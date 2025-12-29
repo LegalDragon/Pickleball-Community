@@ -105,9 +105,13 @@ const AuthCallback = () => {
         return
       }
 
-      // Store user data
+      // Normalize user data to lowercase property names (backend uses PascalCase)
       const userWithDefaults = {
-        ...userData,
+        id: userData.id || userData.Id,
+        email: userData.email || userData.Email,
+        firstName: userData.firstName || userData.FirstName,
+        lastName: userData.lastName || userData.LastName,
+        role: userData.role || userData.Role || effectiveRole,
         profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null
       }
       localStorage.setItem('pickleball_user', JSON.stringify(userWithDefaults))
@@ -124,18 +128,14 @@ const AuthCallback = () => {
       const returnTo = searchParams.get('returnTo')
       let redirectPath = returnTo ? decodeURIComponent(returnTo) : '/'
 
-      // If no returnTo, redirect based on role
-      // Admin users go to student dashboard (they can access admin from menu)
-      if (!returnTo && userData.role) {
-        const role = userData.role.toLowerCase()
-        switch (role) {
-          case 'coach':
-            redirectPath = '/coach/dashboard'
-            break
-          case 'admin':
-          case 'student':
-            redirectPath = '/student/dashboard'
-            break
+      // If no returnTo, redirect to student dashboard for all users
+      // (admins can access Admin Dashboard from the menu)
+      if (!returnTo || returnTo === '/') {
+        const role = userWithDefaults.role?.toLowerCase()
+        if (role === 'coach') {
+          redirectPath = '/coach/dashboard'
+        } else {
+          redirectPath = '/student/dashboard'
         }
       }
 
