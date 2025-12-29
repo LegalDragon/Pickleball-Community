@@ -50,11 +50,23 @@ const AuthCallback = () => {
 
       setMessage('Syncing user data...')
 
-      // Sync user to local database
+      // Sync user to local database - this returns a NEW local JWT with site-specific role
       let userData = null
+      let localToken = token // fallback to shared auth token
       try {
         const syncResponse = await authApi.syncFromSharedAuth(token)
         userData = syncResponse.User || syncResponse.user
+
+        // Use the new local token if provided (contains site-specific role)
+        if (syncResponse.Token || syncResponse.token) {
+          localToken = syncResponse.Token || syncResponse.token
+          console.log('Using local token with site-specific role')
+
+          // Update stored token with the new local token
+          localStorage.setItem('jwtToken', localToken)
+          axios.defaults.headers.common['Authorization'] = `Bearer ${localToken}`
+        }
+
         console.log('User synced successfully:', userData)
       } catch (syncError) {
         console.warn('User sync failed, decoding token locally:', syncError.message)
