@@ -104,7 +104,16 @@ const Navigation = () => {
     }
   };
 
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
   const userMenuItems = [
+    // Admin Dashboard - only shown for admin users
+    ...(isAdmin ? [{
+      name: 'Admin Dashboard',
+      href: '/admin/dashboard',
+      icon: School2Icon,
+      isAdmin: true
+    }] : []),
     {
       name: 'Dashboard',
       href: getDashboardPath(),
