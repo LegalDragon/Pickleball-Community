@@ -88,17 +88,17 @@ const Navigation = () => {
 
 
   // Get dashboard path based on role
+  // Admin users have a separate "Admin Dashboard" link, so their regular dashboard goes to student view
   const getDashboardPath = () => {
     if (!user?.role) return '/';
 
     switch (user.role.toLowerCase()) {
       case 'coach':
         return '/coach/dashboard';
+      case 'admin':
       case 'student':
       case 'player':
         return '/student/dashboard';
-      case 'admin':
-        return '/admin/dashboard';
       default:
         return '/';
     }
