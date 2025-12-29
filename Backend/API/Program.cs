@@ -82,17 +82,11 @@ builder.Services.AddHttpClient("SharedAuth", client =>
 
 // Services
 builder.Services.AddScoped<IAssetService, AssetService>();
-builder.Services.AddScoped<IMaterialService, MaterialService>();
-builder.Services.AddScoped<ICourseService, CourseService>();
-builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IFileStorageService, AwsS3StorageService>();
-builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISharedAuthService, SharedAuthService>();
 builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<ITagService, TagService>();
-builder.Services.AddScoped<IVideoReviewService, VideoReviewService>();
-builder.Services.AddScoped<IBlogService, BlogService>();
 builder.Services.AddScoped<IPlayerCertificationService, PlayerCertificationService>();
 
 // CORS - Load allowed origins from configuration
