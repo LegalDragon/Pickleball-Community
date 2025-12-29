@@ -1,11 +1,11 @@
 {
   "profiles": {
-    "Pickleball.College.API": {
+    "Pickleball.Community.API": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "launchUrl": "swagger",
-      "applicationUrl": "https://localhost:7009",
+      "applicationUrl": "https://localhost:7008",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
