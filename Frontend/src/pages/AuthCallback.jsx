@@ -26,6 +26,9 @@ const AuthCallback = () => {
 
   const handleCallback = async () => {
     try {
+      // Log all URL parameters from shared auth
+      console.log('AuthCallback URL params:', Object.fromEntries(searchParams.entries()))
+
       // Check for error from shared auth
       const error = searchParams.get('error')
       if (error) {
@@ -34,8 +37,11 @@ const AuthCallback = () => {
         return
       }
 
-      // Get token from URL
+      // Get token and isAdmin from URL
       const token = searchParams.get('token')
+      const isAdminFromShared = searchParams.get('isAdmin')
+      console.log('isAdmin from shared auth:', isAdminFromShared)
+
       if (!token) {
         setStatus('error')
         setMessage('No authentication token received')
