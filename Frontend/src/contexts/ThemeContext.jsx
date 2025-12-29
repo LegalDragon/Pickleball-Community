@@ -213,6 +213,13 @@ export const ThemeProvider = ({ children }) => {
     return darkThemes.includes(currentTheme)
   }
 
+  // Refresh theme from server (for admin updates)
+  const refreshTheme = async () => {
+    // For now, just re-apply the current theme
+    // In a full implementation, this would fetch from the API
+    applyTheme(currentTheme)
+  }
+
   const value = {
     currentTheme,
     setTheme,
@@ -221,6 +228,7 @@ export const ThemeProvider = ({ children }) => {
     isDarkTheme,
     themePresets,
     isLoading,
+    refreshTheme,
   }
 
   return (
