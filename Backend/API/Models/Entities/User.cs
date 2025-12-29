@@ -1,0 +1,90 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Pickleball.College.Models.Entities;
+
+public class User
+{
+    public int Id { get; set; }
+
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    // PasswordHash can be null for users authenticating via shared auth
+    public string? PasswordHash { get; set; }
+
+    [Required]
+    public string Role { get; set; } = "Student";
+
+    [Required]
+    public string? FirstName { get; set; } = string.Empty;
+
+    [Required]
+    public string? LastName { get; set; } = string.Empty;
+
+    public string? RefreshToken{ get; set; } = string.Empty;
+    public string? Bio { get; set; } = string.Empty;
+    public string? ProfileImageUrl { get; set; } = string.Empty;
+
+    // Basic info fields
+    [MaxLength(20)]
+    public string? Gender { get; set; }
+
+    public DateTime? DateOfBirth { get; set; }
+
+    [MaxLength(20)]
+    public string? Phone { get; set; }
+
+    [MaxLength(200)]
+    public string? Address { get; set; }
+
+    [MaxLength(100)]
+    public string? City { get; set; }
+
+    [MaxLength(100)]
+    public string? State { get; set; }
+
+    [MaxLength(20)]
+    public string? ZipCode { get; set; }
+
+    [MaxLength(100)]
+    public string? Country { get; set; }
+
+    // Pickleball info fields
+    [MaxLength(10)]
+    public string? Handedness { get; set; }
+
+    [MaxLength(100)]
+    public string? ExperienceLevel { get; set; }
+
+    [MaxLength(100)]
+    public string? PlayingStyle { get; set; }
+
+    [MaxLength(100)]
+    public string? PaddleBrand { get; set; }
+
+    [MaxLength(100)]
+    public string? PaddleModel { get; set; }
+
+    public int? YearsPlaying { get; set; }
+
+    [MaxLength(100)]
+    public string? TournamentLevel { get; set; }
+
+    [MaxLength(100)]
+    public string? FavoriteShot { get; set; }
+
+    [MaxLength(500)]
+    public string? IntroVideo { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsActive { get; set; } = true;
+
+    // Navigation properties
+    public CoachProfile? CoachProfile { get; set; }
+    public ICollection<TrainingMaterial> TrainingMaterials { get; set; } = new List<TrainingMaterial>();
+    public ICollection<MaterialPurchase> MaterialPurchases { get; set; } = new List<MaterialPurchase>();
+    public ICollection<TrainingSession> CoachingSessions { get; set; } = new List<TrainingSession>();
+    public ICollection<TrainingSession> StudentSessions { get; set; } = new List<TrainingSession>();
+}

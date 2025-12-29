@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* body {
+  @apply bg-slate-950 text-slate-100;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+} */
+
+/* THEME ROOTS - Default values (overridden by ThemeContext) */
+:root {
+  --bg: #ffffff;
+  --text: #111111;
+  --card: #f4f4f4;
+  --input: #d8d8d8;
+  --border: #2994FF;
+  --accent: #2994FF;
+  --accent-hover: #1a7ae6;
+  --accent-light: #e6f3ff;
+}
+
+/* Apply */
+body {
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+input, select, textarea {
+  background: var(--input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: #2994FF;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Theme utility classes */
+.bg-theme {
+  background-color: var(--bg);
+}
+
+.text-theme {
+  color: var(--text);
+}
+
+.bg-card-theme {
+  background-color: var(--card);
+}
+
+.border-theme {
+  border-color: var(--border);
+}
+
+.bg-accent-theme {
+  background-color: var(--accent);
+}
+
+.text-accent-theme {
+  color: var(--accent);
+}
+
+.bg-accent-light-theme {
+  background-color: var(--accent-light);
+}
+
+.hover\:bg-accent-hover-theme:hover {
+  background-color: var(--accent-hover);
+}
+
+.bg-input-theme {
+  background-color: var(--input);
+}

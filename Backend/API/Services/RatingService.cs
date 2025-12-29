@@ -1,0 +1,202 @@
+using Microsoft.EntityFrameworkCore;
+using Pickleball.College.Database;
+using Pickleball.College.Models.DTOs;
+using Pickleball.College.Models.Entities;
+
+namespace Pickleball.College.Services;
+
+public class RatingService : IRatingService
+{
+    private readonly ApplicationDbContext _context;
+    private static readonly string[] ValidRatableTypes = { "Material", "Coach", "Course" };
+
+    public RatingService(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<RatingDto> CreateOrUpdateRatingAsync(int userId, CreateRatingRequest request)
+    {
+        // Validate ratable type
+        if (!ValidRatableTypes.Contains(request.RatableType))
+        {
+            throw new ArgumentException($"Invalid RatableType. Must be one of: {string.Join(", ", ValidRatableTypes)}");
+        }
+
+        // Validate that the ratable item exists
+        var itemExists = await ValidateRatableItemExistsAsync(request.RatableType, request.RatableId);
+        if (!itemExists)
+        {
+            throw new ArgumentException($"{request.RatableType} with ID {request.RatableId} not found");
+        }
+
+        // Check if rating already exists
+        var existingRating = await _context.Ratings
+            .FirstOrDefaultAsync(r => r.UserId == userId
+                && r.RatableType == request.RatableType
+                && r.RatableId == request.RatableId);
+
+        if (existingRating != null)
+        {
+            // Update existing rating
+            existingRating.Stars = request.Stars;
+            existingRating.Review = request.Review;
+            existingRating.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return await MapToDto(existingRating);
+        }
+
+        // Create new rating
+        var rating = new Rating
+        {
+            UserId = userId,
+            RatableType = request.RatableType,
+            RatableId = request.RatableId,
+            Stars = request.Stars,
+            Review = request.Review
+        };
+
+        _context.Ratings.Add(rating);
+        await _context.SaveChangesAsync();
+
+        return await MapToDto(rating);
+    }
+
+    public async Task<RatingDto?> GetUserRatingAsync(int userId, string ratableType, int ratableId)
+    {
+        var rating = await _context.Ratings
+            .Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.UserId == userId
+                && r.RatableType == ratableType
+                && r.RatableId == ratableId);
+
+        if (rating == null) return null;
+
+        return await MapToDto(rating);
+    }
+
+    public async Task<List<RatingDto>> GetRatingsAsync(string ratableType, int ratableId)
+    {
+        var ratings = await _context.Ratings
+            .Include(r => r.User)
+            .Where(r => r.RatableType == ratableType && r.RatableId == ratableId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        var result = new List<RatingDto>();
+        foreach (var rating in ratings)
+        {
+            result.Add(await MapToDto(rating));
+        }
+        return result;
+    }
+
+    public async Task<RatingSummaryDto> GetRatingSummaryAsync(string ratableType, int ratableId)
+    {
+        var ratings = await _context.Ratings
+            .Where(r => r.RatableType == ratableType && r.RatableId == ratableId)
+            .ToListAsync();
+
+        return CalculateSummary(ratableType, ratableId, ratings);
+    }
+
+    public async Task<Dictionary<int, RatingSummaryDto>> GetRatingSummariesAsync(string ratableType, List<int> ratableIds)
+    {
+        var result = new Dictionary<int, RatingSummaryDto>();
+
+        // Handle empty list
+        if (ratableIds == null || ratableIds.Count == 0)
+        {
+            return result;
+        }
+
+        // Convert to array to avoid EF Core query generation issues with List<T>.Contains
+        var idsArray = ratableIds.ToArray();
+
+        // Query all ratings for the given type that match any of the IDs
+        var ratings = await _context.Ratings
+            .Where(r => r.RatableType == ratableType)
+            .ToListAsync();
+
+        // Filter in memory to avoid SQL Server syntax issues with large IN clauses
+        var filteredRatings = ratings.Where(r => idsArray.Contains(r.RatableId)).ToList();
+
+        foreach (var id in ratableIds)
+        {
+            var itemRatings = filteredRatings.Where(r => r.RatableId == id).ToList();
+            result[id] = CalculateSummary(ratableType, id, itemRatings);
+        }
+
+        return result;
+    }
+
+    public async Task<bool> DeleteRatingAsync(int userId, string ratableType, int ratableId)
+    {
+        var rating = await _context.Ratings
+            .FirstOrDefaultAsync(r => r.UserId == userId
+                && r.RatableType == ratableType
+                && r.RatableId == ratableId);
+
+        if (rating == null) return false;
+
+        _context.Ratings.Remove(rating);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    private async Task<bool> ValidateRatableItemExistsAsync(string ratableType, int ratableId)
+    {
+        return ratableType switch
+        {
+            "Material" => await _context.TrainingMaterials.AnyAsync(m => m.Id == ratableId),
+            "Coach" => await _context.Users.AnyAsync(u => u.Id == ratableId && u.Role == "Coach"),
+            "Course" => await _context.Courses.AnyAsync(c => c.Id == ratableId),
+            _ => false
+        };
+    }
+
+    private async Task<RatingDto> MapToDto(Rating rating)
+    {
+        var user = rating.User ?? await _context.Users.FindAsync(rating.UserId);
+
+        return new RatingDto
+        {
+            Id = rating.Id,
+            UserId = rating.UserId,
+            UserName = user != null ? $"{user.FirstName} {user.LastName}" : "Unknown User",
+            UserAvatar = user?.ProfileImageUrl,
+            RatableType = rating.RatableType,
+            RatableId = rating.RatableId,
+            Stars = rating.Stars,
+            Review = rating.Review,
+            CreatedAt = rating.CreatedAt,
+            UpdatedAt = rating.UpdatedAt
+        };
+    }
+
+    private static RatingSummaryDto CalculateSummary(string ratableType, int ratableId, List<Rating> ratings)
+    {
+        var starCounts = new int[5];
+        foreach (var rating in ratings)
+        {
+            if (rating.Stars >= 1 && rating.Stars <= 5)
+            {
+                starCounts[rating.Stars - 1]++;
+            }
+        }
+
+        var totalRatings = ratings.Count;
+        var averageRating = totalRatings > 0
+            ? ratings.Average(r => r.Stars)
+            : 0;
+
+        return new RatingSummaryDto
+        {
+            RatableType = ratableType,
+            RatableId = ratableId,
+            AverageRating = Math.Round(averageRating, 1),
+            TotalRatings = totalRatings,
+            StarCounts = starCounts
+        };
+    }
+}

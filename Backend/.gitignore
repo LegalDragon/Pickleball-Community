@@ -1,0 +1,48 @@
+# .NET Core
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+
+# Visual Studio
+.vs/
+*.csproj.user
+*.vbproj.user
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# Connection Strings (Security)
+appsettings.Development.json
+appsettings.Production.json
+connectionstrings.json
+
+# Database
+*.mdf
+*.ldf
+*.ndf
+
+# Rider
+.idea/
+*.sln.iml
+
+# Publish
+publish/
+PublishProfiles/
