@@ -5,14 +5,38 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getAssetUrl } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
 
+// Shared Auth API URL from environment
+const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
+const SITE_KEY = 'community';
+
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [authKey, setAuthKey] = useState(0); // Add this
+  const [logoHtml, setLogoHtml] = useState(null);
   const location = useLocation();
 
   const { user, logout, isAuthenticated } = useAuth();
   const { redirectToLogin, redirectToRegister } = useSharedAuth();
+
+  // Fetch logo HTML from shared auth
+  useEffect(() => {
+    const fetchLogoHtml = async () => {
+      try {
+        const res = await fetch(`${SHARED_AUTH_URL}/settings/logo-html?site=${SITE_KEY}`);
+        if (res.ok) {
+          const html = await res.text();
+          setLogoHtml(html);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch logo HTML:', err);
+      }
+    };
+
+    if (SHARED_AUTH_URL) {
+      fetchLogoHtml();
+    }
+  }, []);
 
   console.log('Navigation useAuth returns:', { user, isAuthenticated });
 
@@ -148,22 +172,31 @@ const Navigation = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3 group">
-            <div style={{ width: "60px", height: "66px" }}
-              className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-              <img
-                src={logoPath}
-                alt="Pickleball.Community Logo"
-                className="w-full h-full object-contain p-1"
-                onError={handleImageError}
-                onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+            {logoHtml ? (
+              <div
+                className="flex items-center"
+                dangerouslySetInnerHTML={{ __html: logoHtml }}
               />
-            </div>
-            <div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
-                Pickleball.Community
-              </span>
-              <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
-            </div>
+            ) : (
+              <>
+                <div style={{ width: "60px", height: "66px" }}
+                  className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                  <img
+                    src={logoPath}
+                    alt="Pickleball.Community Logo"
+                    className="w-full h-full object-contain p-1"
+                    onError={handleImageError}
+                    onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+                  />
+                </div>
+                <div>
+                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
+                    Pickleball.Community
+                  </span>
+                  <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
+                </div>
+              </>
+            )}
           </Link>
 
           {/* Desktop Navigation */}
