@@ -52,10 +52,13 @@ public class AuthController : ControllerBase
             // Sync user to local database
             var localUser = await _sharedAuthService.SyncUserAsync(sharedUser);
 
-            // Return the local user with their site-specific role
+            // Generate a new local JWT with the site-specific role
+            var localToken = _authService.GenerateJwtToken(localUser);
+
+            // Return the local user with their site-specific role and NEW token
             return Ok(new
             {
-                Token = request.Token,  // Pass through the shared auth token
+                Token = localToken,  // Use local token with site-specific role
                 User = new
                 {
                     localUser.Id,

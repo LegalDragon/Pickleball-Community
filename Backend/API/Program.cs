@@ -65,7 +65,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuers = validIssuers,
             ValidAudiences = validAudiences,
             // Accept multiple signing keys for shared auth compatibility
-            IssuerSigningKeys = signingKeys
+            IssuerSigningKeys = signingKeys,
+            // Map claim types for shared auth JWT compatibility
+            RoleClaimType = "role",
+            NameClaimType = "name"
         };
     });
 
