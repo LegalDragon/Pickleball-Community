@@ -1,4 +1,4 @@
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface IFileStorageService
 {

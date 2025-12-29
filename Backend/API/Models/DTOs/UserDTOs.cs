@@ -1,4 +1,4 @@
-namespace Pickleball.College.Models.DTOs;
+namespace Pickleball.Community.Models.DTOs;
 
 public class UserProfileDto
 {

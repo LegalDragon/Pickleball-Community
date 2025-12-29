@@ -1,7 +1,7 @@
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface IAuthService
 {

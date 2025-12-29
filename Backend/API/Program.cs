@@ -2,10 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Pickleball.College.Database;
-using Pickleball.College.Services; 
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.Configuration;
+using Pickleball.Community.Database;
+using Pickleball.Community.Services; 
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -1,6 +1,6 @@
-using Pickleball.College.Models.DTOs;
+using Pickleball.Community.Models.DTOs;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface ITagService
 {

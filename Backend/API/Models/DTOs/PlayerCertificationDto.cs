@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Pickleball.College.API.Models.DTOs;
+namespace Pickleball.Community.API.Models.DTOs;
 
 // Knowledge Level DTOs
 public class KnowledgeLevelDto

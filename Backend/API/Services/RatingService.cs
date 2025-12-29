@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Database;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public class RatingService : IRatingService
 {

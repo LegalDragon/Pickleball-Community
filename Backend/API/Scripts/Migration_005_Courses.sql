@@ -3,7 +3,7 @@
 -- Description: Adds Courses, CourseMaterials, and CoursePurchases tables
 --              to support course bundling of training materials
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

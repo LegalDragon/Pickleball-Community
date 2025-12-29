@@ -2,7 +2,7 @@
 -- Date: 2025-12-14
 -- Description: Creates BlogPosts table for coach blogging feature
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 PRINT 'Starting Migration_012_BlogPosts...';

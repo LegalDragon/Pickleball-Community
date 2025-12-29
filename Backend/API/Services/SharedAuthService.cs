@@ -3,10 +3,10 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface ISharedAuthService
 {

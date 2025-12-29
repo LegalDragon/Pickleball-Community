@@ -2,7 +2,7 @@
 -- Date: 2025-12-10
 -- Description: Adds bidding/proposal columns to VideoReviewRequests table
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 PRINT 'Starting Migration_010_VideoReviewBidding...';

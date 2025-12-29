@@ -7,14 +7,14 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.SqlServer;
 using Microsoft.IdentityModel.Tokens;
-using Pickleball.College.Database;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
 
 using Microsoft.AspNetCore.Mvc;
 using Stripe.Climate;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public class AuthService : IAuthService
 {

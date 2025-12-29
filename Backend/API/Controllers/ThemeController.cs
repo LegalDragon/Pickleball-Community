@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -524,7 +524,7 @@ public class ThemeController : ControllerBase
     {
         var defaultTheme = new ThemeSettings
         {
-            OrganizationName = "Pickleball College",
+            OrganizationName = "Pickleball Community",
             PrimaryColor = "#047857",
             PrimaryDarkColor = "#065f46",
             PrimaryLightColor = "#d1fae5",
@@ -591,7 +591,7 @@ public class ThemeController : ControllerBase
     {
         return new ThemeSettingsDto
         {
-            OrganizationName = "Pickleball College",
+            OrganizationName = "Pickleball Community",
             PrimaryColor = "#047857",
             PrimaryDarkColor = "#065f46",
             PrimaryLightColor = "#d1fae5",

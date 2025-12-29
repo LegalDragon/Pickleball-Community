@@ -1,11 +1,11 @@
 -- Create Database
-IF NOT EXISTS(SELECT * FROM sys.databases WHERE name = 'PickleballCollege')
+IF NOT EXISTS(SELECT * FROM sys.databases WHERE name = 'PickleballCommunity')
 BEGIN
-    CREATE DATABASE PickleballCollege;
+    CREATE DATABASE PickleballCommunity;
 END
 GO
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- Users table
@@ -100,12 +100,12 @@ END
 GO
 
 -- Create initial admin user (password: Admin123!)
-IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'admin@pickleball.college')
+IF NOT EXISTS (SELECT * FROM Users WHERE Email = 'admin@pickleball.Community')
 BEGIN
     INSERT INTO Users (Id, Email, PasswordHash, Role, FirstName, LastName, Bio)
     VALUES (
         NEWID(),
-        'admin@pickleball.college',
+        'admin@pickleball.Community',
         '.eBz.7Q7QZ7QZ7QZ7QZ7QZ7QZ7QZ7QZ7QZ', -- This is a hashed version of 'Admin123!'
         'Admin',
         'System',

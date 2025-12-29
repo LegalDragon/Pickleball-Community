@@ -1,9 +1,9 @@
-namespace Pickleball.College.Models.DTOs;
+namespace Pickleball.Community.Models.DTOs;
 
 public class ThemeSettingsDto
 {
     public int ThemeId { get; set; }
-    public string OrganizationName { get; set; } = "Pickleball College";
+    public string OrganizationName { get; set; } = "Pickleball Community";
     public string? LogoUrl { get; set; }
     public string? FaviconUrl { get; set; }
 

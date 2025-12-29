@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.API.Models.DTOs;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.API.Models.DTOs;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
 using System.Security.Cryptography;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface IPlayerCertificationService
 {

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 public class ThemeSettings
 {
@@ -9,7 +9,7 @@ public class ThemeSettings
 
     [Required]
     [MaxLength(200)]
-    public string OrganizationName { get; set; } = "Pickleball College";
+    public string OrganizationName { get; set; } = "Pickleball Community";
 
     [MaxLength(500)]
     public string? LogoUrl { get; set; }

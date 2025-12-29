@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// An individual review submitted by a reviewer

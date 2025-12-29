@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// A certification review request created by a student

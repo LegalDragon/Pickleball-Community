@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 using Stripe.Climate;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]

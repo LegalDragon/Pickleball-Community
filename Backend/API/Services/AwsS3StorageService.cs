@@ -1,7 +1,7 @@
 using Amazon.S3;
 using Amazon.S3.Transfer;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public class AwsS3StorageService : IFileStorageService
 {
@@ -11,7 +11,7 @@ public class AwsS3StorageService : IFileStorageService
     public AwsS3StorageService(IConfiguration configuration)
     {
         var awsConfig = configuration.GetSection("AWS");
-        _bucketName = awsConfig["BucketName"] ?? "pickleball-college";
+        _bucketName = awsConfig["BucketName"] ?? "pickleball-Community";
         
         // In production, use IAM roles. For development, use credentials:
         _s3Client = new AmazonS3Client(

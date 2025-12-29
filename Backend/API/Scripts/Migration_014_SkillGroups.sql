@@ -2,7 +2,7 @@
 -- Date: 2025-12-14
 -- Description: Adds SkillGroups table and links SkillAreas to groups for weighted certification scoring
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 PRINT 'Starting Migration_014_SkillGroups...';

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Database;
+namespace Pickleball.Community.Database;
 
 public class ApplicationDbContext : DbContext
 {

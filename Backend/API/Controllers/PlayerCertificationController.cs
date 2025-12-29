@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using Pickleball.College.Services;
-using Pickleball.College.API.Models.DTOs;
+using Pickleball.Community.Services;
+using Pickleball.Community.API.Models.DTOs;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]

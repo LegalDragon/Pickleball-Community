@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 public class ThemePreset
 {
