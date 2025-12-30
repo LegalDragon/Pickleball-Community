@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, ThumbsDown, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate, Image, Video, Upload, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { courtsApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import CourtMap from '../components/ui/CourtMap';
 
 const SURFACE_TYPES = [
   { value: 'all', label: 'All Surfaces' },
@@ -634,44 +635,23 @@ export default function Courts() {
             {viewMode === 'map' ? (
               /* Map View */
               <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-6 bg-gray-50 text-center">
-                  <Map className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Map View Coming Soon</h3>
-                  <p className="text-gray-500 mb-4">
-                    We're working on an interactive map view. For now, you can view courts on Google Maps by clicking the court cards below.
-                  </p>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Switch to List View
-                  </button>
+                <div className="h-[600px]">
+                  <CourtMap
+                    courts={courts}
+                    userLocation={userLocation}
+                    onCourtClick={(court) => handleViewDetails(court)}
+                  />
                 </div>
-                {/* Show court list anyway */}
-                <div className="p-6 border-t">
-                  <h4 className="font-medium text-gray-900 mb-4">Court Locations:</h4>
-                  <div className="space-y-2">
-                    {courts.map(court => (
-                      <div
-                        key={court.courtId}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleViewDetails(court)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <MapPin className="w-4 h-4 text-green-600" />
-                          <div>
-                            <span className="font-medium text-gray-900">{court.name || 'Unnamed Court'}</span>
-                            <span className="text-sm text-gray-500 ml-2">
-                              {court.city}{court.state && `, ${court.state}`}
-                            </span>
-                          </div>
-                        </div>
-                        {court.distance && (
-                          <span className="text-sm text-green-600">{court.distance.toFixed(1)} mi</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                {/* Court count */}
+                <div className="p-4 border-t bg-gray-50">
+                  <p className="text-sm text-gray-600 text-center">
+                    Showing {courts.filter(c => c.latitude || c.gpsLat).length} courts with coordinates
+                    {courts.length > courts.filter(c => c.latitude || c.gpsLat).length && (
+                      <span className="text-gray-400">
+                        {' '}({courts.length - courts.filter(c => c.latitude || c.gpsLat).length} without coordinates)
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
             ) : (
