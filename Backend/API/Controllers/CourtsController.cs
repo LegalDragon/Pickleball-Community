@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
@@ -27,140 +29,92 @@ public class CourtsController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
-    // GET: /courts/search - Search for courts
+    // GET: /courts/search - Search for courts using stored procedure
     [HttpGet("search")]
     public async Task<ActionResult<ApiResponse<PagedResult<CourtDto>>>> SearchCourts([FromQuery] CourtSearchRequest request)
     {
         try
         {
-            var query = _context.Courts.AsQueryable();
+            var courts = new List<CourtDto>();
+            int totalCount = 0;
 
-            // Filter by state if provided
-            if (!string.IsNullOrWhiteSpace(request.State))
-            {
-                query = query.Where(c => c.State == request.State);
-            }
+            var connection = _context.Database.GetDbConnection();
+            await connection.OpenAsync();
 
-            // Filter by city if provided (case-insensitive using EF.Functions.Like)
-            if (!string.IsNullOrWhiteSpace(request.City))
-            {
-                var cityPattern = $"%{request.City}%";
-                query = query.Where(c => c.City != null && EF.Functions.Like(c.City, cityPattern));
-            }
-
-            // Filter by lights if provided
-            if (request.HasLights.HasValue && request.HasLights.Value)
-            {
-                query = query.Where(c => c.Lights == "Y");
-            }
-
-            // Filter by indoor courts if provided
-            if (request.IsIndoor.HasValue && request.IsIndoor.Value)
-            {
-                query = query.Where(c => c.IndoorNum > 0);
-            }
-
-            // Text search if provided (case-insensitive using EF.Functions.Like)
-            if (!string.IsNullOrWhiteSpace(request.Query))
-            {
-                var searchPattern = $"%{request.Query}%";
-                query = query.Where(c =>
-                    (c.Name != null && EF.Functions.Like(c.Name, searchPattern)) ||
-                    (c.City != null && EF.Functions.Like(c.City, searchPattern)) ||
-                    (c.Addr1 != null && EF.Functions.Like(c.Addr1, searchPattern)));
-            }
-
-            var courts = await query.ToListAsync();
-
-            // Calculate distance if coordinates are provided
-            List<(Court court, double? distance)> courtsWithDistance;
-            if (request.Latitude.HasValue && request.Longitude.HasValue)
-            {
-                courtsWithDistance = courts
-                    .Select(c =>
-                    {
-                        double? distance = null;
-                        if (double.TryParse(c.GpsLat, out var lat) && double.TryParse(c.GpsLng, out var lng))
-                        {
-                            distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, lat, lng);
-                        }
-                        return (court: c, distance);
-                    })
-                    .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)
-                    .OrderBy(x => x.distance ?? double.MaxValue)
-                    .ToList();
-            }
-            else
-            {
-                courtsWithDistance = courts.Select(c => (court: c, distance: (double?)null)).ToList();
-            }
-
-            // Get total count before pagination
-            var totalCount = courtsWithDistance.Count;
-
-            // Apply pagination
-            var pagedCourts = courtsWithDistance
-                .Skip((request.Page - 1) * request.PageSize)
-                .Take(request.PageSize)
-                .ToList();
-
-            // Get aggregated info for courts (handle case where table may not exist yet)
-            var courtIds = pagedCourts.Select(x => x.court.CourtId).ToList();
-            List<CourtConfirmation> confirmations;
             try
             {
-                confirmations = await _context.CourtConfirmations
-                    .Where(cc => courtIds.Contains(cc.CourtId))
-                    .ToListAsync();
-            }
-            catch
-            {
-                // Table may not exist yet
-                confirmations = new List<CourtConfirmation>();
-            }
+                using var command = connection.CreateCommand();
+                command.CommandText = "sp_SearchCourts";
+                command.CommandType = CommandType.StoredProcedure;
 
-            var confirmationsByCourtId = confirmations.GroupBy(c => c.CourtId).ToDictionary(g => g.Key, g => g.ToList());
+                // Add parameters
+                command.Parameters.Add(new SqlParameter("@Query", SqlDbType.NVarChar, 100) { Value = (object?)request.Query ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@State", SqlDbType.NVarChar, 50) { Value = (object?)request.State ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@City", SqlDbType.NVarChar, 50) { Value = (object?)request.City ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@HasLights", SqlDbType.Bit) { Value = request.HasLights.HasValue && request.HasLights.Value ? true : DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@IsIndoor", SqlDbType.Bit) { Value = request.IsIndoor.HasValue && request.IsIndoor.Value ? true : DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@UserLat", SqlDbType.Float) { Value = (object?)request.Latitude ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@UserLng", SqlDbType.Float) { Value = (object?)request.Longitude ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@RadiusMiles", SqlDbType.Float) { Value = (object?)request.RadiusMiles ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@Page", SqlDbType.Int) { Value = request.Page });
+                command.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = request.PageSize });
 
-            var courtDtos = pagedCourts.Select(x =>
-            {
-                var court = x.court;
-                var courtConfirmations = confirmationsByCourtId.GetValueOrDefault(court.CourtId, new List<CourtConfirmation>());
-
-                return new CourtDto
+                using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
                 {
-                    CourtId = court.CourtId,
-                    Name = court.Name,
-                    Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-                    City = court.City,
-                    County = court.County,
-                    State = court.State,
-                    Zip = court.Zip,
-                    Country = court.Country,
-                    Phone = court.Phone,
-                    Website = court.Website,
-                    Email = court.Email,
-                    IndoorNum = court.IndoorNum,
-                    OutdoorNum = court.OutdoorNum,
-                    CoveredNum = court.CoveredNum,
-                    HasLights = court.Lights == "Y",
-                    Latitude = double.TryParse(court.GpsLat, out var lat) ? lat : null,
-                    Longitude = double.TryParse(court.GpsLng, out var lng) ? lng : null,
-                    Distance = x.distance,
-                    AggregatedInfo = GetAggregatedInfo(courtConfirmations)
-                };
-            }).ToList();
+                    var court = new CourtDto
+                    {
+                        CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                        Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? null : reader.GetString(reader.GetOrdinal("Name")),
+                        Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
+                        City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
+                        County = reader.IsDBNull(reader.GetOrdinal("County")) ? null : reader.GetString(reader.GetOrdinal("County")),
+                        State = reader.IsDBNull(reader.GetOrdinal("State")) ? null : reader.GetString(reader.GetOrdinal("State")),
+                        Zip = reader.IsDBNull(reader.GetOrdinal("Zip")) ? null : reader.GetString(reader.GetOrdinal("Zip")),
+                        Country = reader.IsDBNull(reader.GetOrdinal("Country")) ? null : reader.GetString(reader.GetOrdinal("Country")),
+                        Phone = reader.IsDBNull(reader.GetOrdinal("Phone")) ? null : reader.GetString(reader.GetOrdinal("Phone")),
+                        Website = reader.IsDBNull(reader.GetOrdinal("Website")) ? null : reader.GetString(reader.GetOrdinal("Website")),
+                        Email = reader.IsDBNull(reader.GetOrdinal("Email")) ? null : reader.GetString(reader.GetOrdinal("Email")),
+                        IndoorNum = reader.IsDBNull(reader.GetOrdinal("IndoorNum")) ? null : reader.GetInt32(reader.GetOrdinal("IndoorNum")),
+                        OutdoorNum = reader.IsDBNull(reader.GetOrdinal("OutdoorNum")) ? null : reader.GetInt32(reader.GetOrdinal("OutdoorNum")),
+                        CoveredNum = reader.IsDBNull(reader.GetOrdinal("CoveredNum")) ? null : reader.GetInt32(reader.GetOrdinal("CoveredNum")),
+                        HasLights = reader.GetInt32(reader.GetOrdinal("HasLights")) == 1,
+                        Latitude = reader.IsDBNull(reader.GetOrdinal("Latitude")) ? null : reader.GetDouble(reader.GetOrdinal("Latitude")),
+                        Longitude = reader.IsDBNull(reader.GetOrdinal("Longitude")) ? null : reader.GetDouble(reader.GetOrdinal("Longitude")),
+                        Distance = reader.IsDBNull(reader.GetOrdinal("Distance")) ? null : reader.GetDouble(reader.GetOrdinal("Distance")),
+                        AggregatedInfo = new CourtAggregatedInfoDto
+                        {
+                            ConfirmationCount = reader.GetInt32(reader.GetOrdinal("ConfirmationCount")),
+                            AverageRating = reader.IsDBNull(reader.GetOrdinal("AverageRating")) ? null : reader.GetDouble(reader.GetOrdinal("AverageRating"))
+                        }
+                    };
+
+                    totalCount = reader.GetInt32(reader.GetOrdinal("TotalCount"));
+                    courts.Add(court);
+                }
+            }
+            finally
+            {
+                await connection.CloseAsync();
+            }
 
             return Ok(new ApiResponse<PagedResult<CourtDto>>
             {
                 Success = true,
                 Data = new PagedResult<CourtDto>
                 {
-                    Items = courtDtos,
+                    Items = courts,
                     TotalCount = totalCount,
                     Page = request.Page,
                     PageSize = request.PageSize
                 }
             });
+        }
+        catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
+        {
+            // Stored procedure not created yet - fall back to LINQ
+            _logger.LogWarning("Stored procedure sp_SearchCourts not found, falling back to LINQ query");
+            return await SearchCourtsLinq(request);
         }
         catch (Exception ex)
         {
@@ -169,74 +123,287 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // GET: /courts/{id} - Get court details
+    // Fallback LINQ-based search (used when stored procedure doesn't exist)
+    private async Task<ActionResult<ApiResponse<PagedResult<CourtDto>>>> SearchCourtsLinq(CourtSearchRequest request)
+    {
+        var query = _context.Courts.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.State))
+            query = query.Where(c => c.State == request.State);
+
+        if (!string.IsNullOrWhiteSpace(request.City))
+        {
+            var cityPattern = $"%{request.City}%";
+            query = query.Where(c => c.City != null && EF.Functions.Like(c.City, cityPattern));
+        }
+
+        if (request.HasLights.HasValue && request.HasLights.Value)
+            query = query.Where(c => c.Lights == "Y");
+
+        if (request.IsIndoor.HasValue && request.IsIndoor.Value)
+            query = query.Where(c => c.IndoorNum > 0);
+
+        if (!string.IsNullOrWhiteSpace(request.Query))
+        {
+            var searchPattern = $"%{request.Query}%";
+            query = query.Where(c =>
+                (c.Name != null && EF.Functions.Like(c.Name, searchPattern)) ||
+                (c.City != null && EF.Functions.Like(c.City, searchPattern)) ||
+                (c.Addr1 != null && EF.Functions.Like(c.Addr1, searchPattern)));
+        }
+
+        var courts = await query.ToListAsync();
+
+        List<(Court court, double? distance)> courtsWithDistance;
+        if (request.Latitude.HasValue && request.Longitude.HasValue)
+        {
+            courtsWithDistance = courts
+                .Select(c =>
+                {
+                    double? distance = null;
+                    if (double.TryParse(c.GpsLat, out var lat) && double.TryParse(c.GpsLng, out var lng))
+                        distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, lat, lng);
+                    return (court: c, distance);
+                })
+                .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)
+                .OrderBy(x => x.distance ?? double.MaxValue)
+                .ToList();
+        }
+        else
+        {
+            courtsWithDistance = courts.Select(c => (court: c, distance: (double?)null)).ToList();
+        }
+
+        var totalCount = courtsWithDistance.Count;
+        var pagedCourts = courtsWithDistance
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+
+        var courtDtos = pagedCourts.Select(x => new CourtDto
+        {
+            CourtId = x.court.CourtId,
+            Name = x.court.Name,
+            Address = string.Join(" ", new[] { x.court.Addr1, x.court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+            City = x.court.City,
+            County = x.court.County,
+            State = x.court.State,
+            Zip = x.court.Zip,
+            Country = x.court.Country,
+            Phone = x.court.Phone,
+            Website = x.court.Website,
+            Email = x.court.Email,
+            IndoorNum = x.court.IndoorNum,
+            OutdoorNum = x.court.OutdoorNum,
+            CoveredNum = x.court.CoveredNum,
+            HasLights = x.court.Lights == "Y",
+            Latitude = double.TryParse(x.court.GpsLat, out var lat) ? lat : null,
+            Longitude = double.TryParse(x.court.GpsLng, out var lng) ? lng : null,
+            Distance = x.distance,
+            AggregatedInfo = new CourtAggregatedInfoDto { ConfirmationCount = 0 }
+        }).ToList();
+
+        return Ok(new ApiResponse<PagedResult<CourtDto>>
+        {
+            Success = true,
+            Data = new PagedResult<CourtDto>
+            {
+                Items = courtDtos,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize
+            }
+        });
+    }
+
+    // GET: /courts/{id} - Get court details using stored procedure
     [HttpGet("{id}")]
     public async Task<ActionResult<ApiResponse<CourtDetailDto>>> GetCourt(int id, [FromQuery] double? userLat, [FromQuery] double? userLng)
     {
         try
         {
-            var court = await _context.Courts.FindAsync(id);
-            if (court == null)
-                return NotFound(new ApiResponse<CourtDetailDto> { Success = false, Message = "Court not found" });
+            CourtDetailDto? dto = null;
+            var recentConfirmations = new List<CourtConfirmationDto>();
+            CourtAggregatedInfoDto aggregatedInfo = new() { ConfirmationCount = 0 };
 
-            List<CourtConfirmation> confirmations;
+            var connection = _context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
             try
             {
-                confirmations = await _context.CourtConfirmations
-                    .Include(cc => cc.User)
-                    .Where(cc => cc.CourtId == id)
-                    .OrderByDescending(cc => cc.UpdatedAt)
-                    .ToListAsync();
-            }
-            catch
-            {
-                // Table may not exist yet
-                confirmations = new List<CourtConfirmation>();
-            }
+                using var command = connection.CreateCommand();
+                command.CommandText = "sp_GetCourtDetail";
+                command.CommandType = CommandType.StoredProcedure;
 
-            double? distance = null;
-            if (userLat.HasValue && userLng.HasValue &&
-                double.TryParse(court.GpsLat, out var lat) && double.TryParse(court.GpsLng, out var lng))
-            {
-                distance = CalculateDistance(userLat.Value, userLng.Value, lat, lng);
+                command.Parameters.Add(new SqlParameter("@CourtId", SqlDbType.Int) { Value = id });
+                command.Parameters.Add(new SqlParameter("@UserLat", SqlDbType.Float) { Value = (object?)userLat ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@UserLng", SqlDbType.Float) { Value = (object?)userLng ?? DBNull.Value });
+
+                using var reader = await command.ExecuteReaderAsync();
+
+                // First result set: Court basic info
+                if (await reader.ReadAsync())
+                {
+                    dto = new CourtDetailDto
+                    {
+                        CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                        Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? null : reader.GetString(reader.GetOrdinal("Name")),
+                        Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
+                        City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
+                        County = reader.IsDBNull(reader.GetOrdinal("County")) ? null : reader.GetString(reader.GetOrdinal("County")),
+                        State = reader.IsDBNull(reader.GetOrdinal("State")) ? null : reader.GetString(reader.GetOrdinal("State")),
+                        Zip = reader.IsDBNull(reader.GetOrdinal("Zip")) ? null : reader.GetString(reader.GetOrdinal("Zip")),
+                        Country = reader.IsDBNull(reader.GetOrdinal("Country")) ? null : reader.GetString(reader.GetOrdinal("Country")),
+                        Phone = reader.IsDBNull(reader.GetOrdinal("Phone")) ? null : reader.GetString(reader.GetOrdinal("Phone")),
+                        Website = reader.IsDBNull(reader.GetOrdinal("Website")) ? null : reader.GetString(reader.GetOrdinal("Website")),
+                        Email = reader.IsDBNull(reader.GetOrdinal("Email")) ? null : reader.GetString(reader.GetOrdinal("Email")),
+                        IndoorNum = reader.IsDBNull(reader.GetOrdinal("IndoorNum")) ? null : reader.GetInt32(reader.GetOrdinal("IndoorNum")),
+                        OutdoorNum = reader.IsDBNull(reader.GetOrdinal("OutdoorNum")) ? null : reader.GetInt32(reader.GetOrdinal("OutdoorNum")),
+                        CoveredNum = reader.IsDBNull(reader.GetOrdinal("CoveredNum")) ? null : reader.GetInt32(reader.GetOrdinal("CoveredNum")),
+                        HasLights = reader.GetInt32(reader.GetOrdinal("HasLights")) == 1,
+                        Latitude = reader.IsDBNull(reader.GetOrdinal("Latitude")) ? null : reader.GetDouble(reader.GetOrdinal("Latitude")),
+                        Longitude = reader.IsDBNull(reader.GetOrdinal("Longitude")) ? null : reader.GetDouble(reader.GetOrdinal("Longitude")),
+                        Distance = reader.IsDBNull(reader.GetOrdinal("Distance")) ? null : reader.GetDouble(reader.GetOrdinal("Distance"))
+                    };
+                }
+
+                if (dto == null)
+                    return NotFound(new ApiResponse<CourtDetailDto> { Success = false, Message = "Court not found" });
+
+                // Second result set: Aggregated confirmation data
+                if (await reader.NextResultAsync() && await reader.ReadAsync())
+                {
+                    aggregatedInfo = new CourtAggregatedInfoDto
+                    {
+                        ConfirmationCount = reader.GetInt32(reader.GetOrdinal("ConfirmationCount")),
+                        AverageRating = reader.IsDBNull(reader.GetOrdinal("AverageRating")) ? null : reader.GetDouble(reader.GetOrdinal("AverageRating")),
+                        MostConfirmedIndoorCount = reader.IsDBNull(reader.GetOrdinal("MostConfirmedIndoorCount")) ? null : reader.GetInt32(reader.GetOrdinal("MostConfirmedIndoorCount")),
+                        MostConfirmedOutdoorCount = reader.IsDBNull(reader.GetOrdinal("MostConfirmedOutdoorCount")) ? null : reader.GetInt32(reader.GetOrdinal("MostConfirmedOutdoorCount")),
+                        MostConfirmedHasLights = reader.IsDBNull(reader.GetOrdinal("MostConfirmedHasLights")) ? null : reader.GetBoolean(reader.GetOrdinal("MostConfirmedHasLights")),
+                        MostConfirmedHasFee = reader.IsDBNull(reader.GetOrdinal("MostConfirmedHasFee")) ? null : reader.GetBoolean(reader.GetOrdinal("MostConfirmedHasFee")),
+                        CommonFeeAmount = reader.IsDBNull(reader.GetOrdinal("CommonFeeAmount")) ? null : reader.GetString(reader.GetOrdinal("CommonFeeAmount")),
+                        CommonHours = reader.IsDBNull(reader.GetOrdinal("CommonHours")) ? null : reader.GetString(reader.GetOrdinal("CommonHours")),
+                        CommonSurfaceType = reader.IsDBNull(reader.GetOrdinal("CommonSurfaceType")) ? null : reader.GetString(reader.GetOrdinal("CommonSurfaceType"))
+                    };
+                }
+
+                // Third result set: Recent confirmations
+                if (await reader.NextResultAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        var confirmation = new CourtConfirmationDto
+                        {
+                            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                            CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                            UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
+                            UserName = reader.IsDBNull(reader.GetOrdinal("UserName")) ? null : reader.GetString(reader.GetOrdinal("UserName")),
+                            UserProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("UserProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("UserProfileImageUrl")),
+                            NameConfirmed = reader.IsDBNull(reader.GetOrdinal("NameConfirmed")) ? null : reader.GetBoolean(reader.GetOrdinal("NameConfirmed")),
+                            SuggestedName = reader.IsDBNull(reader.GetOrdinal("SuggestedName")) ? null : reader.GetString(reader.GetOrdinal("SuggestedName")),
+                            ConfirmedIndoorCount = reader.IsDBNull(reader.GetOrdinal("ConfirmedIndoorCount")) ? null : reader.GetInt32(reader.GetOrdinal("ConfirmedIndoorCount")),
+                            ConfirmedOutdoorCount = reader.IsDBNull(reader.GetOrdinal("ConfirmedOutdoorCount")) ? null : reader.GetInt32(reader.GetOrdinal("ConfirmedOutdoorCount")),
+                            ConfirmedCoveredCount = reader.IsDBNull(reader.GetOrdinal("ConfirmedCoveredCount")) ? null : reader.GetInt32(reader.GetOrdinal("ConfirmedCoveredCount")),
+                            HasLights = reader.IsDBNull(reader.GetOrdinal("HasLights")) ? null : reader.GetBoolean(reader.GetOrdinal("HasLights")),
+                            HasFee = reader.IsDBNull(reader.GetOrdinal("HasFee")) ? null : reader.GetBoolean(reader.GetOrdinal("HasFee")),
+                            FeeAmount = reader.IsDBNull(reader.GetOrdinal("FeeAmount")) ? null : reader.GetString(reader.GetOrdinal("FeeAmount")),
+                            FeeNotes = reader.IsDBNull(reader.GetOrdinal("FeeNotes")) ? null : reader.GetString(reader.GetOrdinal("FeeNotes")),
+                            Hours = reader.IsDBNull(reader.GetOrdinal("Hours")) ? null : reader.GetString(reader.GetOrdinal("Hours")),
+                            Rating = reader.IsDBNull(reader.GetOrdinal("Rating")) ? null : reader.GetInt32(reader.GetOrdinal("Rating")),
+                            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+                            SurfaceType = reader.IsDBNull(reader.GetOrdinal("SurfaceType")) ? null : reader.GetString(reader.GetOrdinal("SurfaceType")),
+                            Amenities = reader.IsDBNull(reader.GetOrdinal("Amenities")) ? null : reader.GetString(reader.GetOrdinal("Amenities"))?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+                        };
+                        recentConfirmations.Add(confirmation);
+                    }
+                }
+
+                dto.AggregatedInfo = aggregatedInfo;
+                dto.RecentConfirmations = recentConfirmations;
+
+                // Get current user's confirmation if authenticated
+                var userId = GetCurrentUserId();
+                if (userId.HasValue)
+                {
+                    dto.MyConfirmation = recentConfirmations.FirstOrDefault(c => c.UserId == userId.Value);
+                }
             }
-
-            var userId = GetCurrentUserId();
-
-            var dto = new CourtDetailDto
+            finally
             {
-                CourtId = court.CourtId,
-                Name = court.Name,
-                Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-                City = court.City,
-                County = court.County,
-                State = court.State,
-                Zip = court.Zip,
-                Country = court.Country,
-                Phone = court.Phone,
-                Website = court.Website,
-                Email = court.Email,
-                IndoorNum = court.IndoorNum,
-                OutdoorNum = court.OutdoorNum,
-                CoveredNum = court.CoveredNum,
-                HasLights = court.Lights == "Y",
-                Latitude = double.TryParse(court.GpsLat, out var courtLat) ? courtLat : null,
-                Longitude = double.TryParse(court.GpsLng, out var courtLng) ? courtLng : null,
-                Distance = distance,
-                AggregatedInfo = GetAggregatedInfo(confirmations),
-                RecentConfirmations = confirmations.Take(10).Select(cc => MapToConfirmationDto(cc)).ToList(),
-                MyConfirmation = userId.HasValue
-                    ? confirmations.Where(cc => cc.UserId == userId.Value).Select(cc => MapToConfirmationDto(cc)).FirstOrDefault()
-                    : null
-            };
+                await connection.CloseAsync();
+            }
 
             return Ok(new ApiResponse<CourtDetailDto> { Success = true, Data = dto });
+        }
+        catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
+        {
+            // Stored procedure not created yet - fall back to LINQ
+            _logger.LogWarning("Stored procedure sp_GetCourtDetail not found, falling back to LINQ query");
+            return await GetCourtLinq(id, userLat, userLng);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching court {CourtId}", id);
             return StatusCode(500, new ApiResponse<CourtDetailDto> { Success = false, Message = "An error occurred" });
         }
+    }
+
+    // Fallback LINQ-based get court (used when stored procedure doesn't exist)
+    private async Task<ActionResult<ApiResponse<CourtDetailDto>>> GetCourtLinq(int id, double? userLat, double? userLng)
+    {
+        var court = await _context.Courts.FindAsync(id);
+        if (court == null)
+            return NotFound(new ApiResponse<CourtDetailDto> { Success = false, Message = "Court not found" });
+
+        List<CourtConfirmation> confirmations = new();
+        try
+        {
+            confirmations = await _context.CourtConfirmations
+                .Include(cc => cc.User)
+                .Where(cc => cc.CourtId == id)
+                .OrderByDescending(cc => cc.UpdatedAt)
+                .ToListAsync();
+        }
+        catch { /* Table may not exist */ }
+
+        double? distance = null;
+        if (userLat.HasValue && userLng.HasValue &&
+            double.TryParse(court.GpsLat, out var lat) && double.TryParse(court.GpsLng, out var lng))
+        {
+            distance = CalculateDistance(userLat.Value, userLng.Value, lat, lng);
+        }
+
+        var userId = GetCurrentUserId();
+        var dto = new CourtDetailDto
+        {
+            CourtId = court.CourtId,
+            Name = court.Name,
+            Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+            City = court.City,
+            County = court.County,
+            State = court.State,
+            Zip = court.Zip,
+            Country = court.Country,
+            Phone = court.Phone,
+            Website = court.Website,
+            Email = court.Email,
+            IndoorNum = court.IndoorNum,
+            OutdoorNum = court.OutdoorNum,
+            CoveredNum = court.CoveredNum,
+            HasLights = court.Lights == "Y",
+            Latitude = double.TryParse(court.GpsLat, out var courtLat) ? courtLat : null,
+            Longitude = double.TryParse(court.GpsLng, out var courtLng) ? courtLng : null,
+            Distance = distance,
+            AggregatedInfo = GetAggregatedInfo(confirmations),
+            RecentConfirmations = confirmations.Take(10).Select(cc => MapToConfirmationDto(cc)).ToList(),
+            MyConfirmation = userId.HasValue
+                ? confirmations.Where(cc => cc.UserId == userId.Value).Select(cc => MapToConfirmationDto(cc)).FirstOrDefault()
+                : null
+        };
+
+        return Ok(new ApiResponse<CourtDetailDto> { Success = true, Data = dto });
     }
 
     // POST: /courts/{id}/confirmations - Submit or update court confirmation
@@ -254,13 +421,11 @@ public class CourtsController : ControllerBase
             if (court == null)
                 return NotFound(new ApiResponse<CourtConfirmationDto> { Success = false, Message = "Court not found" });
 
-            // Check for existing confirmation
             var existingConfirmation = await _context.CourtConfirmations
                 .FirstOrDefaultAsync(cc => cc.CourtId == id && cc.UserId == userId.Value);
 
             if (existingConfirmation != null)
             {
-                // Update existing confirmation
                 existingConfirmation.NameConfirmed = dto.NameConfirmed ?? existingConfirmation.NameConfirmed;
                 existingConfirmation.SuggestedName = dto.SuggestedName ?? existingConfirmation.SuggestedName;
                 existingConfirmation.ConfirmedIndoorCount = dto.ConfirmedIndoorCount ?? existingConfirmation.ConfirmedIndoorCount;
@@ -289,7 +454,6 @@ public class CourtsController : ControllerBase
             }
             else
             {
-                // Create new confirmation
                 var confirmation = new CourtConfirmation
                 {
                     CourtId = id,
@@ -350,12 +514,41 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // GET: /courts/states - Get list of states with courts
+    // GET: /courts/states - Get list of states with courts using stored procedure
     [HttpGet("states")]
     public async Task<ActionResult<ApiResponse<List<string>>>> GetStates()
     {
         try
         {
+            var states = new List<string>();
+
+            var connection = _context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = "sp_GetCourtStates";
+                command.CommandType = CommandType.StoredProcedure;
+
+                using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    if (!reader.IsDBNull(0))
+                        states.Add(reader.GetString(0));
+                }
+            }
+            finally
+            {
+                await connection.CloseAsync();
+            }
+
+            return Ok(new ApiResponse<List<string>> { Success = true, Data = states });
+        }
+        catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
+        {
+            // Stored procedure not created yet - fall back to LINQ
+            _logger.LogWarning("Stored procedure sp_GetCourtStates not found, falling back to LINQ query");
             var states = await _context.Courts
                 .Where(c => c.State != null && c.State != "")
                 .Select(c => c.State!)
@@ -372,11 +565,10 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // Helper method to calculate distance between two points using Haversine formula
+    // Helper method to calculate distance (fallback)
     private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
     {
-        const double R = 3959; // Earth's radius in miles
-
+        const double R = 3959;
         var lat1Rad = lat1 * Math.PI / 180;
         var lat2Rad = lat2 * Math.PI / 180;
         var deltaLat = (lat2 - lat1) * Math.PI / 180;
@@ -390,7 +582,7 @@ public class CourtsController : ControllerBase
         return R * c;
     }
 
-    // Helper method to aggregate confirmation data
+    // Helper for LINQ fallback
     private static CourtAggregatedInfoDto GetAggregatedInfo(List<CourtConfirmation> confirmations)
     {
         if (confirmations.Count == 0)
@@ -402,58 +594,14 @@ public class CourtsController : ControllerBase
             AverageRating = confirmations.Where(c => c.Rating.HasValue).Any()
                 ? confirmations.Where(c => c.Rating.HasValue).Average(c => c.Rating!.Value)
                 : null,
-            MostConfirmedIndoorCount = GetMostCommonValue(confirmations.Where(c => c.ConfirmedIndoorCount.HasValue).Select(c => c.ConfirmedIndoorCount!.Value)),
-            MostConfirmedOutdoorCount = GetMostCommonValue(confirmations.Where(c => c.ConfirmedOutdoorCount.HasValue).Select(c => c.ConfirmedOutdoorCount!.Value)),
-            MostConfirmedHasLights = GetMostCommonBool(confirmations.Where(c => c.HasLights.HasValue).Select(c => c.HasLights!.Value)),
-            MostConfirmedHasFee = GetMostCommonBool(confirmations.Where(c => c.HasFee.HasValue).Select(c => c.HasFee!.Value)),
-            CommonFeeAmount = GetMostCommonString(confirmations.Where(c => !string.IsNullOrEmpty(c.FeeAmount)).Select(c => c.FeeAmount!)),
-            CommonHours = GetMostCommonString(confirmations.Where(c => !string.IsNullOrEmpty(c.Hours)).Select(c => c.Hours!)),
-            CommonSurfaceType = GetMostCommonString(confirmations.Where(c => !string.IsNullOrEmpty(c.SurfaceType)).Select(c => c.SurfaceType!)),
-            CommonAmenities = GetMostCommonAmenities(confirmations.Where(c => !string.IsNullOrEmpty(c.Amenities)).Select(c => c.Amenities!))
+            MostConfirmedIndoorCount = confirmations.Where(c => c.ConfirmedIndoorCount.HasValue).GroupBy(c => c.ConfirmedIndoorCount).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key,
+            MostConfirmedOutdoorCount = confirmations.Where(c => c.ConfirmedOutdoorCount.HasValue).GroupBy(c => c.ConfirmedOutdoorCount).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key,
+            MostConfirmedHasLights = confirmations.Where(c => c.HasLights.HasValue).Count(c => c.HasLights == true) > confirmations.Where(c => c.HasLights.HasValue).Count(c => c.HasLights == false) ? true : confirmations.Where(c => c.HasLights.HasValue).Count(c => c.HasLights == false) > 0 ? false : null,
+            MostConfirmedHasFee = confirmations.Where(c => c.HasFee.HasValue).Count(c => c.HasFee == true) > confirmations.Where(c => c.HasFee.HasValue).Count(c => c.HasFee == false) ? true : confirmations.Where(c => c.HasFee.HasValue).Count(c => c.HasFee == false) > 0 ? false : null,
+            CommonFeeAmount = confirmations.Where(c => !string.IsNullOrEmpty(c.FeeAmount)).GroupBy(c => c.FeeAmount).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key,
+            CommonHours = confirmations.Where(c => !string.IsNullOrEmpty(c.Hours)).GroupBy(c => c.Hours).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key,
+            CommonSurfaceType = confirmations.Where(c => !string.IsNullOrEmpty(c.SurfaceType)).GroupBy(c => c.SurfaceType).OrderByDescending(g => g.Count()).FirstOrDefault()?.Key
         };
-    }
-
-    private static int? GetMostCommonValue(IEnumerable<int> values)
-    {
-        var list = values.ToList();
-        if (!list.Any()) return null;
-        return list.GroupBy(v => v).OrderByDescending(g => g.Count()).First().Key;
-    }
-
-    private static bool? GetMostCommonBool(IEnumerable<bool> values)
-    {
-        var list = values.ToList();
-        if (!list.Any()) return null;
-        var trueCount = list.Count(v => v);
-        return trueCount > list.Count / 2;
-    }
-
-    private static string? GetMostCommonString(IEnumerable<string> values)
-    {
-        var list = values.ToList();
-        if (!list.Any()) return null;
-        return list.GroupBy(v => v).OrderByDescending(g => g.Count()).First().Key;
-    }
-
-    private static List<string>? GetMostCommonAmenities(IEnumerable<string> amenityStrings)
-    {
-        var allAmenities = amenityStrings
-            .SelectMany(s => s.Split(',', StringSplitOptions.RemoveEmptyEntries))
-            .Select(a => a.Trim().ToLower())
-            .ToList();
-
-        if (!allAmenities.Any()) return null;
-
-        // Return amenities that appear in at least 30% of confirmations
-        var totalConfirmations = amenityStrings.Count();
-        var threshold = Math.Max(1, totalConfirmations * 0.3);
-
-        return allAmenities
-            .GroupBy(a => a)
-            .Where(g => g.Count() >= threshold)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
-            .ToList();
     }
 
     private static CourtConfirmationDto MapToConfirmationDto(CourtConfirmation cc)
