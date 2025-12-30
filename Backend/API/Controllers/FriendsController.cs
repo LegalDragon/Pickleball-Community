@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
@@ -38,6 +40,18 @@ public class FriendsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<FriendDto>> { Success = false, Message = "User not authenticated" });
 
+            // Try stored procedure first
+            try
+            {
+                var friends = await GetFriendsWithStoredProcedure(userId.Value);
+                return Ok(new ApiResponse<List<FriendDto>> { Success = true, Data = friends });
+            }
+            catch (Exception spEx)
+            {
+                _logger.LogWarning(spEx, "Stored procedure sp_GetFriendsList not available, falling back to LINQ");
+            }
+
+            // Fallback to LINQ
             var friendships = await _context.Friendships
                 .Include(f => f.User1)
                 .Include(f => f.User2)
@@ -72,6 +86,38 @@ public class FriendsController : ControllerBase
         }
     }
 
+    private async Task<List<FriendDto>> GetFriendsWithStoredProcedure(int userId)
+    {
+        var results = new List<FriendDto>();
+        var connectionString = _context.Database.GetConnectionString();
+
+        using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        using var command = new SqlCommand("sp_GetFriendsList", connection);
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@CurrentUserId", userId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new FriendDto
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                FriendUserId = reader.GetInt32(reader.GetOrdinal("FriendUserId")),
+                Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? "" : reader.GetString(reader.GetOrdinal("Name")),
+                ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("ProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ProfileImageUrl")),
+                ExperienceLevel = reader.IsDBNull(reader.GetOrdinal("ExperienceLevel")) ? null : reader.GetString(reader.GetOrdinal("ExperienceLevel")),
+                PlayingStyle = reader.IsDBNull(reader.GetOrdinal("PlayingStyle")) ? null : reader.GetString(reader.GetOrdinal("PlayingStyle")),
+                Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                PaddleBrand = reader.IsDBNull(reader.GetOrdinal("PaddleBrand")) ? null : reader.GetString(reader.GetOrdinal("PaddleBrand")),
+                FriendsSince = reader.GetDateTime(reader.GetOrdinal("FriendsSince"))
+            });
+        }
+
+        return results;
+    }
+
     // GET: /friends/search?query=... - Search for players
     [HttpGet("search")]
     public async Task<ActionResult<ApiResponse<List<PlayerSearchResultDto>>>> SearchPlayers([FromQuery] string query)
@@ -85,7 +131,19 @@ public class FriendsController : ControllerBase
             if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
                 return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = new List<PlayerSearchResultDto>() });
 
-            var queryLower = query.ToLower();
+            // Try stored procedure first
+            try
+            {
+                var users = await SearchPlayersWithStoredProcedure(userId.Value, query);
+                return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = users });
+            }
+            catch (Exception spEx)
+            {
+                _logger.LogWarning(spEx, "Stored procedure sp_SearchUsersForFriends not available, falling back to LINQ");
+            }
+
+            // Fallback to LINQ with EF.Functions.Like for SQL Server compatibility
+            var searchPattern = $"%{query}%";
 
             // Get existing friend user IDs
             var friendUserIds = await _context.Friendships
@@ -99,26 +157,27 @@ public class FriendsController : ControllerBase
                 .Select(fr => fr.SenderId == userId.Value ? fr.RecipientId : fr.SenderId)
                 .ToListAsync();
 
-            var users = await _context.Users
+            var usersQuery = await _context.Users
                 .Where(u => u.Id != userId.Value && u.IsActive &&
-                    (u.FirstName!.ToLower().Contains(queryLower) ||
-                     u.LastName!.ToLower().Contains(queryLower) ||
-                     u.Email.ToLower().Contains(queryLower) ||
-                     (u.FirstName + " " + u.LastName).ToLower().Contains(queryLower)))
+                    (EF.Functions.Like(u.FirstName ?? "", searchPattern) ||
+                     EF.Functions.Like(u.LastName ?? "", searchPattern) ||
+                     EF.Functions.Like(u.Email, searchPattern) ||
+                     EF.Functions.Like((u.FirstName ?? "") + " " + (u.LastName ?? ""), searchPattern)))
                 .Take(20)
-                .Select(u => new PlayerSearchResultDto
-                {
-                    Id = u.Id,
-                    Name = $"{u.FirstName} {u.LastName}".Trim(),
-                    ProfileImageUrl = u.ProfileImageUrl,
-                    ExperienceLevel = u.ExperienceLevel,
-                    Location = !string.IsNullOrEmpty(u.City) && !string.IsNullOrEmpty(u.State)
-                        ? $"{u.City}, {u.State}"
-                        : u.City ?? u.State,
-                    IsFriend = friendUserIds.Contains(u.Id),
-                    HasPendingRequest = pendingRequestUserIds.Contains(u.Id)
-                })
                 .ToListAsync();
+
+            var users = usersQuery.Select(u => new PlayerSearchResultDto
+            {
+                Id = u.Id,
+                Name = $"{u.FirstName} {u.LastName}".Trim(),
+                ProfileImageUrl = u.ProfileImageUrl,
+                ExperienceLevel = u.ExperienceLevel,
+                Location = !string.IsNullOrEmpty(u.City) && !string.IsNullOrEmpty(u.State)
+                    ? $"{u.City}, {u.State}"
+                    : u.City ?? u.State,
+                IsFriend = friendUserIds.Contains(u.Id),
+                HasPendingRequest = pendingRequestUserIds.Contains(u.Id)
+            }).ToList();
 
             return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = users });
         }
@@ -127,6 +186,38 @@ public class FriendsController : ControllerBase
             _logger.LogError(ex, "Error searching players");
             return StatusCode(500, new ApiResponse<List<PlayerSearchResultDto>> { Success = false, Message = "An error occurred" });
         }
+    }
+
+    private async Task<List<PlayerSearchResultDto>> SearchPlayersWithStoredProcedure(int userId, string query)
+    {
+        var results = new List<PlayerSearchResultDto>();
+        var connectionString = _context.Database.GetConnectionString();
+
+        using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        using var command = new SqlCommand("sp_SearchUsersForFriends", connection);
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@CurrentUserId", userId);
+        command.Parameters.AddWithValue("@SearchQuery", query);
+        command.Parameters.AddWithValue("@MaxResults", 20);
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new PlayerSearchResultDto
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? "" : reader.GetString(reader.GetOrdinal("Name")),
+                ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("ProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ProfileImageUrl")),
+                ExperienceLevel = reader.IsDBNull(reader.GetOrdinal("ExperienceLevel")) ? null : reader.GetString(reader.GetOrdinal("ExperienceLevel")),
+                Location = reader.IsDBNull(reader.GetOrdinal("Location")) ? null : reader.GetString(reader.GetOrdinal("Location")),
+                IsFriend = reader.GetInt32(reader.GetOrdinal("IsFriend")) == 1,
+                HasPendingRequest = reader.GetInt32(reader.GetOrdinal("HasPendingRequest")) == 1
+            });
+        }
+
+        return results;
     }
 
     // GET: /friends/requests/pending - Get pending friend requests received
@@ -139,29 +230,42 @@ public class FriendsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<FriendRequestDto>> { Success = false, Message = "User not authenticated" });
 
-            var requests = await _context.FriendRequests
+            // Try stored procedure first
+            try
+            {
+                var requests = await GetPendingRequestsWithStoredProcedure(userId.Value);
+                return Ok(new ApiResponse<List<FriendRequestDto>> { Success = true, Data = requests });
+            }
+            catch (Exception spEx)
+            {
+                _logger.LogWarning(spEx, "Stored procedure sp_GetPendingFriendRequests not available, falling back to LINQ");
+            }
+
+            // Fallback to LINQ
+            var requestsData = await _context.FriendRequests
                 .Include(fr => fr.Sender)
                 .Where(fr => fr.RecipientId == userId.Value && fr.Status == "Pending")
                 .OrderByDescending(fr => fr.CreatedAt)
-                .Select(fr => new FriendRequestDto
-                {
-                    Id = fr.Id,
-                    Status = fr.Status,
-                    Message = fr.Message,
-                    CreatedAt = fr.CreatedAt,
-                    Sender = new UserSummaryDto
-                    {
-                        Id = fr.Sender!.Id,
-                        Name = $"{fr.Sender.FirstName} {fr.Sender.LastName}".Trim(),
-                        ProfileImageUrl = fr.Sender.ProfileImageUrl,
-                        ExperienceLevel = fr.Sender.ExperienceLevel,
-                        PlayingStyle = fr.Sender.PlayingStyle,
-                        Location = !string.IsNullOrEmpty(fr.Sender.City) && !string.IsNullOrEmpty(fr.Sender.State)
-                            ? $"{fr.Sender.City}, {fr.Sender.State}"
-                            : fr.Sender.City ?? fr.Sender.State
-                    }
-                })
                 .ToListAsync();
+
+            var requests = requestsData.Select(fr => new FriendRequestDto
+            {
+                Id = fr.Id,
+                Status = fr.Status,
+                Message = fr.Message,
+                CreatedAt = fr.CreatedAt,
+                Sender = new UserSummaryDto
+                {
+                    Id = fr.Sender!.Id,
+                    Name = $"{fr.Sender.FirstName} {fr.Sender.LastName}".Trim(),
+                    ProfileImageUrl = fr.Sender.ProfileImageUrl,
+                    ExperienceLevel = fr.Sender.ExperienceLevel,
+                    PlayingStyle = fr.Sender.PlayingStyle,
+                    Location = !string.IsNullOrEmpty(fr.Sender.City) && !string.IsNullOrEmpty(fr.Sender.State)
+                        ? $"{fr.Sender.City}, {fr.Sender.State}"
+                        : fr.Sender.City ?? fr.Sender.State
+                }
+            }).ToList();
 
             return Ok(new ApiResponse<List<FriendRequestDto>> { Success = true, Data = requests });
         }
@@ -170,6 +274,42 @@ public class FriendsController : ControllerBase
             _logger.LogError(ex, "Error fetching pending requests");
             return StatusCode(500, new ApiResponse<List<FriendRequestDto>> { Success = false, Message = "An error occurred" });
         }
+    }
+
+    private async Task<List<FriendRequestDto>> GetPendingRequestsWithStoredProcedure(int userId)
+    {
+        var results = new List<FriendRequestDto>();
+        var connectionString = _context.Database.GetConnectionString();
+
+        using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        using var command = new SqlCommand("sp_GetPendingFriendRequests", connection);
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@CurrentUserId", userId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new FriendRequestDto
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                Status = reader.GetString(reader.GetOrdinal("Status")),
+                Message = reader.IsDBNull(reader.GetOrdinal("Message")) ? null : reader.GetString(reader.GetOrdinal("Message")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                Sender = new UserSummaryDto
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("SenderId")),
+                    Name = reader.IsDBNull(reader.GetOrdinal("SenderName")) ? "" : reader.GetString(reader.GetOrdinal("SenderName")),
+                    ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("SenderProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("SenderProfileImageUrl")),
+                    ExperienceLevel = reader.IsDBNull(reader.GetOrdinal("SenderExperienceLevel")) ? null : reader.GetString(reader.GetOrdinal("SenderExperienceLevel")),
+                    PlayingStyle = reader.IsDBNull(reader.GetOrdinal("SenderPlayingStyle")) ? null : reader.GetString(reader.GetOrdinal("SenderPlayingStyle")),
+                    Location = reader.IsDBNull(reader.GetOrdinal("SenderLocation")) ? null : reader.GetString(reader.GetOrdinal("SenderLocation"))
+                }
+            });
+        }
+
+        return results;
     }
 
     // GET: /friends/requests/sent - Get sent friend requests awaiting response
@@ -182,29 +322,42 @@ public class FriendsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<FriendRequestDto>> { Success = false, Message = "User not authenticated" });
 
-            var requests = await _context.FriendRequests
+            // Try stored procedure first
+            try
+            {
+                var requests = await GetSentRequestsWithStoredProcedure(userId.Value);
+                return Ok(new ApiResponse<List<FriendRequestDto>> { Success = true, Data = requests });
+            }
+            catch (Exception spEx)
+            {
+                _logger.LogWarning(spEx, "Stored procedure sp_GetSentFriendRequests not available, falling back to LINQ");
+            }
+
+            // Fallback to LINQ
+            var requestsData = await _context.FriendRequests
                 .Include(fr => fr.Recipient)
                 .Where(fr => fr.SenderId == userId.Value && fr.Status == "Pending")
                 .OrderByDescending(fr => fr.CreatedAt)
-                .Select(fr => new FriendRequestDto
-                {
-                    Id = fr.Id,
-                    Status = fr.Status,
-                    Message = fr.Message,
-                    CreatedAt = fr.CreatedAt,
-                    Recipient = new UserSummaryDto
-                    {
-                        Id = fr.Recipient!.Id,
-                        Name = $"{fr.Recipient.FirstName} {fr.Recipient.LastName}".Trim(),
-                        ProfileImageUrl = fr.Recipient.ProfileImageUrl,
-                        ExperienceLevel = fr.Recipient.ExperienceLevel,
-                        PlayingStyle = fr.Recipient.PlayingStyle,
-                        Location = !string.IsNullOrEmpty(fr.Recipient.City) && !string.IsNullOrEmpty(fr.Recipient.State)
-                            ? $"{fr.Recipient.City}, {fr.Recipient.State}"
-                            : fr.Recipient.City ?? fr.Recipient.State
-                    }
-                })
                 .ToListAsync();
+
+            var requests = requestsData.Select(fr => new FriendRequestDto
+            {
+                Id = fr.Id,
+                Status = fr.Status,
+                Message = fr.Message,
+                CreatedAt = fr.CreatedAt,
+                Recipient = new UserSummaryDto
+                {
+                    Id = fr.Recipient!.Id,
+                    Name = $"{fr.Recipient.FirstName} {fr.Recipient.LastName}".Trim(),
+                    ProfileImageUrl = fr.Recipient.ProfileImageUrl,
+                    ExperienceLevel = fr.Recipient.ExperienceLevel,
+                    PlayingStyle = fr.Recipient.PlayingStyle,
+                    Location = !string.IsNullOrEmpty(fr.Recipient.City) && !string.IsNullOrEmpty(fr.Recipient.State)
+                        ? $"{fr.Recipient.City}, {fr.Recipient.State}"
+                        : fr.Recipient.City ?? fr.Recipient.State
+                }
+            }).ToList();
 
             return Ok(new ApiResponse<List<FriendRequestDto>> { Success = true, Data = requests });
         }
@@ -213,6 +366,42 @@ public class FriendsController : ControllerBase
             _logger.LogError(ex, "Error fetching sent requests");
             return StatusCode(500, new ApiResponse<List<FriendRequestDto>> { Success = false, Message = "An error occurred" });
         }
+    }
+
+    private async Task<List<FriendRequestDto>> GetSentRequestsWithStoredProcedure(int userId)
+    {
+        var results = new List<FriendRequestDto>();
+        var connectionString = _context.Database.GetConnectionString();
+
+        using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        using var command = new SqlCommand("sp_GetSentFriendRequests", connection);
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.AddWithValue("@CurrentUserId", userId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new FriendRequestDto
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                Status = reader.GetString(reader.GetOrdinal("Status")),
+                Message = reader.IsDBNull(reader.GetOrdinal("Message")) ? null : reader.GetString(reader.GetOrdinal("Message")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                Recipient = new UserSummaryDto
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("RecipientId")),
+                    Name = reader.IsDBNull(reader.GetOrdinal("RecipientName")) ? "" : reader.GetString(reader.GetOrdinal("RecipientName")),
+                    ProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("RecipientProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("RecipientProfileImageUrl")),
+                    ExperienceLevel = reader.IsDBNull(reader.GetOrdinal("RecipientExperienceLevel")) ? null : reader.GetString(reader.GetOrdinal("RecipientExperienceLevel")),
+                    PlayingStyle = reader.IsDBNull(reader.GetOrdinal("RecipientPlayingStyle")) ? null : reader.GetString(reader.GetOrdinal("RecipientPlayingStyle")),
+                    Location = reader.IsDBNull(reader.GetOrdinal("RecipientLocation")) ? null : reader.GetString(reader.GetOrdinal("RecipientLocation"))
+                }
+            });
+        }
+
+        return results;
     }
 
     // POST: /friends/requests - Send a friend request
