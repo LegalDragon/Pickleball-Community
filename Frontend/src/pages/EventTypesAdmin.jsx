@@ -150,6 +150,7 @@ export default function EventTypesAdmin() {
   });
   const [iconSearch, setIconSearch] = useState('');
   const [iconCategory, setIconCategory] = useState('All');
+  const [error, setError] = useState('');
 
   // Filter icons based on search and category
   const filteredIcons = useMemo(() => {
@@ -192,6 +193,7 @@ export default function EventTypesAdmin() {
     });
     setIconSearch('');
     setIconCategory('All');
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -207,6 +209,7 @@ export default function EventTypesAdmin() {
     });
     setIconSearch('');
     setIconCategory('All');
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -215,6 +218,7 @@ export default function EventTypesAdmin() {
     if (!formData.name.trim()) return;
 
     setSaving(true);
+    setError('');
     try {
       if (editingType) {
         const response = await eventTypesApi.update(editingType.id, formData);
@@ -223,16 +227,22 @@ export default function EventTypesAdmin() {
             et.id === editingType.id ? response.data : et
           ));
           setIsModalOpen(false);
+        } else {
+          setError(response.message || 'Failed to update event type');
         }
       } else {
         const response = await eventTypesApi.create(formData);
         if (response.success) {
           setEventTypes([...eventTypes, response.data]);
           setIsModalOpen(false);
+        } else {
+          setError(response.message || 'Failed to create event type');
         }
       }
     } catch (err) {
       console.error('Error saving event type:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'An error occurred while saving';
+      setError(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -449,8 +459,9 @@ export default function EventTypesAdmin() {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            {/* Fixed Header */}
+            <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900">
                 {editingType ? 'Edit Event Type' : 'Add Event Type'}
               </h2>
@@ -462,171 +473,181 @@ export default function EventTypesAdmin() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Tournament"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                  required
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of this event type..."
-                  rows={2}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                />
-              </div>
-
-              {/* Icon Picker */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Icon
-                </label>
-                {/* Search and Category Filter */}
-                <div className="flex gap-2 mb-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={iconSearch}
-                      onChange={(e) => setIconSearch(e.target.value)}
-                      placeholder="Search icons..."
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                    />
+            {/* Scrollable Content */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {/* Error Message */}
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {error}
                   </div>
-                  <select
-                    value={iconCategory}
-                    onChange={(e) => setIconCategory(e.target.value)}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                  >
-                    <option value="All">All</option>
-                    {ICON_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                {/* Icon Grid */}
-                <div className="h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
-                  {filteredIcons.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                      No icons found
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-8 gap-1">
-                      {filteredIcons.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, icon: option.value })}
-                          className={`p-2 rounded-lg border-2 transition-all ${
-                            formData.icon === option.value
-                              ? 'border-green-500 bg-green-50 text-green-600 scale-105'
-                              : 'border-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                          }`}
-                          title={`${option.label} (${option.category})`}
-                        >
-                          <option.icon className="w-5 h-5" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="mt-1 text-xs text-gray-500">
-                  {filteredIcons.length} icons available
-                </div>
-              </div>
+                )}
 
-              {/* Color Picker */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Background Color
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {COLOR_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, color: option.value })}
-                      className={`w-10 h-10 rounded-lg ${option.class} transition-all flex items-center justify-center ${
-                        formData.color === option.value
-                          ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
-                          : 'hover:scale-105'
-                      }`}
-                      title={option.label}
-                    >
-                      {formData.color === option.value && (
-                        <span className="text-white text-lg font-bold">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sort Order & Active */}
-              <div className="grid grid-cols-2 gap-4">
+                {/* Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sort Order
+                    Name *
                   </label>
                   <input
-                    type="number"
-                    value={formData.sortOrder}
-                    onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-                    min="0"
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Tournament"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Brief description of this event type..."
+                    rows={2}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
 
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 cursor-pointer pb-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                      className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                    />
-                    <span className="text-sm text-gray-700">Active</span>
+                {/* Icon Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Icon
                   </label>
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div className="pt-4 border-t">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preview
-                </label>
-                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className={`w-12 h-12 rounded-lg ${getColorClass(formData.color)} flex items-center justify-center text-white`}>
-                    {getIconComponent(formData.icon)}
+                  {/* Search and Category Filter */}
+                  <div className="flex gap-2 mb-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={iconSearch}
+                        onChange={(e) => setIconSearch(e.target.value)}
+                        placeholder="Search icons..."
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                      />
+                    </div>
+                    <select
+                      value={iconCategory}
+                      onChange={(e) => setIconCategory(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    >
+                      <option value="All">All</option>
+                      {ICON_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
+                  {/* Icon Grid */}
+                  <div className="h-32 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                    {filteredIcons.length === 0 ? (
+                      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                        No icons found
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-8 gap-1">
+                        {filteredIcons.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, icon: option.value })}
+                            className={`p-2 rounded-lg border-2 transition-all ${
+                              formData.icon === option.value
+                                ? 'border-green-500 bg-green-50 text-green-600 scale-105'
+                                : 'border-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                            }`}
+                            title={`${option.label} (${option.category})`}
+                          >
+                            <option.icon className="w-5 h-5" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {filteredIcons.length} icons available
+                  </div>
+                </div>
+
+                {/* Color Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Background Color
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {COLOR_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color: option.value })}
+                        className={`w-8 h-8 rounded-lg ${option.class} transition-all flex items-center justify-center ${
+                          formData.color === option.value
+                            ? 'ring-2 ring-offset-2 ring-gray-400 scale-110'
+                            : 'hover:scale-105'
+                        }`}
+                        title={option.label}
+                      >
+                        {formData.color === option.value && (
+                          <span className="text-white text-sm font-bold">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sort Order & Active */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="font-medium text-gray-900">{formData.name || 'Event Type Name'}</div>
-                    <div className="text-sm text-gray-500">{formData.description || 'Description...'}</div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sort Order
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.sortOrder}
+                      onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                      min="0"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer pb-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-700">Active</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div className="pt-4 border-t">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Preview
+                  </label>
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className={`w-12 h-12 rounded-lg ${getColorClass(formData.color)} flex items-center justify-center text-white`}>
+                      {getIconComponent(formData.icon)}
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{formData.name || 'Event Type Name'}</div>
+                      <div className="text-sm text-gray-500">{formData.description || 'Description...'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
+              {/* Fixed Footer with Actions */}
+              <div className="flex gap-3 p-4 border-t bg-gray-50 flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
