@@ -63,6 +63,9 @@ export default function Friends() {
     setHasSearched(true);
     try {
       const response = await friendsApi.searchPlayers(searchFilters);
+      console.log('Search response:', response);
+      console.log('Search response.data:', response.data);
+      console.log('Search results:', response.data?.data);
       setSearchResults(response.data?.data || []);
     } catch (err) {
       console.error('Error searching players:', err);
