@@ -27,20 +27,14 @@ export default function Friends() {
   const loadFriendsData = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API calls when backend is ready
-      // const [friendsRes, pendingRes, sentRes] = await Promise.all([
-      //   friendsApi.getFriends(),
-      //   friendsApi.getPendingRequests(),
-      //   friendsApi.getSentRequests()
-      // ]);
-      // setFriends(friendsRes);
-      // setPendingRequests(pendingRes);
-      // setSentRequests(sentRes);
-
-      // Placeholder data
-      setFriends([]);
-      setPendingRequests([]);
-      setSentRequests([]);
+      const [friendsRes, pendingRes, sentRes] = await Promise.all([
+        friendsApi.getFriends(),
+        friendsApi.getPendingRequests(),
+        friendsApi.getSentRequests()
+      ]);
+      setFriends(friendsRes.data?.data || []);
+      setPendingRequests(pendingRes.data?.data || []);
+      setSentRequests(sentRes.data?.data || []);
     } catch (err) {
       console.error('Error loading friends data:', err);
     } finally {
@@ -57,10 +51,8 @@ export default function Friends() {
 
     setSearching(true);
     try {
-      // TODO: Replace with actual API call
-      // const results = await friendsApi.searchPlayers(query);
-      // setSearchResults(results);
-      setSearchResults([]);
+      const response = await friendsApi.searchPlayers(query);
+      setSearchResults(response.data?.data || []);
     } catch (err) {
       console.error('Error searching players:', err);
     } finally {
@@ -70,13 +62,13 @@ export default function Friends() {
 
   const handleSendRequest = async (userId) => {
     try {
-      // TODO: Replace with actual API call
-      // await friendsApi.sendRequest(userId);
-      console.log('Sending friend request to:', userId);
+      await friendsApi.sendRequest(userId);
       // Refresh data
       loadFriendsData();
-      // Remove from search results
-      setSearchResults(prev => prev.filter(u => u.id !== userId));
+      // Update search results to show pending status
+      setSearchResults(prev => prev.map(u =>
+        u.id === userId ? { ...u, hasPendingRequest: true } : u
+      ));
     } catch (err) {
       console.error('Error sending friend request:', err);
     }
@@ -84,9 +76,7 @@ export default function Friends() {
 
   const handleAcceptRequest = async (requestId) => {
     try {
-      // TODO: Replace with actual API call
-      // await friendsApi.acceptRequest(requestId);
-      console.log('Accepting request:', requestId);
+      await friendsApi.acceptRequest(requestId);
       loadFriendsData();
     } catch (err) {
       console.error('Error accepting request:', err);
@@ -95,9 +85,7 @@ export default function Friends() {
 
   const handleRejectRequest = async (requestId) => {
     try {
-      // TODO: Replace with actual API call
-      // await friendsApi.rejectRequest(requestId);
-      console.log('Rejecting request:', requestId);
+      await friendsApi.rejectRequest(requestId);
       loadFriendsData();
     } catch (err) {
       console.error('Error rejecting request:', err);
@@ -106,9 +94,7 @@ export default function Friends() {
 
   const handleCancelRequest = async (requestId) => {
     try {
-      // TODO: Replace with actual API call
-      // await friendsApi.cancelRequest(requestId);
-      console.log('Cancelling request:', requestId);
+      await friendsApi.cancelRequest(requestId);
       loadFriendsData();
     } catch (err) {
       console.error('Error cancelling request:', err);
@@ -231,9 +217,9 @@ export default function Friends() {
                             <Calendar className="w-4 h-4" />
                             <span>Friends since {formatDate(friend.friendsSince)}</span>
                           </div>
-                          {friend.skillLevel && (
+                          {friend.experienceLevel && (
                             <span className="text-xs text-blue-600 font-medium">
-                              Level {friend.skillLevel}
+                              {friend.experienceLevel}
                             </span>
                           )}
                         </div>
@@ -299,9 +285,9 @@ export default function Friends() {
                             <p className="text-sm text-gray-500">
                               Sent {formatDate(request.createdAt)}
                             </p>
-                            {request.sender.skillLevel && (
+                            {request.sender.experienceLevel && (
                               <span className="text-xs text-blue-600 font-medium">
-                                Level {request.sender.skillLevel}
+                                {request.sender.experienceLevel}
                               </span>
                             )}
                           </div>
@@ -443,9 +429,9 @@ export default function Friends() {
                         )}
                         <div>
                           <h3 className="font-medium text-gray-900">{player.name}</h3>
-                          {player.skillLevel && (
+                          {player.experienceLevel && (
                             <span className="text-sm text-blue-600">
-                              Level {player.skillLevel}
+                              {player.experienceLevel}
                             </span>
                           )}
                           {player.location && (
@@ -453,13 +439,25 @@ export default function Friends() {
                           )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleSendRequest(player.id)}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Add Friend
-                      </button>
+                      {player.isFriend ? (
+                        <span className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium">
+                          <Check className="w-4 h-4" />
+                          Friends
+                        </span>
+                      ) : player.hasPendingRequest ? (
+                        <span className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg font-medium">
+                          <Clock className="w-4 h-4" />
+                          Pending
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleSendRequest(player.id)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          Add Friend
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -555,9 +553,9 @@ function FriendDetailModal({ friend, onClose }) {
               </div>
             )}
             <h3 className="text-xl font-semibold text-gray-900">{friend.name}</h3>
-            {friend.skillLevel && (
+            {friend.experienceLevel && (
               <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                Level {friend.skillLevel}
+                {friend.experienceLevel}
               </span>
             )}
             <p className="text-gray-500 mt-2">
