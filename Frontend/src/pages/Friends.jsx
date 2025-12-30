@@ -13,9 +13,15 @@ export default function Friends() {
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [sentRequests, setSentRequests] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilters, setSearchFilters] = useState({
+    firstName: '',
+    lastName: '',
+    city: '',
+    state: ''
+  });
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [previewUser, setPreviewUser] = useState(null);
@@ -42,22 +48,37 @@ export default function Friends() {
     }
   };
 
-  const handleSearch = async (query) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
+  const handleSearch = async (e) => {
+    e?.preventDefault();
+
+    // Check if at least one field has a value
+    const hasFilters = Object.values(searchFilters).some(v => v.trim().length > 0);
+    if (!hasFilters) {
       setSearchResults([]);
+      setHasSearched(false);
       return;
     }
 
     setSearching(true);
+    setHasSearched(true);
     try {
-      const response = await friendsApi.searchPlayers(query);
+      const response = await friendsApi.searchPlayers(searchFilters);
       setSearchResults(response.data?.data || []);
     } catch (err) {
       console.error('Error searching players:', err);
     } finally {
       setSearching(false);
     }
+  };
+
+  const handleFilterChange = (field, value) => {
+    setSearchFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const clearSearch = () => {
+    setSearchFilters({ firstName: '', lastName: '', city: '', state: '' });
+    setSearchResults([]);
+    setHasSearched(false);
   };
 
   const handleSendRequest = async (userId) => {
@@ -389,27 +410,81 @@ export default function Friends() {
             </div>
 
             <div className="p-6">
-              <div className="relative mb-6">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              {/* Search Form */}
+              <form onSubmit={handleSearch} className="mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                    <input
+                      type="text"
+                      placeholder="Enter first name..."
+                      value={searchFilters.firstName}
+                      onChange={(e) => handleFilterChange('firstName', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                    <input
+                      type="text"
+                      placeholder="Enter last name..."
+                      value={searchFilters.lastName}
+                      onChange={(e) => handleFilterChange('lastName', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                    <input
+                      type="text"
+                      placeholder="Enter city..."
+                      value={searchFilters.city}
+                      onChange={(e) => handleFilterChange('city', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                    <input
+                      type="text"
+                      placeholder="Enter state..."
+                      value={searchFilters.state}
+                      onChange={(e) => handleFilterChange('state', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={searching}
+                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <Search className="w-4 h-4" />
+                    {searching ? 'Searching...' : 'Search'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </form>
 
+              {/* Search Results */}
               {searching ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
                 </div>
-              ) : searchQuery.length >= 2 && searchResults.length === 0 ? (
+              ) : hasSearched && searchResults.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  No players found matching "{searchQuery}"
+                  No players found matching your search criteria
                 </div>
               ) : searchResults.length > 0 ? (
                 <div className="space-y-3">
+                  <p className="text-sm text-gray-500 mb-3">Found {searchResults.length} player(s)</p>
                   {searchResults.map(player => (
                     <div
                       key={player.id}
@@ -464,7 +539,7 @@ export default function Friends() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p>Enter a name or email to search for players</p>
+                  <p>Enter search criteria and click Search to find players</p>
                 </div>
               )}
             </div>

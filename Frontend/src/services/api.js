@@ -501,7 +501,14 @@ export const friendsApi = {
   getSentRequests: () => api.get('/friends/requests/sent'),
 
   // Search for players to add as friends
-  searchPlayers: (query) => api.get(`/friends/search?query=${encodeURIComponent(query)}`),
+  searchPlayers: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.firstName) params.append('firstName', filters.firstName);
+    if (filters.lastName) params.append('lastName', filters.lastName);
+    if (filters.city) params.append('city', filters.city);
+    if (filters.state) params.append('state', filters.state);
+    return api.get(`/friends/search?${params.toString()}`);
+  },
 
   // Send a friend request
   sendRequest: (userId) => api.post('/friends/requests', { recipientId: userId }),

@@ -7,8 +7,8 @@ GO
 
 -- =============================================
 -- Stored Procedure: sp_SearchUsersForFriends
--- Searches users by name or email, excluding self,
--- and returns friendship/pending request status
+-- Searches users by first name, last name, city, state
+-- excluding self, and returns friendship/pending request status
 -- =============================================
 IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[sp_SearchUsersForFriends]') AND type in (N'P', N'PC'))
 BEGIN
@@ -19,14 +19,20 @@ GO
 
 CREATE PROCEDURE [dbo].[sp_SearchUsersForFriends]
     @CurrentUserId INT,
-    @SearchQuery NVARCHAR(100),
+    @FirstName NVARCHAR(100) = NULL,
+    @LastName NVARCHAR(100) = NULL,
+    @City NVARCHAR(100) = NULL,
+    @State NVARCHAR(100) = NULL,
     @MaxResults INT = 20
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Prepare search pattern for LIKE
-    DECLARE @SearchPattern NVARCHAR(102) = '%' + @SearchQuery + '%';
+    -- Prepare search patterns for LIKE (only if parameter has value)
+    DECLARE @FirstNamePattern NVARCHAR(102) = CASE WHEN @FirstName IS NOT NULL AND LEN(@FirstName) > 0 THEN '%' + @FirstName + '%' ELSE NULL END;
+    DECLARE @LastNamePattern NVARCHAR(102) = CASE WHEN @LastName IS NOT NULL AND LEN(@LastName) > 0 THEN '%' + @LastName + '%' ELSE NULL END;
+    DECLARE @CityPattern NVARCHAR(102) = CASE WHEN @City IS NOT NULL AND LEN(@City) > 0 THEN '%' + @City + '%' ELSE NULL END;
+    DECLARE @StatePattern NVARCHAR(102) = CASE WHEN @State IS NOT NULL AND LEN(@State) > 0 THEN '%' + @State + '%' ELSE NULL END;
 
     -- Return search results with friendship status
     SELECT TOP (@MaxResults)
@@ -60,19 +66,11 @@ BEGIN
     FROM Users u
     WHERE u.Id != @CurrentUserId
       AND u.IsActive = 1
-      AND (
-          u.FirstName LIKE @SearchPattern
-          OR u.LastName LIKE @SearchPattern
-          OR u.Email LIKE @SearchPattern
-          OR (ISNULL(u.FirstName, '') + ' ' + ISNULL(u.LastName, '')) LIKE @SearchPattern
-      )
+      AND (@FirstNamePattern IS NULL OR u.FirstName LIKE @FirstNamePattern)
+      AND (@LastNamePattern IS NULL OR u.LastName LIKE @LastNamePattern)
+      AND (@CityPattern IS NULL OR u.City LIKE @CityPattern)
+      AND (@StatePattern IS NULL OR u.State LIKE @StatePattern)
     ORDER BY
-        -- Prioritize exact matches at start of name
-        CASE
-            WHEN u.FirstName LIKE @SearchQuery + '%' THEN 0
-            WHEN u.LastName LIKE @SearchQuery + '%' THEN 1
-            ELSE 2
-        END,
         u.FirstName,
         u.LastName;
 END

@@ -118,9 +118,13 @@ public class FriendsController : ControllerBase
         return results;
     }
 
-    // GET: /friends/search?query=... - Search for players
+    // GET: /friends/search - Search for players by first name, last name, city, state
     [HttpGet("search")]
-    public async Task<ActionResult<ApiResponse<List<PlayerSearchResultDto>>>> SearchPlayers([FromQuery] string query)
+    public async Task<ActionResult<ApiResponse<List<PlayerSearchResultDto>>>> SearchPlayers(
+        [FromQuery] string? firstName,
+        [FromQuery] string? lastName,
+        [FromQuery] string? city,
+        [FromQuery] string? state)
     {
         try
         {
@@ -128,22 +132,21 @@ public class FriendsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<PlayerSearchResultDto>> { Success = false, Message = "User not authenticated" });
 
-            if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            // Check if at least one search parameter is provided
+            if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName) &&
+                string.IsNullOrWhiteSpace(city) && string.IsNullOrWhiteSpace(state))
                 return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = new List<PlayerSearchResultDto>() });
 
             // Try stored procedure first
             try
             {
-                var users = await SearchPlayersWithStoredProcedure(userId.Value, query);
+                var users = await SearchPlayersWithStoredProcedure(userId.Value, firstName, lastName, city, state);
                 return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = users });
             }
             catch (Exception spEx)
             {
                 _logger.LogWarning(spEx, "Stored procedure sp_SearchUsersForFriends not available, falling back to LINQ");
             }
-
-            // Fallback to LINQ with EF.Functions.Like for SQL Server compatibility
-            var searchPattern = $"%{query}%";
 
             // Get existing friend user IDs
             var friendUserIds = await _context.Friendships
@@ -157,16 +160,24 @@ public class FriendsController : ControllerBase
                 .Select(fr => fr.SenderId == userId.Value ? fr.RecipientId : fr.SenderId)
                 .ToListAsync();
 
-            var usersQuery = await _context.Users
-                .Where(u => u.Id != userId.Value && u.IsActive &&
-                    (EF.Functions.Like(u.FirstName ?? "", searchPattern) ||
-                     EF.Functions.Like(u.LastName ?? "", searchPattern) ||
-                     EF.Functions.Like(u.Email, searchPattern) ||
-                     EF.Functions.Like((u.FirstName ?? "") + " " + (u.LastName ?? ""), searchPattern)))
-                .Take(20)
-                .ToListAsync();
+            // Fallback to LINQ with EF.Functions.Like for SQL Server compatibility
+            var query = _context.Users.Where(u => u.Id != userId.Value && u.IsActive);
 
-            var usersList = usersQuery.Select(u => new PlayerSearchResultDto
+            if (!string.IsNullOrWhiteSpace(firstName))
+                query = query.Where(u => EF.Functions.Like(u.FirstName ?? "", $"%{firstName}%"));
+
+            if (!string.IsNullOrWhiteSpace(lastName))
+                query = query.Where(u => EF.Functions.Like(u.LastName ?? "", $"%{lastName}%"));
+
+            if (!string.IsNullOrWhiteSpace(city))
+                query = query.Where(u => EF.Functions.Like(u.City ?? "", $"%{city}%"));
+
+            if (!string.IsNullOrWhiteSpace(state))
+                query = query.Where(u => EF.Functions.Like(u.State ?? "", $"%{state}%"));
+
+            var usersData = await query.Take(20).ToListAsync();
+
+            var usersList = usersData.Select(u => new PlayerSearchResultDto
             {
                 Id = u.Id,
                 Name = $"{u.FirstName} {u.LastName}".Trim(),
@@ -188,7 +199,8 @@ public class FriendsController : ControllerBase
         }
     }
 
-    private async Task<List<PlayerSearchResultDto>> SearchPlayersWithStoredProcedure(int userId, string query)
+    private async Task<List<PlayerSearchResultDto>> SearchPlayersWithStoredProcedure(
+        int userId, string? firstName, string? lastName, string? city, string? state)
     {
         var results = new List<PlayerSearchResultDto>();
         var connectionString = _context.Database.GetConnectionString();
@@ -199,7 +211,10 @@ public class FriendsController : ControllerBase
         using var command = new SqlCommand("sp_SearchUsersForFriends", connection);
         command.CommandType = CommandType.StoredProcedure;
         command.Parameters.AddWithValue("@CurrentUserId", userId);
-        command.Parameters.AddWithValue("@SearchQuery", query);
+        command.Parameters.AddWithValue("@FirstName", (object?)firstName ?? DBNull.Value);
+        command.Parameters.AddWithValue("@LastName", (object?)lastName ?? DBNull.Value);
+        command.Parameters.AddWithValue("@City", (object?)city ?? DBNull.Value);
+        command.Parameters.AddWithValue("@State", (object?)state ?? DBNull.Value);
         command.Parameters.AddWithValue("@MaxResults", 20);
 
         using var reader = await command.ExecuteReaderAsync();
