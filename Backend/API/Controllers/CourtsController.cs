@@ -763,6 +763,146 @@ public class CourtsController : ControllerBase
         }
     }
 
+    // POST: /courts/check-nearby - Check for nearby courts within specified radius
+    [HttpPost("check-nearby")]
+    public async Task<ActionResult<ApiResponse<NearbyCourtsResponse>>> CheckNearbyCourts([FromBody] CheckNearbyCourtsRequest request)
+    {
+        try
+        {
+            // Convert yards to miles for distance calculation (1 mile = 1760 yards)
+            var radiusMiles = request.RadiusYards / 1760.0;
+
+            // Get all courts with coordinates
+            var courts = await _context.Courts.ToListAsync();
+
+            var nearbyCourts = courts
+                .Select(c =>
+                {
+                    if (!double.TryParse(c.GpsLat, out var lat) || !double.TryParse(c.GpsLng, out var lng))
+                        return null;
+
+                    var distanceMiles = CalculateDistance(request.Latitude, request.Longitude, lat, lng);
+                    var distanceYards = distanceMiles * 1760;
+
+                    if (distanceYards > request.RadiusYards)
+                        return null;
+
+                    return new NearbyCourtDto
+                    {
+                        CourtId = c.CourtId,
+                        Name = c.Name,
+                        Address = string.Join(" ", new[] { c.Addr1, c.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+                        City = c.City,
+                        State = c.State,
+                        Country = c.Country,
+                        Latitude = lat,
+                        Longitude = lng,
+                        DistanceYards = Math.Round(distanceYards, 1),
+                        IndoorNum = c.IndoorNum,
+                        OutdoorNum = c.OutdoorNum,
+                        HasLights = c.Lights == "Y"
+                    };
+                })
+                .Where(c => c != null)
+                .OrderBy(c => c!.DistanceYards)
+                .ToList();
+
+            return Ok(new ApiResponse<NearbyCourtsResponse>
+            {
+                Success = true,
+                Data = new NearbyCourtsResponse
+                {
+                    NearbyCourts = nearbyCourts!
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking for nearby courts");
+            return StatusCode(500, new ApiResponse<NearbyCourtsResponse> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /courts - Add a new court
+    [HttpPost]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<CourtDto>>> AddCourt([FromBody] AddCourtRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<CourtDto> { Success = false, Message = "User not authenticated" });
+
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest(new ApiResponse<CourtDto> { Success = false, Message = "Court name is required" });
+
+            if (request.Latitude == 0 && request.Longitude == 0)
+                return BadRequest(new ApiResponse<CourtDto> { Success = false, Message = "Valid location coordinates are required" });
+
+            // Create the court
+            var court = new Court
+            {
+                Name = request.Name,
+                Addr1 = request.Addr1,
+                Addr2 = request.Addr2,
+                City = request.City,
+                State = request.State,
+                Zip = request.Zip,
+                Country = request.Country,
+                Phone = request.Phone,
+                Website = request.Website,
+                Email = request.Email,
+                IndoorNum = request.IndoorNum ?? 0,
+                OutdoorNum = request.OutdoorNum ?? 0,
+                CoveredNum = request.CoveredNum ?? 0,
+                Lights = request.HasLights ? "Y" : "N",
+                GpsLat = request.Latitude.ToString(),
+                GpsLng = request.Longitude.ToString(),
+                AdminUid = userId.Value
+            };
+
+            _context.Courts.Add(court);
+            await _context.SaveChangesAsync();
+
+            var dto = new CourtDto
+            {
+                CourtId = court.CourtId,
+                Name = court.Name,
+                Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+                City = court.City,
+                State = court.State,
+                Zip = court.Zip,
+                Country = court.Country,
+                Phone = court.Phone,
+                Website = court.Website,
+                Email = court.Email,
+                IndoorNum = court.IndoorNum,
+                OutdoorNum = court.OutdoorNum,
+                CoveredNum = court.CoveredNum,
+                HasLights = court.Lights == "Y",
+                Latitude = request.Latitude,
+                Longitude = request.Longitude,
+                AggregatedInfo = new CourtAggregatedInfoDto { ConfirmationCount = 0 }
+            };
+
+            _logger.LogInformation("User {UserId} added court {CourtId}: {CourtName}", userId.Value, court.CourtId, court.Name);
+
+            return Ok(new ApiResponse<CourtDto>
+            {
+                Success = true,
+                Message = "Court added successfully",
+                Data = dto
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding court");
+            return StatusCode(500, new ApiResponse<CourtDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // Helper method to calculate distance (fallback)
     private static double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
     {

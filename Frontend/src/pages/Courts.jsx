@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, ThumbsDown, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate, Image, Video, Upload, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { courtsApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import CourtMap from '../components/ui/CourtMap';
+import L from 'leaflet';
 
 const SURFACE_TYPES = [
   { value: 'all', label: 'All Surfaces' },
@@ -21,6 +22,9 @@ export default function Courts() {
   const { user, isAuthenticated } = useAuth();
   const [courts, setCourts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Add Court Modal
+  const [showAddCourtModal, setShowAddCourtModal] = useState(false);
 
   // Search mode: 'distance' or 'full'
   const [searchMode, setSearchMode] = useState('distance');
@@ -323,14 +327,25 @@ export default function Courts() {
       {/* Header */}
       <div className="bg-gradient-to-r from-green-600 to-green-800 text-white py-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <MapPin className="w-12 h-12" />
-            <div>
-              <h1 className="text-3xl font-bold">Find Pickleball Courts</h1>
-              <p className="text-green-100 mt-1">
-                Search {totalCount.toLocaleString()} courts and help keep information up to date
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <MapPin className="w-12 h-12" />
+              <div>
+                <h1 className="text-3xl font-bold">Find Pickleball Courts</h1>
+                <p className="text-green-100 mt-1">
+                  Search {totalCount.toLocaleString()} courts and help keep information up to date
+                </p>
+              </div>
             </div>
+            {isAuthenticated && (
+              <button
+                onClick={() => setShowAddCourtModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-lg font-medium hover:bg-green-50 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                Add Court
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -719,6 +734,19 @@ export default function Courts() {
             setSelectedCourt(updatedCourt);
             loadCourts();
           }}
+        />
+      )}
+
+      {/* Add Court Modal */}
+      {showAddCourtModal && (
+        <AddCourtModal
+          onClose={() => setShowAddCourtModal(false)}
+          onCourtAdded={(newCourt) => {
+            setShowAddCourtModal(false);
+            loadCourts();
+            handleViewDetails(newCourt);
+          }}
+          userLocation={userLocation}
         />
       )}
     </div>
@@ -1762,6 +1790,491 @@ function InfoBox({ label, value, className = '' }) {
     <div className={`bg-gray-50 rounded-lg p-3 ${className}`}>
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       <div className="font-medium text-gray-900 capitalize">{value?.toString().replace(/_/g, ' ') || 'Unknown'}</div>
+    </div>
+  );
+}
+
+function AddCourtModal({ onClose, onCourtAdded, userLocation }) {
+  const [step, setStep] = useState('location'); // 'location', 'duplicates', 'details'
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [nearbyCourts, setNearbyCourts] = useState([]);
+
+  // Form data
+  const [formData, setFormData] = useState({
+    name: '',
+    addr1: '',
+    addr2: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: 'USA',
+    phone: '',
+    website: '',
+    email: '',
+    indoorNum: 0,
+    outdoorNum: 0,
+    coveredNum: 0,
+    hasLights: false,
+    latitude: userLocation?.lat || 0,
+    longitude: userLocation?.lng || 0
+  });
+
+  // Map for location selection
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Initialize map for location selection
+  useEffect(() => {
+    if (step !== 'location' || !mapRef.current || mapInstanceRef.current) return;
+
+    // Fix default icon paths
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    });
+
+    const center = userLocation ? [userLocation.lat, userLocation.lng] : [39.8283, -98.5795];
+    const map = L.map(mapRef.current).setView(center, userLocation ? 13 : 4);
+    mapInstanceRef.current = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Add draggable marker
+    const marker = L.marker(center, { draggable: true }).addTo(map);
+    markerRef.current = marker;
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      setFormData(prev => ({
+        ...prev,
+        latitude: pos.lat,
+        longitude: pos.lng
+      }));
+    });
+
+    // Click on map to move marker
+    map.on('click', (e) => {
+      marker.setLatLng(e.latlng);
+      setFormData(prev => ({
+        ...prev,
+        latitude: e.latlng.lat,
+        longitude: e.latlng.lng
+      }));
+    });
+
+    setMapReady(true);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [step, userLocation]);
+
+  // Check for nearby courts
+  const checkForDuplicates = async () => {
+    if (!formData.latitude || !formData.longitude) {
+      setError('Please select a location on the map');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await courtsApi.checkNearby(formData.latitude, formData.longitude, 200);
+      if (response.success) {
+        setNearbyCourts(response.data.nearbyCourts || []);
+        if (response.data.nearbyCourts?.length > 0) {
+          setStep('duplicates');
+        } else {
+          setStep('details');
+        }
+      } else {
+        setError(response.message || 'Failed to check for nearby courts');
+      }
+    } catch (err) {
+      console.error('Error checking nearby courts:', err);
+      setError('Failed to check for nearby courts. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit new court
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      setError('Please enter a court name');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await courtsApi.addCourt(formData);
+      if (response.success) {
+        onCourtAdded(response.data);
+      } else {
+        setError(response.message || 'Failed to add court');
+      }
+    } catch (err) {
+      console.error('Error adding court:', err);
+      setError(err.message || 'Failed to add court. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <Plus className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Add New Court</h2>
+              <p className="text-sm text-gray-500">
+                {step === 'location' && 'Step 1: Select location'}
+                {step === 'duplicates' && 'Possible duplicates found'}
+                {step === 'details' && 'Step 2: Enter court details'}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          {step === 'location' && (
+            <div className="space-y-4">
+              <div className="text-sm text-gray-600 mb-4">
+                Click on the map or drag the marker to select the exact location of the court.
+              </div>
+
+              {/* Map */}
+              <div
+                ref={mapRef}
+                className="h-[400px] rounded-lg border border-gray-200"
+              />
+
+              {/* Coordinates display */}
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-green-600" />
+                  <span className="text-gray-600">
+                    {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={checkForDuplicates}
+                disabled={loading || !formData.latitude || !formData.longitude}
+                className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                    Checking for nearby courts...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-5 h-5" />
+                    Check Location & Continue
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {step === 'duplicates' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-5 h-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-yellow-800">
+                      {nearbyCourts.length} court{nearbyCourts.length !== 1 ? 's' : ''} found within 200 yards
+                    </h3>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Please check if your court already exists below. If it does, you can update its information instead of adding a duplicate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {nearbyCourts.map(court => (
+                  <div
+                    key={court.courtId}
+                    className="p-4 border rounded-lg hover:border-green-500 cursor-pointer transition-colors"
+                    onClick={() => {
+                      // Close modal and let parent handle viewing the court
+                      onClose();
+                      // The court will be viewed via the onCourtAdded callback with an existing court
+                    }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{court.name || 'Unnamed Court'}</h4>
+                        <p className="text-sm text-gray-500">{court.address}</p>
+                        <p className="text-sm text-gray-500">{court.city}, {court.state}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          {Math.round(court.distanceYards)} yards
+                        </span>
+                        <div className="mt-2 text-xs text-gray-500">
+                          {court.indoorNum > 0 && `${court.indoorNum} indoor`}
+                          {court.indoorNum > 0 && court.outdoorNum > 0 && ', '}
+                          {court.outdoorNum > 0 && `${court.outdoorNum} outdoor`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={() => setStep('location')}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Change Location
+                </button>
+                <button
+                  onClick={() => setStep('details')}
+                  className="flex-1 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                >
+                  This is a New Court
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'details' && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Court Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Court Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g., Sunset Park Pickleball Courts"
+                  className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                  required
+                />
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={formData.addr1}
+                  onChange={(e) => setFormData({ ...formData, addr1: e.target.value })}
+                  placeholder="Street address"
+                  className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+                  <input
+                    type="text"
+                    value={formData.zip}
+                    onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                  <input
+                    type="text"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+
+              {/* Court Numbers */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Number of Courts</label>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Indoor</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.indoorNum}
+                      onChange={(e) => setFormData({ ...formData, indoorNum: parseInt(e.target.value) || 0 })}
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Outdoor</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.outdoorNum}
+                      onChange={(e) => setFormData({ ...formData, outdoorNum: parseInt(e.target.value) || 0 })}
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Covered</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.coveredNum}
+                      onChange={(e) => setFormData({ ...formData, coveredNum: parseInt(e.target.value) || 0 })}
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Has Lights */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.hasLights}
+                  onChange={(e) => setFormData({ ...formData, hasLights: e.target.checked })}
+                  className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                />
+                <div className="flex items-center gap-2">
+                  <Sun className="w-5 h-5 text-yellow-500" />
+                  <span className="text-gray-700">Courts have lights for night play</span>
+                </div>
+              </label>
+
+              {/* Contact Info (collapsed by default) */}
+              <details className="border rounded-lg p-4">
+                <summary className="cursor-pointer font-medium text-gray-700">
+                  Contact Information (optional)
+                </summary>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                    <input
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                      placeholder="https://"
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                </div>
+              </details>
+
+              {/* Location info */}
+              <div className="p-3 bg-gray-50 rounded-lg flex items-center gap-2 text-sm text-gray-600">
+                <MapPin className="w-4 h-4 text-green-600" />
+                <span>Location: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}</span>
+                <button
+                  type="button"
+                  onClick={() => setStep('location')}
+                  className="ml-auto text-green-600 hover:text-green-700 font-medium"
+                >
+                  Change
+                </button>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setStep(nearbyCourts.length > 0 ? 'duplicates' : 'location')}
+                  className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      Adding Court...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5" />
+                      Add Court
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

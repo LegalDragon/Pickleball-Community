@@ -164,3 +164,54 @@ public class CourtAssetLikeDto
 {
     public bool IsLike { get; set; } // true = like, false = dislike
 }
+
+// Check nearby courts request/response
+public class CheckNearbyCourtsRequest
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public double RadiusYards { get; set; } = 200;
+}
+
+public class NearbyCourtsResponse
+{
+    public List<NearbyCourtDto> NearbyCourts { get; set; } = new();
+    public bool HasDuplicates => NearbyCourts.Count > 0;
+}
+
+public class NearbyCourtDto
+{
+    public int CourtId { get; set; }
+    public string? Name { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public double DistanceYards { get; set; }
+    public int? IndoorNum { get; set; }
+    public int? OutdoorNum { get; set; }
+    public bool HasLights { get; set; }
+}
+
+// Add new court request
+public class AddCourtRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Addr1 { get; set; }
+    public string? Addr2 { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Zip { get; set; }
+    public string? Country { get; set; }
+    public string? Phone { get; set; }
+    public string? Website { get; set; }
+    public string? Email { get; set; }
+    public int? IndoorNum { get; set; }
+    public int? OutdoorNum { get; set; }
+    public int? CoveredNum { get; set; }
+    public bool HasLights { get; set; }
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+}

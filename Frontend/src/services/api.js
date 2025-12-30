@@ -635,7 +635,14 @@ export const courtsApi = {
   uploadAsset: (courtId, data) => api.post(`/courts/${courtId}/assets`, data),
   deleteAsset: (assetId) => api.delete(`/courts/assets/${assetId}`),
   voteOnAsset: (assetId, isLike) => api.post(`/courts/assets/${assetId}/vote`, { isLike }),
-  removeAssetVote: (assetId) => api.delete(`/courts/assets/${assetId}/vote`)
+  removeAssetVote: (assetId) => api.delete(`/courts/assets/${assetId}/vote`),
+
+  // Check for nearby courts (duplicate detection)
+  checkNearby: (latitude, longitude, radiusYards = 200) =>
+    api.post('/courts/check-nearby', { latitude, longitude, radiusYards }),
+
+  // Add a new court
+  addCourt: (data) => api.post('/courts', data)
 }
 
 // Event Types API
