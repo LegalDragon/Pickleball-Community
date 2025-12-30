@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Sun, Moon, Phone, Globe, ExternalLink } from 'lucide-react';
-
-// Dynamically import leaflet to avoid SSR issues
-let L = null;
-if (typeof window !== 'undefined') {
-  L = require('leaflet');
-}
+import L from 'leaflet';
 
 export default function CourtMap({
   courts,
@@ -52,7 +47,7 @@ export default function CourtMap({
 
   // Initialize map
   useEffect(() => {
-    if (!isClient || !mapRef.current || !L) return;
+    if (!isClient || !mapRef.current) return;
     if (mapInstanceRef.current) return; // Already initialized
 
     // Fix default icon paths
@@ -82,7 +77,7 @@ export default function CourtMap({
 
   // Update markers when courts change
   useEffect(() => {
-    if (!mapInstanceRef.current || !L) return;
+    if (!mapInstanceRef.current) return;
 
     const map = mapInstanceRef.current;
 
