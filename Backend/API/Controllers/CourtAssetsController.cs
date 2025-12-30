@@ -42,9 +42,9 @@ public class CourtAssetsController : ControllerBase
                 {
                     Asset = a,
                     User = a.User,
-                    LikeCount = a.Likes != null ? a.Likes.Count(l => l.IsLike) : 0,
-                    DislikeCount = a.Likes != null ? a.Likes.Count(l => !l.IsLike) : 0,
-                    UserVote = userId.HasValue && a.Likes != null
+                    LikeCount = a.Likes.Count(l => l.IsLike),
+                    DislikeCount = a.Likes.Count(l => !l.IsLike),
+                    UserVote = userId.HasValue
                         ? a.Likes.FirstOrDefault(l => l.UserId == userId.Value)
                         : null
                 })
