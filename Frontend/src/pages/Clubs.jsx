@@ -26,6 +26,7 @@ export default function Clubs() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [inviteClub, setInviteClub] = useState(null);
   const [activeTab, setActiveTab] = useState('search'); // search, my-clubs
+  const [joinMessage, setJoinMessage] = useState(null); // { type: 'success'|'error', text: string }
   const pageSize = 20;
 
   // Get user's location on mount
@@ -144,19 +145,28 @@ export default function Clubs() {
       return;
     }
 
+    setJoinMessage(null);
     try {
       const response = await clubsApi.join(clubId, code ? { inviteCode: code } : {});
       if (response.success) {
+        setJoinMessage({ type: 'success', text: response.message || 'Successfully joined the club!' });
         loadMyClubs();
         if (selectedClub) {
           const updated = await clubsApi.getClub(clubId);
           if (updated.success) setSelectedClub(updated.data);
         }
         setInviteClub(null);
+      } else {
+        setJoinMessage({ type: 'error', text: response.message || 'Failed to join club' });
       }
     } catch (err) {
       console.error('Error joining club:', err);
+      // err could be the API response data or an error message
+      const message = err?.message || (typeof err === 'string' ? err : 'An error occurred while joining the club');
+      setJoinMessage({ type: 'error', text: message });
     }
+    // Auto-clear message after 5 seconds
+    setTimeout(() => setJoinMessage(null), 5000);
   };
 
   return (
@@ -188,6 +198,23 @@ export default function Clubs() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Join Message Toast */}
+        {joinMessage && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
+            joinMessage.type === 'success'
+              ? 'bg-green-50 border border-green-200 text-green-800'
+              : 'bg-red-50 border border-red-200 text-red-800'
+          }`}>
+            <span>{joinMessage.text}</span>
+            <button
+              onClick={() => setJoinMessage(null)}
+              className="ml-4 text-current opacity-60 hover:opacity-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         {/* Invite Banner */}
         {inviteClub && (
           <div className="mb-6 p-6 bg-purple-50 border border-purple-200 rounded-xl">
