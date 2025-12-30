@@ -12,6 +12,7 @@ import CertificationAdmin from './pages/CertificationAdmin'
 import Events from './pages/Events'
 import Courts from './pages/Courts'
 import Blog from './pages/Blog'
+import Friends from './pages/Friends'
 import ProtectedRoute from './components/ProtectedRoute'
 
 import ForgotPassword from './pages/ForgotPassword'
@@ -52,6 +53,13 @@ function App() {
       <Route path="/my-certificate" element={
         <ProtectedRoute>
           <MyCertificate />
+        </ProtectedRoute>
+      } />
+
+      {/* Friends */}
+      <Route path="/friends" element={
+        <ProtectedRoute>
+          <Friends />
         </ProtectedRoute>
       } />
 

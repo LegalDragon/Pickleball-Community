@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  Award, User, Settings, Loader2
+  Award, User, Settings, Loader2, Users
 } from 'lucide-react'
 import { userApi, getAssetUrl } from '../services/api'
 
@@ -73,7 +73,7 @@ const MemberDashboard = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* My Certificate */}
           <Link
             to="/my-certificate"
@@ -86,6 +86,22 @@ const MemberDashboard = () => {
               <div>
                 <h3 className="font-semibold text-gray-900">My Certificate</h3>
                 <p className="text-sm text-gray-600">View your skill ratings from peer reviews</p>
+              </div>
+            </div>
+          </Link>
+
+          {/* Friends */}
+          <Link
+            to="/friends"
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <Users className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Friends</h3>
+                <p className="text-sm text-gray-600">Connect with other pickleball players</p>
               </div>
             </div>
           </Link>

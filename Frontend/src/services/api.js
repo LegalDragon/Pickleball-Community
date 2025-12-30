@@ -426,4 +426,40 @@ export const certificationApi = {
     api.get('/playercertification/certificate')
 }
 
+// Friends API
+export const friendsApi = {
+  // Get all friends
+  getFriends: () => api.get('/friends'),
+
+  // Get pending friend requests (received)
+  getPendingRequests: () => api.get('/friends/requests/pending'),
+
+  // Get sent friend requests (awaiting response)
+  getSentRequests: () => api.get('/friends/requests/sent'),
+
+  // Search for players to add as friends
+  searchPlayers: (query) => api.get(`/friends/search?query=${encodeURIComponent(query)}`),
+
+  // Send a friend request
+  sendRequest: (userId) => api.post('/friends/requests', { recipientId: userId }),
+
+  // Accept a friend request
+  acceptRequest: (requestId) => api.post(`/friends/requests/${requestId}/accept`),
+
+  // Reject a friend request
+  rejectRequest: (requestId) => api.post(`/friends/requests/${requestId}/reject`),
+
+  // Cancel a sent friend request
+  cancelRequest: (requestId) => api.delete(`/friends/requests/${requestId}`),
+
+  // Remove a friend
+  removeFriend: (friendId) => api.delete(`/friends/${friendId}`),
+
+  // Get game history with a friend
+  getGameHistory: (friendId) => api.get(`/friends/${friendId}/games`),
+
+  // Get friend's profile details
+  getFriendProfile: (friendId) => api.get(`/friends/${friendId}/profile`)
+}
+
 export default api
