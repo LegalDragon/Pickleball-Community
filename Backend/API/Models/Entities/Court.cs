@@ -7,7 +7,7 @@ namespace Pickleball.Community.Models.Entities;
 public class Court
 {
     [Key]
-    [Column("Court_ID")]
+    [Column("Id")]
     public int CourtId { get; set; }
 
     [MaxLength(50)]

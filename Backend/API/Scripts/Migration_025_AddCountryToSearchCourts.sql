@@ -42,7 +42,7 @@ BEGIN
     ),
     CourtsWithDistance AS (
         SELECT
-            c.Court_ID,
+            c.Id,
             c.Name,
             c.Addr1,
             c.Addr2,
@@ -75,7 +75,7 @@ BEGIN
                 ELSE NULL
             END AS Distance
         FROM Courts c
-        LEFT JOIN NotACourtCounts nac ON c.Court_ID = nac.CourtId
+        LEFT JOIN NotACourtCounts nac ON c.Id = nac.CourtId
         WHERE
             -- Exclude courts flagged as "not a court" by 3+ users
             ISNULL(nac.NotACourtCount, 0) < @NotACourtThreshold
@@ -110,7 +110,7 @@ BEGIN
         SELECT COUNT(*) AS Total FROM FilteredCourts
     )
     SELECT
-        fc.Court_ID AS CourtId,
+        fc.Id AS CourtId,
         fc.Name,
         LTRIM(RTRIM(COALESCE(fc.Addr1, '') + ' ' + COALESCE(fc.Addr2, ''))) AS Address,
         fc.City,
@@ -131,12 +131,12 @@ BEGIN
         tc.Total AS TotalCount,
         fc.NotACourtCount,
         -- Aggregated confirmation data
-        (SELECT COUNT(*) FROM CourtConfirmations cc WHERE cc.CourtId = fc.Court_ID) AS ConfirmationCount,
-        (SELECT AVG(CAST(cc.Rating AS FLOAT)) FROM CourtConfirmations cc WHERE cc.CourtId = fc.Court_ID AND cc.Rating IS NOT NULL) AS AverageRating,
+        (SELECT COUNT(*) FROM CourtConfirmations cc WHERE cc.CourtId = fc.Id) AS ConfirmationCount,
+        (SELECT AVG(CAST(cc.Rating AS FLOAT)) FROM CourtConfirmations cc WHERE cc.CourtId = fc.Id AND cc.Rating IS NOT NULL) AS AverageRating,
         -- Most suggested name
         (SELECT TOP 1 SuggestedName
          FROM CourtConfirmations
-         WHERE CourtId = fc.Court_ID AND SuggestedName IS NOT NULL AND SuggestedName != ''
+         WHERE CourtId = fc.Id AND SuggestedName IS NOT NULL AND SuggestedName != ''
          GROUP BY SuggestedName
          ORDER BY COUNT(*) DESC) AS MostSuggestedName
     FROM FilteredCourts fc
