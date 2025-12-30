@@ -124,20 +124,11 @@ const AuthCallback = () => {
       setStatus('success')
       setMessage('Authentication successful!')
 
-      // Determine redirect path
+      // Determine redirect path - all users go to member dashboard
       const returnTo = searchParams.get('returnTo')
-      let redirectPath = returnTo ? decodeURIComponent(returnTo) : '/'
-
-      // If no returnTo, redirect to student dashboard for all users
-      // (admins can access Admin Dashboard from the menu)
-      if (!returnTo || returnTo === '/') {
-        const role = userWithDefaults.role?.toLowerCase()
-        if (role === 'coach') {
-          redirectPath = '/coach/dashboard'
-        } else {
-          redirectPath = '/student/dashboard'
-        }
-      }
+      let redirectPath = (!returnTo || returnTo === '/')
+        ? '/member/dashboard'
+        : decodeURIComponent(returnTo)
 
       // Redirect after short delay to show success message
       setTimeout(() => {

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { userApi, getAssetUrl } from '../services/api'
 
-const StudentDashboard = () => {
+const MemberDashboard = () => {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
@@ -41,7 +41,7 @@ const StudentDashboard = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="mt-2 text-gray-600">Welcome back, {user?.firstName || 'Player'}!</p>
+          <p className="mt-2 text-gray-600">Welcome back, {user?.firstName || 'Member'}!</p>
         </div>
 
         {/* Profile Card */}
@@ -146,4 +146,4 @@ const StudentDashboard = () => {
   )
 }
 
-export default StudentDashboard
+export default MemberDashboard

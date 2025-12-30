@@ -87,21 +87,9 @@ const Navigation = () => {
   };
 
 
-  // Get dashboard path based on role
-  // Admin users have a separate "Admin Dashboard" link, so their regular dashboard goes to student view
+  // Get dashboard path - all members go to the same dashboard
   const getDashboardPath = () => {
-    if (!user?.role) return '/';
-
-    switch (user.role.toLowerCase()) {
-      case 'coach':
-        return '/coach/dashboard';
-      case 'admin':
-      case 'student':
-      case 'player':
-        return '/student/dashboard';
-      default:
-        return '/';
-    }
+    return user?.role ? '/member/dashboard' : '/';
   };
 
   const isAdmin = user?.role?.toLowerCase() === 'admin';
@@ -380,17 +368,26 @@ const Navigation = () => {
 
                   {/* Mobile User Menu */}
                   <div className="space-y-2 mt-4">
-                    {/* Dashboard link for mobile */}
+                    {/* Admin Dashboard link for mobile - only for admins */}
+                    {isAdmin && (
+                      <Link
+                        to="/admin/dashboard"
+                        className="flex items-center space-x-2 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors font-medium"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <School2Icon className="w-4 h-4" />
+                        <span>Admin Dashboard</span>
+                      </Link>
+                    )}
+                    {/* Dashboard link for mobile - all members */}
                     {user?.role && (
                       <Link
-                        to={user.role === 'Coach' ? '/coach/dashboard' :
-                          user.role === 'Student' ? '/student/dashboard' :
-                            user.role === 'Admin' ? '/admin/dashboard' : '/'}
+                        to="/member/dashboard"
                         className="flex items-center space-x-2 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-medium"
                         onClick={() => setIsOpen(false)}
                       >
                         <HomeIcon className="w-4 h-4" />
-                        <span>  Dashboard</span>
+                        <span>Dashboard</span>
                       </Link>
                     )}
 

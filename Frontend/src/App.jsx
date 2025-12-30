@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import StudentDashboard from './pages/StudentDashboard'
+import MemberDashboard from './pages/MemberDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 import Notifications from './pages/Notifications'
@@ -30,27 +30,30 @@ function App() {
       {/* Player Certification - Public Review */}
       <Route path="/review/:token" element={<PlayerReview />} />
 
-      {/* Protected Routes - Role Specific */}
-      <Route path="/student/dashboard" element={
-        <ProtectedRoute role="Student">
-          <StudentDashboard />
+      {/* Protected Routes - Any Authenticated Member */}
+      <Route path="/member/dashboard" element={
+        <ProtectedRoute>
+          <MemberDashboard />
         </ProtectedRoute>
       } />
 
-      {/* Student Certificate */}
+      {/* Redirect old student dashboard route */}
+      <Route path="/student/dashboard" element={<Navigate to="/member/dashboard" replace />} />
+
+      {/* Member Certificate */}
       <Route path="/my-certificate" element={
-        <ProtectedRoute role="Student">
+        <ProtectedRoute>
           <MyCertificate />
         </ProtectedRoute>
       } />
 
+      {/* Admin Routes */}
       <Route path="/admin/dashboard" element={
         <ProtectedRoute role="Admin">
           <AdminDashboard />
         </ProtectedRoute>
       } />
 
-      {/* Admin Certification Configuration */}
       <Route path="/admin/certification" element={
         <ProtectedRoute role="Admin">
           <CertificationAdmin />
