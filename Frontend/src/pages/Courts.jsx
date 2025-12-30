@@ -61,11 +61,29 @@ export default function Courts() {
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 20;
 
+  // Check if location permission is blocked
+  const [locationBlocked, setLocationBlocked] = useState(false);
+
   // Get user's location on mount
-  const getLocation = useCallback(() => {
+  const getLocation = useCallback(async () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser');
       return;
+    }
+
+    // Check permission state first if available
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus.state === 'denied') {
+          setLocationBlocked(true);
+          setLocationError('Location access is blocked. Click the lock icon in your address bar to allow location access, then refresh.');
+          return;
+        }
+        setLocationBlocked(false);
+      } catch (e) {
+        // Permissions API not fully supported, continue anyway
+      }
     }
 
     setGettingLocation(true);
@@ -78,10 +96,20 @@ export default function Courts() {
           lng: position.coords.longitude
         });
         setGettingLocation(false);
+        setLocationBlocked(false);
       },
       (error) => {
         console.warn('Geolocation error:', error);
-        setLocationError('Unable to get your location. Try again or use Full Search.');
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationBlocked(true);
+          setLocationError('Location access was denied. Click the lock/site settings icon in your address bar to allow location access.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError('Location information is unavailable. Try again or use Full Search.');
+        } else if (error.code === error.TIMEOUT) {
+          setLocationError('Location request timed out. Try again or use Full Search.');
+        } else {
+          setLocationError('Unable to get your location. Try again or use Full Search.');
+        }
         setGettingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -90,7 +118,7 @@ export default function Courts() {
 
   useEffect(() => {
     getLocation();
-  }, []);
+  }, [getLocation]);
 
   // Load countries for full search
   useEffect(() => {
@@ -409,9 +437,25 @@ export default function Courts() {
               </div>
 
               {locationError && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg flex items-center gap-2 text-sm">
-                  <MapPin className="w-4 h-4" />
-                  {locationError}
+                <div className={`p-3 rounded-lg flex items-start gap-3 text-sm ${
+                  locationBlocked
+                    ? 'bg-red-50 border border-red-200 text-red-700'
+                    : 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                }`}>
+                  <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p>{locationError}</p>
+                    {locationBlocked && (
+                      <div className="mt-2 text-xs opacity-80">
+                        <p className="font-medium">To enable location:</p>
+                        <ol className="list-decimal ml-4 mt-1 space-y-0.5">
+                          <li>Click the lock/tune icon in your browser's address bar</li>
+                          <li>Find "Location" and change it to "Allow"</li>
+                          <li>Refresh the page</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
