@@ -527,6 +527,151 @@ export const eventTypesApi = {
   reorder: (orderedIds) => api.put('/eventtypes/reorder', orderedIds)
 }
 
+// Events API (full event management)
+export const eventsApi = {
+  // Search events with filters
+  search: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.query) queryParams.append('query', params.query);
+    if (params.eventTypeId) queryParams.append('eventTypeId', params.eventTypeId);
+    if (params.country) queryParams.append('country', params.country);
+    if (params.state) queryParams.append('state', params.state);
+    if (params.city) queryParams.append('city', params.city);
+    if (params.latitude) queryParams.append('latitude', params.latitude);
+    if (params.longitude) queryParams.append('longitude', params.longitude);
+    if (params.radiusMiles) queryParams.append('radiusMiles', params.radiusMiles);
+    if (params.startDateFrom) queryParams.append('startDateFrom', params.startDateFrom);
+    if (params.startDateTo) queryParams.append('startDateTo', params.startDateTo);
+    if (params.isUpcoming !== undefined) queryParams.append('isUpcoming', params.isUpcoming);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    return api.get(`/events/search?${queryParams.toString()}`);
+  },
+
+  // Get featured events for home page
+  getFeatured: (limit = 6) => api.get(`/events/featured?limit=${limit}`),
+
+  // Get event details
+  getEvent: (id) => api.get(`/events/${id}`),
+
+  // Create a new event
+  create: (data) => api.post('/events', data),
+
+  // Update an event
+  update: (id, data) => api.put(`/events/${id}`, data),
+
+  // Delete an event
+  delete: (id) => api.delete(`/events/${id}`),
+
+  // Publish event
+  publish: (id) => api.post(`/events/${id}/publish`),
+
+  // Register for an event division
+  register: (eventId, data) => api.post(`/events/${eventId}/register`, data),
+
+  // Cancel registration
+  cancelRegistration: (eventId, divisionId) =>
+    api.delete(`/events/${eventId}/register/${divisionId}`),
+
+  // Get division registrations
+  getRegistrations: (eventId, divisionId) =>
+    api.get(`/events/${eventId}/divisions/${divisionId}/registrations`),
+
+  // Partner requests
+  createPartnerRequest: (eventId, data) =>
+    api.post(`/events/${eventId}/partner-request`, data),
+
+  getPartnerRequests: (eventId, divisionId) =>
+    api.get(`/events/${eventId}/divisions/${divisionId}/partner-requests`),
+
+  cancelPartnerRequest: (requestId) =>
+    api.delete(`/events/partner-request/${requestId}`),
+
+  // Get my events
+  getMyEvents: () => api.get('/events/my'),
+
+  // Division management
+  addDivision: (eventId, data) =>
+    api.post(`/events/${eventId}/divisions`, data),
+
+  removeDivision: (eventId, divisionId) =>
+    api.delete(`/events/${eventId}/divisions/${divisionId}`)
+}
+
+// Clubs API
+export const clubsApi = {
+  // Search clubs with filters
+  search: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.query) queryParams.append('query', params.query);
+    if (params.country) queryParams.append('country', params.country);
+    if (params.state) queryParams.append('state', params.state);
+    if (params.city) queryParams.append('city', params.city);
+    if (params.latitude) queryParams.append('latitude', params.latitude);
+    if (params.longitude) queryParams.append('longitude', params.longitude);
+    if (params.radiusMiles) queryParams.append('radiusMiles', params.radiusMiles);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    return api.get(`/clubs/search?${queryParams.toString()}`);
+  },
+
+  // Get club details
+  getClub: (id) => api.get(`/clubs/${id}`),
+
+  // Create a new club
+  create: (data) => api.post('/clubs', data),
+
+  // Update a club
+  update: (id, data) => api.put(`/clubs/${id}`, data),
+
+  // Delete a club (soft delete)
+  delete: (id) => api.delete(`/clubs/${id}`),
+
+  // Join a club
+  join: (id, data = {}) => api.post(`/clubs/${id}/join`, data),
+
+  // Leave a club
+  leave: (id) => api.post(`/clubs/${id}/leave`),
+
+  // Get club members
+  getMembers: (id) => api.get(`/clubs/${id}/members`),
+
+  // Update member role
+  updateMemberRole: (clubId, memberId, role) =>
+    api.put(`/clubs/${clubId}/members/${memberId}/role`, { role }),
+
+  // Remove a member
+  removeMember: (clubId, memberId) =>
+    api.delete(`/clubs/${clubId}/members/${memberId}`),
+
+  // Get pending join requests
+  getJoinRequests: (id) => api.get(`/clubs/${id}/requests`),
+
+  // Review join request
+  reviewRequest: (clubId, requestId, approve) =>
+    api.post(`/clubs/${clubId}/requests/${requestId}/review`, { approve }),
+
+  // Send notification
+  sendNotification: (id, title, message) =>
+    api.post(`/clubs/${id}/notifications`, { title, message }),
+
+  // Get notifications
+  getNotifications: (id, page = 1, pageSize = 20) =>
+    api.get(`/clubs/${id}/notifications?page=${page}&pageSize=${pageSize}`),
+
+  // Get my clubs
+  getMyClubs: () => api.get('/clubs/my'),
+
+  // Get invite link
+  getInviteLink: (id) => api.get(`/clubs/${id}/invite-link`),
+
+  // Regenerate invite code
+  regenerateInvite: (id) => api.post(`/clubs/${id}/regenerate-invite`),
+
+  // Get club by invite code
+  getByInviteCode: (code) => api.get(`/clubs/join/${code}`)
+}
+
 // Friends API
 export const friendsApi = {
   // Get all friends

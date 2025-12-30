@@ -1,0 +1,1356 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { clubsApi, getSharedAssetUrl } from '../services/api';
+
+export default function Clubs() {
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteCode = searchParams.get('invite');
+
+  const [clubs, setClubs] = useState([]);
+  const [myClubs, setMyClubs] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [country, setCountry] = useState('');
+  const [state, setState] = useState('');
+  const [city, setCity] = useState('');
+  const [userLocation, setUserLocation] = useState(null);
+  const [radiusMiles, setRadiusMiles] = useState(100);
+  const [selectedClub, setSelectedClub] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [inviteClub, setInviteClub] = useState(null);
+  const [activeTab, setActiveTab] = useState('search'); // search, my-clubs
+  const pageSize = 20;
+
+  // Get user's location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn('Geolocation error:', error);
+        }
+      );
+    }
+  }, []);
+
+  // Check invite code on mount
+  useEffect(() => {
+    if (inviteCode) {
+      loadInviteClub(inviteCode);
+    }
+  }, [inviteCode]);
+
+  const loadInviteClub = async (code) => {
+    try {
+      const response = await clubsApi.getByInviteCode(code);
+      if (response.success) {
+        setInviteClub(response.data);
+      }
+    } catch (err) {
+      console.error('Invalid invite code:', err);
+    }
+  };
+
+  // Load my clubs when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadMyClubs();
+    }
+  }, [isAuthenticated]);
+
+  const loadMyClubs = async () => {
+    try {
+      const response = await clubsApi.getMyClubs();
+      if (response.success) {
+        setMyClubs(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading my clubs:', err);
+    }
+  };
+
+  // Load clubs
+  const loadClubs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {
+        page,
+        pageSize,
+        query: searchQuery || undefined,
+        country: country || undefined,
+        state: state || undefined,
+        city: city || undefined,
+        latitude: userLocation?.lat,
+        longitude: userLocation?.lng,
+        radiusMiles: userLocation ? radiusMiles : undefined,
+      };
+
+      const response = await clubsApi.search(params);
+      if (response.success && response.data) {
+        setClubs(response.data.items || []);
+        setTotalPages(response.data.totalPages || 1);
+        setTotalCount(response.data.totalCount || 0);
+      }
+    } catch (err) {
+      console.error('Error loading clubs:', err);
+      setClubs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, searchQuery, country, state, city, userLocation, radiusMiles]);
+
+  useEffect(() => {
+    if (activeTab === 'search') {
+      loadClubs();
+    }
+  }, [loadClubs, activeTab]);
+
+  // Debounced search
+  const [searchTimeout, setSearchTimeout] = useState(null);
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    if (searchTimeout) clearTimeout(searchTimeout);
+    setSearchTimeout(setTimeout(() => {
+      setPage(1);
+    }, 500));
+  };
+
+  const handleViewDetails = async (club) => {
+    try {
+      const response = await clubsApi.getClub(club.id);
+      if (response.success) {
+        setSelectedClub(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading club details:', err);
+    }
+  };
+
+  const handleJoinClub = async (clubId, code = null) => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const response = await clubsApi.join(clubId, code ? { inviteCode: code } : {});
+      if (response.success) {
+        loadMyClubs();
+        if (selectedClub) {
+          const updated = await clubsApi.getClub(clubId);
+          if (updated.success) setSelectedClub(updated.data);
+        }
+        setInviteClub(null);
+      }
+    } catch (err) {
+      console.error('Error joining club:', err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Users className="w-12 h-12" />
+              <div>
+                <h1 className="text-3xl font-bold">Pickleball Clubs</h1>
+                <p className="text-purple-100 mt-1">
+                  Find and join local clubs or create your own
+                </p>
+              </div>
+            </div>
+            {isAuthenticated && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white text-purple-600 rounded-lg font-medium hover:bg-purple-50 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                Create Club
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Invite Banner */}
+        {inviteClub && (
+          <div className="mb-6 p-6 bg-purple-50 border border-purple-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {inviteClub.logoUrl ? (
+                  <img src={getSharedAssetUrl(inviteClub.logoUrl)} alt="" className="w-16 h-16 rounded-lg object-cover" />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-purple-200 flex items-center justify-center">
+                    <Users className="w-8 h-8 text-purple-600" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-semibold text-lg text-gray-900">You've been invited to join {inviteClub.name}!</h3>
+                  <p className="text-gray-600">{inviteClub.memberCount} members • {inviteClub.city}{inviteClub.state && `, ${inviteClub.state}`}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleJoinClub(inviteClub.id, inviteCode)}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                >
+                  Join Club
+                </button>
+                <button
+                  onClick={() => { setInviteClub(null); navigate('/clubs', { replace: true }); }}
+                  className="p-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        {isAuthenticated && (
+          <div className="mb-6 border-b">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'search'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Find Clubs
+              </button>
+              <button
+                onClick={() => setActiveTab('my-clubs')}
+                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'my-clubs'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                My Clubs
+                {myClubs && (myClubs.clubsIManage.length + myClubs.clubsIBelong.length) > 0 && (
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-600 rounded-full">
+                    {myClubs.clubsIManage.length + myClubs.clubsIBelong.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'search' && (
+          <>
+            {/* Filters */}
+            <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+              <div className="flex flex-wrap gap-4 items-center">
+                {/* Search */}
+                <div className="flex-1 min-w-[250px]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search clubs..."
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Country Filter */}
+                <input
+                  type="text"
+                  placeholder="Country"
+                  value={country}
+                  onChange={(e) => { setCountry(e.target.value); setPage(1); }}
+                  className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+
+                {/* State Filter */}
+                <input
+                  type="text"
+                  placeholder="State"
+                  value={state}
+                  onChange={(e) => { setState(e.target.value); setPage(1); }}
+                  className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+
+                {/* City Filter */}
+                <input
+                  type="text"
+                  placeholder="City"
+                  value={city}
+                  onChange={(e) => { setCity(e.target.value); setPage(1); }}
+                  className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+
+                {/* Distance Filter (only if location available) */}
+                {userLocation && (
+                  <select
+                    value={radiusMiles}
+                    onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
+                    className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value={10}>Within 10 miles</option>
+                    <option value={25}>Within 25 miles</option>
+                    <option value={50}>Within 50 miles</option>
+                    <option value={100}>Within 100 miles</option>
+                    <option value={250}>Within 250 miles</option>
+                    <option value={500}>Within 500 miles</option>
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {/* Clubs List */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
+              </div>
+            ) : clubs.length > 0 ? (
+              <>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {clubs.map(club => (
+                    <ClubCard
+                      key={club.id}
+                      club={club}
+                      onViewDetails={() => handleViewDetails(club)}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-8 flex items-center justify-center gap-4">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </button>
+                    <span className="text-gray-600">
+                      Page {page} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Clubs Found</h3>
+                <p className="text-gray-500 mb-6">
+                  {searchQuery || state || city
+                    ? 'No clubs match your search criteria. Try adjusting your filters.'
+                    : 'No clubs have been created in this area yet.'}
+                </p>
+                {isAuthenticated && (
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create the First Club
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'my-clubs' && myClubs && (
+          <div className="space-y-8">
+            {/* Clubs I Manage */}
+            {myClubs.clubsIManage.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-yellow-500" />
+                  Clubs I Manage
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {myClubs.clubsIManage.map(club => (
+                    <ClubCard
+                      key={club.id}
+                      club={club}
+                      onViewDetails={() => handleViewDetails(club)}
+                      showManageButton
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clubs I Belong To */}
+            {myClubs.clubsIBelong.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-500" />
+                  Clubs I'm a Member Of
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {myClubs.clubsIBelong.map(club => (
+                    <ClubCard
+                      key={club.id}
+                      club={club}
+                      onViewDetails={() => handleViewDetails(club)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending Requests */}
+            {myClubs.pendingRequests.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-orange-500" />
+                  Pending Join Requests
+                </h2>
+                <div className="space-y-3">
+                  {myClubs.pendingRequests.map(request => (
+                    <div key={request.id} className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{request.clubName}</h3>
+                        <p className="text-sm text-gray-500">Requested {new Date(request.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                        Pending
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {myClubs.clubsIManage.length === 0 && myClubs.clubsIBelong.length === 0 && myClubs.pendingRequests.length === 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">You're Not in Any Clubs Yet</h3>
+                <p className="text-gray-500 mb-6">
+                  Join an existing club or create your own!
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <button
+                    onClick={() => setActiveTab('search')}
+                    className="px-6 py-2 border border-purple-600 text-purple-600 rounded-lg font-medium hover:bg-purple-50 transition-colors"
+                  >
+                    Find Clubs
+                  </button>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create Club
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Club Detail Modal */}
+      {selectedClub && (
+        <ClubDetailModal
+          club={selectedClub}
+          isAuthenticated={isAuthenticated}
+          currentUserId={user?.id}
+          onClose={() => setSelectedClub(null)}
+          onJoin={() => handleJoinClub(selectedClub.id)}
+          onUpdate={() => {
+            loadMyClubs();
+            loadClubs();
+          }}
+        />
+      )}
+
+      {/* Create Club Modal */}
+      {showCreateModal && (
+        <CreateClubModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={(newClub) => {
+            setShowCreateModal(false);
+            loadMyClubs();
+            handleViewDetails(newClub);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ClubCard({ club, onViewDetails, showManageButton = false }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+      {club.logoUrl && (
+        <div className="h-32 bg-purple-100 relative">
+          <img
+            src={getSharedAssetUrl(club.logoUrl)}
+            alt={club.name}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-2">
+          <h3 className="font-semibold text-gray-900">{club.name}</h3>
+          <div className="flex items-center gap-1 text-purple-600">
+            <Users className="w-4 h-4" />
+            <span className="text-sm font-medium">{club.memberCount}</span>
+          </div>
+        </div>
+
+        {club.description && (
+          <p className="text-sm text-gray-600 mb-3 line-clamp-2">{club.description}</p>
+        )}
+
+        <div className="space-y-2 text-sm text-gray-600">
+          {(club.city || club.state) && (
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">
+                {club.city}{club.state && `, ${club.state}`}{club.country && club.country !== 'USA' && `, ${club.country}`}
+              </span>
+            </div>
+          )}
+          {club.distance && (
+            <div className="flex items-center gap-2 text-purple-600">
+              <MapPin className="w-4 h-4" />
+              <span>{club.distance.toFixed(1)} miles away</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onViewDetails}
+            className="flex-1 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+          >
+            View Details
+          </button>
+          {showManageButton && (
+            <button
+              onClick={onViewDetails}
+              className="p-2 border border-purple-600 text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin, onUpdate }) {
+  const [activeTab, setActiveTab] = useState('about');
+  const [members, setMembers] = useState([]);
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inviteCode, setInviteCode] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [newNotification, setNewNotification] = useState({ title: '', message: '' });
+  const [sendingNotification, setSendingNotification] = useState(false);
+
+  const isAdmin = club.isAdmin;
+  const isModerator = club.isModerator;
+  const isMember = club.isMember;
+  const canManage = isAdmin || isModerator;
+
+  useEffect(() => {
+    if (activeTab === 'members') loadMembers();
+    if (activeTab === 'requests' && canManage) loadJoinRequests();
+    if (activeTab === 'notifications') loadNotifications();
+  }, [activeTab]);
+
+  const loadMembers = async () => {
+    setLoading(true);
+    try {
+      const response = await clubsApi.getMembers(club.id);
+      if (response.success) {
+        setMembers(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading members:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadJoinRequests = async () => {
+    setLoading(true);
+    try {
+      const response = await clubsApi.getJoinRequests(club.id);
+      if (response.success) {
+        setJoinRequests(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading join requests:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    try {
+      const response = await clubsApi.getNotifications(club.id);
+      if (response.success) {
+        setNotifications(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading notifications:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetInviteLink = async () => {
+    try {
+      const response = await clubsApi.getInviteLink(club.id);
+      if (response.success) {
+        setInviteCode(response.data);
+      }
+    } catch (err) {
+      console.error('Error getting invite link:', err);
+    }
+  };
+
+  const copyInviteLink = () => {
+    const link = `${window.location.origin}/clubs?invite=${inviteCode}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleReviewRequest = async (requestId, approve) => {
+    try {
+      await clubsApi.reviewRequest(club.id, requestId, approve);
+      loadJoinRequests();
+      onUpdate();
+    } catch (err) {
+      console.error('Error reviewing request:', err);
+    }
+  };
+
+  const handleUpdateRole = async (memberId, role) => {
+    try {
+      await clubsApi.updateMemberRole(club.id, memberId, role);
+      loadMembers();
+      onUpdate();
+    } catch (err) {
+      console.error('Error updating role:', err);
+    }
+  };
+
+  const handleRemoveMember = async (memberId) => {
+    if (!confirm('Are you sure you want to remove this member?')) return;
+    try {
+      await clubsApi.removeMember(club.id, memberId);
+      loadMembers();
+      onUpdate();
+    } catch (err) {
+      console.error('Error removing member:', err);
+    }
+  };
+
+  const handleSendNotification = async () => {
+    if (!newNotification.title || !newNotification.message) return;
+    setSendingNotification(true);
+    try {
+      await clubsApi.sendNotification(club.id, newNotification.title, newNotification.message);
+      setNewNotification({ title: '', message: '' });
+      loadNotifications();
+    } catch (err) {
+      console.error('Error sending notification:', err);
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
+  const handleLeaveClub = async () => {
+    if (!confirm('Are you sure you want to leave this club?')) return;
+    try {
+      await clubsApi.leave(club.id);
+      onUpdate();
+      onClose();
+    } catch (err) {
+      console.error('Error leaving club:', err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
+          <div className="flex items-center gap-4">
+            {club.logoUrl ? (
+              <img src={getSharedAssetUrl(club.logoUrl)} alt="" className="w-12 h-12 rounded-lg object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
+                <Users className="w-6 h-6 text-purple-600" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">{club.name}</h2>
+              <p className="text-sm text-gray-500">
+                {club.memberCount} member{club.memberCount !== 1 ? 's' : ''}
+                {club.city && ` • ${club.city}${club.state ? `, ${club.state}` : ''}`}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="border-b">
+          <div className="flex overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('about')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'about'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              About
+            </button>
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'members'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Members
+            </button>
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'notifications'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Notifications
+            </button>
+            {canManage && (
+              <button
+                onClick={() => setActiveTab('requests')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'requests'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Join Requests
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('manage')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'manage'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Manage
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* About Tab */}
+          {activeTab === 'about' && (
+            <div className="space-y-6">
+              {/* Join/Leave Button */}
+              {!isMember && !club.hasPendingRequest && (
+                <button
+                  onClick={onJoin}
+                  disabled={!isAuthenticated}
+                  className="w-full py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {club.requiresApproval ? 'Request to Join' : 'Join Club'}
+                </button>
+              )}
+              {club.hasPendingRequest && (
+                <div className="p-4 bg-orange-50 border border-orange-200 text-orange-700 rounded-lg text-center">
+                  Your join request is pending approval
+                </div>
+              )}
+              {isMember && !isAdmin && (
+                <button
+                  onClick={handleLeaveClub}
+                  className="w-full py-3 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors"
+                >
+                  Leave Club
+                </button>
+              )}
+
+              {/* Description */}
+              {club.description && (
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-2">About</h3>
+                  <p className="text-gray-600">{club.description}</p>
+                </div>
+              )}
+
+              {/* Location */}
+              {(club.address || club.city) && (
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-purple-600" />
+                    Location
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg p-4 text-sm">
+                    {club.address && <p>{club.address}</p>}
+                    <p>{club.city}{club.state && `, ${club.state}`} {club.postalCode}</p>
+                    {club.country && <p>{club.country}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* Contact */}
+              {(club.website || club.email || club.phone) && (
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-2">Contact</h3>
+                  <div className="space-y-2 text-sm">
+                    {club.website && (
+                      <div className="flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-gray-400" />
+                        <a href={club.website} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">
+                          {club.website}
+                        </a>
+                      </div>
+                    )}
+                    {club.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-gray-400" />
+                        <a href={`mailto:${club.email}`} className="text-purple-600 hover:underline">
+                          {club.email}
+                        </a>
+                      </div>
+                    )}
+                    {club.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-gray-400" />
+                        <span>{club.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Members */}
+              {club.recentMembers?.length > 0 && (
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-3">Recent Members</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {club.recentMembers.slice(0, 8).map(member => (
+                      <div key={member.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                        {member.profileImageUrl ? (
+                          <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                            <span className="text-purple-600 text-sm font-medium">
+                              {member.name?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-sm text-gray-700">{member.name}</span>
+                        {member.role === 'Admin' && <Crown className="w-4 h-4 text-yellow-500" />}
+                        {member.role === 'Moderator' && <Shield className="w-4 h-4 text-blue-500" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Members Tab */}
+          {activeTab === 'members' && (
+            <div>
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
+                </div>
+              ) : members.length > 0 ? (
+                <div className="space-y-3">
+                  {members.map(member => (
+                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {member.profileImageUrl ? (
+                          <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <span className="text-purple-600 font-medium">
+                              {member.name?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{member.name}</span>
+                            {member.role === 'Admin' && <Crown className="w-4 h-4 text-yellow-500" />}
+                            {member.role === 'Moderator' && <Shield className="w-4 h-4 text-blue-500" />}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {member.location || member.experienceLevel || `Joined ${new Date(member.joinedAt).toLocaleDateString()}`}
+                          </p>
+                        </div>
+                      </div>
+                      {isAdmin && member.userId !== currentUserId && (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleUpdateRole(member.id, e.target.value)}
+                            className="text-sm border border-gray-300 rounded px-2 py-1"
+                          >
+                            <option value="Member">Member</option>
+                            <option value="Moderator">Moderator</option>
+                            <option value="Admin">Admin</option>
+                          </select>
+                          <button
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No members yet</p>
+              )}
+            </div>
+          )}
+
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              {/* Send Notification Form (for admins/mods) */}
+              {canManage && (
+                <div className="p-4 bg-gray-50 rounded-lg space-y-3">
+                  <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-purple-600" />
+                    Send Notification to All Members
+                  </h3>
+                  <input
+                    type="text"
+                    placeholder="Title"
+                    value={newNotification.title}
+                    onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  />
+                  <textarea
+                    placeholder="Message"
+                    value={newNotification.message}
+                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  />
+                  <button
+                    onClick={handleSendNotification}
+                    disabled={sendingNotification || !newNotification.title || !newNotification.message}
+                    className="w-full py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {sendingNotification ? 'Sending...' : 'Send Notification'}
+                  </button>
+                </div>
+              )}
+
+              {/* Notifications List */}
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
+                </div>
+              ) : notifications.length > 0 ? (
+                <div className="space-y-4">
+                  {notifications.map(notification => (
+                    <div key={notification.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-gray-900">{notification.title}</h4>
+                        <span className="text-sm text-gray-500">
+                          {new Date(notification.sentAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 text-sm">{notification.message}</p>
+                      <p className="text-xs text-gray-400 mt-2">by {notification.sentByUserName}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No notifications yet</p>
+              )}
+            </div>
+          )}
+
+          {/* Join Requests Tab */}
+          {activeTab === 'requests' && canManage && (
+            <div>
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
+                </div>
+              ) : joinRequests.length > 0 ? (
+                <div className="space-y-3">
+                  {joinRequests.map(request => (
+                    <div key={request.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {request.userProfileImageUrl ? (
+                          <img src={getSharedAssetUrl(request.userProfileImageUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                            <span className="text-purple-600 font-medium">
+                              {request.userName?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-medium text-gray-900">{request.userName}</span>
+                          <p className="text-sm text-gray-500">{request.userLocation || request.userExperienceLevel}</p>
+                          {request.message && (
+                            <p className="text-sm text-gray-600 mt-1 italic">"{request.message}"</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleReviewRequest(request.id, true)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleReviewRequest(request.id, false)}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No pending join requests</p>
+              )}
+            </div>
+          )}
+
+          {/* Manage Tab */}
+          {activeTab === 'manage' && isAdmin && (
+            <div className="space-y-6">
+              {/* Invite Link */}
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-purple-600" />
+                  Invite Link
+                </h3>
+                {inviteCode ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/clubs?invite=${inviteCode}`}
+                      className="flex-1 border border-gray-300 rounded-lg p-2 bg-gray-50 text-sm"
+                    />
+                    <button
+                      onClick={copyInviteLink}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2"
+                    >
+                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleGetInviteLink}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg"
+                  >
+                    Generate Invite Link
+                  </button>
+                )}
+                <p className="text-sm text-gray-500 mt-2">
+                  Share this link to invite people to join your club directly
+                </p>
+              </div>
+
+              {/* Club Settings */}
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-purple-600" />
+                  Settings
+                </h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Visibility</span>
+                    <span className="font-medium">{club.isPublic ? 'Public' : 'Private'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Approval Required</span>
+                    <span className="font-medium">{club.requiresApproval ? 'Yes' : 'No'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateClubModal({ onClose, onCreate }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    postalCode: '',
+    website: '',
+    email: '',
+    phone: '',
+    isPublic: true,
+    requiresApproval: true
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name) {
+      setError('Club name is required');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await clubsApi.create(formData);
+      if (response.success) {
+        onCreate(response.data);
+      } else {
+        setError(response.message || 'Failed to create club');
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
+          <h2 className="text-xl font-semibold text-gray-900">Create New Club</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Club Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="My Pickleball Club"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              placeholder="Tell people about your club..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+              <input
+                type="text"
+                value={formData.country}
+                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="USA"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+              <input
+                type="text"
+                value={formData.postalCode}
+                onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+              <input
+                type="url"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.isPublic}
+                onChange={(e) => setFormData({ ...formData, isPublic: e.target.checked })}
+                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+              />
+              <div>
+                <span className="font-medium text-gray-900">Public Club</span>
+                <p className="text-sm text-gray-500">Anyone can find this club in search</p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.requiresApproval}
+                onChange={(e) => setFormData({ ...formData, requiresApproval: e.target.checked })}
+                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+              />
+              <div>
+                <span className="font-medium text-gray-900">Require Approval</span>
+                <p className="text-sm text-gray-500">New members need approval to join</p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+            >
+              {submitting ? 'Creating...' : 'Create Club'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

@@ -47,6 +47,16 @@ public class ApplicationDbContext : DbContext
 
     // Events
     public DbSet<EventType> EventTypes { get; set; }
+    public DbSet<Event> Events { get; set; }
+    public DbSet<EventDivision> EventDivisions { get; set; }
+    public DbSet<EventRegistration> EventRegistrations { get; set; }
+    public DbSet<EventPartnerRequest> EventPartnerRequests { get; set; }
+
+    // Clubs
+    public DbSet<Club> Clubs { get; set; }
+    public DbSet<ClubMember> ClubMembers { get; set; }
+    public DbSet<ClubJoinRequest> ClubJoinRequests { get; set; }
+    public DbSet<ClubNotification> ClubNotifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

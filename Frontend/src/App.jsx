@@ -12,6 +12,7 @@ import CertificationAdmin from './pages/CertificationAdmin'
 import EventTypesAdmin from './pages/EventTypesAdmin'
 import Events from './pages/Events'
 import Courts from './pages/Courts'
+import Clubs from './pages/Clubs'
 import Blog from './pages/Blog'
 import Friends from './pages/Friends'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -38,6 +39,7 @@ function App() {
       {/* Community Features - Public */}
       <Route path="/events" element={<Events />} />
       <Route path="/courts" element={<Courts />} />
+      <Route path="/clubs" element={<Clubs />} />
       <Route path="/blog" element={<Blog />} />
 
       {/* Protected Routes - Any Authenticated Member */}
