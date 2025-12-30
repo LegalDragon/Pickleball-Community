@@ -5,7 +5,7 @@ import {
   User, Calendar, ChevronRight, ArrowLeft, Gamepad2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { friendsApi, getAssetUrl } from '../services/api';
+import { friendsApi, getSharedAssetUrl } from '../services/api';
 
 export default function Friends() {
   const { user } = useAuth();
@@ -229,7 +229,7 @@ export default function Friends() {
                       <div className="flex items-center gap-4">
                         {friend.profileImageUrl ? (
                           <img
-                            src={getAssetUrl(friend.profileImageUrl)}
+                            src={getSharedAssetUrl(friend.profileImageUrl)}
                             alt={friend.name}
                             className="w-12 h-12 rounded-full object-cover"
                           />
@@ -298,7 +298,7 @@ export default function Friends() {
                         >
                           {request.sender.profileImageUrl ? (
                             <img
-                              src={getAssetUrl(request.sender.profileImageUrl)}
+                              src={getSharedAssetUrl(request.sender.profileImageUrl)}
                               alt={request.sender.name}
                               className="w-12 h-12 rounded-full object-cover"
                             />
@@ -370,7 +370,7 @@ export default function Friends() {
                         <div className="flex items-center gap-4">
                           {request.recipient.profileImageUrl ? (
                             <img
-                              src={getAssetUrl(request.recipient.profileImageUrl)}
+                              src={getSharedAssetUrl(request.recipient.profileImageUrl)}
                               alt={request.recipient.name}
                               className="w-10 h-10 rounded-full object-cover"
                             />
@@ -499,7 +499,7 @@ export default function Friends() {
                       <div className="flex items-center gap-4">
                         {player.profileImageUrl ? (
                           <img
-                            src={getAssetUrl(player.profileImageUrl)}
+                            src={getSharedAssetUrl(player.profileImageUrl)}
                             alt={player.name}
                             className="w-12 h-12 rounded-full object-cover"
                           />
@@ -624,7 +624,7 @@ function FriendDetailModal({ friend, onClose }) {
           <div className="text-center mb-6">
             {friend.profileImageUrl ? (
               <img
-                src={getAssetUrl(friend.profileImageUrl)}
+                src={getSharedAssetUrl(friend.profileImageUrl)}
                 alt={friend.name}
                 className="w-24 h-24 rounded-full object-cover mx-auto mb-4"
               />
@@ -742,7 +742,7 @@ function UserPreviewModal({ user, onClose, onAccept, onReject, pendingRequestId 
           <div className="text-center mb-6">
             {user.profileImageUrl ? (
               <img
-                src={getAssetUrl(user.profileImageUrl)}
+                src={getSharedAssetUrl(user.profileImageUrl)}
                 alt={user.name}
                 className="w-20 h-20 rounded-full object-cover mx-auto mb-4"
               />

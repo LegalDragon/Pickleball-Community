@@ -4,21 +4,16 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || ''
 const SHARED_AUTH_UI_URL = import.meta.env.VITE_SHARED_AUTH_UI_URL || ''
 
-// Helper function to get full asset URL (for avatars, images, videos, etc.)
+// Helper function to get full asset URL from local API (for local assets)
 export const getAssetUrl = (path) => {
   if (!path) return null
   // If path is already a full URL, return as-is
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path
   }
-  // Get base URL without /api suffix for asset paths
-  const baseUrl = API_BASE_URL//.replace(/\/api\/?$/, '')
+  const baseUrl = API_BASE_URL
 
-  // If path starts with /api, use the full API URL
-  if (path.startsWith('/api/')) {
-    return `${baseUrl}${path.replace('/api/', '/')}`
-  }
-  // If path starts with /, prepend base URL
+  // Keep the full path including /api if present
   if (path.startsWith('/')) {
     return `${baseUrl}${path}`
   }
@@ -26,8 +21,25 @@ export const getAssetUrl = (path) => {
   return `${baseUrl}/${path}`
 }
 
-// Export API_BASE_URL for direct use if needed
-export { API_BASE_URL }
+// Helper function to get asset URL from Funtime-Shared (for user avatars, profile images)
+export const getSharedAssetUrl = (path) => {
+  if (!path) return null
+  // If path is already a full URL, return as-is
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  const baseUrl = SHARED_AUTH_URL
+
+  // Keep the full path including /api if present
+  if (path.startsWith('/')) {
+    return `${baseUrl}${path}`
+  }
+  // For relative paths without leading slash, prepend base URL with /
+  return `${baseUrl}/${path}`
+}
+
+// Export URLs for direct use if needed
+export { API_BASE_URL, SHARED_AUTH_URL }
 
 const api = axios.create({
   baseURL: API_BASE_URL,
