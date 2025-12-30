@@ -473,12 +473,15 @@ export const courtsApi = {
     if (params.latitude) queryParams.append('latitude', params.latitude);
     if (params.longitude) queryParams.append('longitude', params.longitude);
     if (params.radiusMiles) queryParams.append('radiusMiles', params.radiusMiles);
+    if (params.country) queryParams.append('country', params.country);
     if (params.state) queryParams.append('state', params.state);
     if (params.city) queryParams.append('city', params.city);
     if (params.hasLights !== undefined) queryParams.append('hasLights', params.hasLights);
     if (params.isIndoor !== undefined) queryParams.append('isIndoor', params.isIndoor);
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
     return api.get(`/courts/search?${queryParams.toString()}`);
   },
 
@@ -499,7 +502,16 @@ export const courtsApi = {
     api.get(`/courts/${courtId}/confirmations`),
 
   // Get list of states with courts
-  getStates: () => api.get('/courts/states')
+  getStates: () => api.get('/courts/states'),
+
+  // Get countries with court counts
+  getCountries: () => api.get('/courts/countries'),
+
+  // Get states for a country with court counts
+  getStatesByCountry: (country) => api.get(`/courts/countries/${encodeURIComponent(country)}/states`),
+
+  // Get cities for a state with court counts
+  getCitiesByState: (country, state) => api.get(`/courts/countries/${encodeURIComponent(country)}/states/${encodeURIComponent(state)}/cities`)
 }
 
 // Event Types API

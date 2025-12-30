@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar } from 'lucide-react';
+import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { courtsApi } from '../services/api';
 
@@ -20,14 +20,41 @@ export default function Courts() {
   const { user, isAuthenticated } = useAuth();
   const [courts, setCourts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hasLights, setHasLights] = useState(false);
-  const [isIndoor, setIsIndoor] = useState(false);
-  const [selectedState, setSelectedState] = useState('');
-  const [states, setStates] = useState([]);
+
+  // Search mode: 'distance' or 'full'
+  const [searchMode, setSearchMode] = useState('distance');
+
+  // View mode: 'list' or 'map'
+  const [viewMode, setViewMode] = useState('list');
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('distance'); // distance, name, rating
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  // Distance search state
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
-  const [radiusMiles, setRadiusMiles] = useState(100);
+  const [radiusMiles, setRadiusMiles] = useState(50);
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  // Full search state
+  const [countries, setCountries] = useState([]);
+  const [statesWithCounts, setStatesWithCounts] = useState([]);
+  const [citiesWithCounts, setCitiesWithCounts] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [citySearch, setCitySearch] = useState('');
+  const [courtNameSearch, setCourtNameSearch] = useState('');
+
+  // Legacy state for old endpoint
+  const [states, setStates] = useState([]);
+
+  // Common filters
+  const [hasLights, setHasLights] = useState(false);
+  const [isIndoor, setIsIndoor] = useState(false);
+
+  // Results
   const [selectedCourt, setSelectedCourt] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -35,24 +62,96 @@ export default function Courts() {
   const pageSize = 20;
 
   // Get user's location on mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.warn('Geolocation error:', error);
-          setLocationError('Unable to get your location. Results will not be sorted by distance.');
-        }
-      );
+  const getLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
     }
+
+    setGettingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setGettingLocation(false);
+      },
+      (error) => {
+        console.warn('Geolocation error:', error);
+        setLocationError('Unable to get your location. Try again or use Full Search.');
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   }, []);
 
-  // Load states list
+  useEffect(() => {
+    getLocation();
+  }, []);
+
+  // Load countries for full search
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const response = await courtsApi.getCountries();
+        if (response.success) {
+          setCountries(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading countries:', err);
+      }
+    };
+    loadCountries();
+  }, []);
+
+  // Load states when country is selected
+  useEffect(() => {
+    if (!selectedCountry) {
+      setStatesWithCounts([]);
+      setSelectedState('');
+      setCitiesWithCounts([]);
+      setSelectedCity('');
+      return;
+    }
+
+    const loadStates = async () => {
+      try {
+        const response = await courtsApi.getStatesByCountry(selectedCountry);
+        if (response.success) {
+          setStatesWithCounts(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading states:', err);
+      }
+    };
+    loadStates();
+  }, [selectedCountry]);
+
+  // Load cities when state is selected
+  useEffect(() => {
+    if (!selectedCountry || !selectedState) {
+      setCitiesWithCounts([]);
+      setSelectedCity('');
+      return;
+    }
+
+    const loadCities = async () => {
+      try {
+        const response = await courtsApi.getCitiesByState(selectedCountry, selectedState);
+        if (response.success) {
+          setCitiesWithCounts(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading cities:', err);
+      }
+    };
+    loadCities();
+  }, [selectedCountry, selectedState]);
+
+  // Legacy: Load states list for backwards compatibility
   useEffect(() => {
     const loadStates = async () => {
       try {
@@ -71,21 +170,56 @@ export default function Courts() {
   const loadCourts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {
+      let params = {
         page,
         pageSize,
-        query: searchQuery || undefined,
-        latitude: userLocation?.lat,
-        longitude: userLocation?.lng,
-        radiusMiles: userLocation ? radiusMiles : undefined,
-        state: selectedState || undefined,
         hasLights: hasLights || undefined,
         isIndoor: isIndoor || undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
       };
+
+      if (searchMode === 'distance') {
+        // Distance-based search
+        if (userLocation) {
+          params.latitude = userLocation.lat;
+          params.longitude = userLocation.lng;
+          params.radiusMiles = radiusMiles;
+        }
+      } else {
+        // Full search mode
+        if (selectedCountry) params.country = selectedCountry;
+        if (selectedState) params.state = selectedState;
+        if (selectedCity) params.city = selectedCity;
+        if (courtNameSearch) params.query = courtNameSearch;
+      }
 
       const response = await courtsApi.search(params);
       if (response.success && response.data) {
-        setCourts(response.data.items || []);
+        let items = response.data.items || [];
+
+        // Client-side sorting if needed
+        if (sortBy === 'name') {
+          items = [...items].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+          });
+        } else if (sortBy === 'rating') {
+          items = [...items].sort((a, b) => {
+            const ratingA = a.aggregatedInfo?.averageRating || 0;
+            const ratingB = b.aggregatedInfo?.averageRating || 0;
+            return sortOrder === 'asc' ? ratingA - ratingB : ratingB - ratingA;
+          });
+        } else if (sortBy === 'distance' && userLocation) {
+          items = [...items].sort((a, b) => {
+            const distA = a.distance || 999999;
+            const distB = b.distance || 999999;
+            return sortOrder === 'asc' ? distA - distB : distB - distA;
+          });
+        }
+
+        setCourts(items);
         setTotalPages(response.data.totalPages || 1);
         setTotalCount(response.data.totalCount || 0);
       }
@@ -95,20 +229,45 @@ export default function Courts() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, userLocation, radiusMiles, selectedState, hasLights, isIndoor]);
+  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, courtNameSearch, hasLights, isIndoor, sortBy, sortOrder]);
 
   useEffect(() => {
     loadCourts();
   }, [loadCourts]);
 
-  // Debounced search
+  // Debounced search for court name
   const [searchTimeout, setSearchTimeout] = useState(null);
-  const handleSearchChange = (value) => {
-    setSearchQuery(value);
+  const handleCourtNameSearch = (value) => {
+    setCourtNameSearch(value);
     if (searchTimeout) clearTimeout(searchTimeout);
     setSearchTimeout(setTimeout(() => {
       setPage(1);
     }, 500));
+  };
+
+  // Handle sort change
+  const handleSortChange = (newSortBy) => {
+    if (sortBy === newSortBy) {
+      // Toggle order if same sort field
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(newSortBy);
+      setSortOrder(newSortBy === 'rating' ? 'desc' : 'asc'); // Default to desc for rating
+    }
+    setPage(1);
+  };
+
+  // Reset search when switching modes
+  const handleSearchModeChange = (mode) => {
+    setSearchMode(mode);
+    setPage(1);
+    // Reset sort to appropriate default
+    if (mode === 'distance' && userLocation) {
+      setSortBy('distance');
+    } else {
+      setSortBy('name');
+    }
+    setSortOrder('asc');
   };
 
   const handleViewDetails = async (court) => {
@@ -140,63 +299,201 @@ export default function Courts() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Location Notice */}
-        {locationError && !userLocation && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg flex items-center gap-2">
-            <MapPin className="w-5 h-5" />
-            {locationError}
-          </div>
-        )}
-
-        {/* Filters */}
+        {/* Search Mode Toggle */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex flex-wrap gap-4 items-center">
-            {/* Search */}
-            <div className="flex-1 min-w-[250px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name, city, or address..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                />
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Search Mode Tabs */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSearchModeChange('distance')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  searchMode === 'distance'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Navigation className="w-5 h-5" />
+                Find Near Me
+              </button>
+              <button
+                onClick={() => handleSearchModeChange('full')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  searchMode === 'full'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Search className="w-5 h-5" />
+                Full Search
+              </button>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex gap-2 lg:ml-auto">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                <List className="w-5 h-5" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('map')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
+                  viewMode === 'map'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                <Map className="w-5 h-5" />
+                Map
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search Options */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          {searchMode === 'distance' ? (
+            /* Distance Search Mode */
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Current Location */}
+                <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3 flex-1 min-w-[250px]">
+                  <Locate className={`w-5 h-5 ${userLocation ? 'text-green-600' : 'text-gray-400'}`} />
+                  <div className="flex-1">
+                    {gettingLocation ? (
+                      <span className="text-gray-500">Getting your location...</span>
+                    ) : userLocation ? (
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">Your Location</span>
+                        <span className="text-sm text-gray-500 ml-2">
+                          ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">Location not available</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={getLocation}
+                    disabled={gettingLocation}
+                    className="text-sm text-green-600 hover:text-green-700 font-medium disabled:opacity-50"
+                  >
+                    {gettingLocation ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {/* Distance Radius */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">Within</span>
+                  <select
+                    value={radiusMiles}
+                    onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
+                    className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    disabled={!userLocation}
+                  >
+                    <option value={5}>5 miles</option>
+                    <option value={10}>10 miles</option>
+                    <option value={25}>25 miles</option>
+                    <option value={50}>50 miles</option>
+                    <option value={100}>100 miles</option>
+                    <option value={250}>250 miles</option>
+                    <option value={500}>500 miles</option>
+                  </select>
+                </div>
+              </div>
+
+              {locationError && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg flex items-center gap-2 text-sm">
+                  <MapPin className="w-4 h-4" />
+                  {locationError}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Full Search Mode */
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Country Dropdown */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                  <select
+                    value={selectedCountry}
+                    onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="">All Countries</option>
+                    {countries.map(c => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} ({c.count.toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* State Dropdown */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State/Province</label>
+                  <select
+                    value={selectedState}
+                    onChange={(e) => { setSelectedState(e.target.value); setPage(1); }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    disabled={!selectedCountry}
+                  >
+                    <option value="">All States</option>
+                    {statesWithCounts.map(s => (
+                      <option key={s.name} value={s.name}>
+                        {s.name} ({s.count.toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* City Dropdown/Search */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <select
+                    value={selectedCity}
+                    onChange={(e) => { setSelectedCity(e.target.value); setPage(1); }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    disabled={!selectedState}
+                  >
+                    <option value="">All Cities</option>
+                    {citiesWithCounts.map(c => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} ({c.count.toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Court Name Search */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Court Name</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by name..."
+                      value={courtNameSearch}
+                      onChange={(e) => handleCourtNameSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* State Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-gray-500" />
-              <select
-                value={selectedState}
-                onChange={(e) => { setSelectedState(e.target.value); setPage(1); }}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">All States</option>
-                {states.map(state => (
-                  <option key={state} value={state}>{state}</option>
-                ))}
-              </select>
-            </div>
+          {/* Common Filters */}
+          <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t">
+            <span className="text-sm text-gray-500">Filters:</span>
 
-            {/* Distance Filter (only if location available) */}
-            {userLocation && (
-              <select
-                value={radiusMiles}
-                onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-              >
-                <option value={10}>Within 10 miles</option>
-                <option value={25}>Within 25 miles</option>
-                <option value={50}>Within 50 miles</option>
-                <option value={100}>Within 100 miles</option>
-                <option value={250}>Within 250 miles</option>
-                <option value={500}>Within 500 miles</option>
-              </select>
-            )}
-
-            {/* Toggle Filters */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -204,7 +501,7 @@ export default function Courts() {
                 onChange={(e) => { setHasLights(e.target.checked); setPage(1); }}
                 className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
               />
-              <Sun className="w-4 h-4 text-gray-500" />
+              <Sun className="w-4 h-4 text-yellow-500" />
               <span className="text-sm text-gray-700">Has Lights</span>
             </label>
 
@@ -215,27 +512,128 @@ export default function Courts() {
                 onChange={(e) => { setIsIndoor(e.target.checked); setPage(1); }}
                 className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
               />
+              <Layers className="w-4 h-4 text-blue-500" />
               <span className="text-sm text-gray-700">Indoor</span>
             </label>
+
+            {/* Sort Options (for list view) */}
+            {viewMode === 'list' && (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-sm text-gray-500">Sort by:</span>
+                <button
+                  onClick={() => handleSortChange('distance')}
+                  disabled={searchMode !== 'distance' || !userLocation}
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-sm transition-colors ${
+                    sortBy === 'distance'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  } ${searchMode !== 'distance' || !userLocation ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Navigation className="w-3 h-3" />
+                  Distance
+                  {sortBy === 'distance' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3" /> : <SortDesc className="w-3 h-3" />)}
+                </button>
+                <button
+                  onClick={() => handleSortChange('name')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-sm transition-colors ${
+                    sortBy === 'name'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Name
+                  {sortBy === 'name' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3" /> : <SortDesc className="w-3 h-3" />)}
+                </button>
+                <button
+                  onClick={() => handleSortChange('rating')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-sm transition-colors ${
+                    sortBy === 'rating'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Star className="w-3 h-3" />
+                  Rating
+                  {sortBy === 'rating' && (sortOrder === 'asc' ? <SortAsc className="w-3 h-3" /> : <SortDesc className="w-3 h-3" />)}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Courts List */}
+        {/* Results Count */}
+        {!loading && courts.length > 0 && (
+          <div className="mb-4 text-sm text-gray-600">
+            Showing {courts.length} of {totalCount.toLocaleString()} courts
+            {searchMode === 'distance' && userLocation && ` within ${radiusMiles} miles`}
+            {searchMode === 'full' && selectedCountry && ` in ${selectedCountry}`}
+            {searchMode === 'full' && selectedState && `, ${selectedState}`}
+            {searchMode === 'full' && selectedCity && `, ${selectedCity}`}
+          </div>
+        )}
+
+        {/* Courts Results */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-600"></div>
           </div>
         ) : courts.length > 0 ? (
           <>
-            <div className="grid gap-6 md:grid-cols-2">
-              {courts.map(court => (
-                <CourtCard
-                  key={court.courtId}
-                  court={court}
-                  onViewDetails={() => handleViewDetails(court)}
-                />
-              ))}
-            </div>
+            {viewMode === 'map' ? (
+              /* Map View */
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-6 bg-gray-50 text-center">
+                  <Map className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Map View Coming Soon</h3>
+                  <p className="text-gray-500 mb-4">
+                    We're working on an interactive map view. For now, you can view courts on Google Maps by clicking the court cards below.
+                  </p>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    Switch to List View
+                  </button>
+                </div>
+                {/* Show court list anyway */}
+                <div className="p-6 border-t">
+                  <h4 className="font-medium text-gray-900 mb-4">Court Locations:</h4>
+                  <div className="space-y-2">
+                    {courts.map(court => (
+                      <div
+                        key={court.courtId}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
+                        onClick={() => handleViewDetails(court)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <MapPin className="w-4 h-4 text-green-600" />
+                          <div>
+                            <span className="font-medium text-gray-900">{court.name || 'Unnamed Court'}</span>
+                            <span className="text-sm text-gray-500 ml-2">
+                              {court.city}{court.state && `, ${court.state}`}
+                            </span>
+                          </div>
+                        </div>
+                        {court.distance && (
+                          <span className="text-sm text-green-600">{court.distance.toFixed(1)} mi</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* List View */
+              <div className="grid gap-6 md:grid-cols-2">
+                {courts.map(court => (
+                  <CourtCard
+                    key={court.courtId}
+                    court={court}
+                    onViewDetails={() => handleViewDetails(court)}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -267,9 +665,13 @@ export default function Courts() {
             <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No Courts Found</h3>
             <p className="text-gray-500 mb-6">
-              {searchQuery || selectedState
+              {searchMode === 'distance' && !userLocation
+                ? 'Enable location access to find courts near you, or use Full Search.'
+                : searchMode === 'distance' && userLocation
+                ? `No courts found within ${radiusMiles} miles. Try increasing the distance.`
+                : selectedCountry || selectedState || courtNameSearch
                 ? 'No courts match your search criteria. Try adjusting your filters.'
-                : 'No courts have been added to this area yet.'}
+                : 'Select a country to start searching for courts.'}
             </p>
           </div>
         )}
