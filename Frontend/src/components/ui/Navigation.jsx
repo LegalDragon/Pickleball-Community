@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, BookOpen, HomeIcon, School2Icon, User, Bell, FileText } from 'lucide-react';
+import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAssetUrl } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
@@ -47,8 +47,9 @@ const Navigation = () => {
   }, [isAuthenticated, user]);
 
   const navigation = [
-    { name: 'Home', href: '/', icon: School2Icon },
-    { name: 'Marketplace', href: '/marketplace', icon: BookOpen },
+    { name: 'Home', href: '/', icon: HomeIcon },
+    { name: 'Events', href: '/events', icon: Calendar },
+    { name: 'Courts', href: '/courts', icon: MapPin },
     { name: 'Blog', href: '/blog', icon: FileText },
   ];
 

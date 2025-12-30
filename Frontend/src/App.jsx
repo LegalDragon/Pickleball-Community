@@ -9,6 +9,9 @@ import Notifications from './pages/Notifications'
 import PlayerReview from './pages/PlayerReview'
 import MyCertificate from './pages/MyCertificate'
 import CertificationAdmin from './pages/CertificationAdmin'
+import Events from './pages/Events'
+import Courts from './pages/Courts'
+import Blog from './pages/Blog'
 import ProtectedRoute from './components/ProtectedRoute'
 
 import ForgotPassword from './pages/ForgotPassword'
@@ -29,6 +32,11 @@ function App() {
 
       {/* Player Certification - Public Review */}
       <Route path="/review/:token" element={<PlayerReview />} />
+
+      {/* Community Features - Public */}
+      <Route path="/events" element={<Events />} />
+      <Route path="/courts" element={<Courts />} />
+      <Route path="/blog" element={<Blog />} />
 
       {/* Protected Routes - Any Authenticated Member */}
       <Route path="/member/dashboard" element={
