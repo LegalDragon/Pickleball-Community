@@ -165,12 +165,14 @@ const AdminDashboard = () => {
   }
 
   // Helper to get relative asset path from response (for saving to DB)
+  // Response: { data: { success: true, url: "/asset/11", ... } }
+  // Use response.data.url directly - it already contains the relative path
   const getAssetPathFromResponse = (response) => {
-    if (response && response.id) {
-      return `/asset/${response.id}`
+    if (response?.data?.url) {
+      return response.data.url
     }
-    if (response.success && response.data?.id) {
-      return `/asset/${response.data.id}`
+    if (response?.url) {
+      return response.url
     }
     return null
   }

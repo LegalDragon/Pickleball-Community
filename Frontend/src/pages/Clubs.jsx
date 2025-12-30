@@ -727,12 +727,13 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     try {
       // Upload to Funtime-Shared
       const response = await sharedAssetApi.upload(file, 'image', 'club');
-      // Save only relative path to DB, construct full URL when viewing
+      // Save only relative path to DB - use response.data.url directly
+      // Response: { data: { success: true, url: "/asset/11", ... } }
       let logoUrl;
-      if (response && response.id) {
-        logoUrl = `/asset/${response.id}`;
-      } else if (response.success && response.data?.id) {
-        logoUrl = `/asset/${response.data.id}`;
+      if (response?.data?.url) {
+        logoUrl = response.data.url;
+      } else if (response?.url) {
+        logoUrl = response.url;
       }
 
       if (logoUrl) {
@@ -1532,13 +1533,12 @@ function CreateClubModal({ onClose, onCreate }) {
     try {
       // Upload to Funtime-Shared asset service
       const response = await sharedAssetApi.upload(file, 'image', 'club');
-      // Save only relative path to DB
-      if (response && response.id) {
-        const logoUrl = `/asset/${response.id}`;
-        setFormData({ ...formData, logoUrl });
-      } else if (response.success && response.data?.id) {
-        const logoUrl = `/asset/${response.data.id}`;
-        setFormData({ ...formData, logoUrl });
+      // Save only relative path to DB - use response.data.url directly
+      // Response: { data: { success: true, url: "/asset/11", ... } }
+      if (response?.data?.url) {
+        setFormData({ ...formData, logoUrl: response.data.url });
+      } else if (response?.url) {
+        setFormData({ ...formData, logoUrl: response.url });
       } else {
         setError(response.message || 'Upload failed');
       }

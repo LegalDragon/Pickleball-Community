@@ -159,27 +159,17 @@ const Profile = () => {
         console.log('Avatar upload response keys:', response ? Object.keys(response) : 'null')
 
         // Handle Funtime-Shared response format
-        // Save only the relative path to DB, construct full URL when viewing
+        // Response: { data: { success: true, url: "/asset/11", ... } }
+        // Use response.data.url directly - it already contains the relative path
         let assetPath = null
-        let assetId = null
 
-        // Try different response formats
-        if (response && response.id) {
-          assetId = response.id
-        } else if (response && response.Id) {
-          assetId = response.Id
-        } else if (response?.data?.id) {
-          assetId = response.data.id
-        } else if (response?.data?.Id) {
-          assetId = response.data.Id
-        } else if (response?.asset?.id) {
-          assetId = response.asset.id
-        } else if (response?.asset?.Id) {
-          assetId = response.asset.Id
+        if (response?.data?.url) {
+          assetPath = response.data.url
+        } else if (response?.url) {
+          assetPath = response.url
         }
 
-        if (assetId) {
-          assetPath = `/asset/${assetId}`
+        if (assetPath) {
           console.log('New avatar path:', assetPath)
           // Update local user with new avatar path
           updateUser({ ...user, avatar: assetPath, profileImageUrl: assetPath })
@@ -189,8 +179,8 @@ const Profile = () => {
           // Save relative path to local backend
           await userApi.updateProfile({ profileImageUrl: assetPath })
         } else {
-          console.error('Could not find asset ID in response:', JSON.stringify(response, null, 2))
-          throw new Error('Upload failed - no asset ID returned. Check console for response format.')
+          console.error('Could not find asset URL in response:', JSON.stringify(response, null, 2))
+          throw new Error('Upload failed - no asset URL returned. Check console for response format.')
         }
       } catch (error) {
         console.error('Avatar upload error:', error)
