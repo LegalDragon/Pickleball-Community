@@ -1972,6 +1972,28 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation }) {
                 Click on the map or drag the marker to select the exact location of the court.
               </div>
 
+              {/* Use My Location button */}
+              {userLocation && (
+                <button
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      latitude: userLocation.lat,
+                      longitude: userLocation.lng
+                    }));
+                    // Update marker and map if initialized
+                    if (markerRef.current && mapInstanceRef.current) {
+                      markerRef.current.setLatLng([userLocation.lat, userLocation.lng]);
+                      mapInstanceRef.current.setView([userLocation.lat, userLocation.lng], 16);
+                    }
+                  }}
+                  className="w-full py-3 bg-blue-50 border-2 border-blue-200 text-blue-700 rounded-lg font-medium hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Locate className="w-5 h-5" />
+                  I'm at the court - Use my current location
+                </button>
+              )}
+
               {/* Map */}
               <div
                 ref={mapRef}
