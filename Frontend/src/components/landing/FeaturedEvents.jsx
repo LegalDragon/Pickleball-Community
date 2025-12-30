@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, ChevronLeft, ChevronRight, ArrowRight, Trophy, Stethoscope, UsersRound, PartyPopper } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, ChevronLeft, ChevronRight, ArrowRight, Trophy, Stethoscope, UsersRound, PartyPopper, Swords } from 'lucide-react';
 import { eventsApi, getSharedAssetUrl } from '../../services/api';
 
 export default function FeaturedEvents() {
@@ -198,6 +198,7 @@ function EventCard({ event, formatDate, formatTime }) {
   const getEventTypeStyle = (typeName) => {
     const name = (typeName || '').toLowerCase();
     if (name.includes('tournament')) return { color: 'bg-purple-100 text-purple-700', Icon: Trophy };
+    if (name.includes('mini') || name.includes('match')) return { color: 'bg-red-100 text-red-700', Icon: Swords };
     if (name.includes('open') || name.includes('play')) return { color: 'bg-green-100 text-green-700', Icon: UsersRound };
     if (name.includes('clinic') || name.includes('lesson')) return { color: 'bg-blue-100 text-blue-700', Icon: Stethoscope };
     if (name.includes('league')) return { color: 'bg-orange-100 text-orange-700', Icon: Trophy };
