@@ -153,11 +153,17 @@ sharedAuthApi.interceptors.request.use((config) => {
 // Shared User API (for Funtime-Shared user profile operations)
 // Note: SHARED_AUTH_URL already includes /api, so endpoints should NOT have /api prefix
 export const sharedUserApi = {
-  // Upload avatar to shared auth service
+  // Upload avatar to shared auth service (uses shared asset API)
   uploadAvatar: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return sharedAuthApi.post('/assets/upload', formData, {
+    const params = new URLSearchParams({
+      assetType: 'image',
+      category: 'avatar',
+      siteKey: 'community',
+      isPublic: 'true'
+    });
+    return sharedAuthApi.post(`/asset/upload?${params.toString()}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
@@ -167,6 +173,89 @@ export const sharedUserApi = {
 
   // Update user profile on shared auth
   updateProfile: (data) => sharedAuthApi.put('/users/me', data),
+}
+
+// Shared Asset API (for Funtime-Shared centralized asset management)
+// Use this for all asset uploads across pickleball.* sites
+const SITE_KEY = 'community' // Site identifier for multi-tenant asset storage
+
+export const sharedAssetApi = {
+  /**
+   * Upload a file to Funtime-Shared asset service
+   * @param {File} file - The file to upload
+   * @param {string} assetType - Type: 'image', 'video', 'document', 'audio'
+   * @param {string} category - Category for organization: 'avatar', 'theme', 'club', 'court', 'video', etc.
+   * @param {boolean} isPublic - Whether the asset is publicly accessible (default: true)
+   * @returns {Promise} - Response with asset ID and URL
+   */
+  upload: async (file, assetType = 'image', category = 'general', isPublic = true) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = new URLSearchParams({
+      assetType,
+      category,
+      siteKey: SITE_KEY,
+      isPublic: isPublic.toString()
+    });
+    return sharedAuthApi.post(`/asset/upload?${params.toString()}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  /**
+   * Register an external URL as an asset (e.g., YouTube video)
+   * @param {string} url - External URL
+   * @param {string} title - Display title
+   * @param {string} assetType - Type: 'video', 'link', etc.
+   * @param {string} category - Category for organization
+   * @param {string} thumbnailUrl - Optional thumbnail URL
+   * @returns {Promise} - Response with asset ID
+   */
+  registerLink: async (url, title, assetType = 'video', category = 'video', thumbnailUrl = null) => {
+    return sharedAuthApi.post('/asset/link', {
+      url,
+      title,
+      assetType,
+      category,
+      siteKey: SITE_KEY,
+      thumbnailUrl,
+      isPublic: true
+    });
+  },
+
+  /**
+   * Get asset info by ID
+   * @param {number} assetId - Asset ID
+   * @returns {Promise} - Asset metadata
+   */
+  getInfo: (assetId) => sharedAuthApi.get(`/asset/${assetId}/info`),
+
+  /**
+   * Get asset URL for display
+   * @param {number} assetId - Asset ID
+   * @returns {string} - Full URL to access the asset
+   */
+  getUrl: (assetId) => `${SHARED_AUTH_URL}/asset/${assetId}`,
+
+  /**
+   * Delete an asset by ID
+   * @param {number} assetId - Asset ID
+   * @returns {Promise}
+   */
+  delete: (assetId) => sharedAuthApi.delete(`/asset/${assetId}`),
+
+  /**
+   * Helper to determine asset type from file
+   * @param {File} file - The file to check
+   * @returns {string} - Asset type
+   */
+  getAssetType: (file) => {
+    const mimeType = file.type.toLowerCase();
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    return 'document';
+  }
 }
 
 export const authApi = {

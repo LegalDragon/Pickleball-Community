@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, ThumbsDown, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate, Image, Video, Upload, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { courtsApi, assetApi } from '../services/api';
+import { courtsApi, sharedAssetApi, SHARED_AUTH_URL } from '../services/api';
 
 const SURFACE_TYPES = [
   { value: 'all', label: 'All Surfaces' },
@@ -936,19 +936,25 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
     setUploadError(null);
 
     try {
-      // Upload file to asset service
-      const folder = isVideo ? 'videos' : 'images';
-      const uploadResponse = await assetApi.upload(file, folder, 'CourtAsset', court.courtId);
+      // Upload file to Funtime-Shared asset service
+      const assetType = isVideo ? 'video' : 'image';
+      const uploadResponse = await sharedAssetApi.upload(file, assetType, 'court');
 
-      if (!uploadResponse.success) {
+      // Handle response and construct URL
+      let assetUrl;
+      if (uploadResponse && uploadResponse.id) {
+        assetUrl = `${SHARED_AUTH_URL}/asset/${uploadResponse.id}`;
+      } else if (uploadResponse.success && uploadResponse.data?.url) {
+        assetUrl = uploadResponse.data.url;
+      } else {
         throw new Error(uploadResponse.message || 'Upload failed');
       }
 
       // Create court asset record
       const assetData = {
         assetType: isVideo ? 'video' : 'image',
-        assetUrl: uploadResponse.data.url,
-        thumbnailUrl: isVideo ? null : uploadResponse.data.url,
+        assetUrl: assetUrl,
+        thumbnailUrl: isVideo ? null : assetUrl,
         width: null,
         height: null,
         fileSizeBytes: file.size,

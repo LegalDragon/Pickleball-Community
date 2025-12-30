@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { clubsApi, assetApi, clubMemberRolesApi, getSharedAssetUrl } from '../services/api';
+import { clubsApi, sharedAssetApi, clubMemberRolesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -1410,8 +1410,14 @@ function CreateClubModal({ onClose, onCreate }) {
     setUploadingLogo(true);
     setError(null);
     try {
-      const response = await assetApi.upload(file, 'logos', 'Club', null);
-      if (response.success) {
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'club');
+      if (response && response.id) {
+        // Construct URL using the shared asset endpoint
+        const logoUrl = `${SHARED_AUTH_URL}/asset/${response.id}`;
+        setFormData({ ...formData, logoUrl });
+      } else if (response.success && response.data?.url) {
+        // Fallback for alternative response format
         setFormData({ ...formData, logoUrl: response.data.url });
       } else {
         setError(response.message || 'Upload failed');

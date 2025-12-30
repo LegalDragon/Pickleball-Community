@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { userApi, themeApi, getAssetUrl } from '../services/api'
+import { userApi, themeApi, sharedAssetApi, getAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, Filter, MoreVertical, Eye, X,
@@ -164,6 +164,17 @@ const AdminDashboard = () => {
     }
   }
 
+  // Helper to construct shared asset URL from response
+  const getSharedAssetUrlFromResponse = (response) => {
+    if (response && response.id) {
+      return `${SHARED_AUTH_URL}/asset/${response.id}`
+    }
+    if (response.success && response.data?.url) {
+      return response.data.url
+    }
+    return null
+  }
+
   // Handle logo upload
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -171,10 +182,16 @@ const AdminDashboard = () => {
 
     setUploadingLogo(true)
     try {
-      const response = await themeApi.uploadLogo(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, logoUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      const logoUrl = getSharedAssetUrlFromResponse(response)
+      if (logoUrl) {
+        setThemeSettings(prev => ({ ...prev, logoUrl }))
+        // Save theme settings to persist the URL
+        await themeApi.update({ ...themeSettings, logoUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset URL')
       }
     } catch (error) {
       console.error('Error uploading logo:', error)
@@ -191,10 +208,15 @@ const AdminDashboard = () => {
 
     setUploadingFavicon(true)
     try {
-      const response = await themeApi.uploadFavicon(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, faviconUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      const faviconUrl = getSharedAssetUrlFromResponse(response)
+      if (faviconUrl) {
+        setThemeSettings(prev => ({ ...prev, faviconUrl }))
+        await themeApi.update({ ...themeSettings, faviconUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset URL')
       }
     } catch (error) {
       console.error('Error uploading favicon:', error)
@@ -211,10 +233,15 @@ const AdminDashboard = () => {
 
     setUploadingHeroVideo(true)
     try {
-      const response = await themeApi.uploadHeroVideo(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, heroVideoUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'video', 'theme')
+      const heroVideoUrl = getSharedAssetUrlFromResponse(response)
+      if (heroVideoUrl) {
+        setThemeSettings(prev => ({ ...prev, heroVideoUrl }))
+        await themeApi.update({ ...themeSettings, heroVideoUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset URL')
       }
     } catch (error) {
       console.error('Error uploading hero video:', error)
@@ -231,10 +258,15 @@ const AdminDashboard = () => {
 
     setUploadingHeroImage(true)
     try {
-      const response = await themeApi.uploadHeroImage(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, heroImageUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      const heroImageUrl = getSharedAssetUrlFromResponse(response)
+      if (heroImageUrl) {
+        setThemeSettings(prev => ({ ...prev, heroImageUrl }))
+        await themeApi.update({ ...themeSettings, heroImageUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset URL')
       }
     } catch (error) {
       console.error('Error uploading hero image:', error)
@@ -248,8 +280,10 @@ const AdminDashboard = () => {
   const handleDeleteHeroVideo = async () => {
     if (!confirm('Are you sure you want to delete the hero video?')) return
     try {
-      await themeApi.deleteHeroVideo()
-      setThemeSettings(prev => ({ ...prev, heroVideoUrl: null, heroVideoThumbnailUrl: null }))
+      // Update theme settings to remove video URL
+      const updatedSettings = { ...themeSettings, heroVideoUrl: null }
+      await themeApi.update(updatedSettings)
+      setThemeSettings(prev => ({ ...prev, heroVideoUrl: null }))
       await refreshTheme()
     } catch (error) {
       console.error('Error deleting hero video:', error)
@@ -260,7 +294,9 @@ const AdminDashboard = () => {
   const handleDeleteHeroImage = async () => {
     if (!confirm('Are you sure you want to delete the hero image?')) return
     try {
-      await themeApi.deleteHeroImage()
+      // Update theme settings to remove image URL
+      const updatedSettings = { ...themeSettings, heroImageUrl: null }
+      await themeApi.update(updatedSettings)
       setThemeSettings(prev => ({ ...prev, heroImageUrl: null }))
       await refreshTheme()
     } catch (error) {

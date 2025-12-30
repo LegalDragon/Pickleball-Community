@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { X, Upload, Link as LinkIcon, Video, Play, Trash2, ExternalLink } from 'lucide-react'
-import { assetApi, getAssetUrl } from '../../services/api'
+import { sharedAssetApi, getAssetUrl, SHARED_AUTH_URL } from '../../services/api'
 
 /**
  * Reusable Video Upload Modal Component
@@ -146,9 +146,16 @@ const VideoUploadModal = ({
 
       setUploading(true)
       try {
-        const response = await assetApi.upload(selectedFile, 'videos', objectType, objectId)
-        if (response.success && response.data) {
-          onSave({ url: response.data.url, type: 'file', fileId: response.data.fileId })
+        // Upload to Funtime-Shared asset service
+        const response = await sharedAssetApi.upload(selectedFile, 'video', objectType || 'video')
+        if (response && response.id) {
+          // Construct URL using shared asset endpoint
+          const videoUrl = `${SHARED_AUTH_URL}/asset/${response.id}`
+          onSave({ url: videoUrl, type: 'file', fileId: response.id })
+          onClose()
+        } else if (response.success && response.data) {
+          // Fallback for alternative response format
+          onSave({ url: response.data.url, type: 'file', fileId: response.data.fileId || response.data.id })
           onClose()
         } else {
           setError(response.message || 'Upload failed')
