@@ -30,6 +30,12 @@ export default function Friends() {
     loadFriendsData();
   }, []);
 
+  // Helper to extract data from response (handles both wrapped and unwrapped)
+  const extractData = (response) => {
+    const data = response.data?.data ?? response.data ?? [];
+    return Array.isArray(data) ? data : [];
+  };
+
   const loadFriendsData = async () => {
     setLoading(true);
     try {
@@ -38,9 +44,9 @@ export default function Friends() {
         friendsApi.getPendingRequests(),
         friendsApi.getSentRequests()
       ]);
-      setFriends(friendsRes.data?.data || []);
-      setPendingRequests(pendingRes.data?.data || []);
-      setSentRequests(sentRes.data?.data || []);
+      setFriends(extractData(friendsRes));
+      setPendingRequests(extractData(pendingRes));
+      setSentRequests(extractData(sentRes));
     } catch (err) {
       console.error('Error loading friends data:', err);
     } finally {
@@ -63,10 +69,7 @@ export default function Friends() {
     setHasSearched(true);
     try {
       const response = await friendsApi.searchPlayers(searchFilters);
-      console.log('Search response:', response);
-      console.log('Search response.data:', response.data);
-      console.log('Search results:', response.data?.data);
-      setSearchResults(response.data?.data || []);
+      setSearchResults(extractData(response));
     } catch (err) {
       console.error('Error searching players:', err);
     } finally {
