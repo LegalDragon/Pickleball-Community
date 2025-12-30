@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -28,6 +29,7 @@ export default function Clubs() {
   const [activeTab, setActiveTab] = useState('search'); // search, my-clubs
   const [joinMessage, setJoinMessage] = useState(null); // { type: 'success'|'error', text: string }
   const [memberRoles, setMemberRoles] = useState([]);
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
   const pageSize = 20;
 
   // Load available member roles on mount
@@ -546,6 +548,14 @@ export default function Clubs() {
             loadMyClubs();
             handleViewDetails(newClub);
           }}
+        />
+      )}
+
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
         />
       )}
     </div>
@@ -1099,7 +1109,10 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                 <div className="space-y-3">
                   {members.map(member => (
                     <div key={member.id} className={`flex items-center justify-between p-3 rounded-lg ${member.isMembershipExpired ? 'bg-red-50' : 'bg-gray-50'}`}>
-                      <div className="flex items-center gap-3">
+                      <div
+                        className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setProfileModalUserId(member.userId)}
+                      >
                         {member.profileImageUrl ? (
                           <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
                         ) : (
@@ -1111,7 +1124,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                         )}
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900">{member.name}</span>
+                            <span className="font-medium text-gray-900 hover:text-purple-600">{member.name}</span>
                             {member.role === 'Admin' && <Crown className="w-4 h-4 text-yellow-500" />}
                             {member.role === 'Moderator' && <Shield className="w-4 h-4 text-blue-500" />}
                             {member.title && (

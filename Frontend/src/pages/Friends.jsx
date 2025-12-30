@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { friendsApi, getSharedAssetUrl } from '../services/api';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Friends() {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ export default function Friends() {
   const [loading, setLoading] = useState(true);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [previewUser, setPreviewUser] = useState(null);
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
 
   useEffect(() => {
     loadFriendsData();
@@ -221,10 +223,10 @@ export default function Friends() {
             ) : friends.length > 0 ? (
               <div className="divide-y">
                 {friends.map(friend => (
-                  <Link
+                  <div
                     key={friend.id}
-                    to={`/users/${friend.id}`}
-                    className="block p-4 hover:bg-gray-50 transition-colors"
+                    onClick={() => setProfileModalUserId(friend.id)}
+                    className="block p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -254,7 +256,7 @@ export default function Friends() {
                       </div>
                       <ChevronRight className="w-5 h-5 text-gray-400" />
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -293,9 +295,9 @@ export default function Friends() {
                   {pendingRequests.map(request => (
                     <div key={request.id} className="p-4">
                       <div className="flex items-center justify-between">
-                        <Link
-                          to={`/users/${request.sender.id}`}
-                          className="flex items-center gap-4 hover:opacity-80 transition-opacity"
+                        <div
+                          onClick={() => setProfileModalUserId(request.sender.id)}
+                          className="flex items-center gap-4 hover:opacity-80 transition-opacity cursor-pointer"
                         >
                           {request.sender.profileImageUrl ? (
                             <img
@@ -319,15 +321,15 @@ export default function Friends() {
                               </span>
                             )}
                           </div>
-                        </Link>
+                        </div>
                         <div className="flex items-center gap-2">
-                          <Link
-                            to={`/users/${request.sender.id}`}
+                          <button
+                            onClick={() => setProfileModalUserId(request.sender.id)}
                             className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
                             title="View Profile"
                           >
                             <ExternalLink className="w-5 h-5" />
-                          </Link>
+                          </button>
                           <button
                             onClick={() => handleAcceptRequest(request.id)}
                             className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
@@ -368,9 +370,9 @@ export default function Friends() {
                   {sentRequests.map(request => (
                     <div key={request.id} className="p-4">
                       <div className="flex items-center justify-between">
-                        <Link
-                          to={`/users/${request.recipient.id}`}
-                          className="flex items-center gap-4 hover:opacity-80 transition-opacity"
+                        <div
+                          onClick={() => setProfileModalUserId(request.recipient.id)}
+                          className="flex items-center gap-4 hover:opacity-80 transition-opacity cursor-pointer"
                         >
                           {request.recipient.profileImageUrl ? (
                             <img
@@ -389,7 +391,7 @@ export default function Friends() {
                               Sent {formatDate(request.createdAt)}
                             </p>
                           </div>
-                        </Link>
+                        </div>
                         <button
                           onClick={() => handleCancelRequest(request.id)}
                           className="text-sm text-gray-500 hover:text-red-600"
@@ -500,9 +502,9 @@ export default function Friends() {
                       key={player.id}
                       className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
                     >
-                      <Link
-                        to={`/users/${player.id}`}
-                        className="flex items-center gap-4 hover:opacity-80 transition-opacity"
+                      <div
+                        onClick={() => setProfileModalUserId(player.id)}
+                        className="flex items-center gap-4 hover:opacity-80 transition-opacity cursor-pointer"
                       >
                         {player.profileImageUrl ? (
                           <img
@@ -526,15 +528,15 @@ export default function Friends() {
                             <p className="text-sm text-gray-500">{player.location}</p>
                           )}
                         </div>
-                      </Link>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <Link
-                          to={`/users/${player.id}`}
+                        <button
+                          onClick={() => setProfileModalUserId(player.id)}
                           className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
                           title="View Profile"
                         >
                           <ExternalLink className="w-5 h-5" />
-                        </Link>
+                        </button>
                         {player.isFriend ? (
                           <span className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium">
                             <Check className="w-4 h-4" />
@@ -585,6 +587,15 @@ export default function Friends() {
           onAccept={handleAcceptRequest}
           onReject={handleRejectRequest}
           pendingRequestId={pendingRequests.find(r => r.sender.id === previewUser.id)?.id}
+        />
+      )}
+
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
+          onFriendshipChange={loadFriendsData}
         />
       )}
     </div>
