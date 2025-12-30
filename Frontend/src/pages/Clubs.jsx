@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3 } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 
@@ -533,6 +533,7 @@ export default function Clubs() {
             loadMyClubs();
             loadClubs();
           }}
+          memberRoles={memberRoles}
         />
       )}
 
@@ -620,7 +621,7 @@ function ClubCard({ club, onViewDetails, showManageButton = false }) {
   );
 }
 
-function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin, onUpdate }) {
+function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin, onUpdate, memberRoles }) {
   const [activeTab, setActiveTab] = useState('about');
   const [members, setMembers] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
@@ -632,10 +633,13 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [sendingNotification, setSendingNotification] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [memberEditData, setMemberEditData] = useState({ title: '', membershipValidTo: '', membershipNotes: '' });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [clubData, setClubData] = useState(club);
+  const logoInputRef = useRef(null);
 
-  const isAdmin = club.isAdmin;
-  const isModerator = club.isModerator;
-  const isMember = club.isMember;
+  const isAdmin = clubData.isAdmin;
+  const isModerator = clubData.isModerator;
+  const isMember = clubData.isMember;
   const canManage = isAdmin || isModerator;
 
   useEffect(() => {
@@ -702,6 +706,63 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Handle club logo upload
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Logo must be less than 5MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      // Upload to Funtime-Shared
+      const response = await sharedAssetApi.upload(file, 'image', 'club');
+      let logoUrl;
+      if (response && response.id) {
+        logoUrl = `${SHARED_AUTH_URL}/asset/${response.id}`;
+      } else if (response.success && response.data?.url) {
+        logoUrl = response.data.url;
+      }
+
+      if (logoUrl) {
+        // Update club with new logo URL
+        const updateResponse = await clubsApi.update(clubData.id, { ...clubData, logoUrl });
+        if (updateResponse.success) {
+          setClubData(prev => ({ ...prev, logoUrl }));
+          onUpdate();
+        }
+      }
+    } catch (err) {
+      console.error('Error uploading logo:', err);
+      alert('Failed to upload logo');
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  // Handle logo removal
+  const handleRemoveLogo = async () => {
+    if (!confirm('Remove club logo?')) return;
+    try {
+      const updateResponse = await clubsApi.update(clubData.id, { ...clubData, logoUrl: null });
+      if (updateResponse.success) {
+        setClubData(prev => ({ ...prev, logoUrl: null }));
+        onUpdate();
+      }
+    } catch (err) {
+      console.error('Error removing logo:', err);
+    }
   };
 
   const handleReviewRequest = async (requestId, approve) => {
@@ -1258,6 +1319,64 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                 <p className="text-sm text-gray-500 mt-2">
                   Share this link to invite people to join your club directly
                 </p>
+              </div>
+
+              {/* Club Logo */}
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Image className="w-5 h-5 text-purple-600" />
+                  Club Logo
+                </h3>
+                <div className="flex items-start gap-4">
+                  {clubData.logoUrl ? (
+                    <div className="relative">
+                      <img
+                        src={getSharedAssetUrl(clubData.logoUrl)}
+                        alt="Club logo"
+                        className="w-24 h-24 rounded-lg object-cover border border-gray-200"
+                      />
+                      <button
+                        onClick={handleRemoveLogo}
+                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                      <Image className="w-8 h-8 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      ref={logoInputRef}
+                      onChange={handleLogoUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {uploadingLogo ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          {clubData.logoUrl ? 'Change Logo' : 'Upload Logo'}
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      PNG, JPG up to 5MB. Recommended: 200x200px
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Club Settings */}
