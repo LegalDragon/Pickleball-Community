@@ -560,7 +560,6 @@ public class CourtsController : ControllerBase
             // Fallback to LINQ
             _logger.LogWarning("Stored procedure GetCourtCountries not found, falling back to LINQ");
             var countries = await _context.Courts
-                .Where(c => c.IsActive)
                 .GroupBy(c => c.Country ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
@@ -618,7 +617,7 @@ public class CourtsController : ControllerBase
             _logger.LogWarning("Stored procedure GetCourtStatesByCountry not found, falling back to LINQ");
             var searchCountry = country == "Unknown" ? null : country;
             var states = await _context.Courts
-                .Where(c => c.IsActive && (searchCountry == null ? c.Country == null : c.Country == searchCountry))
+                .Where(c => searchCountry == null ? c.Country == null : c.Country == searchCountry)
                 .GroupBy(c => c.State ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
@@ -678,8 +677,7 @@ public class CourtsController : ControllerBase
             var searchCountry = country == "Unknown" ? null : country;
             var searchState = state == "Unknown" ? null : state;
             var cities = await _context.Courts
-                .Where(c => c.IsActive
-                    && (searchCountry == null ? c.Country == null : c.Country == searchCountry)
+                .Where(c => (searchCountry == null ? c.Country == null : c.Country == searchCountry)
                     && (searchState == null ? c.State == null : c.State == searchState))
                 .GroupBy(c => c.City ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })

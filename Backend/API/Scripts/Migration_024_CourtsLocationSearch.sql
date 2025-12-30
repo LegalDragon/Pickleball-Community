@@ -25,7 +25,6 @@ BEGIN
         Country = ISNULL(Country, 'Unknown'),
         CourtCount = COUNT(*)
     FROM Courts
-    WHERE IsActive = 1
     GROUP BY Country
     ORDER BY
         COUNT(*) DESC,
@@ -61,8 +60,7 @@ BEGIN
         State = ISNULL(State, 'Unknown'),
         CourtCount = COUNT(*)
     FROM Courts
-    WHERE IsActive = 1
-      AND (
+    WHERE (
           (@SearchCountry IS NULL AND Country IS NULL)
           OR (@SearchCountry = 'Unknown' AND Country IS NULL)
           OR Country = @SearchCountry
@@ -104,8 +102,7 @@ BEGIN
         City = ISNULL(City, 'Unknown'),
         CourtCount = COUNT(*)
     FROM Courts
-    WHERE IsActive = 1
-      AND (
+    WHERE (
           (@SearchCountry IS NULL AND Country IS NULL)
           OR (@SearchCountry = 'Unknown' AND Country IS NULL)
           OR Country = @SearchCountry
@@ -147,7 +144,6 @@ BEGIN
         Country = ISNULL(Country, 'Unknown'),
         CourtCount = COUNT(*)
     FROM Courts
-    WHERE IsActive = 1
     GROUP BY Country
     ORDER BY
         COUNT(*) DESC,
@@ -159,7 +155,6 @@ BEGIN
         State = ISNULL(State, 'Unknown'),
         CourtCount = COUNT(*)
     FROM Courts
-    WHERE IsActive = 1
     GROUP BY Country, State
     ORDER BY
         ISNULL(Country, 'Unknown') ASC,
