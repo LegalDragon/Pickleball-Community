@@ -524,14 +524,14 @@ export default function Courts() {
                   </select>
                 </div>
 
-                {/* Court Name Search */}
+                {/* Court Name/Address Search */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Court Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name or Address</label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Search by name..."
+                      placeholder="Search by name or address..."
                       value={courtNameSearch}
                       onChange={(e) => handleCourtNameSearch(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
