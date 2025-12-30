@@ -1,57 +1,10 @@
-import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import { MapPin, Star, Sun, Moon, Phone, Globe, ExternalLink } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapPin, Sun, Moon, Phone, Globe, ExternalLink } from 'lucide-react';
 
-// Fix for default marker icons in react-leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
-
-// Custom marker icon for courts
-const courtIcon = new L.Icon({
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-// Component to handle map center changes
-function MapCenterHandler({ center, zoom }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (center) {
-      map.setView(center, zoom || map.getZoom());
-    }
-  }, [center, zoom, map]);
-
-  return null;
-}
-
-// Component to fit bounds to all markers
-function FitBoundsHandler({ courts }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (courts && courts.length > 0) {
-      const validCourts = courts.filter(c => c.latitude && c.longitude);
-      if (validCourts.length > 0) {
-        const bounds = L.latLngBounds(
-          validCourts.map(c => [parseFloat(c.latitude), parseFloat(c.longitude)])
-        );
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-      }
-    }
-  }, [courts, map]);
-
-  return null;
+// Dynamically import leaflet to avoid SSR issues
+let L = null;
+if (typeof window !== 'undefined') {
+  L = require('leaflet');
 }
 
 export default function CourtMap({
@@ -62,8 +15,14 @@ export default function CourtMap({
   userLocation,
   fitBounds = true
 }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
+  const [isClient, setIsClient] = useState(false);
+
   // Filter courts with valid coordinates
   const courtsWithCoords = useMemo(() => {
+    if (!courts) return [];
     return courts.filter(court => {
       const lat = parseFloat(court.latitude || court.gpsLat);
       const lng = parseFloat(court.longitude || court.gpsLng);
@@ -75,27 +34,164 @@ export default function CourtMap({
     }));
   }, [courts]);
 
-  // Default center (US center) if no courts or user location
+  // Default center
   const defaultCenter = useMemo(() => {
     if (userLocation) {
       return [userLocation.lat, userLocation.lng];
     }
     if (courtsWithCoords.length > 0) {
-      // Center on first court
       return [courtsWithCoords[0].lat, courtsWithCoords[0].lng];
     }
-    // Default to center of US
-    return [39.8283, -98.5795];
+    return [39.8283, -98.5795]; // Center of US
   }, [userLocation, courtsWithCoords]);
 
-  const getTotalCourts = (court) => {
-    return (court.indoorNum || 0) + (court.outdoorNum || 0) + (court.coveredNum || 0);
+  // Set client-side flag
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Initialize map
+  useEffect(() => {
+    if (!isClient || !mapRef.current || !L) return;
+    if (mapInstanceRef.current) return; // Already initialized
+
+    // Fix default icon paths
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    });
+
+    // Create map
+    const map = L.map(mapRef.current).setView(center || defaultCenter, zoom);
+    mapInstanceRef.current = map;
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [isClient]);
+
+  // Update markers when courts change
+  useEffect(() => {
+    if (!mapInstanceRef.current || !L) return;
+
+    const map = mapInstanceRef.current;
+
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+
+    // Create court icon
+    const courtIcon = L.icon({
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    // Add court markers
+    courtsWithCoords.forEach(court => {
+      const popupContent = createPopupContent(court);
+      const marker = L.marker([court.lat, court.lng], { icon: courtIcon })
+        .addTo(map)
+        .bindPopup(popupContent, { maxWidth: 300 });
+
+      marker.on('click', () => {
+        if (onCourtClick) onCourtClick(court);
+      });
+
+      markersRef.current.push(marker);
+    });
+
+    // Add user location marker
+    if (userLocation) {
+      const userIcon = L.divIcon({
+        html: `<div style="width: 20px; height: 20px; background: #3B82F6; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+        className: 'user-location-marker',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+
+      const userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+        .addTo(map)
+        .bindPopup('<strong>Your Location</strong>');
+
+      markersRef.current.push(userMarker);
+    }
+
+    // Fit bounds if requested
+    if (fitBounds && courtsWithCoords.length > 0) {
+      const bounds = L.latLngBounds(courtsWithCoords.map(c => [c.lat, c.lng]));
+      if (userLocation) {
+        bounds.extend([userLocation.lat, userLocation.lng]);
+      }
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+    }
+  }, [courtsWithCoords, userLocation, fitBounds, onCourtClick]);
+
+  // Create popup HTML content
+  const createPopupContent = (court) => {
+    const address = [court.city, court.state].filter(Boolean).join(', ');
+
+    let courtTypes = '';
+    if (court.indoorNum > 0) {
+      courtTypes += `<span style="display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; border-radius: 4px; font-size: 11px; margin-right: 4px;">${court.indoorNum} Indoor</span>`;
+    }
+    if (court.outdoorNum > 0) {
+      courtTypes += `<span style="display: inline-block; padding: 2px 6px; background: #dcfce7; color: #15803d; border-radius: 4px; font-size: 11px; margin-right: 4px;">${court.outdoorNum} Outdoor</span>`;
+    }
+    if (court.coveredNum > 0) {
+      courtTypes += `<span style="display: inline-block; padding: 2px 6px; background: #f3e8ff; color: #7c3aed; border-radius: 4px; font-size: 11px;">${court.coveredNum} Covered</span>`;
+    }
+
+    let lights = '';
+    if (court.lights) {
+      const hasLights = court.lights.toLowerCase() === 'yes';
+      lights = `<div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+        ${hasLights ? '☀️ Lights available' : '🌙 No lights'}
+      </div>`;
+    }
+
+    let actions = `<a href="https://www.google.com/maps/search/?api=1&query=${court.lat},${court.lng}" target="_blank" rel="noopener" style="color: #2563eb; font-size: 11px; text-decoration: none; margin-right: 8px;">📍 Directions</a>`;
+    if (court.phone) {
+      actions += `<a href="tel:${court.phone}" style="color: #16a34a; font-size: 11px; text-decoration: none; margin-right: 8px;">📞 Call</a>`;
+    }
+    if (court.website) {
+      actions += `<a href="${court.website}" target="_blank" rel="noopener" style="color: #7c3aed; font-size: 11px; text-decoration: none;">🌐 Website</a>`;
+    }
+
+    return `
+      <div style="min-width: 180px;">
+        <h3 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #111;">${court.name || 'Unnamed Court'}</h3>
+        <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">${address}</p>
+        ${courtTypes ? `<div style="margin-bottom: 8px;">${courtTypes}</div>` : ''}
+        ${lights}
+        <div style="padding-top: 8px; border-top: 1px solid #eee;">
+          ${actions}
+        </div>
+      </div>
+    `;
   };
 
-  const formatAddress = (court) => {
-    const parts = [court.city, court.state].filter(Boolean);
-    return parts.join(', ');
-  };
+  if (!isClient) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
 
   if (courtsWithCoords.length === 0) {
     return (
@@ -112,135 +208,10 @@ export default function CourtMap({
   }
 
   return (
-    <MapContainer
-      center={center || defaultCenter}
-      zoom={zoom}
+    <div
+      ref={mapRef}
       className="h-full w-full rounded-lg"
-      scrollWheelZoom={true}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      {fitBounds && <FitBoundsHandler courts={courtsWithCoords} />}
-      {center && <MapCenterHandler center={center} zoom={zoom} />}
-
-      {/* User location marker */}
-      {userLocation && (
-        <Marker
-          position={[userLocation.lat, userLocation.lng]}
-          icon={new L.Icon({
-            iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3B82F6" width="32" height="32">
-                <circle cx="12" cy="12" r="10" fill="#3B82F6" stroke="white" stroke-width="2"/>
-                <circle cx="12" cy="12" r="4" fill="white"/>
-              </svg>
-            `),
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          })}
-        >
-          <Popup>
-            <div className="text-center">
-              <strong>Your Location</strong>
-            </div>
-          </Popup>
-        </Marker>
-      )}
-
-      {/* Court markers */}
-      {courtsWithCoords.map(court => (
-        <Marker
-          key={court.courtId}
-          position={[court.lat, court.lng]}
-          icon={courtIcon}
-          eventHandlers={{
-            click: () => onCourtClick && onCourtClick(court)
-          }}
-        >
-          <Popup>
-            <div className="min-w-[200px] max-w-[280px]">
-              <h3 className="font-semibold text-gray-900 mb-1 text-sm">
-                {court.name || 'Unnamed Court'}
-              </h3>
-
-              <p className="text-xs text-gray-500 mb-2">
-                {formatAddress(court)}
-              </p>
-
-              {/* Court counts */}
-              <div className="flex flex-wrap gap-1 mb-2">
-                {court.indoorNum > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                    {court.indoorNum} Indoor
-                  </span>
-                )}
-                {court.outdoorNum > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                    {court.outdoorNum} Outdoor
-                  </span>
-                )}
-                {court.coveredNum > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                    {court.coveredNum} Covered
-                  </span>
-                )}
-              </div>
-
-              {/* Lights */}
-              {court.lights && (
-                <div className="flex items-center gap-1 text-xs text-gray-600 mb-2">
-                  {court.lights.toLowerCase() === 'yes' ? (
-                    <>
-                      <Sun className="w-3 h-3 text-yellow-500" />
-                      <span>Lights available</span>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-3 h-3 text-gray-400" />
-                      <span>No lights</span>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-2 mt-2 pt-2 border-t border-gray-100">
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${court.lat},${court.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Directions
-                </a>
-                {court.phone && (
-                  <a
-                    href={`tel:${court.phone}`}
-                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800"
-                  >
-                    <Phone className="w-3 h-3" />
-                    Call
-                  </a>
-                )}
-                {court.website && (
-                  <a
-                    href={court.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800"
-                  >
-                    <Globe className="w-3 h-3" />
-                    Website
-                  </a>
-                )}
-              </div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+      style={{ minHeight: '400px' }}
+    />
   );
 }
