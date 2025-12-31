@@ -161,8 +161,10 @@ export const ThemeProvider = ({ children }) => {
   const fetchThemeSettings = useCallback(async () => {
     try {
       const response = await themeApi.getActive()
-      if (response) {
-        setThemeSettings(response)
+      if (response?.success && response?.data) {
+        setThemeSettings(response.data)
+      } else if (response && !response.success) {
+        console.warn('Theme API returned unsuccessful response')
       }
     } catch (error) {
       console.warn('Failed to fetch theme settings:', error)
