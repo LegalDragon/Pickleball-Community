@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getAssetUrl } from '../../services/api';
+import { getSharedAssetUrl } from '../../services/api';
 import { Play, Pause, Volume2, VolumeX, MapPin, Users, Award, Calendar } from 'lucide-react';
 
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
@@ -108,7 +108,7 @@ const Header = () => {
               playsInline
               poster={theme?.heroVideoThumbnailUrl}
             >
-              <source src={getAssetUrl(heroVideoUrl)} type="video/mp4" />
+              <source src={getSharedAssetUrl(heroVideoUrl)} type="video/mp4" />
             </video>
           )}
           {/* Video Controls - only for local videos */}
@@ -133,7 +133,7 @@ const Header = () => {
         </>
       ) : hasImage ? (
         <img
-          src={theme.heroImageUrl.startsWith('http') ? theme.heroImageUrl : getAssetUrl(theme.heroImageUrl)}
+          src={theme.heroImageUrl.startsWith('http') ? theme.heroImageUrl : getSharedAssetUrl(theme.heroImageUrl)}
           alt="Hero background"
           className="absolute inset-0 w-full h-full object-cover"
         />
