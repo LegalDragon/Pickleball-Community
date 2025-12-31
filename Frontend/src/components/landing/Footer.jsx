@@ -64,7 +64,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="copyright">
-          &copy; 2023-2025 Pickleball.Community. All rights reserved.
+          &copy; 2023-2025 Funtime Pickleball Inc. All rights reserved.
         </div>
       </div>
     </footer>
