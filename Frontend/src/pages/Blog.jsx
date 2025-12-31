@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight } from 'lucide-react';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
+import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight, FolderOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { blogApi, ratingApi, getSharedAssetUrl } from '../services/api';
 
@@ -150,16 +150,25 @@ export default function Blog() {
               </div>
             </div>
             {canWrite && (
-              <button
-                onClick={() => {
-                  setEditingPost(null);
-                  setShowWriteModal(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-purple-700 rounded-lg font-medium hover:bg-purple-50 transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                Write Post
-              </button>
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/my-blog"
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-500/30 text-white rounded-lg font-medium hover:bg-purple-500/50 transition-colors"
+                >
+                  <FolderOpen className="w-5 h-5" />
+                  My Posts
+                </Link>
+                <button
+                  onClick={() => {
+                    setEditingPost(null);
+                    setShowWriteModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-purple-700 rounded-lg font-medium hover:bg-purple-50 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  Write Post
+                </button>
+              </div>
             )}
           </div>
         </div>

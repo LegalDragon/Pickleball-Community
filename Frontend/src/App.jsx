@@ -17,6 +17,7 @@ import Courts from './pages/Courts'
 import Clubs from './pages/Clubs'
 import Blog from './pages/Blog'
 import BlogAdmin from './pages/BlogAdmin'
+import MyBlog from './pages/MyBlog'
 import Friends from './pages/Friends'
 import PublicProfile from './pages/PublicProfile'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -45,6 +46,13 @@ function App() {
       <Route path="/courts" element={<Courts />} />
       <Route path="/clubs" element={<Clubs />} />
       <Route path="/blog" element={<Blog />} />
+
+      {/* My Blog - For writers to manage their posts */}
+      <Route path="/my-blog" element={
+        <ProtectedRoute>
+          <MyBlog />
+        </ProtectedRoute>
+      } />
 
       {/* Protected Routes - Any Authenticated Member */}
       <Route path="/member/dashboard" element={
