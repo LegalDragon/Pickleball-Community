@@ -74,7 +74,8 @@ export default function BlogAdmin() {
       if (postFilter !== 'all') {
         params.status = postFilter.charAt(0).toUpperCase() + postFilter.slice(1);
       }
-      const response = await blogApi.getPosts(params);
+      // Use getAllPosts for admin - includes drafts and archived
+      const response = await blogApi.getAllPosts(params);
       if (response?.success) {
         setPosts(response.data?.items || response.data || []);
       }

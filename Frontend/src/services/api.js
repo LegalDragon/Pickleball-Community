@@ -916,6 +916,16 @@ export const blogApi = {
   // Get my posts (for authors)
   getMyPosts: () => api.get('/blog/posts/my'),
 
+  // Get all posts (Admin only - includes drafts and archived)
+  getAllPosts: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const qs = queryParams.toString();
+    return api.get(`/blog/posts/all${qs ? '?' + qs : ''}`);
+  },
+
   // Comments
   getComments: (postId) => api.get(`/blog/posts/${postId}/comments`),
   addComment: (postId, content, parentId = null) =>

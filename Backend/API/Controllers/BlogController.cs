@@ -341,13 +341,23 @@ public class BlogController : ControllerBase
     // GET: /Blog/posts/all (Admin - all posts)
     [HttpGet("posts/all")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<ApiResponse<List<BlogPostListDto>>>> GetAllPosts()
+    public async Task<ActionResult<ApiResponse<List<BlogPostListDto>>>> GetAllPosts(
+        [FromQuery] string? status = null)
     {
         try
         {
-            var posts = await _context.BlogPosts
+            var query = _context.BlogPosts
                 .Include(p => p.Author)
                 .Include(p => p.Category)
+                .AsQueryable();
+
+            // Filter by status if provided
+            if (!string.IsNullOrEmpty(status) && Enum.TryParse<BlogPostStatus>(status, true, out var statusEnum))
+            {
+                query = query.Where(p => p.Status == statusEnum);
+            }
+
+            var posts = await query
                 .OrderByDescending(p => p.CreatedAt)
                 .Select(p => new BlogPostListDto
                 {
