@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { certificationApi } from '../services/api';
+import { certificationApi, SHARED_AUTH_URL } from '../services/api';
 import { getAssetUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Star, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Star, CheckCircle, AlertCircle, Award, GraduationCap, RefreshCw, Info } from 'lucide-react';
 
 export default function PlayerReview() {
   const { token } = useParams();
@@ -213,6 +213,70 @@ export default function PlayerReview() {
             {error}
           </div>
         )}
+
+        {/* Certified Reviewer Encouragement - Hidden for self-review */}
+        {!isSelfReview && (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-start gap-4">
+              {/* College Logo */}
+              <div className="flex-shrink-0 relative">
+                <div className="w-16 h-16 bg-white rounded-xl shadow-md flex items-center justify-center p-2">
+                  <img
+                    src={`${SHARED_AUTH_URL}/sites/College/logo`}
+                    alt="Pickleball College"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="hidden w-full h-full items-center justify-center">
+                    <GraduationCap className="w-8 h-8 text-indigo-600" />
+                  </div>
+                </div>
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-amber-400 text-amber-900 text-xs font-bold rounded-full">
+                  Soon
+                </span>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Become a Certified Reviewer</h3>
+                </div>
+                <p className="text-gray-700 text-sm mb-3">
+                  Your accurate and consistent reviews matter! We track reviewer accuracy over time.
+                  Reviewers who provide thoughtful, consistent ratings will earn the
+                  <span className="font-semibold text-indigo-700"> "Certified Reviewer" </span>
+                  badge.
+                </p>
+                <div className="bg-white/60 rounded-lg p-3 border border-indigo-100">
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium text-indigo-700">Coming Soon on Pickleball.College:</span> Certified Reviewers
+                    will be able to provide official skill certifications that players can showcase on their profiles
+                    and use for tournament seeding.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Review Update Notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1 flex items-center gap-1">
+              <RefreshCw className="w-4 h-4" />
+              Review Update Policy
+            </p>
+            <p>
+              If you've reviewed this player before, submitting a new review within <span className="font-semibold">1 month</span> will
+              update your previous scores. After 1 month, a new review entry is created to track skill progression over time.
+            </p>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Reviewer Info - Hidden for self-review */}
