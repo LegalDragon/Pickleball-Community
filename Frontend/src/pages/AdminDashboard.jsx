@@ -9,6 +9,7 @@ import {
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import VideoUploadModal from '../components/ui/VideoUploadModal'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -31,11 +32,10 @@ const AdminDashboard = () => {
   const [savingTheme, setSavingTheme] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
-  const [uploadingHeroVideo, setUploadingHeroVideo] = useState(false)
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
+  const [isHeroVideoModalOpen, setIsHeroVideoModalOpen] = useState(false)
   const logoInputRef = useRef(null)
   const faviconInputRef = useRef(null)
-  const heroVideoInputRef = useRef(null)
   const heroImageInputRef = useRef(null)
 
   // Pagination
@@ -229,29 +229,17 @@ const AdminDashboard = () => {
     }
   }
 
-  // Handle hero video upload
-  const handleHeroVideoUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploadingHeroVideo(true)
+  // Handle hero video save from modal (supports both URL and file upload)
+  const handleHeroVideoSave = async ({ url, type }) => {
     try {
-      // Upload to Funtime-Shared asset service
-      const response = await sharedAssetApi.upload(file, 'video', 'theme')
-      // Save only relative path to DB
-      const heroVideoUrl = getAssetPathFromResponse(response)
-      if (heroVideoUrl) {
-        setThemeSettings(prev => ({ ...prev, heroVideoUrl }))
-        await themeApi.update({ ...themeSettings, heroVideoUrl })
-        await refreshTheme()
-      } else {
-        throw new Error('Failed to get asset path')
-      }
+      // url is either an external URL or a relative asset path from file upload
+      const heroVideoUrl = url
+      setThemeSettings(prev => ({ ...prev, heroVideoUrl }))
+      await themeApi.update({ ...themeSettings, heroVideoUrl })
+      await refreshTheme()
     } catch (error) {
-      console.error('Error uploading hero video:', error)
-      alert('Failed to upload hero video')
-    } finally {
-      setUploadingHeroVideo(false)
+      console.error('Error saving hero video:', error)
+      alert('Failed to save hero video')
     }
   }
 
@@ -766,50 +754,61 @@ const AdminDashboard = () => {
                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                           {themeSettings.heroVideoUrl ? (
                             <div className="space-y-3">
-                              <video
-                                src={getAssetUrl(themeSettings.heroVideoUrl)}
-                                className="w-full h-32 object-cover rounded-lg"
-                                muted
-                                loop
-                                autoPlay
-                                playsInline
-                              />
+                              {/* Check if it's an external URL (YouTube, etc.) or uploaded file */}
+                              {themeSettings.heroVideoUrl.includes('youtube.com') || themeSettings.heroVideoUrl.includes('youtu.be') ? (
+                                <div className="w-full h-32 bg-gray-900 rounded-lg flex items-center justify-center">
+                                  <Video className="w-8 h-8 text-white" />
+                                  <span className="text-white ml-2 text-sm">YouTube Video</span>
+                                </div>
+                              ) : themeSettings.heroVideoUrl.startsWith('http') ? (
+                                <div className="w-full h-32 bg-gray-900 rounded-lg flex items-center justify-center">
+                                  <Video className="w-8 h-8 text-white" />
+                                  <span className="text-white ml-2 text-sm">External Video</span>
+                                </div>
+                              ) : (
+                                <video
+                                  src={getAssetUrl(themeSettings.heroVideoUrl)}
+                                  className="w-full h-32 object-cover rounded-lg"
+                                  muted
+                                  loop
+                                  autoPlay
+                                  playsInline
+                                />
+                              )}
                               <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-500 truncate flex-1">
-                                  {themeSettings.heroVideoUrl.split('/').pop()}
+                                  {themeSettings.heroVideoUrl.length > 40
+                                    ? themeSettings.heroVideoUrl.substring(0, 40) + '...'
+                                    : themeSettings.heroVideoUrl}
                                 </span>
-                                <button
-                                  onClick={handleDeleteHeroVideo}
-                                  className="p-1.5 text-red-500 hover:bg-red-50 rounded"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center space-x-1">
+                                  <button
+                                    onClick={() => setIsHeroVideoModalOpen(true)}
+                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={handleDeleteHeroVideo}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ) : (
                             <div className="text-center py-4">
                               <Video className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                              <p className="text-sm text-gray-500 mb-3">No video uploaded</p>
-                              <input
-                                type="file"
-                                ref={heroVideoInputRef}
-                                onChange={handleHeroVideoUpload}
-                                accept="video/mp4,video/webm,video/ogg"
-                                className="hidden"
-                              />
+                              <p className="text-sm text-gray-500 mb-3">No video set</p>
                               <button
-                                onClick={() => heroVideoInputRef.current?.click()}
-                                disabled={uploadingHeroVideo}
-                                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center mx-auto disabled:opacity-50"
+                                onClick={() => setIsHeroVideoModalOpen(true)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center mx-auto"
                               >
-                                {uploadingHeroVideo ? (
-                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Upload className="w-4 h-4 mr-2" />
-                                )}
-                                {uploadingHeroVideo ? 'Uploading...' : 'Upload Video'}
+                                <Upload className="w-4 h-4 mr-2" />
+                                Add Video
                               </button>
-                              <p className="text-xs text-gray-400 mt-2">MP4, WebM up to 50MB</p>
+                              <p className="text-xs text-gray-400 mt-2">Upload or paste external URL</p>
                             </div>
                           )}
                         </div>
@@ -1502,6 +1501,17 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Hero Video Upload Modal */}
+      <VideoUploadModal
+        isOpen={isHeroVideoModalOpen}
+        onClose={() => setIsHeroVideoModalOpen(false)}
+        onSave={handleHeroVideoSave}
+        currentVideo={themeSettings?.heroVideoUrl}
+        objectType="theme"
+        title="Hero Video"
+        maxSizeMB={100}
+      />
     </div>
   )
 }

@@ -1,10 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getAssetUrl } from '../../services/api';
 import { Play, Pause, Volume2, VolumeX, MapPin, Users, Award, Calendar } from 'lucide-react';
 
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
 const SITE_KEY = 'community';
+
+// Check if URL is from external platform
+const isExternalVideoUrl = (url) => {
+  if (!url) return false;
+  const externalPatterns = ['youtube.com', 'youtu.be', 'vimeo.com', 'tiktok.com'];
+  return externalPatterns.some(pattern => url.includes(pattern));
+};
+
+// Get YouTube embed URL
+const getYouTubeEmbedUrl = (url) => {
+  if (!url) return null;
+  if (url.includes('youtube.com/watch')) {
+    const videoId = new URL(url).searchParams.get('v');
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1`;
+  }
+  if (url.includes('youtu.be/')) {
+    const videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1`;
+  }
+  return null;
+};
 
 const Header = () => {
   const { theme } = useTheme();
@@ -13,7 +35,10 @@ const Header = () => {
   const [logoHtml, setLogoHtml] = useState(null);
   const videoRef = useRef(null);
 
-  const hasVideo = theme?.heroVideoUrl;
+  const heroVideoUrl = theme?.heroVideoUrl;
+  const isExternalVideo = isExternalVideoUrl(heroVideoUrl);
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(heroVideoUrl);
+  const hasVideo = heroVideoUrl && (isExternalVideo || heroVideoUrl);
   const hasImage = theme?.heroImageUrl;
 
   // Fetch large logo HTML from shared auth
@@ -58,38 +83,57 @@ const Header = () => {
       {/* Background Video or Image */}
       {hasVideo ? (
         <>
-          <video
-            ref={videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            autoPlay
-            loop
-            muted={isMuted}
-            playsInline
-            poster={theme?.heroVideoThumbnailUrl}
-          >
-            <source src={theme.heroVideoUrl} type="video/mp4" />
-          </video>
-          {/* Video Controls */}
-          <div className="absolute bottom-4 right-4 flex gap-2 z-20">
-            <button
-              onClick={togglePlay}
-              className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
+          {youtubeEmbedUrl ? (
+            /* YouTube embed */
+            <div className="absolute inset-0 w-full h-full overflow-hidden">
+              <iframe
+                src={youtubeEmbedUrl}
+                className="absolute top-1/2 left-1/2 w-[200%] h-[200%] -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                title="Hero video"
+              />
+            </div>
+          ) : isExternalVideo ? (
+            /* Other external video - just show image fallback or gradient */
+            <div className="absolute inset-0 bg-gradient-to-br from-green-600 via-green-700 to-emerald-800" />
+          ) : (
+            /* Uploaded/local video file */
+            <video
+              ref={videoRef}
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay
+              loop
+              muted={isMuted}
+              playsInline
+              poster={theme?.heroVideoThumbnailUrl}
             >
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={toggleMute}
-              className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-              aria-label={isMuted ? 'Unmute' : 'Mute'}
-            >
-              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-          </div>
+              <source src={getAssetUrl(heroVideoUrl)} type="video/mp4" />
+            </video>
+          )}
+          {/* Video Controls - only for local videos */}
+          {!isExternalVideo && (
+            <div className="absolute bottom-4 right-4 flex gap-2 z-20">
+              <button
+                onClick={togglePlay}
+                className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={toggleMute}
+                className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+              </button>
+            </div>
+          )}
         </>
       ) : hasImage ? (
         <img
-          src={theme.heroImageUrl}
+          src={theme.heroImageUrl.startsWith('http') ? theme.heroImageUrl : getAssetUrl(theme.heroImageUrl)}
           alt="Hero background"
           className="absolute inset-0 w-full h-full object-cover"
         />
