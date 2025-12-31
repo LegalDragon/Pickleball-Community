@@ -80,22 +80,23 @@ const Header = () => {
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 py-20">
-        <div className="max-w-3xl">
-          {/* Large Logo */}
-          <div className="mb-8">
+        <div className="max-w-4xl">
+          {/* Logo and Title side by side */}
+          <div className="flex items-center gap-6 mb-8">
             <img
               src="/Logo.png"
               alt="Pickleball.Community"
-              className="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 object-contain drop-shadow-2xl"
+              className="w-24 h-24 md:w-32 md:h-32 lg:w-40 lg:h-40 object-contain drop-shadow-2xl flex-shrink-0"
             />
+            <div>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
+                {theme?.heroTitle || 'Pickleball.Community'}
+              </h1>
+              <p className="text-xl md:text-2xl text-white/90 mt-2">
+                {theme?.heroSubtitle || 'Connect. Play. Get Certified.'}
+              </p>
+            </div>
           </div>
-
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight">
-            {theme?.heroTitle || 'Pickleball.Community'}
-          </h1>
-          <p className="text-xl md:text-2xl text-white/90 mb-8 leading-relaxed">
-            {theme?.heroSubtitle || 'Connect. Play. Get Certified.'}
-          </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-wrap gap-4 mb-12">
