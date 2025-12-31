@@ -100,6 +100,26 @@ export default function MyBlog() {
     }
   };
 
+  // Fetch full post details before editing (list DTO doesn't include content)
+  const handleEditPost = async (post) => {
+    try {
+      const response = await blogApi.getPost(post.slug || post.id);
+      if (response?.success && response.data) {
+        setEditingPost(response.data);
+        setShowWriteModal(true);
+      } else {
+        // Fallback to list data if fetch fails
+        setEditingPost(post);
+        setShowWriteModal(true);
+      }
+    } catch (err) {
+      console.error('Error loading post for edit:', err);
+      // Fallback to list data
+      setEditingPost(post);
+      setShowWriteModal(true);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -215,10 +235,7 @@ export default function MyBlog() {
                             </Link>
                           )}
                           <button
-                            onClick={() => {
-                              setEditingPost(post);
-                              setShowWriteModal(true);
-                            }}
+                            onClick={() => handleEditPost(post)}
                             className="p-2 text-gray-400 hover:text-purple-600 rounded"
                             title="Edit"
                           >

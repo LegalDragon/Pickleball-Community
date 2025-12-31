@@ -910,8 +910,8 @@ export const blogApi = {
   createPost: (data) => api.post('/blog/posts', data),
   updatePost: (id, data) => api.put(`/blog/posts/${id}`, data),
   deletePost: (id) => api.delete(`/blog/posts/${id}`),
-  publishPost: (id) => api.post(`/blog/posts/${id}/publish`),
-  archivePost: (id) => api.post(`/blog/posts/${id}/archive`),
+  publishPost: (id) => api.put(`/blog/posts/${id}`, { status: 'Published' }),
+  archivePost: (id) => api.put(`/blog/posts/${id}`, { status: 'Archived' }),
 
   // Get my posts (for authors)
   getMyPosts: () => api.get('/blog/posts/my'),
