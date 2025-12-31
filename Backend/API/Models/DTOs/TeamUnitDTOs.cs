@@ -1,35 +1,33 @@
 namespace Pickleball.Community.Models.DTOs;
 
-public class EventTypeDto
+public class TeamUnitDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int MaleCount { get; set; }
+    public int FemaleCount { get; set; }
+    public int UnisexCount { get; set; }
+    public int TotalPlayers { get; set; }
     public string? Icon { get; set; }
     public string? Color { get; set; }
-    public bool AllowMultipleDivisions { get; set; } = true;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; }
 }
 
-public class CreateEventTypeDto
+public class CreateTeamUnitDto
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int MaleCount { get; set; }
+    public int FemaleCount { get; set; }
+    public int UnisexCount { get; set; }
     public string? Icon { get; set; }
     public string? Color { get; set; }
-    public bool AllowMultipleDivisions { get; set; } = true;
     public int SortOrder { get; set; } = 0;
-    public bool IsActive { get; set; } = true;
 }
 
-public class UpdateEventTypeDto
+public class UpdateTeamUnitDto : CreateTeamUnitDto
 {
-    public string? Name { get; set; }
-    public string? Description { get; set; }
-    public string? Icon { get; set; }
-    public string? Color { get; set; }
-    public bool? AllowMultipleDivisions { get; set; }
-    public int? SortOrder { get; set; }
-    public bool? IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
 }

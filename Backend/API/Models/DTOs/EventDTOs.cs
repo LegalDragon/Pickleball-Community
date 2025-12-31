@@ -10,11 +10,13 @@ public class EventDto
     public string? EventTypeName { get; set; }
     public string? EventTypeIcon { get; set; }
     public string? EventTypeColor { get; set; }
+    public bool AllowMultipleDivisions { get; set; } = true;
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
     public DateTime? RegistrationOpenDate { get; set; }
     public DateTime? RegistrationCloseDate { get; set; }
     public bool IsPublished { get; set; }
+    public bool IsPrivate { get; set; }
     public string? VenueName { get; set; }
     public string? City { get; set; }
     public string? State { get; set; }
@@ -60,16 +62,31 @@ public class EventDivisionDto
     public int EventId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+
+    // New structure
+    public int? TeamUnitId { get; set; }
+    public string? TeamUnitName { get; set; }
+    public int? AgeGroupId { get; set; }
+    public string? AgeGroupName { get; set; }
+    public decimal? MinSkillRating { get; set; }
+    public decimal? MaxSkillRating { get; set; }
+    public int? MaxUnits { get; set; }
+
+    // Legacy fields (for backward compatibility)
     public int TeamSize { get; set; } = 1;
     public string? SkillLevelMin { get; set; }
     public string? SkillLevelMax { get; set; }
     public string? Gender { get; set; }
     public string? AgeGroup { get; set; }
     public int? MaxTeams { get; set; }
+
     public decimal? DivisionFee { get; set; }
     public int SortOrder { get; set; }
     public int RegisteredCount { get; set; }
     public int LookingForPartnerCount { get; set; }
+
+    // Rewards
+    public List<DivisionRewardDto> Rewards { get; set; } = new();
 }
 
 // Division with registrations
@@ -127,6 +144,7 @@ public class CreateEventDto
     public DateTime EndDate { get; set; }
     public DateTime? RegistrationOpenDate { get; set; }
     public DateTime? RegistrationCloseDate { get; set; }
+    public bool IsPrivate { get; set; } = false;
     public int? CourtId { get; set; }
     public string? VenueName { get; set; }
     public string? Address { get; set; }
@@ -151,14 +169,27 @@ public class CreateEventDivisionDto
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+
+    // New structure
+    public int? TeamUnitId { get; set; }
+    public int? AgeGroupId { get; set; }
+    public decimal? MinSkillRating { get; set; }
+    public decimal? MaxSkillRating { get; set; }
+    public int? MaxUnits { get; set; }
+
+    // Legacy fields (for backward compatibility)
     public int TeamSize { get; set; } = 1;
     public string? SkillLevelMin { get; set; }
     public string? SkillLevelMax { get; set; }
     public string? Gender { get; set; }
     public string? AgeGroup { get; set; }
     public int? MaxTeams { get; set; }
+
     public decimal? DivisionFee { get; set; }
     public int SortOrder { get; set; } = 0;
+
+    // Rewards to create with this division
+    public List<CreateDivisionRewardDto> Rewards { get; set; } = new();
 }
 
 // Update event request

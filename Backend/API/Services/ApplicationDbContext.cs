@@ -55,6 +55,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventDivision> EventDivisions { get; set; }
     public DbSet<EventRegistration> EventRegistrations { get; set; }
     public DbSet<EventPartnerRequest> EventPartnerRequests { get; set; }
+    public DbSet<TeamUnit> TeamUnits { get; set; }
+    public DbSet<AgeGroup> AgeGroups { get; set; }
+    public DbSet<DivisionReward> DivisionRewards { get; set; }
 
     // Clubs
     public DbSet<Club> Clubs { get; set; }
@@ -450,6 +453,68 @@ public class ApplicationDbContext : DbContext
             entity.Property(r => r.Name).IsRequired().HasMaxLength(50);
             entity.HasIndex(r => r.Name).IsUnique();
             entity.HasIndex(r => r.SortOrder);
+        });
+
+        // Team Unit configuration
+        modelBuilder.Entity<TeamUnit>(entity =>
+        {
+            entity.Property(u => u.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(u => u.SortOrder);
+
+            // Seed default team units
+            entity.HasData(
+                new TeamUnit { Id = 1, Name = "Men's Singles", Description = "Single male player", MaleCount = 1, FemaleCount = 0, UnisexCount = 0, SortOrder = 1, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 2, Name = "Women's Singles", Description = "Single female player", MaleCount = 0, FemaleCount = 1, UnisexCount = 0, SortOrder = 2, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 3, Name = "Open Singles", Description = "Single player of any gender", MaleCount = 0, FemaleCount = 0, UnisexCount = 1, SortOrder = 3, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 4, Name = "Men's Doubles", Description = "Two male players", MaleCount = 2, FemaleCount = 0, UnisexCount = 0, SortOrder = 4, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 5, Name = "Women's Doubles", Description = "Two female players", MaleCount = 0, FemaleCount = 2, UnisexCount = 0, SortOrder = 5, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 6, Name = "Mixed Doubles", Description = "One male and one female player", MaleCount = 1, FemaleCount = 1, UnisexCount = 0, SortOrder = 6, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new TeamUnit { Id = 7, Name = "Open Doubles", Description = "Two players of any gender", MaleCount = 0, FemaleCount = 0, UnisexCount = 2, SortOrder = 7, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+            );
+        });
+
+        // Age Group configuration
+        modelBuilder.Entity<AgeGroup>(entity =>
+        {
+            entity.Property(a => a.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(a => a.SortOrder);
+
+            // Seed default age groups
+            entity.HasData(
+                new AgeGroup { Id = 1, Name = "Open", Description = "All ages welcome", MinAge = null, MaxAge = null, SortOrder = 1, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new AgeGroup { Id = 2, Name = "Junior (Under 18)", Description = "Players under 18 years old", MinAge = null, MaxAge = 17, SortOrder = 2, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new AgeGroup { Id = 3, Name = "Adult (18-49)", Description = "Players 18-49 years old", MinAge = 18, MaxAge = 49, SortOrder = 3, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new AgeGroup { Id = 4, Name = "Senior 50+", Description = "Players 50 years and older", MinAge = 50, MaxAge = null, SortOrder = 4, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new AgeGroup { Id = 5, Name = "Senior 60+", Description = "Players 60 years and older", MinAge = 60, MaxAge = null, SortOrder = 5, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new AgeGroup { Id = 6, Name = "Senior 70+", Description = "Players 70 years and older", MinAge = 70, MaxAge = null, SortOrder = 6, IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+            );
+        });
+
+        // Division Reward configuration
+        modelBuilder.Entity<DivisionReward>(entity =>
+        {
+            entity.Property(r => r.RewardType).IsRequired().HasMaxLength(50);
+            entity.Property(r => r.Description).HasMaxLength(200);
+            entity.HasIndex(r => new { r.DivisionId, r.Placement });
+
+            entity.HasOne(r => r.Division)
+                  .WithMany(d => d.Rewards)
+                  .HasForeignKey(r => r.DivisionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Event Division configuration (add navigation for new entities)
+        modelBuilder.Entity<EventDivision>(entity =>
+        {
+            entity.HasOne(d => d.TeamUnit)
+                  .WithMany()
+                  .HasForeignKey(d => d.TeamUnitId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.AgeGroupEntity)
+                  .WithMany()
+                  .HasForeignKey(d => d.AgeGroupId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Blog Category configuration

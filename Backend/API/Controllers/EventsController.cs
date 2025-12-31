@@ -205,8 +205,14 @@ public class EventsController : ControllerBase
                 .Include(e => e.Court)
                 .Include(e => e.Divisions.Where(d => d.IsActive))
                     .ThenInclude(d => d.Registrations)
-                .Include(e => e.Divisions)
+                .Include(e => e.Divisions.Where(d => d.IsActive))
                     .ThenInclude(d => d.PartnerRequests.Where(p => p.Status == "Open"))
+                .Include(e => e.Divisions.Where(d => d.IsActive))
+                    .ThenInclude(d => d.TeamUnit)
+                .Include(e => e.Divisions.Where(d => d.IsActive))
+                    .ThenInclude(d => d.AgeGroupEntity)
+                .Include(e => e.Divisions.Where(d => d.IsActive))
+                    .ThenInclude(d => d.Rewards)
                 .Include(e => e.Registrations)
                 .FirstOrDefaultAsync(e => e.Id == id && e.IsActive);
 
@@ -224,11 +230,13 @@ public class EventsController : ControllerBase
                 EventTypeName = evt.EventType?.Name,
                 EventTypeIcon = evt.EventType?.Icon,
                 EventTypeColor = evt.EventType?.Color,
+                AllowMultipleDivisions = evt.EventType?.AllowMultipleDivisions ?? true,
                 StartDate = evt.StartDate,
                 EndDate = evt.EndDate,
                 RegistrationOpenDate = evt.RegistrationOpenDate,
                 RegistrationCloseDate = evt.RegistrationCloseDate,
                 IsPublished = evt.IsPublished,
+                IsPrivate = evt.IsPrivate,
                 VenueName = evt.VenueName,
                 Address = evt.Address,
                 City = evt.City,
@@ -266,6 +274,15 @@ public class EventsController : ControllerBase
                         EventId = d.EventId,
                         Name = d.Name,
                         Description = d.Description,
+                        // New fields
+                        TeamUnitId = d.TeamUnitId,
+                        TeamUnitName = d.TeamUnit?.Name,
+                        AgeGroupId = d.AgeGroupId,
+                        AgeGroupName = d.AgeGroupEntity?.Name,
+                        MinSkillRating = d.MinSkillRating,
+                        MaxSkillRating = d.MaxSkillRating,
+                        MaxUnits = d.MaxUnits,
+                        // Legacy fields
                         TeamSize = d.TeamSize,
                         SkillLevelMin = d.SkillLevelMin,
                         SkillLevelMax = d.SkillLevelMax,
@@ -275,7 +292,19 @@ public class EventsController : ControllerBase
                         DivisionFee = d.DivisionFee,
                         SortOrder = d.SortOrder,
                         RegisteredCount = d.Registrations.Count,
-                        LookingForPartnerCount = d.PartnerRequests.Count(p => p.IsLookingForPartner && p.Status == "Open")
+                        LookingForPartnerCount = d.PartnerRequests.Count(p => p.IsLookingForPartner && p.Status == "Open"),
+                        Rewards = d.Rewards.Where(r => r.IsActive).OrderBy(r => r.Placement).Select(r => new DivisionRewardDto
+                        {
+                            Id = r.Id,
+                            DivisionId = r.DivisionId,
+                            Placement = r.Placement,
+                            RewardType = r.RewardType,
+                            CashAmount = r.CashAmount,
+                            Description = r.Description,
+                            Icon = r.Icon,
+                            Color = r.Color,
+                            IsActive = r.IsActive
+                        }).ToList()
                     }).ToList()
             };
 
@@ -308,6 +337,7 @@ public class EventsController : ControllerBase
                 EndDate = dto.EndDate,
                 RegistrationOpenDate = dto.RegistrationOpenDate,
                 RegistrationCloseDate = dto.RegistrationCloseDate,
+                IsPrivate = dto.IsPrivate,
                 CourtId = dto.CourtId,
                 VenueName = dto.VenueName,
                 Address = dto.Address,
@@ -339,6 +369,13 @@ public class EventsController : ControllerBase
                     EventId = evt.Id,
                     Name = divDto.Name,
                     Description = divDto.Description,
+                    // New fields
+                    TeamUnitId = divDto.TeamUnitId,
+                    AgeGroupId = divDto.AgeGroupId,
+                    MinSkillRating = divDto.MinSkillRating,
+                    MaxSkillRating = divDto.MaxSkillRating,
+                    MaxUnits = divDto.MaxUnits,
+                    // Legacy fields
                     TeamSize = divDto.TeamSize,
                     SkillLevelMin = divDto.SkillLevelMin,
                     SkillLevelMax = divDto.SkillLevelMax,
@@ -349,6 +386,23 @@ public class EventsController : ControllerBase
                     SortOrder = divDto.SortOrder > 0 ? divDto.SortOrder : sortOrder++
                 };
                 _context.EventDivisions.Add(division);
+                await _context.SaveChangesAsync();
+
+                // Add rewards for this division
+                foreach (var rewardDto in divDto.Rewards)
+                {
+                    var reward = new DivisionReward
+                    {
+                        DivisionId = division.Id,
+                        Placement = rewardDto.Placement,
+                        RewardType = rewardDto.RewardType,
+                        CashAmount = rewardDto.CashAmount,
+                        Description = rewardDto.Description,
+                        Icon = rewardDto.Icon,
+                        Color = rewardDto.Color
+                    };
+                    _context.DivisionRewards.Add(reward);
+                }
             }
             await _context.SaveChangesAsync();
 
@@ -391,6 +445,7 @@ public class EventsController : ControllerBase
             evt.RegistrationOpenDate = dto.RegistrationOpenDate;
             evt.RegistrationCloseDate = dto.RegistrationCloseDate;
             evt.IsPublished = dto.IsPublished;
+            evt.IsPrivate = dto.IsPrivate;
             evt.CourtId = dto.CourtId;
             evt.VenueName = dto.VenueName;
             evt.Address = dto.Address;
@@ -848,6 +903,13 @@ public class EventsController : ControllerBase
                 EventId = id,
                 Name = dto.Name,
                 Description = dto.Description,
+                // New fields
+                TeamUnitId = dto.TeamUnitId,
+                AgeGroupId = dto.AgeGroupId,
+                MinSkillRating = dto.MinSkillRating,
+                MaxSkillRating = dto.MaxSkillRating,
+                MaxUnits = dto.MaxUnits,
+                // Legacy fields
                 TeamSize = dto.TeamSize,
                 SkillLevelMin = dto.SkillLevelMin,
                 SkillLevelMax = dto.SkillLevelMax,
@@ -861,6 +923,27 @@ public class EventsController : ControllerBase
             _context.EventDivisions.Add(division);
             await _context.SaveChangesAsync();
 
+            // Add rewards for this division
+            foreach (var rewardDto in dto.Rewards)
+            {
+                var reward = new DivisionReward
+                {
+                    DivisionId = division.Id,
+                    Placement = rewardDto.Placement,
+                    RewardType = rewardDto.RewardType,
+                    CashAmount = rewardDto.CashAmount,
+                    Description = rewardDto.Description,
+                    Icon = rewardDto.Icon,
+                    Color = rewardDto.Color
+                };
+                _context.DivisionRewards.Add(reward);
+            }
+            await _context.SaveChangesAsync();
+
+            // Load team unit and age group for response
+            var teamUnit = dto.TeamUnitId.HasValue ? await _context.TeamUnits.FindAsync(dto.TeamUnitId.Value) : null;
+            var ageGroup = dto.AgeGroupId.HasValue ? await _context.AgeGroups.FindAsync(dto.AgeGroupId.Value) : null;
+
             return Ok(new ApiResponse<EventDivisionDto>
             {
                 Success = true,
@@ -870,6 +953,15 @@ public class EventsController : ControllerBase
                     EventId = division.EventId,
                     Name = division.Name,
                     Description = division.Description,
+                    // New fields
+                    TeamUnitId = division.TeamUnitId,
+                    TeamUnitName = teamUnit?.Name,
+                    AgeGroupId = division.AgeGroupId,
+                    AgeGroupName = ageGroup?.Name,
+                    MinSkillRating = division.MinSkillRating,
+                    MaxSkillRating = division.MaxSkillRating,
+                    MaxUnits = division.MaxUnits,
+                    // Legacy fields
                     TeamSize = division.TeamSize,
                     SkillLevelMin = division.SkillLevelMin,
                     SkillLevelMax = division.SkillLevelMax,
@@ -879,7 +971,19 @@ public class EventsController : ControllerBase
                     DivisionFee = division.DivisionFee,
                     SortOrder = division.SortOrder,
                     RegisteredCount = 0,
-                    LookingForPartnerCount = 0
+                    LookingForPartnerCount = 0,
+                    Rewards = dto.Rewards.Select((r, i) => new DivisionRewardDto
+                    {
+                        Id = i + 1, // Placeholder - actual IDs are in the database
+                        DivisionId = division.Id,
+                        Placement = r.Placement,
+                        RewardType = r.RewardType,
+                        CashAmount = r.CashAmount,
+                        Description = r.Description,
+                        Icon = r.Icon,
+                        Color = r.Color,
+                        IsActive = true
+                    }).ToList()
                 }
             });
         }
@@ -942,11 +1046,13 @@ public class EventsController : ControllerBase
             EventTypeName = evt.EventType?.Name,
             EventTypeIcon = evt.EventType?.Icon,
             EventTypeColor = evt.EventType?.Color,
+            AllowMultipleDivisions = evt.EventType?.AllowMultipleDivisions ?? true,
             StartDate = evt.StartDate,
             EndDate = evt.EndDate,
             RegistrationOpenDate = evt.RegistrationOpenDate,
             RegistrationCloseDate = evt.RegistrationCloseDate,
             IsPublished = evt.IsPublished,
+            IsPrivate = evt.IsPrivate,
             VenueName = evt.VenueName,
             City = evt.City,
             State = evt.State,

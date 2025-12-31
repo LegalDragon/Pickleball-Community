@@ -43,6 +43,7 @@ public class EventTypesController : ControllerBase
                     Description = et.Description,
                     Icon = et.Icon,
                     Color = et.Color,
+                    AllowMultipleDivisions = et.AllowMultipleDivisions,
                     SortOrder = et.SortOrder,
                     IsActive = et.IsActive
                 })
@@ -74,6 +75,7 @@ public class EventTypesController : ControllerBase
                 Description = eventType.Description,
                 Icon = eventType.Icon,
                 Color = eventType.Color,
+                AllowMultipleDivisions = eventType.AllowMultipleDivisions,
                 SortOrder = eventType.SortOrder,
                 IsActive = eventType.IsActive
             };
@@ -105,6 +107,7 @@ public class EventTypesController : ControllerBase
                 Description = dto.Description,
                 Icon = dto.Icon,
                 Color = dto.Color,
+                AllowMultipleDivisions = dto.AllowMultipleDivisions,
                 SortOrder = dto.SortOrder,
                 IsActive = dto.IsActive
             };
@@ -119,6 +122,7 @@ public class EventTypesController : ControllerBase
                 Description = eventType.Description,
                 Icon = eventType.Icon,
                 Color = eventType.Color,
+                AllowMultipleDivisions = eventType.AllowMultipleDivisions,
                 SortOrder = eventType.SortOrder,
                 IsActive = eventType.IsActive
             };
@@ -155,6 +159,7 @@ public class EventTypesController : ControllerBase
             eventType.Description = dto.Description ?? eventType.Description;
             eventType.Icon = dto.Icon ?? eventType.Icon;
             eventType.Color = dto.Color ?? eventType.Color;
+            eventType.AllowMultipleDivisions = dto.AllowMultipleDivisions ?? eventType.AllowMultipleDivisions;
             eventType.SortOrder = dto.SortOrder ?? eventType.SortOrder;
             eventType.IsActive = dto.IsActive ?? eventType.IsActive;
             eventType.UpdatedAt = DateTime.UtcNow;
@@ -168,6 +173,7 @@ public class EventTypesController : ControllerBase
                 Description = eventType.Description,
                 Icon = eventType.Icon,
                 Color = eventType.Color,
+                AllowMultipleDivisions = eventType.AllowMultipleDivisions,
                 SortOrder = eventType.SortOrder,
                 IsActive = eventType.IsActive
             };
@@ -228,6 +234,7 @@ public class EventTypesController : ControllerBase
                 Description = eventType.Description,
                 Icon = eventType.Icon,
                 Color = eventType.Color,
+                AllowMultipleDivisions = eventType.AllowMultipleDivisions,
                 SortOrder = eventType.SortOrder,
                 IsActive = eventType.IsActive
             };

@@ -25,6 +25,12 @@ public class Event
     public DateTime? RegistrationCloseDate { get; set; }
     public bool IsPublished { get; set; } = false;
 
+    /// <summary>
+    /// Private events are only visible to invited participants and club members.
+    /// Public events are visible to everyone.
+    /// </summary>
+    public bool IsPrivate { get; set; } = false;
+
     // Location
     public int? CourtId { get; set; }
 
@@ -108,6 +114,40 @@ public class EventDivision
     [MaxLength(500)]
     public string? Description { get; set; }
 
+    /// <summary>
+    /// Reference to the team unit (defines team composition by gender)
+    /// </summary>
+    public int? TeamUnitId { get; set; }
+
+    /// <summary>
+    /// Reference to age group (admin managed)
+    /// </summary>
+    public int? AgeGroupId { get; set; }
+
+    /// <summary>
+    /// Minimum skill rating for this division (e.g., 3.0)
+    /// </summary>
+    [Column(TypeName = "decimal(4,2)")]
+    public decimal? MinSkillRating { get; set; }
+
+    /// <summary>
+    /// Maximum skill rating for this division (e.g., 3.5)
+    /// </summary>
+    [Column(TypeName = "decimal(4,2)")]
+    public decimal? MaxSkillRating { get; set; }
+
+    /// <summary>
+    /// Maximum number of units (teams) allowed in this division
+    /// </summary>
+    public int? MaxUnits { get; set; }
+
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal? DivisionFee { get; set; } // Override event's per-division fee
+
+    public int SortOrder { get; set; } = 0;
+    public bool IsActive { get; set; } = true;
+
+    // Legacy fields (kept for backward compatibility during migration)
     public int TeamSize { get; set; } = 1; // 1 for singles, 2 for doubles
 
     [MaxLength(50)]
@@ -124,18 +164,19 @@ public class EventDivision
 
     public int? MaxTeams { get; set; }
 
-    [Column(TypeName = "decimal(10,2)")]
-    public decimal? DivisionFee { get; set; } // Override event's per-division fee
-
-    public int SortOrder { get; set; } = 0;
-    public bool IsActive { get; set; } = true;
-
     // Navigation
     [ForeignKey("EventId")]
     public Event? Event { get; set; }
 
+    [ForeignKey("TeamUnitId")]
+    public TeamUnit? TeamUnit { get; set; }
+
+    [ForeignKey("AgeGroupId")]
+    public AgeGroup? AgeGroupEntity { get; set; }
+
     public ICollection<EventRegistration> Registrations { get; set; } = new List<EventRegistration>();
     public ICollection<EventPartnerRequest> PartnerRequests { get; set; } = new List<EventPartnerRequest>();
+    public ICollection<DivisionReward> Rewards { get; set; } = new List<DivisionReward>();
 }
 
 public class EventRegistration

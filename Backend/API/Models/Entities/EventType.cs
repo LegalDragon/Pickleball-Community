@@ -22,6 +22,12 @@ public class EventType
     [MaxLength(20)]
     public string? Color { get; set; } // Color code for UI
 
+    /// <summary>
+    /// Whether this event type allows multiple divisions.
+    /// For some event types (like casual play), only one division is allowed.
+    /// </summary>
+    public bool AllowMultipleDivisions { get; set; } = true;
+
     public int SortOrder { get; set; } = 0;
 
     public bool IsActive { get; set; } = true;
