@@ -298,7 +298,14 @@ function WritePostModal({ post, categories, onClose, onSave }) {
     e.preventDefault();
     setSaving(true);
     try {
-      await onSave(formData, publish);
+      // Convert empty strings to null for proper API serialization
+      const dataToSend = {
+        ...formData,
+        categoryId: formData.categoryId ? parseInt(formData.categoryId, 10) : null,
+        featuredImageUrl: formData.featuredImageUrl || null,
+        excerpt: formData.excerpt || null
+      };
+      await onSave(dataToSend, publish);
     } finally {
       setSaving(false);
     }
