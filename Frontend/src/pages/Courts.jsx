@@ -781,6 +781,7 @@ export default function Courts() {
             handleViewDetails(newCourt);
           }}
           userLocation={userLocation}
+          courtTypes={courtTypes}
         />
       )}
     </div>
@@ -1828,7 +1829,7 @@ function InfoBox({ label, value, className = '' }) {
   );
 }
 
-function AddCourtModal({ onClose, onCourtAdded, userLocation }) {
+function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
   const [step, setStep] = useState('location'); // 'location', 'duplicates', 'details'
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
