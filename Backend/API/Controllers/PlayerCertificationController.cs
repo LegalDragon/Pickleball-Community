@@ -291,6 +291,25 @@ public class PlayerCertificationController : ControllerBase
 
     #endregion
 
+    #region Pending Reviews (Invited User)
+
+    /// <summary>
+    /// Get all pending review requests where the current user has been invited to review another player
+    /// </summary>
+    [HttpGet("my-pending-reviews")]
+    [Authorize]
+    public async Task<ActionResult<List<PendingReviewInvitationDto>>> GetMyPendingReviews()
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var pendingReviews = await _certificationService.GetMyPendingReviewsAsync(userId, GetBaseUrl());
+        return Ok(pendingReviews);
+    }
+
+    #endregion
+
     #region Review Page (Public)
 
     [HttpGet("review/{token}")]

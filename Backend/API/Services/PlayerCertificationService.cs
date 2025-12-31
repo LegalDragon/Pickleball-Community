@@ -42,6 +42,9 @@ public interface IPlayerCertificationService
     Task<List<CertificationInvitationDto>> GetInvitationsAsync(int requestId, int studentId);
     Task<int> InvitePeersAsync(int requestId, int studentId, InvitePeersDto dto);
 
+    // Pending Reviews (Invited User)
+    Task<List<PendingReviewInvitationDto>> GetMyPendingReviewsAsync(int userId, string baseUrl);
+
     // Review Page (Public)
     Task<ReviewPageInfoDto> GetReviewPageInfoAsync(string token, int? currentUserId);
     Task<bool> SubmitReviewAsync(string token, SubmitReviewDto dto, int? currentUserId);
@@ -545,6 +548,39 @@ public class PlayerCertificationService : IPlayerCertificationService
 
         await _context.SaveChangesAsync();
         return newInvitations;
+    }
+
+    #endregion
+
+    #region Pending Reviews (Invited User)
+
+    public async Task<List<PendingReviewInvitationDto>> GetMyPendingReviewsAsync(int userId, string baseUrl)
+    {
+        // Get all pending invitations for this user where they haven't reviewed yet
+        // and the request is still active and not expired
+        var invitations = await _context.PlayerCertificationInvitations
+            .Include(i => i.Request)
+                .ThenInclude(r => r.Student)
+            .Where(i => i.InvitedUserId == userId
+                && !i.HasReviewed
+                && i.Request.IsActive
+                && (!i.Request.ExpiresAt.HasValue || i.Request.ExpiresAt.Value > DateTime.UtcNow))
+            .OrderByDescending(i => i.InvitedAt)
+            .ToListAsync();
+
+        return invitations.Select(i => new PendingReviewInvitationDto
+        {
+            InvitationId = i.Id,
+            RequestId = i.RequestId,
+            StudentId = i.Request.StudentId,
+            StudentName = $"{i.Request.Student.FirstName} {i.Request.Student.LastName}",
+            StudentProfileImageUrl = i.Request.Student.ProfileImageUrl,
+            Message = i.Request.Message,
+            ReviewToken = i.Request.Token,
+            ReviewUrl = $"{baseUrl}/review/{i.Request.Token}",
+            InvitedAt = i.InvitedAt,
+            ExpiresAt = i.Request.ExpiresAt
+        }).ToList();
     }
 
     #endregion

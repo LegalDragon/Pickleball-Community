@@ -1,15 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
-import { certificationApi } from '../services/api';
+import { Link } from 'react-router-dom';
+import { certificationApi, getSharedAssetUrl } from '../services/api';
 import { getAssetUrl } from '../services/api';
 import {
   User, Star, Copy, Check, Plus, Link as LinkIcon,
   Eye, EyeOff, Calendar, MessageSquare, ChevronDown, ChevronUp,
-  Award, TrendingUp, Filter, BarChart3, Users, Lock, Globe, UserPlus
+  Award, TrendingUp, Filter, BarChart3, Users, Lock, Globe, UserPlus,
+  Bell, ArrowRight, Clock
 } from 'lucide-react';
 
 export default function MyCertificate() {
   const [certificate, setCertificate] = useState(null);
   const [activeRequest, setActiveRequest] = useState(null);
+  const [pendingReviews, setPendingReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -30,12 +33,14 @@ export default function MyCertificate() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [certData, reqData] = await Promise.all([
+      const [certData, reqData, pendingData] = await Promise.all([
         certificationApi.getMyCertificate(),
-        certificationApi.getActiveRequest()
+        certificationApi.getActiveRequest(),
+        certificationApi.getMyPendingReviews()
       ]);
       setCertificate(certData);
       setActiveRequest(reqData);
+      setPendingReviews(pendingData || []);
     } catch (err) {
       console.error('Error loading certificate data:', err);
       setError('Failed to load certificate data');
@@ -259,6 +264,65 @@ export default function MyCertificate() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Summary */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Pending Review Requests */}
+            {pendingReviews.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl shadow-sm p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Bell className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Pending Review Requests ({pendingReviews.length})
+                  </h2>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  These players have invited you to review their skills.
+                </p>
+                <div className="space-y-3">
+                  {pendingReviews.map(invitation => (
+                    <div
+                      key={invitation.invitationId}
+                      className="bg-white rounded-lg p-4 border border-amber-100 flex items-center gap-4"
+                    >
+                      {/* Player Avatar */}
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {invitation.studentProfileImageUrl ? (
+                          <img
+                            src={getSharedAssetUrl(invitation.studentProfileImageUrl)}
+                            alt={invitation.studentName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <User className="w-6 h-6 text-gray-400" />
+                        )}
+                      </div>
+
+                      {/* Player Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900">{invitation.studentName}</div>
+                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                          <Clock className="w-3 h-3" />
+                          Invited {formatDate(invitation.invitedAt)}
+                        </div>
+                        {invitation.message && (
+                          <div className="text-sm text-gray-600 mt-1 truncate">
+                            "{invitation.message}"
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Review Button */}
+                      <Link
+                        to={`/review/${invitation.reviewToken}`}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex-shrink-0 font-medium"
+                      >
+                        Review
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Overall Summary */}
             <div className="bg-white rounded-xl shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">

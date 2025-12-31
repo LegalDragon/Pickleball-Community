@@ -363,3 +363,35 @@ public class ReviewPageInfoDto
     public List<KnowledgeLevelDto> KnowledgeLevels { get; set; } = new();
     public List<SkillAreaDto> SkillAreas { get; set; } = new();
 }
+
+// Pending Review Invitation (for users who were invited to review others)
+public class PendingReviewInvitationDto
+{
+    public int InvitationId { get; set; }
+    public int RequestId { get; set; }
+
+    /// <summary>
+    /// The player who is requesting the review
+    /// </summary>
+    public int StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+    public string? StudentProfileImageUrl { get; set; }
+
+    /// <summary>
+    /// Optional message from the player
+    /// </summary>
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// The review token for accessing the review page
+    /// </summary>
+    public string ReviewToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// URL to submit the review
+    /// </summary>
+    public string ReviewUrl { get; set; } = string.Empty;
+
+    public DateTime InvitedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+}

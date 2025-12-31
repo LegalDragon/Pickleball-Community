@@ -582,6 +582,10 @@ export const certificationApi = {
   invitePeers: (requestId, userIds) =>
     api.post(`/playercertification/requests/${requestId}/invitations`, { userIds }),
 
+  // Pending Reviews (where current user was invited to review others)
+  getMyPendingReviews: () =>
+    api.get('/playercertification/my-pending-reviews'),
+
   // Review Page (Public)
   getReviewPage: (token) =>
     api.get(`/playercertification/review/${token}`),
