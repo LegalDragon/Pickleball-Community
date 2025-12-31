@@ -45,7 +45,7 @@ const Header = () => {
   useEffect(() => {
     const fetchLogoHtml = async () => {
       try {
-        const res = await fetch(`${SHARED_AUTH_URL}/settings/logo-html?site=${SITE_KEY}&size=2xl`);
+        const res = await fetch(`${SHARED_AUTH_URL}/settings/logo-html?site=${SITE_KEY}&size=10rem`);
         if (res.ok) {
           const html = await res.text();
           setLogoHtml(html);
