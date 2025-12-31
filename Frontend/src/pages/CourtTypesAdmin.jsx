@@ -5,7 +5,7 @@ import {
   // Building/Location icons
   Building, Building2, Home, Store, Warehouse, Factory, Landmark,
   // People/Access icons
-  Users, UserPlus, UserCheck, User, Users2, Lock, LockOpen, Key, Shield,
+  Users, UserPlus, UserCheck, User, Users2, Lock, Unlock, Key, Shield,
   // Nature/Outdoor icons
   TreePine, Mountain, Waves, Sun, Cloud, Leaf,
   // Activity icons
@@ -31,7 +31,7 @@ const ICON_OPTIONS = [
   // Access/People
   { value: 'Users', label: 'Users (Public)', icon: Users, category: 'Access' },
   { value: 'Lock', label: 'Lock (Private)', icon: Lock, category: 'Access' },
-  { value: 'LockOpen', label: 'Lock Open', icon: LockOpen, category: 'Access' },
+  { value: 'Unlock', label: 'Unlock', icon: Unlock, category: 'Access' },
   { value: 'Key', label: 'Key', icon: Key, category: 'Access' },
   { value: 'Shield', label: 'Shield', icon: Shield, category: 'Access' },
   { value: 'User', label: 'User', icon: User, category: 'Access' },
