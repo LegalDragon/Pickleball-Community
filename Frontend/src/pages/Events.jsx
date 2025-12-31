@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { eventsApi, eventTypesApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, eventTypesApi, courtsApi, getSharedAssetUrl } from '../services/api';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
@@ -479,6 +479,7 @@ export default function Events() {
           eventTypes={eventTypes}
           courtId={courtIdParam}
           courtName={courtNameParam}
+          userLocation={userLocation}
           onClose={() => setShowCreateModal(false)}
           onCreate={(newEvent) => {
             setShowCreateModal(false);
@@ -564,9 +565,85 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const [partnerRequests, setPartnerRequests] = useState({});
   const [loading, setLoading] = useState(false);
   const [registeringDivision, setRegisteringDivision] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState(null);
 
   const isOrganizer = event.isOrganizer;
   const isRegistered = event.isRegistered;
+
+  // Initialize edit form data when entering edit mode
+  const startEditing = () => {
+    setEditFormData({
+      name: event.name || '',
+      description: event.description || '',
+      eventTypeId: event.eventTypeId,
+      startDate: event.startDate ? new Date(event.startDate).toISOString().split('T')[0] : '',
+      startTime: event.startDate ? new Date(event.startDate).toTimeString().slice(0, 5) : '09:00',
+      endDate: event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : '',
+      endTime: event.endDate ? new Date(event.endDate).toTimeString().slice(0, 5) : '17:00',
+      venueName: event.venueName || '',
+      address: event.address || '',
+      city: event.city || '',
+      state: event.state || '',
+      country: event.country || 'USA',
+      registrationFee: event.registrationFee || 0,
+      perDivisionFee: event.perDivisionFee || 0,
+      contactEmail: event.contactEmail || '',
+      contactPhone: event.contactPhone || '',
+      maxParticipants: event.maxParticipants || '',
+      isPublished: event.isPublished,
+      isPrivate: event.isPrivate
+    });
+    setIsEditing(true);
+    setEditError(null);
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditFormData(null);
+    setEditError(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editFormData.name || !editFormData.startDate) {
+      setEditError('Event name and start date are required');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    try {
+      const startDateTime = new Date(`${editFormData.startDate}T${editFormData.startTime}`);
+      const endDateTime = editFormData.endDate
+        ? new Date(`${editFormData.endDate}T${editFormData.endTime}`)
+        : new Date(`${editFormData.startDate}T${editFormData.endTime}`);
+
+      const response = await eventsApi.update(event.id, {
+        ...editFormData,
+        startDate: startDateTime.toISOString(),
+        endDate: endDateTime.toISOString(),
+        registrationFee: parseFloat(editFormData.registrationFee) || 0,
+        perDivisionFee: parseFloat(editFormData.perDivisionFee) || 0,
+        maxParticipants: editFormData.maxParticipants ? parseInt(editFormData.maxParticipants) : null,
+        divisions: [] // Keep existing divisions
+      });
+
+      if (response.success) {
+        setIsEditing(false);
+        setEditFormData(null);
+        onUpdate();
+      } else {
+        setEditError(response.message || 'Failed to update event');
+      }
+    } catch (err) {
+      setEditError(err.message || 'An error occurred while updating');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const loadDivisionData = async (divisionId) => {
     setLoading(true);
@@ -861,47 +938,234 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
           {/* Manage Tab */}
           {activeTab === 'manage' && isOrganizer && (
             <div className="space-y-6">
-              <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                <h3 className="font-medium text-orange-800 mb-2">Event Status</h3>
-                <div className="flex items-center gap-4">
-                  <span className={`px-3 py-1 rounded-full text-sm ${
-                    event.isPublished ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {event.isPublished ? 'Published' : 'Draft'}
-                  </span>
-                  {!event.isPublished && (
+              {isEditing ? (
+                // Edit Form
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900">Edit Event</h3>
                     <button
-                      onClick={async () => {
-                        await eventsApi.publish(event.id);
-                        onUpdate();
-                      }}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                      onClick={cancelEditing}
+                      className="text-gray-500 hover:text-gray-700"
                     >
-                      Publish Event
+                      <X className="w-5 h-5" />
                     </button>
-                  )}
-                </div>
-              </div>
+                  </div>
 
-              <div>
-                <h3 className="font-medium text-gray-900 mb-3">Quick Stats</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-orange-600">{event.registeredCount}</div>
-                    <div className="text-sm text-gray-500">Registrations</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-orange-600">{event.divisions?.length || 0}</div>
-                    <div className="text-sm text-gray-500">Divisions</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4 text-center">
-                    <div className="text-2xl font-bold text-orange-600">
-                      ${((event.registrationFee || 0) * event.registeredCount).toFixed(0)}
+                  {editError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                      {editError}
                     </div>
-                    <div className="text-sm text-gray-500">Est. Revenue</div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                    <input
+                      type="text"
+                      value={editFormData?.name || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={editFormData?.description || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                      <input
+                        type="date"
+                        value={editFormData?.startDate || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={editFormData?.startTime || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, startTime: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={editFormData?.endDate || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={editFormData?.endTime || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, endTime: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Venue Name</label>
+                    <input
+                      type="text"
+                      value={editFormData?.venueName || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, venueName: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={editFormData?.city || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                      <input
+                        type="text"
+                        value={editFormData?.state || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Registration Fee ($)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editFormData?.registrationFee || 0}
+                        onChange={(e) => setEditFormData({ ...editFormData, registrationFee: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Per Division Fee ($)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editFormData?.perDivisionFee || 0}
+                        onChange={(e) => setEditFormData({ ...editFormData, perDivisionFee: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                      <input
+                        type="email"
+                        value={editFormData?.contactEmail || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, contactEmail: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                      <input
+                        type="tel"
+                        value={editFormData?.contactPhone || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, contactPhone: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={savingEdit}
+                      className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {savingEdit ? 'Saving...' : 'Save Changes'}
+                    </button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // Normal Manage View
+                <>
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <h3 className="font-medium text-orange-800 mb-2">Event Status</h3>
+                    <div className="flex items-center gap-4">
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        event.isPublished ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {event.isPublished ? 'Published' : 'Draft'}
+                      </span>
+                      {!event.isPublished && (
+                        <button
+                          onClick={async () => {
+                            await eventsApi.publish(event.id);
+                            onUpdate();
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                        >
+                          Publish Event
+                        </button>
+                      )}
+                      <button
+                        onClick={startEditing}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                      >
+                        Edit Event
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-3">Quick Stats</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-600">{event.registeredCount}</div>
+                        <div className="text-sm text-gray-500">Registrations</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-600">{event.divisions?.length || 0}</div>
+                        <div className="text-sm text-gray-500">Divisions</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          ${((event.registrationFee || 0) * event.registeredCount).toFixed(0)}
+                        </div>
+                        <div className="text-sm text-gray-500">Est. Revenue</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -910,7 +1174,19 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   );
 }
 
-function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate }) {
+function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate, userLocation }) {
+  // State for courts
+  const [topCourts, setTopCourts] = useState([]);
+  const [courtsLoading, setCourtsLoading] = useState(true);
+  const [courtSearchQuery, setCourtSearchQuery] = useState('');
+  const [searchedCourts, setSearchedCourts] = useState([]);
+  const [searchingCourts, setSearchingCourts] = useState(false);
+
+  // Selected court
+  const [selectedCourt, setSelectedCourt] = useState(
+    courtId && courtName ? { courtId: parseInt(courtId), courtName: decodeURIComponent(courtName) } : null
+  );
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -931,7 +1207,79 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(courtId ? 2 : 1); // Skip court selection if already provided
+
+  // Load top courts on mount
+  useEffect(() => {
+    const loadTopCourts = async () => {
+      try {
+        setCourtsLoading(true);
+        const response = await courtsApi.getTopForEvents(
+          userLocation?.lat,
+          userLocation?.lng,
+          10
+        );
+        if (response.success) {
+          setTopCourts(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading top courts:', err);
+      } finally {
+        setCourtsLoading(false);
+      }
+    };
+    loadTopCourts();
+  }, [userLocation]);
+
+  // Search courts when query changes
+  useEffect(() => {
+    if (!courtSearchQuery.trim()) {
+      setSearchedCourts([]);
+      return;
+    }
+
+    const searchCourts = async () => {
+      setSearchingCourts(true);
+      try {
+        const response = await courtsApi.search({
+          query: courtSearchQuery,
+          pageSize: 10,
+          latitude: userLocation?.lat,
+          longitude: userLocation?.lng
+        });
+        if (response.success) {
+          setSearchedCourts(response.data?.items || []);
+        }
+      } catch (err) {
+        console.error('Error searching courts:', err);
+      } finally {
+        setSearchingCourts(false);
+      }
+    };
+
+    const timer = setTimeout(searchCourts, 300);
+    return () => clearTimeout(timer);
+  }, [courtSearchQuery, userLocation]);
+
+  // Handle court selection
+  const handleSelectCourt = (court) => {
+    setSelectedCourt({
+      courtId: court.courtId || court.id,
+      courtName: court.courtName || court.name,
+      city: court.city,
+      state: court.state,
+      country: court.country,
+      address: court.address
+    });
+    // Auto-fill location fields
+    setFormData(prev => ({
+      ...prev,
+      venueName: court.courtName || court.name || '',
+      city: court.city || '',
+      state: court.state || '',
+      country: court.country || 'USA'
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -953,7 +1301,7 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
         ...formData,
         startDate: startDateTime.toISOString(),
         endDate: endDateTime.toISOString(),
-        courtId: courtId ? parseInt(courtId) : undefined
+        courtId: selectedCourt?.courtId || undefined
       });
 
       if (response.success) {
@@ -991,11 +1339,17 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
     });
   };
 
+  const stepLabels = ['Court', 'Event Info', 'Date & Time', 'Fees', 'Divisions'];
+  const totalSteps = 5;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
-          <h2 className="text-xl font-semibold text-gray-900">Create New Event</h2>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Create New Event</h2>
+            <p className="text-sm text-gray-500">Step {step} of {totalSteps}: {stepLabels[step - 1]}</p>
+          </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -1008,20 +1362,145 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
             </div>
           )}
 
-          {/* Step 1: Basic Info */}
+          {/* Step 1: Court Selection */}
           {step === 1 && (
             <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-2"
-                  placeholder="Summer Tournament 2025"
-                />
+              <div className="flex items-center gap-2 text-gray-700 mb-4">
+                <Building2 className="w-5 h-5 text-orange-600" />
+                <span className="font-medium">Select a Court for Your Event</span>
               </div>
 
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search courts by name or location..."
+                  value={courtSearchQuery}
+                  onChange={(e) => setCourtSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                />
+                {searchingCourts && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
+                )}
+              </div>
+
+              {/* Search Results */}
+              {courtSearchQuery && searchedCourts.length > 0 && (
+                <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                  {searchedCourts.map(court => (
+                    <button
+                      key={court.id}
+                      type="button"
+                      onClick={() => handleSelectCourt(court)}
+                      className={`w-full p-3 text-left hover:bg-orange-50 flex items-center gap-3 ${
+                        selectedCourt?.courtId === court.id ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''
+                      }`}
+                    >
+                      <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 truncate">{court.name}</div>
+                        <div className="text-sm text-gray-500 truncate">
+                          {[court.city, court.state].filter(Boolean).join(', ')}
+                        </div>
+                      </div>
+                      {court.distance && (
+                        <span className="text-xs text-orange-600 flex-shrink-0">
+                          {court.distance.toFixed(1)} mi
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Top Courts */}
+              {!courtSearchQuery && (
+                <>
+                  <div className="flex items-center gap-2 text-sm text-gray-500 mt-4">
+                    <Navigation className="w-4 h-4" />
+                    <span>Suggested courts based on your history and location</span>
+                  </div>
+
+                  {courtsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-8 h-8 text-orange-600 animate-spin" />
+                    </div>
+                  ) : topCourts.length > 0 ? (
+                    <div className="border rounded-lg divide-y max-h-80 overflow-y-auto">
+                      {topCourts.map(court => (
+                        <button
+                          key={court.courtId}
+                          type="button"
+                          onClick={() => handleSelectCourt(court)}
+                          className={`w-full p-3 text-left hover:bg-orange-50 flex items-center gap-3 ${
+                            selectedCourt?.courtId === court.courtId ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''
+                          }`}
+                        >
+                          <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{court.courtName}</div>
+                            <div className="text-sm text-gray-500 truncate">
+                              {[court.city, court.state].filter(Boolean).join(', ')}
+                            </div>
+                            <div className="flex gap-2 mt-1">
+                              {court.indoorCourts > 0 && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                  {court.indoorCourts} indoor
+                                </span>
+                              )}
+                              {court.outdoorCourts > 0 && (
+                                <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                                  {court.outdoorCourts} outdoor
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {court.distanceMiles && (
+                            <span className="text-xs text-orange-600 flex-shrink-0">
+                              {court.distanceMiles.toFixed(1)} mi
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">
+                      No suggested courts. Use search to find a court.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Selected Court Display */}
+              {selectedCourt && (
+                <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className="w-5 h-5 text-orange-600" />
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedCourt.courtName}</div>
+                        <div className="text-sm text-gray-600">
+                          {[selectedCourt.city, selectedCourt.state].filter(Boolean).join(', ')}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCourt(null)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Step 2: Event Type & Basic Info */}
+          {step === 2 && (
+            <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Event Type *</label>
                 <select
@@ -1036,6 +1515,17 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  placeholder="Summer Tournament 2025"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
                   value={formData.description}
@@ -1044,7 +1534,12 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
                   className="w-full border border-gray-300 rounded-lg p-2"
                 />
               </div>
+            </>
+          )}
 
+          {/* Step 3: Date & Time */}
+          {step === 3 && (
+            <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
@@ -1089,8 +1584,8 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
             </>
           )}
 
-          {/* Step 2: Location & Fees */}
-          {step === 2 && (
+          {/* Step 4: Location & Fees */}
+          {step === 4 && (
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Venue Name</label>
@@ -1171,8 +1666,8 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
             </>
           )}
 
-          {/* Step 3: Divisions */}
-          {step === 3 && (
+          {/* Step 5: Divisions */}
+          {step === 5 && (
             <>
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">Event Divisions</h3>
@@ -1256,10 +1751,17 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
                 Back
               </button>
             )}
-            {step < 3 ? (
+            {step < totalSteps ? (
               <button
                 type="button"
-                onClick={() => setStep(step + 1)}
+                onClick={() => {
+                  if (step === 1 && !selectedCourt) {
+                    setError('Please select a court first');
+                    return;
+                  }
+                  setError(null);
+                  setStep(step + 1);
+                }}
                 className="flex-1 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700"
               >
                 Next
@@ -1277,10 +1779,10 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate })
 
           {/* Step Indicators */}
           <div className="flex justify-center gap-2">
-            {[1, 2, 3].map(s => (
+            {Array.from({ length: totalSteps }, (_, i) => i + 1).map(s => (
               <div
                 key={s}
-                className={`w-2 h-2 rounded-full ${s === step ? 'bg-orange-600' : 'bg-gray-300'}`}
+                className={`w-2 h-2 rounded-full ${s === step ? 'bg-orange-600' : s < step ? 'bg-orange-300' : 'bg-gray-300'}`}
               />
             ))}
           </div>

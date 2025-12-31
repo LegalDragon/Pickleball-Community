@@ -988,6 +988,83 @@ public class CourtsController : ControllerBase
             UpdatedAt = cc.UpdatedAt
         };
     }
+
+    // GET: /courts/top-for-events - Get top courts for event creation based on user history and location
+    [HttpGet("top-for-events")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<TopCourtForEventDto>>>> GetTopCourtsForEvents(
+        [FromQuery] double? latitude = null,
+        [FromQuery] double? longitude = null,
+        [FromQuery] int topN = 10)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<List<TopCourtForEventDto>> { Success = false, Message = "User not authenticated" });
+
+            var courts = new List<TopCourtForEventDto>();
+
+            var connection = _context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = "sp_GetTopCourtsForUser";
+                command.CommandType = CommandType.StoredProcedure;
+
+                command.Parameters.Add(new SqlParameter("@UserId", SqlDbType.Int) { Value = userId.Value });
+                command.Parameters.Add(new SqlParameter("@Latitude", SqlDbType.Float) { Value = (object?)latitude ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@Longitude", SqlDbType.Float) { Value = (object?)longitude ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@TopN", SqlDbType.Int) { Value = topN });
+
+                using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    courts.Add(new TopCourtForEventDto
+                    {
+                        CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                        CourtName = reader.IsDBNull(reader.GetOrdinal("CourtName")) ? null : reader.GetString(reader.GetOrdinal("CourtName")),
+                        City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
+                        State = reader.IsDBNull(reader.GetOrdinal("State")) ? null : reader.GetString(reader.GetOrdinal("State")),
+                        Country = reader.IsDBNull(reader.GetOrdinal("Country")) ? null : reader.GetString(reader.GetOrdinal("Country")),
+                        Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
+                        Zip = reader.IsDBNull(reader.GetOrdinal("Zip")) ? null : reader.GetString(reader.GetOrdinal("Zip")),
+                        Latitude = reader.IsDBNull(reader.GetOrdinal("Latitude")) ? null : reader.GetDouble(reader.GetOrdinal("Latitude")),
+                        Longitude = reader.IsDBNull(reader.GetOrdinal("Longitude")) ? null : reader.GetDouble(reader.GetOrdinal("Longitude")),
+                        IndoorCourts = reader.IsDBNull(reader.GetOrdinal("IndoorCourts")) ? null : reader.GetInt32(reader.GetOrdinal("IndoorCourts")),
+                        OutdoorCourts = reader.IsDBNull(reader.GetOrdinal("OutdoorCourts")) ? null : reader.GetInt32(reader.GetOrdinal("OutdoorCourts")),
+                        HasLights = !reader.IsDBNull(reader.GetOrdinal("HasLights")) && reader.GetString(reader.GetOrdinal("HasLights")) == "Y",
+                        CourtTypeName = reader.IsDBNull(reader.GetOrdinal("CourtTypeName")) ? null : reader.GetString(reader.GetOrdinal("CourtTypeName")),
+                        DistanceMiles = reader.IsDBNull(reader.GetOrdinal("DistanceMiles")) ? null : reader.GetDouble(reader.GetOrdinal("DistanceMiles")),
+                        PriorityScore = reader.GetInt32(reader.GetOrdinal("PriorityScore"))
+                    });
+                }
+            }
+            finally
+            {
+                await connection.CloseAsync();
+            }
+
+            return Ok(new ApiResponse<List<TopCourtForEventDto>> { Success = true, Data = courts });
+        }
+        catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
+        {
+            _logger.LogWarning("Stored procedure sp_GetTopCourtsForUser not found, falling back to empty list");
+            return Ok(new ApiResponse<List<TopCourtForEventDto>>
+            {
+                Success = true,
+                Data = new List<TopCourtForEventDto>(),
+                Message = "Please run migration 037 to enable this feature"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching top courts for events");
+            return StatusCode(500, new ApiResponse<List<TopCourtForEventDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
 }
 
 public class PagedResult<T>

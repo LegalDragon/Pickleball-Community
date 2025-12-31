@@ -659,7 +659,16 @@ export const courtsApi = {
     api.post('/courts/check-nearby', { latitude, longitude, radiusYards }),
 
   // Add a new court
-  addCourt: (data) => api.post('/courts', data)
+  addCourt: (data) => api.post('/courts', data),
+
+  // Get top courts for event creation (based on user history and location)
+  getTopForEvents: (latitude, longitude, topN = 10) => {
+    const params = new URLSearchParams();
+    if (latitude) params.append('latitude', latitude);
+    if (longitude) params.append('longitude', longitude);
+    if (topN) params.append('topN', topN);
+    return api.get(`/courts/top-for-events?${params.toString()}`);
+  }
 }
 
 // Event Types API

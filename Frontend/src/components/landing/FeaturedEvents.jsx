@@ -78,7 +78,17 @@ export default function FeaturedEvents() {
               allEvents.push(evt);
             }
           });
-          setEvents(allEvents.slice(0, 8));
+          // Add recent past events with a flag
+          const recentPast = (response.data.recentPastEvents || []).map(evt => ({
+            ...evt,
+            isPastEvent: true
+          }));
+          recentPast.forEach(evt => {
+            if (!allEvents.find(e => e.id === evt.id)) {
+              allEvents.push(evt);
+            }
+          });
+          setEvents(allEvents.slice(0, 10));
         }
       } catch (err) {
         console.error('Error loading featured events:', err);
@@ -291,14 +301,17 @@ function EventCard({ event, formatDate, formatTime }) {
         )}
 
         {/* Date Badge */}
-        <div className="absolute top-3 left-3 bg-white rounded-lg px-3 py-1 shadow-md">
+        <div className={`absolute top-3 left-3 rounded-lg px-3 py-1 shadow-md ${event.isPastEvent ? 'bg-gray-100' : 'bg-white'}`}>
           <div className="text-center">
             <div className="text-xs font-medium text-gray-500 uppercase">
               {new Date(event.startDate).toLocaleDateString('en-US', { month: 'short' })}
             </div>
-            <div className="text-xl font-bold text-gray-900">
+            <div className={`text-xl font-bold ${event.isPastEvent ? 'text-gray-500' : 'text-gray-900'}`}>
               {new Date(event.startDate).getDate()}
             </div>
+            {event.isPastEvent && (
+              <div className="text-xs text-gray-500">Past</div>
+            )}
           </div>
         </div>
 

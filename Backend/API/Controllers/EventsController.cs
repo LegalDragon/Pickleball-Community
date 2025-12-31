@@ -147,11 +147,12 @@ public class EventsController : ControllerBase
 
     // GET: /events/featured - Get featured events for home page
     [HttpGet("featured")]
-    public async Task<ActionResult<ApiResponse<FeaturedEventsDto>>> GetFeaturedEvents([FromQuery] int limit = 6)
+    public async Task<ActionResult<ApiResponse<FeaturedEventsDto>>> GetFeaturedEvents([FromQuery] int limit = 6, [FromQuery] int pastDays = 7)
     {
         try
         {
             var now = DateTime.UtcNow;
+            var pastCutoff = now.AddDays(-pastDays);
 
             // Upcoming events
             var upcomingEvents = await _context.Events
@@ -175,13 +176,25 @@ public class EventsController : ControllerBase
                 .Take(limit)
                 .ToListAsync();
 
+            // Recent past events (events that ended within the past X days)
+            var recentPastEvents = await _context.Events
+                .Include(e => e.EventType)
+                .Include(e => e.OrganizedBy)
+                .Include(e => e.Divisions)
+                .Include(e => e.Registrations)
+                .Where(e => e.IsActive && e.IsPublished && e.StartDate < now && e.StartDate >= pastCutoff)
+                .OrderByDescending(e => e.StartDate)
+                .Take(limit)
+                .ToListAsync();
+
             return Ok(new ApiResponse<FeaturedEventsDto>
             {
                 Success = true,
                 Data = new FeaturedEventsDto
                 {
                     UpcomingEvents = upcomingEvents.Select(e => MapToEventDto(e, null)).ToList(),
-                    PopularEvents = popularEvents.Select(e => MapToEventDto(e, null)).ToList()
+                    PopularEvents = popularEvents.Select(e => MapToEventDto(e, null)).ToList(),
+                    RecentPastEvents = recentPastEvents.Select(e => MapToEventDto(e, null)).ToList()
                 }
             });
         }

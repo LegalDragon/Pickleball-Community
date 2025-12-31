@@ -271,4 +271,5 @@ public class FeaturedEventsDto
 {
     public List<EventDto> UpcomingEvents { get; set; } = new();
     public List<EventDto> PopularEvents { get; set; } = new();
+    public List<EventDto> RecentPastEvents { get; set; } = new();
 }

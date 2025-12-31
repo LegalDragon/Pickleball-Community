@@ -219,3 +219,23 @@ public class AddCourtRequest
     public double Latitude { get; set; }
     public double Longitude { get; set; }
 }
+
+// Top courts for event creation (returned by sp_GetTopCourtsForUser)
+public class TopCourtForEventDto
+{
+    public int CourtId { get; set; }
+    public string? CourtName { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public string? Address { get; set; }
+    public string? Zip { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public int? IndoorCourts { get; set; }
+    public int? OutdoorCourts { get; set; }
+    public bool HasLights { get; set; }
+    public string? CourtTypeName { get; set; }
+    public double? DistanceMiles { get; set; }
+    public int PriorityScore { get; set; }
+}
