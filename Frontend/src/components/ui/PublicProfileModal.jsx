@@ -109,6 +109,33 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
     return parts.length > 0 ? parts.join(', ') : null
   }
 
+  // Check if video URL is external (YouTube, TikTok, etc.)
+  const isExternalVideoUrl = (url) => {
+    if (!url) return false
+    const externalPatterns = ['youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'instagram.com']
+    return externalPatterns.some(pattern => url.includes(pattern))
+  }
+
+  // Convert video URL to embeddable URL
+  const getVideoEmbedUrl = (url) => {
+    if (!url) return null
+    // YouTube
+    if (url.includes('youtube.com/watch')) {
+      const videoId = new URL(url).searchParams.get('v')
+      return `https://www.youtube.com/embed/${videoId}`
+    }
+    if (url.includes('youtu.be/')) {
+      const videoId = url.split('youtu.be/')[1]?.split('?')[0]
+      return `https://www.youtube.com/embed/${videoId}`
+    }
+    // Vimeo
+    if (url.includes('vimeo.com/')) {
+      const videoId = url.split('vimeo.com/')[1]?.split('?')[0]
+      return `https://player.vimeo.com/video/${videoId}`
+    }
+    return null
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -329,11 +356,34 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     Intro Video
                   </h2>
                   <div className="aspect-video rounded-lg overflow-hidden bg-gray-100">
-                    <video
-                      src={getAssetUrl(profile.introVideo)}
-                      controls
-                      className="w-full h-full object-cover"
-                    />
+                    {isExternalVideoUrl(profile.introVideo) ? (
+                      getVideoEmbedUrl(profile.introVideo) ? (
+                        <iframe
+                          src={getVideoEmbedUrl(profile.introVideo)}
+                          className="w-full h-full"
+                          allowFullScreen
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <a
+                            href={profile.introVideo}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-2"
+                          >
+                            <Play className="w-6 h-6" />
+                            Open Video
+                          </a>
+                        </div>
+                      )
+                    ) : (
+                      <video
+                        src={getAssetUrl(profile.introVideo)}
+                        controls
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                   </div>
                 </div>
               )}
