@@ -21,6 +21,7 @@ export default function MyCertificate() {
   const [showComparison, setShowComparison] = useState(false);
   const [knowledgeLevelFilter, setKnowledgeLevelFilter] = useState('all');
   const [timePeriodFilter, setTimePeriodFilter] = useState('all');
+  const [expandedComparisonGroup, setExpandedComparisonGroup] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -394,26 +395,63 @@ export default function MyCertificate() {
             {/* Self-Review Comparison */}
             {certificate?.hasSelfReview && certificate?.selfReview && certificate?.peerReviewCount > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-purple-600" />
-                    <h2 className="text-xl font-semibold text-gray-900">Self vs Peer Comparison</h2>
-                    {isFilterActive && (
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        Filtered
-                      </span>
-                    )}
+                <div className="flex flex-col gap-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-purple-600" />
+                      <h2 className="text-xl font-semibold text-gray-900">Self vs Peer Comparison</h2>
+                      {isFilterActive && (
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                          Filtered
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowComparison(!showComparison)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        showComparison
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {showComparison ? 'Hide Comparison' : 'Show Comparison'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowComparison(!showComparison)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      showComparison
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {showComparison ? 'Hide Comparison' : 'Show Comparison'}
-                  </button>
+
+                  {/* Filter Controls - Above comparison */}
+                  {showComparison && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+                      <select
+                        value={knowledgeLevelFilter}
+                        onChange={(e) => setKnowledgeLevelFilter(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="all">All Experience Levels</option>
+                        {availableKnowledgeLevels.map(level => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={timePeriodFilter}
+                        onChange={(e) => setTimePeriodFilter(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="week">Last Week</option>
+                        <option value="month">Last Month</option>
+                        <option value="3months">Last 3 Months</option>
+                        <option value="year">Last Year</option>
+                      </select>
+                      {isFilterActive && (
+                        <button
+                          onClick={() => { setKnowledgeLevelFilter('all'); setTimePeriodFilter('all'); }}
+                          className="text-sm text-gray-500 hover:text-gray-700 px-2"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {showComparison && (
@@ -461,43 +499,104 @@ export default function MyCertificate() {
                       const selfScore100 = getGroupScore100(selfGroup.averageScore);
                       const peerScore100 = getGroupScore100(peerGroup.averageScore);
                       const diff = selfScore100 - peerScore100;
+                      const isExpanded = expandedComparisonGroup === selfGroup.groupId;
 
                       return (
-                        <div key={selfGroup.groupId} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="font-medium text-gray-900">{selfGroup.groupName}</span>
-                            <span className={`text-sm font-medium ${
-                              diff > 5 ? 'text-orange-600' : diff < -5 ? 'text-blue-600' : 'text-gray-500'
-                            }`}>
-                              {diff > 0 ? `+${diff}` : diff} pts difference
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <div className="text-xs text-gray-500 mb-1">Self</div>
+                        <div key={selfGroup.groupId} className="border border-gray-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setExpandedComparisonGroup(isExpanded ? null : selfGroup.groupId)}
+                            className="w-full p-4 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-purple-500 rounded-full"
-                                    style={{ width: `${selfScore100}%` }}
-                                  />
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                                )}
+                                <span className="font-medium text-gray-900">{selfGroup.groupName}</span>
+                              </div>
+                              <span className={`text-sm font-medium ${
+                                diff > 5 ? 'text-orange-600' : diff < -5 ? 'text-blue-600' : 'text-gray-500'
+                              }`}>
+                                {diff > 0 ? `+${diff}` : diff} pts difference
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <div className="text-xs text-gray-500 mb-1 text-left">Self</div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-purple-500 rounded-full"
+                                      style={{ width: `${selfScore100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium text-purple-600 w-12 text-right">{selfScore100}</span>
                                 </div>
-                                <span className="text-sm font-medium text-purple-600 w-12 text-right">{selfScore100}</span>
+                              </div>
+                              <div>
+                                <div className="text-xs text-gray-500 mb-1 text-left">Peers</div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-primary-500 rounded-full"
+                                      style={{ width: `${peerScore100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium text-primary-600 w-12 text-right">{peerScore100}</span>
+                                </div>
                               </div>
                             </div>
-                            <div>
-                              <div className="text-xs text-gray-500 mb-1">Peers</div>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-primary-500 rounded-full"
-                                    style={{ width: `${peerScore100}%` }}
-                                  />
-                                </div>
-                                <span className="text-sm font-medium text-primary-600 w-12 text-right">{peerScore100}</span>
+                          </button>
+
+                          {/* Skill Area Drill-down */}
+                          {isExpanded && (
+                            <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-3">
+                              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                Skill Breakdown
                               </div>
+                              {selfGroup.skillAverages?.map(selfSkill => {
+                                const peerSkill = peerGroup.skillAverages?.find(s => s.skillAreaId === selfSkill.skillAreaId);
+                                const selfSkillScore = getGroupScore100(selfSkill.averageScore);
+                                const peerSkillScore = peerSkill ? getGroupScore100(peerSkill.averageScore) : 0;
+                                const skillDiff = selfSkillScore - peerSkillScore;
+
+                                return (
+                                  <div key={selfSkill.skillAreaId} className="bg-white rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-gray-700">{selfSkill.skillAreaName}</span>
+                                      <span className={`text-xs font-medium ${
+                                        skillDiff > 10 ? 'text-orange-600' : skillDiff < -10 ? 'text-blue-600' : 'text-gray-400'
+                                      }`}>
+                                        {skillDiff > 0 ? `+${skillDiff}` : skillDiff}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-purple-400 rounded-full"
+                                            style={{ width: `${selfSkillScore}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-medium text-purple-600 w-8 text-right">{selfSkillScore}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full bg-primary-400 rounded-full"
+                                            style={{ width: `${peerSkillScore}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-medium text-primary-600 w-8 text-right">{peerSkillScore}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
+                          )}
                         </div>
                       );
                     })}
@@ -506,36 +605,16 @@ export default function MyCertificate() {
               </div>
             )}
 
-            {/* Individual Reviews with Filters */}
+            {/* Individual Reviews */}
             {certificate?.reviews?.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-semibold text-gray-900">Review Details</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {/* Knowledge Level Filter */}
-                    <select
-                      value={knowledgeLevelFilter}
-                      onChange={(e) => setKnowledgeLevelFilter(e.target.value)}
-                      className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="all">All Experience Levels</option>
-                      {availableKnowledgeLevels.map(level => (
-                        <option key={level} value={level}>{level}</option>
-                      ))}
-                    </select>
-                    {/* Time Period Filter */}
-                    <select
-                      value={timePeriodFilter}
-                      onChange={(e) => setTimePeriodFilter(e.target.value)}
-                      className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="all">All Time</option>
-                      <option value="week">Last Week</option>
-                      <option value="month">Last Month</option>
-                      <option value="3months">Last 3 Months</option>
-                      <option value="year">Last Year</option>
-                    </select>
-                  </div>
+                  {isFilterActive && (
+                    <span className="text-sm text-gray-500">
+                      Showing {filteredReviews.length} of {certificate.peerReviewCount} reviews
+                    </span>
+                  )}
                 </div>
 
                 {filteredReviews.length === 0 ? (
