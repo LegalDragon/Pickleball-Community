@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { userApi, friendsApi, getSharedAssetUrl, getAssetUrl } from '../../services/api'
+import { Link, useNavigate } from 'react-router-dom'
+import { userApi, friendsApi, messagingApi, getSharedAssetUrl, getAssetUrl } from '../../services/api'
 import {
   User, MapPin, Calendar, UserPlus, UserCheck, Clock,
-  Award, Target, Zap, Heart, Activity, Play, X, Check
+  Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle
 } from 'lucide-react'
 
 export default function PublicProfileModal({ userId, onClose, onFriendshipChange }) {
+  const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [startingChat, setStartingChat] = useState(false)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -87,6 +89,22 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
       console.error('Error rejecting request:', err)
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const handleStartChat = async () => {
+    try {
+      setStartingChat(true)
+      const response = await messagingApi.createDirectConversation(profile.id)
+      const conversationId = response?.data?.id || response?.id
+      if (conversationId) {
+        onClose()
+        navigate(`/messages?conversation=${conversationId}`)
+      }
+    } catch (err) {
+      console.error('Error starting chat:', err)
+    } finally {
+      setStartingChat(false)
     }
   }
 
@@ -219,9 +237,19 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     Edit Profile
                   </Link>
                 ) : profile.friendshipStatus === 'friends' ? (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg font-medium">
-                    <UserCheck className="w-5 h-5" />
-                    Friends
+                  <div className="flex gap-2">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg font-medium">
+                      <UserCheck className="w-5 h-5" />
+                      Friends
+                    </div>
+                    <button
+                      onClick={handleStartChat}
+                      disabled={startingChat}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-lg font-medium hover:bg-gray-100 transition-colors disabled:opacity-50"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      {startingChat ? 'Starting...' : 'Message'}
+                    </button>
                   </div>
                 ) : profile.friendshipStatus === 'pending_sent' ? (
                   <button

@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   MessageCircle, ArrowLeft, Send, MoreVertical, Search, Users, User,
   Check, CheckCheck, Reply, Trash2, Edit3, X, Bell, BellOff, Plus,
-  Image, Smile, ChevronLeft, Wifi, WifiOff
+  Image, Smile, ChevronLeft, Wifi, WifiOff, UserPlus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { messagingApi, getSharedAssetUrl } from '../services/api';
+import { messagingApi, friendsApi, getSharedAssetUrl } from '../services/api';
 import { useSignalR, SignalREvents } from '../hooks/useSignalR';
 
 export default function Messages() {
@@ -27,6 +27,10 @@ export default function Messages() {
   const [conversationDetails, setConversationDetails] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
+  const [showAddFriends, setShowAddFriends] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [addingParticipants, setAddingParticipants] = useState(false);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -326,6 +330,48 @@ export default function Messages() {
     }
   };
 
+  const handleOpenAddFriends = async () => {
+    setShowMenu(false);
+    setShowAddFriends(true);
+    setLoadingFriends(true);
+    try {
+      const response = await friendsApi.getFriends();
+      const allFriends = response.data?.data ?? response.data ?? [];
+      // Filter out friends who are already participants
+      const participantIds = conversationDetails?.participants?.map(p => p.userId) || [];
+      const availableFriends = allFriends.filter(f => !participantIds.includes(f.id));
+      setFriends(availableFriends);
+    } catch (err) {
+      console.error('Error loading friends:', err);
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  const handleAddFriendToChat = async (friendId) => {
+    if (!selectedConversation || addingParticipants) return;
+    setAddingParticipants(true);
+    try {
+      await messagingApi.addParticipants(selectedConversation.id, [friendId]);
+      // Refresh conversation details
+      const detailsRes = await messagingApi.getConversation(selectedConversation.id);
+      setConversationDetails(detailsRes.data);
+      // Remove added friend from list
+      setFriends(prev => prev.filter(f => f.id !== friendId));
+      // Update conversation type if needed
+      if (selectedConversation.type === 'Direct') {
+        setSelectedConversation(prev => ({ ...prev, type: 'FriendGroup' }));
+        setConversations(prev => prev.map(c =>
+          c.id === selectedConversation.id ? { ...c, type: 'FriendGroup' } : c
+        ));
+      }
+    } catch (err) {
+      console.error('Error adding friend to chat:', err);
+    } finally {
+      setAddingParticipants(false);
+    }
+  };
+
   const handleBackToList = () => {
     setShowMobileConversation(false);
     setSelectedConversation(null);
@@ -414,6 +460,13 @@ export default function Messages() {
                 </button>
                 {showMenu && (
                   <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border py-1 z-50">
+                    <button
+                      onClick={handleOpenAddFriends}
+                      className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Add Friends
+                    </button>
                     <button
                       onClick={handleMuteConversation}
                       className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -587,6 +640,7 @@ export default function Messages() {
                         !message.isOwn &&
                         (index === 0 || messages[index - 1].senderId !== message.senderId)
                       }
+                      isGroupChat={selectedConversation?.type !== 'Direct'}
                       onReply={() => {
                         setReplyingTo(message);
                         inputRef.current?.focus();
@@ -678,12 +732,79 @@ export default function Messages() {
           onClick={() => setShowMenu(false)}
         />
       )}
+
+      {/* Add Friends Modal */}
+      {showAddFriends && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Add Friends to Chat</h2>
+              <button
+                onClick={() => setShowAddFriends(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingFriends ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
+                </div>
+              ) : friends.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p>No friends available to add</p>
+                  <p className="text-sm mt-1">All your friends are already in this chat</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {friends.map(friend => (
+                    <div
+                      key={friend.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        {friend.profileImageUrl ? (
+                          <img
+                            src={getSharedAssetUrl(friend.profileImageUrl)}
+                            alt={friend.name}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <User className="w-5 h-5 text-blue-600" />
+                          </div>
+                        )}
+                        <span className="font-medium text-gray-900">{friend.name}</span>
+                      </div>
+                      <button
+                        onClick={() => handleAddFriendToChat(friend.id)}
+                        disabled={addingParticipants}
+                        className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {addingParticipants ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function MessageBubble({ message, isOwn, showAvatar, onReply }) {
+function MessageBubble({ message, isOwn, showAvatar, isGroupChat, onReply }) {
   const [showActions, setShowActions] = useState(false);
+
+  // Truncate name to max 12 characters
+  const truncateName = (name) => {
+    if (!name) return '';
+    return name.length > 12 ? name.substring(0, 10) + '...' : name;
+  };
 
   return (
     <div
@@ -691,8 +812,28 @@ function MessageBubble({ message, isOwn, showAvatar, onReply }) {
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      {/* Avatar for other's messages */}
-      {!isOwn && (
+      {/* Avatar and name for group chats - show for every message */}
+      {!isOwn && isGroupChat && (
+        <div className="flex flex-col items-center flex-shrink-0 w-10">
+          {message.senderAvatar ? (
+            <img
+              src={getSharedAssetUrl(message.senderAvatar)}
+              alt=""
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+              <User className="w-4 h-4 text-blue-600" />
+            </div>
+          )}
+          <span className="text-[10px] text-gray-500 mt-0.5 text-center truncate w-full">
+            {truncateName(message.senderName)}
+          </span>
+        </div>
+      )}
+
+      {/* Avatar for direct messages - only show when showAvatar is true */}
+      {!isOwn && !isGroupChat && (
         <div className="w-8 flex-shrink-0">
           {showAvatar && (
             message.senderAvatar ? (
@@ -710,7 +851,7 @@ function MessageBubble({ message, isOwn, showAvatar, onReply }) {
         </div>
       )}
 
-      <div className={`max-w-[75%] ${isOwn ? 'order-1' : ''}`}>
+      <div className={`max-w-[70%] ${isOwn ? 'order-1' : ''}`}>
         {/* Reply preview */}
         {message.replyToMessage && (
           <div className={`
@@ -732,12 +873,6 @@ function MessageBubble({ message, isOwn, showAvatar, onReply }) {
             }
           `}
         >
-          {/* Sender name for group chats */}
-          {!isOwn && showAvatar && message.senderName && (
-            <p className="text-xs font-medium text-blue-600 mb-1">
-              {message.senderName}
-            </p>
-          )}
 
           {/* Content */}
           {message.isDeleted ? (

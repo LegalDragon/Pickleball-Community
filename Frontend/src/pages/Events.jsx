@@ -659,13 +659,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       city: court.city,
       state: court.state,
       country: court.country,
-      address: court.address
+      address: court.address || court.addr1
     };
     setSelectedCourt(courtData);
     setEditFormData(prev => ({
       ...prev,
       courtId: courtData.courtId,
       venueName: courtData.courtName || '',
+      address: courtData.address || '',
       city: courtData.city || '',
       state: courtData.state || '',
       country: courtData.country || 'USA'
@@ -1106,8 +1107,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                         <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            <span className="font-medium text-green-800">{selectedCourt.courtName}</span>
-                            {selectedCourt.city && <span className="text-green-600">- {selectedCourt.city}, {selectedCourt.state}</span>}
+                            <div>
+                              <span className="font-medium text-green-800">{selectedCourt.courtName || 'UnNamed'}</span>
+                              {selectedCourt.address && <div className="text-sm text-green-600">{selectedCourt.address}</div>}
+                              {selectedCourt.city && <div className="text-sm text-green-600">{selectedCourt.city}, {selectedCourt.state}</div>}
+                            </div>
                           </div>
                           <button onClick={() => setSelectedCourt(null)} className="text-green-600 hover:text-green-800 text-sm">
                             Change
@@ -1140,7 +1144,10 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                 selectedCourt?.courtId === (court.courtId || court.id) ? 'border-orange-500 bg-orange-50' : 'border-gray-200'
                               }`}
                             >
-                              <div className="font-medium text-gray-900">{court.courtName || court.name}</div>
+                              <div className="font-medium text-gray-900">{court.courtName || court.name || 'UnNamed'}</div>
+                              {(court.address || court.addr1) && (
+                                <div className="text-sm text-gray-600">{court.address || court.addr1}</div>
+                              )}
                               <div className="text-sm text-gray-500">
                                 {court.city}{court.state && `, ${court.state}`}
                                 {court.distanceMiles && <span className="ml-2">({court.distanceMiles.toFixed(1)} mi)</span>}
@@ -1164,8 +1171,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                     <div className="space-y-4">
                       {selectedCourt && (
                         <div className="p-2 bg-gray-50 rounded-lg text-sm">
-                          <span className="font-medium">Venue:</span> {selectedCourt.courtName}
-                          {selectedCourt.city && ` - ${selectedCourt.city}, ${selectedCourt.state}`}
+                          <span className="font-medium">Venue:</span> {selectedCourt.courtName || 'UnNamed'}
+                          {selectedCourt.address && <span className="text-gray-600"> - {selectedCourt.address}</span>}
+                          {selectedCourt.city && <span className="text-gray-500"> ({selectedCourt.city}, {selectedCourt.state})</span>}
                         </div>
                       )}
 
@@ -1462,12 +1470,13 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate, u
       city: court.city,
       state: court.state,
       country: court.country,
-      address: court.address
+      address: court.address || court.addr1
     });
     // Auto-fill location fields
     setFormData(prev => ({
       ...prev,
       venueName: court.courtName || court.name || '',
+      address: court.address || court.addr1 || '',
       city: court.city || '',
       state: court.state || '',
       country: court.country || 'USA'
@@ -1592,7 +1601,10 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate, u
                     >
                       <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 truncate">{court.name}</div>
+                        <div className="font-medium text-gray-900 truncate">{court.name || 'UnNamed'}</div>
+                        {court.addr1 && (
+                          <div className="text-sm text-gray-600 truncate">{court.addr1}</div>
+                        )}
                         <div className="text-sm text-gray-500 truncate">
                           {[court.city, court.state].filter(Boolean).join(', ')}
                         </div>
@@ -1632,7 +1644,12 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate, u
                         >
                           <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-900 truncate">{court.courtName}</div>
+                            <div className="font-medium text-gray-900 truncate">
+                              {court.courtName || 'UnNamed'}
+                            </div>
+                            {court.address && (
+                              <div className="text-sm text-gray-600 truncate">{court.address}</div>
+                            )}
                             <div className="text-sm text-gray-500 truncate">
                               {[court.city, court.state].filter(Boolean).join(', ')}
                             </div>
@@ -1672,8 +1689,11 @@ function CreateEventModal({ eventTypes, courtId, courtName, onClose, onCreate, u
                     <div className="flex items-center gap-2">
                       <Check className="w-5 h-5 text-orange-600" />
                       <div>
-                        <div className="font-medium text-gray-900">{selectedCourt.courtName}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="font-medium text-gray-900">{selectedCourt.courtName || 'UnNamed'}</div>
+                        {selectedCourt.address && (
+                          <div className="text-sm text-gray-600">{selectedCourt.address}</div>
+                        )}
+                        <div className="text-sm text-gray-500">
                           {[selectedCourt.city, selectedCourt.state].filter(Boolean).join(', ')}
                         </div>
                       </div>

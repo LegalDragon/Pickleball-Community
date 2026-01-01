@@ -5,7 +5,7 @@ import {
   User, Calendar, ChevronRight, ArrowLeft, Gamepad2, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { friendsApi, getSharedAssetUrl } from '../services/api';
+import { friendsApi, messagingApi, getSharedAssetUrl } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Friends() {
@@ -128,6 +128,19 @@ export default function Friends() {
       loadFriendsData();
     } catch (err) {
       console.error('Error cancelling request:', err);
+    }
+  };
+
+  const handleStartChat = async (friendId, e) => {
+    e.stopPropagation(); // Prevent opening profile modal
+    try {
+      const response = await messagingApi.createDirectConversation(friendId);
+      const conversationId = response?.data?.id || response?.id;
+      if (conversationId) {
+        navigate(`/messages?conversation=${conversationId}`);
+      }
+    } catch (err) {
+      console.error('Error starting chat:', err);
     }
   };
 
@@ -254,7 +267,16 @@ export default function Friends() {
                           )}
                         </div>
                       </div>
-                      <ChevronRight className="w-5 h-5 text-gray-400" />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleStartChat(friend.id, e)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Send message"
+                        >
+                          <MessageCircle className="w-5 h-5" />
+                        </button>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </div>
                     </div>
                   </div>
                 ))}
