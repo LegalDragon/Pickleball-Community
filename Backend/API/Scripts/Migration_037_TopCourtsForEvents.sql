@@ -68,11 +68,20 @@ BEGIN
                      AND c.GPSLat IS NOT NULL AND c.GPSLng IS NOT NULL
                      AND TRY_CAST(c.GPSLat AS FLOAT) IS NOT NULL
                      AND TRY_CAST(c.GPSLng AS FLOAT) IS NOT NULL
-                THEN 50 - LEAST(50, @EarthRadiusMiles * 2 * ASIN(SQRT(
-                    POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
-                    COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
-                    POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
-                )) / 2)  -- 100 miles = 0 bonus, 0 miles = 50 bonus
+                THEN 50 - (
+                    CASE
+                        WHEN (@EarthRadiusMiles * 2 * ASIN(SQRT(
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
+                            COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
+                        )) / 2) > 50 THEN 50
+                        ELSE (@EarthRadiusMiles * 2 * ASIN(SQRT(
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
+                            COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
+                        )) / 2)
+                    END
+                )  -- 100 miles = 0 bonus, 0 miles = 50 bonus
                 ELSE 0
             END
         ) AS PriorityScore
@@ -97,11 +106,20 @@ BEGIN
                      AND c.GPSLat IS NOT NULL AND c.GPSLng IS NOT NULL
                      AND TRY_CAST(c.GPSLat AS FLOAT) IS NOT NULL
                      AND TRY_CAST(c.GPSLng AS FLOAT) IS NOT NULL
-                THEN 50 - LEAST(50, @EarthRadiusMiles * 2 * ASIN(SQRT(
-                    POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
-                    COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
-                    POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
-                )) / 2)
+                THEN 50 - (
+                    CASE
+                        WHEN (@EarthRadiusMiles * 2 * ASIN(SQRT(
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
+                            COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
+                        )) / 2) > 50 THEN 50
+                        ELSE (@EarthRadiusMiles * 2 * ASIN(SQRT(
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLat AS FLOAT)) - RADIANS(@Latitude)) / 2), 2) +
+                            COS(RADIANS(@Latitude)) * COS(RADIANS(TRY_CAST(c.GPSLat AS FLOAT))) *
+                            POWER(SIN((RADIANS(TRY_CAST(c.GPSLng AS FLOAT)) - RADIANS(@Longitude)) / 2), 2)
+                        )) / 2)
+                    END
+                )
                 ELSE 0
             END
         ) DESC,
