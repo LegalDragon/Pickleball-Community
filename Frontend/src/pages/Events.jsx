@@ -489,6 +489,8 @@ export default function Events() {
           currentUserId={user?.id}
           formatDate={formatDate}
           formatTime={formatTime}
+          teamUnits={teamUnits}
+          skillLevels={skillLevels}
           onClose={() => setSelectedEvent(null)}
           onUpdate={(updatedEvent) => {
             if (updatedEvent) {
@@ -588,7 +590,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
   );
 }
 
-function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, formatTime, onClose, onUpdate }) {
+function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, formatTime, teamUnits = [], skillLevels = [], onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState('details');
   const [registrations, setRegistrations] = useState({});
   const [partnerRequests, setPartnerRequests] = useState({});

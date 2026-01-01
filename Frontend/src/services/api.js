@@ -1029,6 +1029,36 @@ export const teamUnitsApi = {
   delete: (id) => api.delete(`/teamunits/${id}`)
 }
 
+// FAQ API
+export const faqApi = {
+  // Public - Get all active FAQ with entries
+  getAll: () => api.get('/faq'),
+
+  // Admin - Get all categories including inactive
+  getAllCategories: () => api.get('/faq/categories/all'),
+
+  // Admin - Create category
+  createCategory: (data) => api.post('/faq/categories', data),
+
+  // Admin - Update category
+  updateCategory: (id, data) => api.put(`/faq/categories/${id}`, data),
+
+  // Admin - Delete category (soft delete)
+  deleteCategory: (id) => api.delete(`/faq/categories/${id}`),
+
+  // Admin - Get all entries including inactive
+  getAllEntries: () => api.get('/faq/entries/all'),
+
+  // Admin - Create entry
+  createEntry: (data) => api.post('/faq/entries', data),
+
+  // Admin - Update entry
+  updateEntry: (id, data) => api.put(`/faq/entries/${id}`, data),
+
+  // Admin - Delete entry (soft delete)
+  deleteEntry: (id) => api.delete(`/faq/entries/${id}`)
+}
+
 // Skill Levels API (for event divisions)
 export const skillLevelsApi = {
   // Get all active skill levels

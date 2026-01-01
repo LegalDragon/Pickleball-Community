@@ -14,6 +14,8 @@ import CourtTypesAdmin from './pages/CourtTypesAdmin'
 import ClubMemberRolesAdmin from './pages/ClubMemberRolesAdmin'
 import TeamUnitsAdmin from './pages/TeamUnitsAdmin'
 import SkillLevelsAdmin from './pages/SkillLevelsAdmin'
+import Faq from './pages/Faq'
+import FaqAdmin from './pages/FaqAdmin'
 import Events from './pages/Events'
 import Courts from './pages/Courts'
 import Clubs from './pages/Clubs'
@@ -49,6 +51,7 @@ function App() {
       <Route path="/courts" element={<Courts />} />
       <Route path="/clubs" element={<Clubs />} />
       <Route path="/blog" element={<Blog />} />
+      <Route path="/faq" element={<Faq />} />
 
       {/* My Blog - For writers to manage their posts */}
       <Route path="/my-blog" element={
@@ -141,6 +144,12 @@ function App() {
       <Route path="/admin/blog" element={
         <ProtectedRoute role="Admin">
           <BlogAdmin />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/admin/faq" element={
+        <ProtectedRoute role="Admin">
+          <FaqAdmin />
         </ProtectedRoute>
       } />
 

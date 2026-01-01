@@ -78,6 +78,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<Message> Messages { get; set; }
     public DbSet<MessageReadReceipt> MessageReadReceipts { get; set; }
 
+    // FAQ
+    public DbSet<FaqCategory> FaqCategories { get; set; }
+    public DbSet<FaqEntry> FaqEntries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
@@ -666,6 +670,27 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(r => r.User)
                   .WithMany()
                   .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // FAQ Category configuration
+        modelBuilder.Entity<FaqCategory>(entity =>
+        {
+            entity.Property(c => c.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(c => c.SortOrder);
+        });
+
+        // FAQ Entry configuration
+        modelBuilder.Entity<FaqEntry>(entity =>
+        {
+            entity.Property(e => e.Question).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Answer).IsRequired();
+            entity.HasIndex(e => e.CategoryId);
+            entity.HasIndex(e => e.SortOrder);
+
+            entity.HasOne(e => e.Category)
+                  .WithMany(c => c.Entries)
+                  .HasForeignKey(e => e.CategoryId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }
