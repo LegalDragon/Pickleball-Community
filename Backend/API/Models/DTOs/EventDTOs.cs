@@ -102,6 +102,7 @@ public class EventRegistrationDto
     public int Id { get; set; }
     public int EventId { get; set; }
     public int DivisionId { get; set; }
+    public string? DivisionName { get; set; }
     public int UserId { get; set; }
     public string UserName { get; set; } = string.Empty;
     public string? UserProfileImageUrl { get; set; }
@@ -113,6 +114,17 @@ public class EventRegistrationDto
     public string Status { get; set; } = "Registered";
     public DateTime RegisteredAt { get; set; }
     public DateTime? CheckedInAt { get; set; }
+}
+
+// Update registration request (for organizers)
+public class UpdateRegistrationDto
+{
+    public string? PaymentStatus { get; set; }
+    public decimal? AmountPaid { get; set; }
+    public int? TeamId { get; set; }
+    public string? TeamName { get; set; }
+    public string? Status { get; set; }
+    public bool? CheckedIn { get; set; }
 }
 
 // Partner request

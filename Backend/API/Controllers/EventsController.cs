@@ -1047,6 +1047,129 @@ public class EventsController : ControllerBase
         }
     }
 
+    // GET: /events/{id}/registrations - Get all registrations for an event (organizer only)
+    [HttpGet("{id}/registrations")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<EventRegistrationDto>>>> GetAllEventRegistrations(int id)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "User not authenticated" });
+
+            var evt = await _context.Events.FindAsync(id);
+            if (evt == null || !evt.IsActive)
+                return NotFound(new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value)
+                return Forbid();
+
+            var registrations = await _context.EventRegistrations
+                .Include(r => r.User)
+                .Include(r => r.Division)
+                .Where(r => r.EventId == id && r.Status != "Cancelled")
+                .OrderBy(r => r.Division!.Name)
+                .ThenBy(r => r.RegisteredAt)
+                .Select(r => new EventRegistrationDto
+                {
+                    Id = r.Id,
+                    EventId = r.EventId,
+                    DivisionId = r.DivisionId,
+                    DivisionName = r.Division != null ? r.Division.Name : "",
+                    UserId = r.UserId,
+                    UserName = r.User != null ? (r.User.FirstName + " " + r.User.LastName).Trim() : "",
+                    UserProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
+                    UserExperienceLevel = r.User != null ? r.User.ExperienceLevel : null,
+                    TeamId = r.TeamId,
+                    TeamName = r.TeamName,
+                    PaymentStatus = r.PaymentStatus,
+                    AmountPaid = r.AmountPaid,
+                    Status = r.Status,
+                    RegisteredAt = r.RegisteredAt,
+                    CheckedInAt = r.CheckedInAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<EventRegistrationDto>> { Success = true, Data = registrations });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching event registrations");
+            return StatusCode(500, new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /events/{id}/registrations/{registrationId} - Update a registration (organizer only)
+    [HttpPut("{id}/registrations/{registrationId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventRegistrationDto>>> UpdateRegistration(int id, int registrationId, [FromBody] UpdateRegistrationDto dto)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<EventRegistrationDto> { Success = false, Message = "User not authenticated" });
+
+            var evt = await _context.Events.FindAsync(id);
+            if (evt == null || !evt.IsActive)
+                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value)
+                return Forbid();
+
+            var registration = await _context.EventRegistrations
+                .Include(r => r.User)
+                .FirstOrDefaultAsync(r => r.Id == registrationId && r.EventId == id);
+
+            if (registration == null)
+                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Registration not found" });
+
+            // Update fields
+            if (dto.PaymentStatus != null)
+                registration.PaymentStatus = dto.PaymentStatus;
+            if (dto.AmountPaid.HasValue)
+                registration.AmountPaid = dto.AmountPaid.Value;
+            if (dto.TeamId.HasValue)
+                registration.TeamId = dto.TeamId.Value;
+            if (dto.TeamName != null)
+                registration.TeamName = dto.TeamName;
+            if (dto.Status != null)
+                registration.Status = dto.Status;
+            if (dto.CheckedIn.HasValue && dto.CheckedIn.Value)
+                registration.CheckedInAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<EventRegistrationDto>
+            {
+                Success = true,
+                Data = new EventRegistrationDto
+                {
+                    Id = registration.Id,
+                    EventId = registration.EventId,
+                    DivisionId = registration.DivisionId,
+                    UserId = registration.UserId,
+                    UserName = registration.User != null ? $"{registration.User.FirstName} {registration.User.LastName}".Trim() : "",
+                    UserProfileImageUrl = registration.User?.ProfileImageUrl,
+                    TeamId = registration.TeamId,
+                    TeamName = registration.TeamName,
+                    PaymentStatus = registration.PaymentStatus,
+                    AmountPaid = registration.AmountPaid,
+                    Status = registration.Status,
+                    RegisteredAt = registration.RegisteredAt,
+                    CheckedInAt = registration.CheckedInAt
+                },
+                Message = "Registration updated"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating registration");
+            return StatusCode(500, new ApiResponse<EventRegistrationDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // Helper methods
     private EventDto MapToEventDto(Event evt, double? distance)
     {

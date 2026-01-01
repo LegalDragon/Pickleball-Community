@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2 } from 'lucide-react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, eventTypesApi, courtsApi, getSharedAssetUrl } from '../services/api';
 
@@ -570,8 +570,107 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
 
+  // Registration management state
+  const [allRegistrations, setAllRegistrations] = useState([]);
+  const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [showRegistrations, setShowRegistrations] = useState(false);
+  const [updatingRegistration, setUpdatingRegistration] = useState(null);
+
+  // Court selection for editing
+  const [topCourts, setTopCourts] = useState([]);
+  const [courtsLoading, setCourtsLoading] = useState(false);
+  const [courtSearchQuery, setCourtSearchQuery] = useState('');
+  const [searchedCourts, setSearchedCourts] = useState([]);
+  const [searchingCourts, setSearchingCourts] = useState(false);
+  const [selectedCourt, setSelectedCourt] = useState(null);
+  const [editStep, setEditStep] = useState(1); // 1: court, 2: details
+
   const isOrganizer = event.isOrganizer;
   const isRegistered = event.isRegistered;
+
+  // Load all registrations when organizer opens manage tab
+  const loadAllRegistrations = async () => {
+    if (!isOrganizer) return;
+    setRegistrationsLoading(true);
+    try {
+      const response = await eventsApi.getAllRegistrations(event.id);
+      if (response.success) {
+        setAllRegistrations(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading registrations:', err);
+    } finally {
+      setRegistrationsLoading(false);
+    }
+  };
+
+  // Load registrations when switching to manage tab
+  useEffect(() => {
+    if (activeTab === 'manage' && isOrganizer && allRegistrations.length === 0) {
+      loadAllRegistrations();
+    }
+  }, [activeTab, isOrganizer]);
+
+  // Load courts for editing
+  const loadTopCourts = async () => {
+    setCourtsLoading(true);
+    try {
+      const response = await courtsApi.getTopForEvents(null, null, 10);
+      if (response.success) {
+        setTopCourts(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading courts:', err);
+    } finally {
+      setCourtsLoading(false);
+    }
+  };
+
+  // Search courts when query changes
+  useEffect(() => {
+    if (!courtSearchQuery.trim() || !isEditing) {
+      setSearchedCourts([]);
+      return;
+    }
+
+    const searchCourts = async () => {
+      setSearchingCourts(true);
+      try {
+        const response = await courtsApi.search({ query: courtSearchQuery, pageSize: 10 });
+        if (response.success) {
+          setSearchedCourts(response.data?.items || []);
+        }
+      } catch (err) {
+        console.error('Error searching courts:', err);
+      } finally {
+        setSearchingCourts(false);
+      }
+    };
+
+    const timer = setTimeout(searchCourts, 300);
+    return () => clearTimeout(timer);
+  }, [courtSearchQuery, isEditing]);
+
+  // Handle court selection in edit mode
+  const handleSelectCourt = (court) => {
+    const courtData = {
+      courtId: court.courtId || court.id,
+      courtName: court.courtName || court.name,
+      city: court.city,
+      state: court.state,
+      country: court.country,
+      address: court.address
+    };
+    setSelectedCourt(courtData);
+    setEditFormData(prev => ({
+      ...prev,
+      courtId: courtData.courtId,
+      venueName: courtData.courtName || '',
+      city: courtData.city || '',
+      state: courtData.state || '',
+      country: courtData.country || 'USA'
+    }));
+  };
 
   // Initialize edit form data when entering edit mode
   const startEditing = () => {
@@ -583,6 +682,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       startTime: event.startDate ? new Date(event.startDate).toTimeString().slice(0, 5) : '09:00',
       endDate: event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : '',
       endTime: event.endDate ? new Date(event.endDate).toTimeString().slice(0, 5) : '17:00',
+      courtId: event.courtId,
       venueName: event.venueName || '',
       address: event.address || '',
       city: event.city || '',
@@ -596,14 +696,19 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       isPublished: event.isPublished,
       isPrivate: event.isPrivate
     });
+    setSelectedCourt(event.courtId ? { courtId: event.courtId, courtName: event.courtName || event.venueName } : null);
     setIsEditing(true);
+    setEditStep(1);
     setEditError(null);
+    loadTopCourts();
   };
 
   const cancelEditing = () => {
     setIsEditing(false);
     setEditFormData(null);
     setEditError(null);
+    setEditStep(1);
+    setSelectedCourt(null);
   };
 
   const saveEdit = async () => {
@@ -634,6 +739,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       if (response.success) {
         setIsEditing(false);
         setEditFormData(null);
+        setEditStep(1);
         onUpdate();
       } else {
         setEditError(response.message || 'Failed to update event');
@@ -642,6 +748,43 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       setEditError(err.message || 'An error occurred while updating');
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  // Mark registration as paid
+  const markAsPaid = async (registration) => {
+    setUpdatingRegistration(registration.id);
+    try {
+      const response = await eventsApi.updateRegistration(event.id, registration.id, {
+        paymentStatus: 'Paid',
+        amountPaid: (event.registrationFee || 0) + (event.perDivisionFee || 0)
+      });
+      if (response.success) {
+        setAllRegistrations(prev =>
+          prev.map(r => r.id === registration.id ? { ...r, paymentStatus: 'Paid' } : r)
+        );
+      }
+    } catch (err) {
+      console.error('Error updating registration:', err);
+    } finally {
+      setUpdatingRegistration(null);
+    }
+  };
+
+  // Assign team name to registration
+  const assignTeam = async (registration, teamName) => {
+    setUpdatingRegistration(registration.id);
+    try {
+      const response = await eventsApi.updateRegistration(event.id, registration.id, { teamName });
+      if (response.success) {
+        setAllRegistrations(prev =>
+          prev.map(r => r.id === registration.id ? { ...r, teamName } : r)
+        );
+      }
+    } catch (err) {
+      console.error('Error updating registration:', err);
+    } finally {
+      setUpdatingRegistration(null);
     }
   };
 
@@ -939,14 +1082,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
           {activeTab === 'manage' && isOrganizer && (
             <div className="space-y-6">
               {isEditing ? (
-                // Edit Form
+                // Edit Form with Steps
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-gray-900">Edit Event</h3>
-                    <button
-                      onClick={cancelEditing}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
+                    <h3 className="font-medium text-gray-900">
+                      Edit Event - Step {editStep}: {editStep === 1 ? 'Select Venue/Court' : 'Event Details'}
+                    </h3>
+                    <button onClick={cancelEditing} className="text-gray-500 hover:text-gray-700">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -957,190 +1099,157 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-                    <input
-                      type="text"
-                      value={editFormData?.name || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                      className="w-full border border-gray-300 rounded-lg p-2"
-                    />
-                  </div>
+                  {editStep === 1 ? (
+                    // Step 1: Court Selection
+                    <div className="space-y-4">
+                      {selectedCourt && (
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <span className="font-medium text-green-800">{selectedCourt.courtName}</span>
+                            {selectedCourt.city && <span className="text-green-600">- {selectedCourt.city}, {selectedCourt.state}</span>}
+                          </div>
+                          <button onClick={() => setSelectedCourt(null)} className="text-green-600 hover:text-green-800 text-sm">
+                            Change
+                          </button>
+                        </div>
+                      )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea
-                      value={editFormData?.description || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-lg p-2"
-                    />
-                  </div>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <input
+                          type="text"
+                          placeholder="Search courts..."
+                          value={courtSearchQuery}
+                          onChange={(e) => setCourtSearchQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
+                        />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                      <input
-                        type="date"
-                        value={editFormData?.startDate || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                      <input
-                        type="time"
-                        value={editFormData?.startTime || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, startTime: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                  </div>
+                      {courtsLoading || searchingCourts ? (
+                        <div className="flex justify-center py-4">
+                          <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {(courtSearchQuery ? searchedCourts : topCourts).map(court => (
+                            <button
+                              key={court.courtId || court.id}
+                              onClick={() => handleSelectCourt(court)}
+                              className={`w-full p-3 text-left border rounded-lg hover:bg-gray-50 transition-colors ${
+                                selectedCourt?.courtId === (court.courtId || court.id) ? 'border-orange-500 bg-orange-50' : 'border-gray-200'
+                              }`}
+                            >
+                              <div className="font-medium text-gray-900">{court.courtName || court.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {court.city}{court.state && `, ${court.state}`}
+                                {court.distanceMiles && <span className="ml-2">({court.distanceMiles.toFixed(1)} mi)</span>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                      <input
-                        type="date"
-                        value={editFormData?.endDate || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
+                      <div className="flex gap-3 pt-4 border-t">
+                        <button type="button" onClick={cancelEditing} className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">
+                          Cancel
+                        </button>
+                        <button type="button" onClick={() => setEditStep(2)} className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700">
+                          Next: Event Details
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                      <input
-                        type="time"
-                        value={editFormData?.endTime || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, endTime: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                  </div>
+                  ) : (
+                    // Step 2: Event Details
+                    <div className="space-y-4">
+                      {selectedCourt && (
+                        <div className="p-2 bg-gray-50 rounded-lg text-sm">
+                          <span className="font-medium">Venue:</span> {selectedCourt.courtName}
+                          {selectedCourt.city && ` - ${selectedCourt.city}, ${selectedCourt.state}`}
+                        </div>
+                      )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Venue Name</label>
-                    <input
-                      type="text"
-                      value={editFormData?.venueName || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, venueName: e.target.value })}
-                      className="w-full border border-gray-300 rounded-lg p-2"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+                        <input type="text" value={editFormData?.name || ''} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                      <input
-                        type="text"
-                        value={editFormData?.city || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                      <input
-                        type="text"
-                        value={editFormData?.state || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea value={editFormData?.description || ''} onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })} rows={3} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Registration Fee ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editFormData?.registrationFee || 0}
-                        onChange={(e) => setEditFormData({ ...editFormData, registrationFee: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Per Division Fee ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editFormData?.perDivisionFee || 0}
-                        onChange={(e) => setEditFormData({ ...editFormData, perDivisionFee: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                          <input type="date" value={editFormData?.startDate || ''} onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                          <input type="time" value={editFormData?.startTime || ''} onChange={(e) => setEditFormData({ ...editFormData, startTime: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
-                      <input
-                        type="email"
-                        value={editFormData?.contactEmail || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, contactEmail: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
-                      <input
-                        type="tel"
-                        value={editFormData?.contactPhone || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, contactPhone: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                      />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                          <input type="date" value={editFormData?.endDate || ''} onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                          <input type="time" value={editFormData?.endTime || ''} onChange={(e) => setEditFormData({ ...editFormData, endTime: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                      </div>
 
-                  <div className="flex gap-3 pt-4 border-t">
-                    <button
-                      type="button"
-                      onClick={cancelEditing}
-                      className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={saveEdit}
-                      disabled={savingEdit}
-                      className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50"
-                    >
-                      {savingEdit ? 'Saving...' : 'Save Changes'}
-                    </button>
-                  </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Registration Fee ($)</label>
+                          <input type="number" min="0" step="0.01" value={editFormData?.registrationFee || 0} onChange={(e) => setEditFormData({ ...editFormData, registrationFee: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Per Division Fee ($)</label>
+                          <input type="number" min="0" step="0.01" value={editFormData?.perDivisionFee || 0} onChange={(e) => setEditFormData({ ...editFormData, perDivisionFee: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                          <input type="email" value={editFormData?.contactEmail || ''} onChange={(e) => setEditFormData({ ...editFormData, contactEmail: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                          <input type="tel" value={editFormData?.contactPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, contactPhone: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-4 border-t">
+                        <button type="button" onClick={() => setEditStep(1)} className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">
+                          Back
+                        </button>
+                        <button type="button" onClick={saveEdit} disabled={savingEdit} className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50">
+                          {savingEdit ? 'Saving...' : 'Save Changes'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 // Normal Manage View
                 <>
                   <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
                     <h3 className="font-medium text-orange-800 mb-2">Event Status</h3>
-                    <div className="flex items-center gap-4">
-                      <span className={`px-3 py-1 rounded-full text-sm ${
-                        event.isPublished ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className={`px-3 py-1 rounded-full text-sm ${event.isPublished ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                         {event.isPublished ? 'Published' : 'Draft'}
                       </span>
                       {!event.isPublished && (
-                        <button
-                          onClick={async () => {
-                            await eventsApi.publish(event.id);
-                            onUpdate();
-                          }}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-                        >
+                        <button onClick={async () => { await eventsApi.publish(event.id); onUpdate(); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
                           Publish Event
                         </button>
                       )}
-                      <button
-                        onClick={startEditing}
-                        className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
-                      >
-                        Edit Event
+                      <button onClick={startEditing} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 flex items-center gap-2">
+                        <Edit3 className="w-4 h-4" /> Edit Event
                       </button>
                     </div>
                   </div>
@@ -1163,6 +1272,90 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                         <div className="text-sm text-gray-500">Est. Revenue</div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Registrations Management */}
+                  <div>
+                    <button
+                      onClick={() => setShowRegistrations(!showRegistrations)}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5 text-gray-600" />
+                        <span className="font-medium text-gray-900">Manage Registrations ({allRegistrations.length})</span>
+                      </div>
+                      {showRegistrations ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+                    </button>
+
+                    {showRegistrations && (
+                      <div className="mt-3 border rounded-lg overflow-hidden">
+                        {registrationsLoading ? (
+                          <div className="flex justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+                          </div>
+                        ) : allRegistrations.length === 0 ? (
+                          <div className="p-8 text-center text-gray-500">No registrations yet</div>
+                        ) : (
+                          <div className="divide-y">
+                            {allRegistrations.map(reg => (
+                              <div key={reg.id} className="p-4 flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                                  {reg.userProfileImageUrl ? (
+                                    <img src={getSharedAssetUrl(reg.userProfileImageUrl)} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm font-medium">
+                                      {reg.userName?.charAt(0) || '?'}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-gray-900 truncate">{reg.userName}</div>
+                                  <div className="text-sm text-gray-500">
+                                    {reg.divisionName || 'Division'} • {new Date(reg.registeredAt).toLocaleDateString()}
+                                  </div>
+                                  {reg.teamName && (
+                                    <div className="text-sm text-blue-600">Team: {reg.teamName}</div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className={`px-2 py-1 text-xs rounded-full ${reg.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                    {reg.paymentStatus}
+                                  </span>
+                                  {reg.paymentStatus !== 'Paid' && (
+                                    <button
+                                      onClick={() => markAsPaid(reg)}
+                                      disabled={updatingRegistration === reg.id}
+                                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                      title="Mark as Paid"
+                                    >
+                                      <DollarSign className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      const teamName = prompt('Enter team/unit name:', reg.teamName || '');
+                                      if (teamName !== null) assignTeam(reg, teamName);
+                                    }}
+                                    disabled={updatingRegistration === reg.id}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Assign to Team/Unit"
+                                  >
+                                    <UserPlus className="w-4 h-4" />
+                                  </button>
+                                  <Link
+                                    to={`/messages?userId=${reg.userId}`}
+                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                    title="Send Message"
+                                  >
+                                    <MessageCircle className="w-4 h-4" />
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

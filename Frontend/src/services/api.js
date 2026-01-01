@@ -789,7 +789,14 @@ export const eventsApi = {
     api.post(`/events/${eventId}/divisions`, data),
 
   removeDivision: (eventId, divisionId) =>
-    api.delete(`/events/${eventId}/divisions/${divisionId}`)
+    api.delete(`/events/${eventId}/divisions/${divisionId}`),
+
+  // Registration management (organizer only)
+  getAllRegistrations: (eventId) =>
+    api.get(`/events/${eventId}/registrations`),
+
+  updateRegistration: (eventId, registrationId, data) =>
+    api.put(`/events/${eventId}/registrations/${registrationId}`, data)
 }
 
 // Clubs API
