@@ -6,7 +6,7 @@ import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
-  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
@@ -369,6 +369,7 @@ const AdminDashboard = () => {
     { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' },
     { id: 'blog', label: 'Blog', icon: BookOpen, link: '/admin/blog' },
     { id: 'faq', label: 'FAQ', icon: HelpCircle, link: '/admin/faq' },
+    { id: 'feedback', label: 'Feedback', icon: MessageSquare, link: '/admin/feedback' },
     { id: 'eventTypes', label: 'Event Types', icon: Tags, link: '/admin/event-types' },
     { id: 'courtTypes', label: 'Court Types', icon: Building2, link: '/admin/court-types' },
     { id: 'clubRoles', label: 'Club Roles', icon: UserCog, link: '/admin/club-member-roles' },

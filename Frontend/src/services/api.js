@@ -1059,6 +1059,39 @@ export const faqApi = {
   deleteEntry: (id) => api.delete(`/faq/entries/${id}`)
 }
 
+// Feedback API
+export const feedbackApi = {
+  // Public - Get active categories for submission form
+  getCategories: () => api.get('/feedback/categories'),
+
+  // Public - Submit feedback
+  submit: (data) => api.post('/feedback', data),
+
+  // Admin - Get all categories including inactive
+  getAllCategories: () => api.get('/feedback/categories/all'),
+
+  // Admin - Create category
+  createCategory: (data) => api.post('/feedback/categories', data),
+
+  // Admin - Update category
+  updateCategory: (id, data) => api.put(`/feedback/categories/${id}`, data),
+
+  // Admin - Delete category
+  deleteCategory: (id) => api.delete(`/feedback/categories/${id}`),
+
+  // Admin - Get all entries with filtering
+  getEntries: (params) => api.get('/feedback/entries', { params }),
+
+  // Admin - Get statistics
+  getStats: () => api.get('/feedback/stats'),
+
+  // Admin - Update entry status/notes
+  updateEntry: (id, data) => api.put(`/feedback/entries/${id}`, data),
+
+  // Admin - Delete entry
+  deleteEntry: (id) => api.delete(`/feedback/entries/${id}`)
+}
+
 // Skill Levels API (for event divisions)
 export const skillLevelsApi = {
   // Get all active skill levels

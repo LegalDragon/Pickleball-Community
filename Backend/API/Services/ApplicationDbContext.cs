@@ -82,6 +82,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<FaqCategory> FaqCategories { get; set; }
     public DbSet<FaqEntry> FaqEntries { get; set; }
 
+    // Feedback
+    public DbSet<FeedbackCategory> FeedbackCategories { get; set; }
+    public DbSet<FeedbackEntry> FeedbackEntries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
@@ -692,6 +696,34 @@ public class ApplicationDbContext : DbContext
                   .WithMany(c => c.Entries)
                   .HasForeignKey(e => e.CategoryId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Feedback Category configuration
+        modelBuilder.Entity<FeedbackCategory>(entity =>
+        {
+            entity.Property(c => c.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(c => c.SortOrder);
+        });
+
+        // Feedback Entry configuration
+        modelBuilder.Entity<FeedbackEntry>(entity =>
+        {
+            entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Message).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.HasIndex(e => e.CategoryId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
+
+            entity.HasOne(e => e.Category)
+                  .WithMany(c => c.Entries)
+                  .HasForeignKey(e => e.CategoryId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
