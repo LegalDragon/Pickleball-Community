@@ -346,10 +346,15 @@ public class EventsController : ControllerBase
                 Name = dto.Name,
                 Description = dto.Description,
                 EventTypeId = dto.EventTypeId,
-                StartDate = dto.StartDate,
-                EndDate = dto.EndDate,
-                RegistrationOpenDate = dto.RegistrationOpenDate,
-                RegistrationCloseDate = dto.RegistrationCloseDate,
+                // Store dates without timezone conversion
+                StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Unspecified),
+                EndDate = DateTime.SpecifyKind(dto.EndDate, DateTimeKind.Unspecified),
+                RegistrationOpenDate = dto.RegistrationOpenDate.HasValue
+                    ? DateTime.SpecifyKind(dto.RegistrationOpenDate.Value, DateTimeKind.Unspecified)
+                    : null,
+                RegistrationCloseDate = dto.RegistrationCloseDate.HasValue
+                    ? DateTime.SpecifyKind(dto.RegistrationCloseDate.Value, DateTimeKind.Unspecified)
+                    : null,
                 IsPrivate = dto.IsPrivate,
                 CourtId = dto.CourtId,
                 VenueName = dto.VenueName,
@@ -453,10 +458,15 @@ public class EventsController : ControllerBase
             evt.Name = dto.Name;
             evt.Description = dto.Description;
             evt.EventTypeId = dto.EventTypeId;
-            evt.StartDate = dto.StartDate;
-            evt.EndDate = dto.EndDate;
-            evt.RegistrationOpenDate = dto.RegistrationOpenDate;
-            evt.RegistrationCloseDate = dto.RegistrationCloseDate;
+            // Store dates without timezone conversion
+            evt.StartDate = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Unspecified);
+            evt.EndDate = DateTime.SpecifyKind(dto.EndDate, DateTimeKind.Unspecified);
+            evt.RegistrationOpenDate = dto.RegistrationOpenDate.HasValue
+                ? DateTime.SpecifyKind(dto.RegistrationOpenDate.Value, DateTimeKind.Unspecified)
+                : null;
+            evt.RegistrationCloseDate = dto.RegistrationCloseDate.HasValue
+                ? DateTime.SpecifyKind(dto.RegistrationCloseDate.Value, DateTimeKind.Unspecified)
+                : null;
             evt.IsPublished = dto.IsPublished;
             evt.IsPrivate = dto.IsPrivate;
             evt.CourtId = dto.CourtId;
@@ -475,6 +485,70 @@ public class EventsController : ControllerBase
             evt.ContactPhone = dto.ContactPhone;
             evt.MaxParticipants = dto.MaxParticipants;
             evt.UpdatedAt = DateTime.UtcNow;
+
+            // Handle divisions update
+            if (dto.Divisions != null)
+            {
+                // Get existing division IDs from the DTO (divisions with IDs that should be kept)
+                var incomingDivisionIds = dto.Divisions
+                    .Where(d => d.Id.HasValue)
+                    .Select(d => d.Id!.Value)
+                    .ToList();
+
+                // Remove divisions that are no longer in the list
+                var divisionsToRemove = evt.Divisions
+                    .Where(d => !incomingDivisionIds.Contains(d.Id))
+                    .ToList();
+
+                foreach (var div in divisionsToRemove)
+                {
+                    _context.EventDivisions.Remove(div);
+                }
+
+                // Update existing and add new divisions
+                foreach (var divDto in dto.Divisions)
+                {
+                    if (divDto.Id.HasValue)
+                    {
+                        // Update existing division
+                        var existingDiv = evt.Divisions.FirstOrDefault(d => d.Id == divDto.Id.Value);
+                        if (existingDiv != null)
+                        {
+                            existingDiv.Name = divDto.Name;
+                            existingDiv.Description = divDto.Description;
+                            existingDiv.TeamSize = divDto.TeamSize;
+                            existingDiv.MaxTeams = divDto.MaxTeams;
+                            existingDiv.DivisionFee = divDto.DivisionFee;
+                            existingDiv.TeamUnitId = divDto.TeamUnitId;
+                            existingDiv.AgeGroupId = divDto.AgeGroupId;
+                            existingDiv.MinSkillRating = divDto.MinSkillRating;
+                            existingDiv.MaxSkillRating = divDto.MaxSkillRating;
+                            existingDiv.MaxUnits = divDto.MaxUnits;
+                        }
+                    }
+                    else
+                    {
+                        // Add new division
+                        var newDivision = new EventDivision
+                        {
+                            EventId = evt.Id,
+                            Name = divDto.Name,
+                            Description = divDto.Description,
+                            TeamSize = divDto.TeamSize,
+                            MaxTeams = divDto.MaxTeams,
+                            DivisionFee = divDto.DivisionFee,
+                            TeamUnitId = divDto.TeamUnitId,
+                            AgeGroupId = divDto.AgeGroupId,
+                            MinSkillRating = divDto.MinSkillRating,
+                            MaxSkillRating = divDto.MaxSkillRating,
+                            MaxUnits = divDto.MaxUnits,
+                            SortOrder = divDto.SortOrder,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        evt.Divisions.Add(newDivision);
+                    }
+                }
+            }
 
             await _context.SaveChangesAsync();
 

@@ -208,6 +208,13 @@ public class CreateEventDivisionDto
 public class UpdateEventDto : CreateEventDto
 {
     public bool IsPublished { get; set; }
+    public new List<UpdateEventDivisionDto> Divisions { get; set; } = new();
+}
+
+// Update division (includes ID for existing divisions)
+public class UpdateEventDivisionDto : CreateEventDivisionDto
+{
+    public int? Id { get; set; }
 }
 
 // Event search request

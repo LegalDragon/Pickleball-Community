@@ -768,14 +768,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
         ? `${editFormData.endDate}T${editFormData.endTime}:00`
         : `${editFormData.startDate}T${editFormData.endTime}:00`;
 
-      // Prepare divisions for update
+      // Prepare divisions for update - use null for new divisions, number for existing
       const divisionsToSave = editDivisions.map(d => ({
-        id: d.isNew ? null : d.id,
+        id: d.isNew ? null : (typeof d.id === 'number' ? d.id : parseInt(d.id) || null),
         name: d.name,
         description: d.description || '',
         teamSize: d.teamSize || 2,
         maxTeams: d.maxTeams || null,
-        entryFee: d.entryFee || 0
+        divisionFee: d.divisionFee || d.entryFee || 0
       }));
 
       const response = await eventsApi.update(event.id, {
