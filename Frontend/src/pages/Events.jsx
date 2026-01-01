@@ -466,7 +466,10 @@ export default function Events() {
           formatDate={formatDate}
           formatTime={formatTime}
           onClose={() => setSelectedEvent(null)}
-          onUpdate={() => {
+          onUpdate={(updatedEvent) => {
+            if (updatedEvent) {
+              setSelectedEvent(updatedEvent);
+            }
             loadMyEvents();
             loadEvents();
           }}
@@ -792,7 +795,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
         setIsEditing(false);
         setEditFormData(null);
         setEditDivisions([]);
-        onUpdate();
+        // Pass the updated event data back to parent
+        onUpdate(response.data);
       } else {
         setEditError(response.message || 'Failed to update event');
       }
