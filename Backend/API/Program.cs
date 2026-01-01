@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Pickleball.Community.Database;
 using Pickleball.Community.Services;
 using Pickleball.Community.Models.Entities;
@@ -11,7 +13,13 @@ using Pickleball.Community.Hubs;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Don't convert DateTime to UTC - treat as local/unspecified time
+        options.JsonSerializerOptions.Converters.Add(new DateTimeConverterUsingDateTimeParse());
+        options.JsonSerializerOptions.Converters.Add(new NullableDateTimeConverterUsingDateTimeParse());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
@@ -200,3 +208,61 @@ using (var scope = app.Services.CreateScope())
 Utility.Initialize(app.Configuration);
 
 app.Run();
+
+/// <summary>
+/// Custom DateTime converter that preserves the date/time value without timezone conversion.
+/// Serializes DateTime without 'Z' suffix and deserializes without assuming UTC.
+/// </summary>
+public class DateTimeConverterUsingDateTimeParse : JsonConverter<DateTime>
+{
+    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var dateString = reader.GetString();
+        if (string.IsNullOrEmpty(dateString))
+            return default;
+
+        // Parse without assuming any timezone - treat as local/unspecified
+        if (DateTime.TryParse(dateString, out var result))
+        {
+            return DateTime.SpecifyKind(result, DateTimeKind.Unspecified);
+        }
+        return default;
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+    {
+        // Write without 'Z' suffix - just the date and time
+        writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss"));
+    }
+}
+
+/// <summary>
+/// Custom nullable DateTime converter
+/// </summary>
+public class NullableDateTimeConverterUsingDateTimeParse : JsonConverter<DateTime?>
+{
+    public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var dateString = reader.GetString();
+        if (string.IsNullOrEmpty(dateString))
+            return null;
+
+        if (DateTime.TryParse(dateString, out var result))
+        {
+            return DateTime.SpecifyKind(result, DateTimeKind.Unspecified);
+        }
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+        {
+            writer.WriteStringValue(value.Value.ToString("yyyy-MM-ddTHH:mm:ss"));
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
+}
