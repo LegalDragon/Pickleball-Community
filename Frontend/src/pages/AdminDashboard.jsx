@@ -951,7 +951,7 @@ const AdminDashboard = () => {
                           {themeSettings.heroImageUrl ? (
                             <div className="space-y-3">
                               <img
-                                src={getAssetUrl(themeSettings.heroImageUrl)}
+                                src={getSharedAssetUrl(themeSettings.heroImageUrl)}
                                 alt="Hero background"
                                 className="w-full h-32 object-cover rounded-lg"
                               />
