@@ -567,7 +567,7 @@ const AdminDashboard = () => {
                                 <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                                   {u.profileImageUrl ? (
                                     <img
-                                      src={getAssetUrl(u.profileImageUrl)}
+                                      src={getSharedAssetUrl(u.profileImageUrl)}
                                       alt={`${u.firstName} ${u.lastName}`}
                                       className="w-full h-full object-cover"
                                     />
@@ -1519,7 +1519,7 @@ const AdminDashboard = () => {
                   <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
                     {selectedUser.profileImageUrl ? (
                       <img
-                        src={getAssetUrl(selectedUser.profileImageUrl)}
+                        src={getSharedAssetUrl(selectedUser.profileImageUrl)}
                         alt={`${selectedUser.firstName} ${selectedUser.lastName}`}
                         className="w-full h-full object-cover"
                       />
