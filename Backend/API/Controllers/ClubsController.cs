@@ -82,8 +82,28 @@ public class ClubsController : ControllerBase
                     .Select(x =>
                     {
                         double? distance = null;
-                        if (x.Club.Latitude.HasValue && x.Club.Longitude.HasValue)
-                            distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, x.Club.Latitude.Value, x.Club.Longitude.Value);
+                        // Try home venue GPS first, then fall back to club's own coordinates
+                        double? clubLat = null;
+                        double? clubLng = null;
+
+                        if (x.Club.HomeVenue != null && !string.IsNullOrEmpty(x.Club.HomeVenue.GpsLat) && !string.IsNullOrEmpty(x.Club.HomeVenue.GpsLng))
+                        {
+                            if (double.TryParse(x.Club.HomeVenue.GpsLat, out var venueLat) && double.TryParse(x.Club.HomeVenue.GpsLng, out var venueLng))
+                            {
+                                clubLat = venueLat;
+                                clubLng = venueLng;
+                            }
+                        }
+
+                        // Fall back to club's own coordinates if home venue doesn't have GPS
+                        if (!clubLat.HasValue || !clubLng.HasValue)
+                        {
+                            clubLat = x.Club.Latitude;
+                            clubLng = x.Club.Longitude;
+                        }
+
+                        if (clubLat.HasValue && clubLng.HasValue)
+                            distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, clubLat.Value, clubLng.Value);
                         return (club: x.Club, memberCount: x.MemberCount, distance);
                     })
                     .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)

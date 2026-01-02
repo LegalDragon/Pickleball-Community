@@ -39,6 +39,7 @@ public class EventsController : ControllerBase
                 .Include(e => e.OrganizedByClub)
                 .Include(e => e.Divisions)
                 .Include(e => e.Registrations)
+                .Include(e => e.Venue) // Include venue for GPS-based distance calculation
                 .Where(e => e.IsActive && e.IsPublished)
                 .AsQueryable();
 
@@ -101,8 +102,28 @@ public class EventsController : ControllerBase
                     .Select(e =>
                     {
                         double? distance = null;
-                        if (e.Latitude.HasValue && e.Longitude.HasValue)
-                            distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, e.Latitude.Value, e.Longitude.Value);
+                        // Try venue GPS first, then fall back to event's own coordinates
+                        double? eventLat = null;
+                        double? eventLng = null;
+
+                        if (e.Venue != null && !string.IsNullOrEmpty(e.Venue.GpsLat) && !string.IsNullOrEmpty(e.Venue.GpsLng))
+                        {
+                            if (double.TryParse(e.Venue.GpsLat, out var venueLat) && double.TryParse(e.Venue.GpsLng, out var venueLng))
+                            {
+                                eventLat = venueLat;
+                                eventLng = venueLng;
+                            }
+                        }
+
+                        // Fall back to event's own coordinates if venue doesn't have GPS
+                        if (!eventLat.HasValue || !eventLng.HasValue)
+                        {
+                            eventLat = e.Latitude;
+                            eventLng = e.Longitude;
+                        }
+
+                        if (eventLat.HasValue && eventLng.HasValue)
+                            distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, eventLat.Value, eventLng.Value);
                         return (evt: e, distance);
                     })
                     .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)
