@@ -75,6 +75,7 @@ export default function Courts() {
   const getLocation = useCallback(async () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser');
+      setSearchMode('search'); // Auto-switch to Full Search
       return;
     }
 
@@ -84,7 +85,8 @@ export default function Courts() {
         const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
         if (permissionStatus.state === 'denied') {
           setLocationBlocked(true);
-          setLocationError('Location access is blocked. Click the lock icon in your address bar to allow location access, then refresh.');
+          setLocationError('Location access is blocked. Use Full Search or enable location in browser settings.');
+          setSearchMode('search'); // Auto-switch to Full Search
           return;
         }
         setLocationBlocked(false);
@@ -96,31 +98,52 @@ export default function Courts() {
     setGettingLocation(true);
     setLocationError(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+    // Try with lower accuracy first (faster, uses IP/WiFi)
+    const tryGetPosition = (highAccuracy, timeout) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: highAccuracy,
+          timeout: timeout,
+          maximumAge: 300000 // Cache for 5 minutes
+        });
+      });
+    };
+
+    try {
+      // First try: fast, low accuracy (IP/WiFi based) - 5 second timeout
+      const position = await tryGetPosition(false, 5000);
+      setUserLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      });
+      setGettingLocation(false);
+      setLocationBlocked(false);
+    } catch (firstError) {
+      // Second try: high accuracy (GPS) - 15 second timeout
+      try {
+        const position = await tryGetPosition(true, 15000);
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude
         });
         setGettingLocation(false);
         setLocationBlocked(false);
-      },
-      (error) => {
+      } catch (error) {
         console.warn('Geolocation error:', error);
         if (error.code === error.PERMISSION_DENIED) {
           setLocationBlocked(true);
-          setLocationError('Location access was denied. Click the lock/site settings icon in your address bar to allow location access.');
+          setLocationError('Location access was denied. Use Full Search or allow location in browser settings.');
         } else if (error.code === error.POSITION_UNAVAILABLE) {
-          setLocationError('Location information is unavailable. Try again or use Full Search.');
+          setLocationError('Location unavailable. Use Full Search to find courts by address.');
         } else if (error.code === error.TIMEOUT) {
-          setLocationError('Location request timed out. Try again or use Full Search.');
+          setLocationError('Location request timed out. Use Full Search to find courts by address.');
         } else {
-          setLocationError('Unable to get your location. Try again or use Full Search.');
+          setLocationError('Unable to get your location. Use Full Search to find courts by address.');
         }
         setGettingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+        // Don't auto-switch for timeout - user might want to try again
+      }
+    }
   }, []);
 
   useEffect(() => {
