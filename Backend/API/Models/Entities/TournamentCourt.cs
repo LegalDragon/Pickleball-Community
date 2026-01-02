@@ -17,6 +17,7 @@ public class TournamentCourt
     /// <summary>
     /// Reference to the venue (facility) where this court is located
     /// </summary>
+    [Column("CourtId")] // Maps to existing CourtId column in database
     public int? VenueId { get; set; }
 
     /// <summary>
