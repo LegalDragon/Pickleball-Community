@@ -167,8 +167,8 @@ public class MessagingController : ControllerBase
                 Participants = conversation.Participants.Select(p => new ConversationParticipantDto
                 {
                     UserId = p.UserId,
-                    UserName = p.User != null ? $"{p.User.FirstName} {p.User.LastName}".Trim() : null,
-                    UserAvatar = p.User?.ProfileImageUrl,
+                    DisplayName = p.User != null ? $"{p.User.FirstName} {p.User.LastName}".Trim() : null,
+                    Avatar = p.User?.ProfileImageUrl,
                     Role = p.Role,
                     JoinedAt = p.JoinedAt,
                     IsOnline = false // TODO: Implement online status with SignalR

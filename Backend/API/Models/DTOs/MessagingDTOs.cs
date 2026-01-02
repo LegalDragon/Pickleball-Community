@@ -36,8 +36,8 @@ public class ConversationListDto
 public class ConversationParticipantDto
 {
     public int UserId { get; set; }
-    public string? UserName { get; set; }
-    public string? UserAvatar { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Avatar { get; set; }
     public string Role { get; set; } = "Member"; // Admin, Member
     public DateTime JoinedAt { get; set; }
     public bool IsOnline { get; set; }

@@ -626,13 +626,111 @@ export default function Messages() {
 
         {/* Messages View - Full screen on mobile, side panel on desktop */}
         <div className={`
-          flex-1 flex bg-gray-50
+          flex-1 flex flex-col bg-gray-50
           ${showMobileConversation ? 'flex' : 'hidden md:flex'}
         `}>
           {selectedConversation ? (
             <>
+              {/* Participants Panel - Top bar */}
+              {conversationDetails?.participants && conversationDetails.participants.length > 0 && (
+                <div className="bg-white border-b px-4 py-2 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowParticipants(!showParticipants)}
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span className="font-medium">{conversationDetails.participants.length} participants</span>
+                      {showParticipants ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Expanded participants list */}
+                  {showParticipants && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {conversationDetails.participants.map(participant => (
+                        <button
+                          key={participant.userId}
+                          onClick={() => setSelectedParticipant(
+                            selectedParticipant?.userId === participant.userId ? null : participant
+                          )}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors ${
+                            selectedParticipant?.userId === participant.userId
+                              ? 'bg-blue-50 border-blue-300'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          {participant.avatar ? (
+                            <img
+                              src={getSharedAssetUrl(participant.avatar)}
+                              alt=""
+                              className="w-6 h-6 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                              <User className="w-3 h-3 text-blue-600" />
+                            </div>
+                          )}
+                          <span className="text-sm font-medium text-gray-700">
+                            {participant.displayName || 'Unknown'}
+                            {participant.userId === user?.id && ' (You)'}
+                          </span>
+                          {participant.role && participant.role !== 'Member' && (
+                            <span className="text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
+                              {participant.role}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Selected participant details popup */}
+                  {selectedParticipant && selectedParticipant.userId !== user?.id && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center gap-3">
+                        {selectedParticipant.avatar ? (
+                          <img
+                            src={getSharedAssetUrl(selectedParticipant.avatar)}
+                            alt=""
+                            className="w-12 h-12 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                            <User className="w-6 h-6 text-blue-600" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {selectedParticipant.displayName}
+                          </p>
+                          {selectedParticipant.city && (
+                            <p className="text-sm text-gray-500 truncate">
+                              {selectedParticipant.city}{selectedParticipant.state && `, ${selectedParticipant.state}`}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => navigate(`/users/${selectedParticipant.userId}`)}
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-1"
+                        >
+                          <User className="w-4 h-4" />
+                          View Profile
+                        </button>
+                        <button
+                          onClick={() => setSelectedParticipant(null)}
+                          className="p-1 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Main messages area */}
-              <div className="flex-1 flex flex-col min-w-0">
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Messages */}
                 <div
                   ref={messagesContainerRef}
@@ -735,109 +833,6 @@ export default function Messages() {
                     <Send className="w-5 h-5" />
                   </button>
                 </form>
-              </div>
-
-              {/* Participants Panel Toggle - Right side */}
-              <div className="hidden md:flex flex-shrink-0 border-l bg-white">
-                {/* Toggle button when collapsed */}
-                {!showParticipants && (
-                  <button
-                    onClick={() => setShowParticipants(true)}
-                    className="w-12 h-full flex flex-col items-center pt-4 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                    title="Show participants"
-                  >
-                    <Users className="w-5 h-5 mb-2" />
-                    <span className="text-xs font-medium">
-                      {conversationDetails?.participants?.length || 0}
-                    </span>
-                  </button>
-                )}
-
-                {/* Expanded participants panel */}
-                {showParticipants && (
-                  <div className="w-64 flex flex-col">
-                    <div className="p-3 border-b flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900">Participants</h3>
-                      <button
-                        onClick={() => setShowParticipants(false)}
-                        className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                        title="Hide participants"
-                      >
-                        <ChevronRight className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2">
-                      {conversationDetails?.participants?.map(participant => (
-                        <button
-                          key={participant.userId}
-                          onClick={() => setSelectedParticipant(
-                            selectedParticipant?.userId === participant.userId ? null : participant
-                          )}
-                          className={`w-full p-2 rounded-lg flex items-center gap-3 hover:bg-gray-100 transition-colors ${
-                            selectedParticipant?.userId === participant.userId ? 'bg-blue-50' : ''
-                          }`}
-                        >
-                          {participant.avatar ? (
-                            <img
-                              src={getSharedAssetUrl(participant.avatar)}
-                              alt=""
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                              <User className="w-5 h-5 text-blue-600" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="font-medium text-gray-900 truncate text-sm">
-                              {participant.displayName || 'Unknown'}
-                              {participant.userId === user?.id && ' (You)'}
-                            </p>
-                            {participant.role && participant.role !== 'Member' && (
-                              <p className="text-xs text-blue-600">{participant.role}</p>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Selected participant details */}
-                    {selectedParticipant && selectedParticipant.userId !== user?.id && (
-                      <div className="p-3 border-t bg-gray-50">
-                        <div className="flex items-center gap-3 mb-3">
-                          {selectedParticipant.avatar ? (
-                            <img
-                              src={getSharedAssetUrl(selectedParticipant.avatar)}
-                              alt=""
-                              className="w-12 h-12 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                              <User className="w-6 h-6 text-blue-600" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate">
-                              {selectedParticipant.displayName}
-                            </p>
-                            {selectedParticipant.city && (
-                              <p className="text-sm text-gray-500 truncate">
-                                {selectedParticipant.city}{selectedParticipant.state && `, ${selectedParticipant.state}`}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => navigate(`/users/${selectedParticipant.userId}`)}
-                          className="w-full py-2 px-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2"
-                        >
-                          <User className="w-4 h-4" />
-                          View Profile
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </>
           ) : (
