@@ -27,7 +27,7 @@ export default function Clubs() {
   const [totalCount, setTotalCount] = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [inviteClub, setInviteClub] = useState(null);
-  const [activeTab, setActiveTab] = useState('my-clubs'); // my-clubs, search
+  const [activeTab, setActiveTab] = useState(isAuthenticated ? 'my-clubs' : 'search'); // my-clubs, search
   const [joinMessage, setJoinMessage] = useState(null); // { type: 'success'|'error', text: string }
   const [memberRoles, setMemberRoles] = useState([]);
   const [profileModalUserId, setProfileModalUserId] = useState(null);
@@ -165,10 +165,13 @@ export default function Clubs() {
     }
   };
 
-  // Load my clubs when authenticated
+  // Load my clubs when authenticated, set appropriate tab
   useEffect(() => {
     if (isAuthenticated) {
       loadMyClubs();
+      setActiveTab('my-clubs');
+    } else {
+      setActiveTab('search');
     }
   }, [isAuthenticated]);
 

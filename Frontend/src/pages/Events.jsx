@@ -32,7 +32,7 @@ export default function Events() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('my-events'); // my-events, search
+  const [activeTab, setActiveTab] = useState(isAuthenticated ? 'my-events' : 'search'); // my-events, search
   const pageSize = 20;
 
   // View mode: 'list' or 'map'
@@ -174,11 +174,14 @@ export default function Events() {
     loadSkillLevels();
   }, []);
 
-  // Load my events and units when authenticated
+  // Load my events and units when authenticated, set appropriate tab
   useEffect(() => {
     if (isAuthenticated) {
       loadMyEvents();
       loadMyUnits();
+      setActiveTab('my-events');
+    } else {
+      setActiveTab('search');
     }
   }, [isAuthenticated]);
 
