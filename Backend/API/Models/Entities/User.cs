@@ -8,13 +8,13 @@ public class User
 
     [Required]
     [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public string? Email { get; set; } = string.Empty;
 
     // PasswordHash can be null for users authenticating via shared auth
     public string? PasswordHash { get; set; }
 
     [Required]
-    public string Role { get; set; } = "Student";
+    public string? Role { get; set; } = "Student";
 
     [Required]
     public string? FirstName { get; set; } = string.Empty;

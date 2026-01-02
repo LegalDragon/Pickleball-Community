@@ -554,10 +554,10 @@ public class UsersController : ControllerBase
                 .Select(u => new UserProfileDto
                 {
                     Id = u.Id,
-                    Email = u.Email,
+                    Email = u.Email ?? string.Empty,
                     FirstName = u.FirstName,
                     LastName = u.LastName,
-                    Role = u.Role,
+                    Role = u.Role ?? "Student",
                     Bio = u.Bio,
                     ProfileImageUrl = u.ProfileImageUrl,
                     Gender = u.Gender,
