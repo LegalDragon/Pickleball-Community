@@ -1,6 +1,6 @@
 namespace Pickleball.Community.Models.DTOs;
 
-public class CourtDto
+public class VenueDto
 {
     public int Id { get; set; }
     public string? Name { get; set; }
@@ -17,15 +17,15 @@ public class CourtDto
     public int? OutdoorNum { get; set; }
     public int? CoveredNum { get; set; }
     public bool HasLights { get; set; }
-    public int? CourtTypeId { get; set; }
-    public string? CourtTypeName { get; set; }
+    public int? VenueTypeId { get; set; }
+    public string? VenueTypeName { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public double? Distance { get; set; } // Calculated distance from user
-    public CourtAggregatedInfoDto? AggregatedInfo { get; set; }
+    public VenueAggregatedInfoDto? AggregatedInfo { get; set; }
 }
 
-public class CourtAggregatedInfoDto
+public class VenueAggregatedInfoDto
 {
     public int ConfirmationCount { get; set; }
     public double? AverageRating { get; set; }
@@ -37,7 +37,7 @@ public class CourtAggregatedInfoDto
     public string? CommonHours { get; set; }
     public string? CommonSurfaceType { get; set; }
     public List<string>? CommonAmenities { get; set; }
-    public int NotACourtCount { get; set; } // Number of users who flagged this as not a court
+    public int NotACourtCount { get; set; } // Number of users who flagged this as not a venue
     public string? MostSuggestedName { get; set; } // Most commonly suggested name
     public string? MostConfirmedAddress { get; set; }
     public string? MostConfirmedCity { get; set; }
@@ -45,17 +45,17 @@ public class CourtAggregatedInfoDto
     public string? MostConfirmedCountry { get; set; }
 }
 
-public class CourtDetailDto : CourtDto
+public class VenueDetailDto : VenueDto
 {
-    public List<CourtConfirmationDto>? RecentConfirmations { get; set; }
-    public CourtConfirmationDto? MyConfirmation { get; set; }
-    public List<CourtAssetDto>? TopAssets { get; set; }
+    public List<VenueConfirmationDto>? RecentConfirmations { get; set; }
+    public VenueConfirmationDto? MyConfirmation { get; set; }
+    public List<VenueAssetDto>? TopAssets { get; set; }
 }
 
-public class CourtConfirmationDto
+public class VenueConfirmationDto
 {
     public int Id { get; set; }
-    public int CourtId { get; set; }
+    public int VenueId { get; set; }
     public int UserId { get; set; }
     public string? UserName { get; set; }
     public string? UserProfileImageUrl { get; set; }
@@ -82,7 +82,7 @@ public class CourtConfirmationDto
     public DateTime UpdatedAt { get; set; }
 }
 
-public class SubmitCourtConfirmationDto
+public class SubmitVenueConfirmationDto
 {
     public bool? NameConfirmed { get; set; }
     public string? SuggestedName { get; set; }
@@ -105,7 +105,7 @@ public class SubmitCourtConfirmationDto
     public string? ConfirmedCountry { get; set; }
 }
 
-public class CourtSearchRequest
+public class VenueSearchRequest
 {
     public string? Query { get; set; }
     public double? Latitude { get; set; }
@@ -114,7 +114,7 @@ public class CourtSearchRequest
     public string? Country { get; set; }
     public string? State { get; set; }
     public string? City { get; set; }
-    public int? CourtTypeId { get; set; }
+    public int? VenueTypeId { get; set; }
     public bool? HasLights { get; set; }
     public bool? IsIndoor { get; set; }
     public int Page { get; set; } = 1;
@@ -122,7 +122,7 @@ public class CourtSearchRequest
 }
 
 /// <summary>
-/// DTO for location dropdown items with court counts
+/// DTO for location dropdown items with venue counts
 /// </summary>
 public class LocationCountDto
 {
@@ -130,11 +130,11 @@ public class LocationCountDto
     public int Count { get; set; }
 }
 
-// Court Asset DTOs
-public class CourtAssetDto
+// Venue Asset DTOs
+public class VenueAssetDto
 {
     public int Id { get; set; }
-    public int CourtId { get; set; }
+    public int VenueId { get; set; }
     public int UserId { get; set; }
     public string? UserName { get; set; }
     public string? UserProfileImageUrl { get; set; }
@@ -151,7 +151,7 @@ public class CourtAssetDto
     public DateTime CreatedAt { get; set; }
 }
 
-public class UploadCourtAssetDto
+public class UploadVenueAssetDto
 {
     public string AssetType { get; set; } = "image"; // 'image' or 'video'
     public string AssetUrl { get; set; } = string.Empty;
@@ -163,26 +163,26 @@ public class UploadCourtAssetDto
     public string? MimeType { get; set; }
 }
 
-public class CourtAssetLikeDto
+public class VenueAssetLikeDto
 {
     public bool IsLike { get; set; } // true = like, false = dislike
 }
 
-// Check nearby courts request/response
-public class CheckNearbyCourtsRequest
+// Check nearby venues request/response
+public class CheckNearbyVenuesRequest
 {
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public double RadiusYards { get; set; } = 200;
 }
 
-public class NearbyCourtsResponse
+public class NearbyVenuesResponse
 {
-    public List<NearbyCourtDto> NearbyCourts { get; set; } = new();
-    public bool HasDuplicates => NearbyCourts.Count > 0;
+    public List<NearbyVenueDto> NearbyVenues { get; set; } = new();
+    public bool HasDuplicates => NearbyVenues.Count > 0;
 }
 
-public class NearbyCourtDto
+public class NearbyVenueDto
 {
     public int Id { get; set; }
     public string? Name { get; set; }
@@ -198,8 +198,8 @@ public class NearbyCourtDto
     public bool HasLights { get; set; }
 }
 
-// Add new court request
-public class AddCourtRequest
+// Add new venue request
+public class AddVenueRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Addr1 { get; set; }
@@ -215,16 +215,16 @@ public class AddCourtRequest
     public int? OutdoorNum { get; set; }
     public int? CoveredNum { get; set; }
     public bool HasLights { get; set; }
-    public int? CourtTypeId { get; set; }
+    public int? VenueTypeId { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
 }
 
-// Top courts for event creation (returned by sp_GetTopCourtsForUser)
-public class TopCourtForEventDto
+// Top venues for event creation (returned by sp_GetTopVenuesForUser)
+public class TopVenueForEventDto
 {
-    public int CourtId { get; set; }
-    public string? CourtName { get; set; }
+    public int VenueId { get; set; }
+    public string? VenueName { get; set; }
     public string? City { get; set; }
     public string? State { get; set; }
     public string? Country { get; set; }
@@ -235,7 +235,7 @@ public class TopCourtForEventDto
     public int? IndoorCourts { get; set; }
     public int? OutdoorCourts { get; set; }
     public bool HasLights { get; set; }
-    public string? CourtTypeName { get; set; }
+    public string? VenueTypeName { get; set; }
     public double? DistanceMiles { get; set; }
     public int PriorityScore { get; set; }
 }

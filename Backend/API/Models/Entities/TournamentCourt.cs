@@ -15,9 +15,9 @@ public class TournamentCourt
     public int EventId { get; set; }
 
     /// <summary>
-    /// Reference to the general Court (location)
+    /// Reference to the venue (facility) where this court is located
     /// </summary>
-    public int? CourtId { get; set; }
+    public int? VenueId { get; set; }
 
     /// <summary>
     /// Court label for this tournament (e.g., "Court 1", "Court A")
@@ -50,8 +50,8 @@ public class TournamentCourt
     [ForeignKey("EventId")]
     public Event? Event { get; set; }
 
-    [ForeignKey("CourtId")]
-    public Court? Court { get; set; }
+    [ForeignKey("VenueId")]
+    public Venue? Venue { get; set; }
 
     [ForeignKey("CurrentGameId")]
     public EventGame? CurrentGame { get; set; }

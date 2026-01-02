@@ -49,7 +49,7 @@ const Navigation = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: HomeIcon },
     { name: 'Events', href: '/events', icon: Calendar },
-    { name: 'Courts', href: '/courts', icon: MapPin },
+    { name: 'Venues', href: '/venues', icon: MapPin },
     { name: 'Clubs', href: '/clubs', icon: Users },
     { name: 'Blog', href: '/blog', icon: FileText },
     { name: 'FAQ', href: '/faq', icon: HelpCircle },

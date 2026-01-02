@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, getSharedAssetUrl } from '../services/api';
-import CourtMap from '../components/ui/CourtMap';
+import VenueMap from '../components/ui/VenueMap';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
 
@@ -593,18 +593,18 @@ export default function Events() {
                       </div>
                       {/* Map */}
                       <div className="flex-1">
-                        <CourtMap
-                          courts={events.map(e => ({
+                        <VenueMap
+                          venues={events.map(e => ({
                             ...e,
-                            courtId: e.id,
+                            id: e.id,
                             name: e.name,
                             latitude: e.latitude,
                             longitude: e.longitude
                           }))}
                           userLocation={userLocation}
-                          onCourtClick={(event) => handleViewDetails(event)}
-                          onMarkerSelect={(event) => setHoveredEventId(event.id || event.courtId)}
-                          selectedCourtId={hoveredEventId}
+                          onVenueClick={(event) => handleViewDetails(event)}
+                          onMarkerSelect={(event) => setHoveredEventId(event.id)}
+                          selectedVenueId={hoveredEventId}
                           showNumbers={true}
                         />
                       </div>

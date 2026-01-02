@@ -1,6 +1,6 @@
 namespace Pickleball.Community.Models.DTOs;
 
-public class CourtTypeDto
+public class VenueTypeDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -11,7 +11,7 @@ public class CourtTypeDto
     public bool IsActive { get; set; }
 }
 
-public class CreateCourtTypeDto
+public class CreateVenueTypeDto
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -21,7 +21,7 @@ public class CreateCourtTypeDto
     public bool IsActive { get; set; } = true;
 }
 
-public class UpdateCourtTypeDto
+public class UpdateVenueTypeDto
 {
     public string? Name { get; set; }
     public string? Description { get; set; }

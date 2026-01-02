@@ -4,7 +4,7 @@ import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, C
 import { useAuth } from '../contexts/AuthContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
-import CourtMap from '../components/ui/CourtMap';
+import VenueMap from '../components/ui/VenueMap';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -573,18 +573,18 @@ export default function Clubs() {
                       </div>
                       {/* Map */}
                       <div className="flex-1">
-                        <CourtMap
-                          courts={clubs.map(c => ({
+                        <VenueMap
+                          venues={clubs.map(c => ({
                             ...c,
-                            courtId: c.id,
+                            id: c.id,
                             name: c.name,
                             latitude: c.latitude,
                             longitude: c.longitude
                           }))}
                           userLocation={userLocation}
-                          onCourtClick={(club) => handleViewDetails(club)}
-                          onMarkerSelect={(club) => setHoveredClubId(club.id || club.courtId)}
-                          selectedCourtId={hoveredClubId}
+                          onVenueClick={(club) => handleViewDetails(club)}
+                          onMarkerSelect={(club) => setHoveredClubId(club.id)}
+                          selectedVenueId={hoveredClubId}
                           showNumbers={true}
                         />
                       </div>

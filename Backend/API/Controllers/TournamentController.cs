@@ -589,7 +589,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<TournamentCourtDto>>>> GetTournamentCourts(int eventId)
     {
         var courts = await _context.TournamentCourts
-            .Include(c => c.Court)
+            .Include(c => c.Venue)
             .Include(c => c.CurrentGame)
                 .ThenInclude(g => g!.Match)
             .Where(c => c.EventId == eventId && c.IsActive)
@@ -598,8 +598,8 @@ public class TournamentController : ControllerBase
             {
                 Id = c.Id,
                 EventId = c.EventId,
-                CourtId = c.CourtId,
-                CourtName = c.Court != null ? c.Court.Name : null,
+                VenueId = c.VenueId,
+                VenueName = c.Venue != null ? c.Venue.Name : null,
                 CourtLabel = c.CourtLabel,
                 Status = c.Status,
                 CurrentGameId = c.CurrentGameId,
@@ -622,7 +622,7 @@ public class TournamentController : ControllerBase
         var court = new TournamentCourt
         {
             EventId = eventId,
-            CourtId = request.CourtId,
+            VenueId = request.VenueId,
             CourtLabel = request.CourtLabel,
             LocationDescription = request.LocationDescription,
             SortOrder = request.SortOrder,
@@ -640,7 +640,7 @@ public class TournamentController : ControllerBase
             {
                 Id = court.Id,
                 EventId = court.EventId,
-                CourtId = court.CourtId,
+                VenueId = court.VenueId,
                 CourtLabel = court.CourtLabel,
                 Status = court.Status,
                 LocationDescription = court.LocationDescription,

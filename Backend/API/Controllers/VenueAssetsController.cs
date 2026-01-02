@@ -9,13 +9,13 @@ using System.Security.Claims;
 namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
-[Route("courts")]
-public class CourtAssetsController : ControllerBase
+[Route("venues")]
+public class VenueAssetsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<CourtAssetsController> _logger;
+    private readonly ILogger<VenueAssetsController> _logger;
 
-    public CourtAssetsController(ApplicationDbContext context, ILogger<CourtAssetsController> logger)
+    public VenueAssetsController(ApplicationDbContext context, ILogger<VenueAssetsController> logger)
     {
         _context = context;
         _logger = logger;
@@ -27,17 +27,17 @@ public class CourtAssetsController : ControllerBase
         return int.TryParse(userIdClaim, out var id) ? id : null;
     }
 
-    // GET: /courts/{courtId}/assets - Get assets for a court (top 20 most liked, most recent)
-    [HttpGet("{courtId}/assets")]
-    public async Task<ActionResult<ApiResponse<List<CourtAssetDto>>>> GetCourtAssets(int courtId)
+    // GET: /venues/{venueId}/assets - Get assets for a venue (top 20 most liked, most recent)
+    [HttpGet("{venueId}/assets")]
+    public async Task<ActionResult<ApiResponse<List<VenueAssetDto>>>> GetVenueAssets(int venueId)
     {
         try
         {
             var userId = GetUserId();
 
             // Get top 20 assets ordered by net likes (likes - dislikes), then by most recent
-            var assets = await _context.CourtAssets
-                .Where(a => a.CourtId == courtId && a.IsApproved)
+            var assets = await _context.VenueAssets
+                .Where(a => a.VenueId == venueId && a.IsApproved)
                 .Select(a => new
                 {
                     Asset = a,
@@ -53,10 +53,10 @@ public class CourtAssetsController : ControllerBase
                 .Take(20)
                 .ToListAsync();
 
-            var dtos = assets.Select(a => new CourtAssetDto
+            var dtos = assets.Select(a => new VenueAssetDto
             {
                 Id = a.Asset.Id,
-                CourtId = a.Asset.CourtId,
+                VenueId = a.Asset.VenueId,
                 UserId = a.Asset.UserId,
                 UserName = a.User != null ? $"{a.User.FirstName} {a.User.LastName}".Trim() : null,
                 UserProfileImageUrl = a.User?.ProfileImageUrl,
@@ -73,42 +73,42 @@ public class CourtAssetsController : ControllerBase
                 CreatedAt = a.Asset.CreatedAt
             }).ToList();
 
-            return Ok(new ApiResponse<List<CourtAssetDto>> { Success = true, Data = dtos });
+            return Ok(new ApiResponse<List<VenueAssetDto>> { Success = true, Data = dtos });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching assets for court {CourtId}", courtId);
-            return StatusCode(500, new ApiResponse<List<CourtAssetDto>> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error fetching assets for venue {VenueId}", venueId);
+            return StatusCode(500, new ApiResponse<List<VenueAssetDto>> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // POST: /courts/{courtId}/assets - Upload a new asset
-    [HttpPost("{courtId}/assets")]
+    // POST: /venues/{venueId}/assets - Upload a new asset
+    [HttpPost("{venueId}/assets")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<CourtAssetDto>>> UploadAsset(int courtId, [FromBody] UploadCourtAssetDto dto)
+    public async Task<ActionResult<ApiResponse<VenueAssetDto>>> UploadAsset(int venueId, [FromBody] UploadVenueAssetDto dto)
     {
         try
         {
             var userId = GetUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<CourtAssetDto> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<VenueAssetDto> { Success = false, Message = "User not authenticated" });
 
-            // Verify court exists
-            var courtExists = await _context.Courts.AnyAsync(c => c.CourtId == courtId);
-            if (!courtExists)
-                return NotFound(new ApiResponse<CourtAssetDto> { Success = false, Message = "Court not found" });
+            // Verify venue exists
+            var venueExists = await _context.Venues.AnyAsync(v => v.VenueId == venueId);
+            if (!venueExists)
+                return NotFound(new ApiResponse<VenueAssetDto> { Success = false, Message = "Venue not found" });
 
             // Validate asset type
             if (dto.AssetType != "image" && dto.AssetType != "video")
-                return BadRequest(new ApiResponse<CourtAssetDto> { Success = false, Message = "Asset type must be 'image' or 'video'" });
+                return BadRequest(new ApiResponse<VenueAssetDto> { Success = false, Message = "Asset type must be 'image' or 'video'" });
 
             // Validate URL
             if (string.IsNullOrWhiteSpace(dto.AssetUrl))
-                return BadRequest(new ApiResponse<CourtAssetDto> { Success = false, Message = "Asset URL is required" });
+                return BadRequest(new ApiResponse<VenueAssetDto> { Success = false, Message = "Asset URL is required" });
 
-            var asset = new CourtAsset
+            var asset = new VenueAsset
             {
-                CourtId = courtId,
+                VenueId = venueId,
                 UserId = userId.Value,
                 AssetType = dto.AssetType,
                 AssetUrl = dto.AssetUrl,
@@ -121,16 +121,16 @@ public class CourtAssetsController : ControllerBase
                 IsApproved = true // Auto-approve for now
             };
 
-            _context.CourtAssets.Add(asset);
+            _context.VenueAssets.Add(asset);
             await _context.SaveChangesAsync();
 
             // Get user info for response
             var user = await _context.Users.FindAsync(userId.Value);
 
-            var result = new CourtAssetDto
+            var result = new VenueAssetDto
             {
                 Id = asset.Id,
-                CourtId = asset.CourtId,
+                VenueId = asset.VenueId,
                 UserId = asset.UserId,
                 UserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : null,
                 UserProfileImageUrl = user?.ProfileImageUrl,
@@ -147,16 +147,16 @@ public class CourtAssetsController : ControllerBase
                 CreatedAt = asset.CreatedAt
             };
 
-            return Ok(new ApiResponse<CourtAssetDto> { Success = true, Data = result, Message = "Asset uploaded successfully" });
+            return Ok(new ApiResponse<VenueAssetDto> { Success = true, Data = result, Message = "Asset uploaded successfully" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error uploading asset for court {CourtId}", courtId);
-            return StatusCode(500, new ApiResponse<CourtAssetDto> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error uploading asset for venue {VenueId}", venueId);
+            return StatusCode(500, new ApiResponse<VenueAssetDto> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // DELETE: /courts/assets/{id} - Delete an asset (owner only)
+    // DELETE: /venues/assets/{id} - Delete an asset (owner only)
     [HttpDelete("assets/{id}")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteAsset(int id)
@@ -167,7 +167,7 @@ public class CourtAssetsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
-            var asset = await _context.CourtAssets.FindAsync(id);
+            var asset = await _context.VenueAssets.FindAsync(id);
             if (asset == null)
                 return NotFound(new ApiResponse<bool> { Success = false, Message = "Asset not found" });
 
@@ -180,7 +180,7 @@ public class CourtAssetsController : ControllerBase
                     return Forbid();
             }
 
-            _context.CourtAssets.Remove(asset);
+            _context.VenueAssets.Remove(asset);
             await _context.SaveChangesAsync();
 
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Asset deleted successfully" });
@@ -192,24 +192,24 @@ public class CourtAssetsController : ControllerBase
         }
     }
 
-    // POST: /courts/assets/{id}/vote - Like or dislike an asset
+    // POST: /venues/assets/{id}/vote - Like or dislike an asset
     [HttpPost("assets/{id}/vote")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<CourtAssetDto>>> VoteOnAsset(int id, [FromBody] CourtAssetLikeDto dto)
+    public async Task<ActionResult<ApiResponse<VenueAssetDto>>> VoteOnAsset(int id, [FromBody] VenueAssetLikeDto dto)
     {
         try
         {
             var userId = GetUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<CourtAssetDto> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<VenueAssetDto> { Success = false, Message = "User not authenticated" });
 
-            var asset = await _context.CourtAssets
+            var asset = await _context.VenueAssets
                 .Include(a => a.Likes)
                 .Include(a => a.User)
                 .FirstOrDefaultAsync(a => a.Id == id);
 
             if (asset == null)
-                return NotFound(new ApiResponse<CourtAssetDto> { Success = false, Message = "Asset not found" });
+                return NotFound(new ApiResponse<VenueAssetDto> { Success = false, Message = "Asset not found" });
 
             // Find existing vote
             var existingVote = asset.Likes?.FirstOrDefault(l => l.UserId == userId.Value);
@@ -223,25 +223,25 @@ public class CourtAssetsController : ControllerBase
             else
             {
                 // Create new vote
-                var vote = new CourtAssetLike
+                var vote = new VenueAssetLike
                 {
                     AssetId = id,
                     UserId = userId.Value,
                     IsLike = dto.IsLike
                 };
-                _context.CourtAssetLikes.Add(vote);
+                _context.VenueAssetLikes.Add(vote);
             }
 
             await _context.SaveChangesAsync();
 
             // Reload to get updated counts
-            var likeCount = await _context.CourtAssetLikes.CountAsync(l => l.AssetId == id && l.IsLike);
-            var dislikeCount = await _context.CourtAssetLikes.CountAsync(l => l.AssetId == id && !l.IsLike);
+            var likeCount = await _context.VenueAssetLikes.CountAsync(l => l.AssetId == id && l.IsLike);
+            var dislikeCount = await _context.VenueAssetLikes.CountAsync(l => l.AssetId == id && !l.IsLike);
 
-            var result = new CourtAssetDto
+            var result = new VenueAssetDto
             {
                 Id = asset.Id,
-                CourtId = asset.CourtId,
+                VenueId = asset.VenueId,
                 UserId = asset.UserId,
                 UserName = asset.User != null ? $"{asset.User.FirstName} {asset.User.LastName}".Trim() : null,
                 UserProfileImageUrl = asset.User?.ProfileImageUrl,
@@ -258,50 +258,50 @@ public class CourtAssetsController : ControllerBase
                 CreatedAt = asset.CreatedAt
             };
 
-            return Ok(new ApiResponse<CourtAssetDto> { Success = true, Data = result });
+            return Ok(new ApiResponse<VenueAssetDto> { Success = true, Data = result });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error voting on asset {AssetId}", id);
-            return StatusCode(500, new ApiResponse<CourtAssetDto> { Success = false, Message = "An error occurred" });
+            return StatusCode(500, new ApiResponse<VenueAssetDto> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // DELETE: /courts/assets/{id}/vote - Remove vote
+    // DELETE: /venues/assets/{id}/vote - Remove vote
     [HttpDelete("assets/{id}/vote")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<CourtAssetDto>>> RemoveVote(int id)
+    public async Task<ActionResult<ApiResponse<VenueAssetDto>>> RemoveVote(int id)
     {
         try
         {
             var userId = GetUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<CourtAssetDto> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<VenueAssetDto> { Success = false, Message = "User not authenticated" });
 
-            var asset = await _context.CourtAssets
+            var asset = await _context.VenueAssets
                 .Include(a => a.User)
                 .FirstOrDefaultAsync(a => a.Id == id);
 
             if (asset == null)
-                return NotFound(new ApiResponse<CourtAssetDto> { Success = false, Message = "Asset not found" });
+                return NotFound(new ApiResponse<VenueAssetDto> { Success = false, Message = "Asset not found" });
 
-            var vote = await _context.CourtAssetLikes
+            var vote = await _context.VenueAssetLikes
                 .FirstOrDefaultAsync(l => l.AssetId == id && l.UserId == userId.Value);
 
             if (vote != null)
             {
-                _context.CourtAssetLikes.Remove(vote);
+                _context.VenueAssetLikes.Remove(vote);
                 await _context.SaveChangesAsync();
             }
 
             // Get updated counts
-            var likeCount = await _context.CourtAssetLikes.CountAsync(l => l.AssetId == id && l.IsLike);
-            var dislikeCount = await _context.CourtAssetLikes.CountAsync(l => l.AssetId == id && !l.IsLike);
+            var likeCount = await _context.VenueAssetLikes.CountAsync(l => l.AssetId == id && l.IsLike);
+            var dislikeCount = await _context.VenueAssetLikes.CountAsync(l => l.AssetId == id && !l.IsLike);
 
-            var result = new CourtAssetDto
+            var result = new VenueAssetDto
             {
                 Id = asset.Id,
-                CourtId = asset.CourtId,
+                VenueId = asset.VenueId,
                 UserId = asset.UserId,
                 UserName = asset.User != null ? $"{asset.User.FirstName} {asset.User.LastName}".Trim() : null,
                 UserProfileImageUrl = asset.User?.ProfileImageUrl,
@@ -318,12 +318,12 @@ public class CourtAssetsController : ControllerBase
                 CreatedAt = asset.CreatedAt
             };
 
-            return Ok(new ApiResponse<CourtAssetDto> { Success = true, Data = result });
+            return Ok(new ApiResponse<VenueAssetDto> { Success = true, Data = result });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing vote on asset {AssetId}", id);
-            return StatusCode(500, new ApiResponse<CourtAssetDto> { Success = false, Message = "An error occurred" });
+            return StatusCode(500, new ApiResponse<VenueAssetDto> { Success = false, Message = "An error occurred" });
         }
     }
 }

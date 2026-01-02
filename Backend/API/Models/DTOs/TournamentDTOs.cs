@@ -124,8 +124,8 @@ public class TournamentCourtDto
 {
     public int Id { get; set; }
     public int EventId { get; set; }
-    public int? CourtId { get; set; }
-    public string? CourtName { get; set; }
+    public int? VenueId { get; set; }
+    public string? VenueName { get; set; }
     public string CourtLabel { get; set; } = string.Empty;
     public string Status { get; set; } = "Available";
     public int? CurrentGameId { get; set; }
@@ -137,7 +137,7 @@ public class TournamentCourtDto
 public class CreateTournamentCourtRequest
 {
     public int EventId { get; set; }
-    public int? CourtId { get; set; }
+    public int? VenueId { get; set; }
     public string CourtLabel { get; set; } = string.Empty;
     public string? LocationDescription { get; set; }
     public int SortOrder { get; set; }

@@ -14,9 +14,9 @@ import {
   MapPin, Flag, Shuffle, DollarSign, Heart, Star, Globe, Compass, GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { courtTypesApi } from '../services/api';
+import { venueTypesApi } from '../services/api';
 
-// Icon options for court types
+// Icon options for venue types
 const ICON_OPTIONS = [
   // Building/Location
   { value: 'Building', label: 'Building', icon: Building, category: 'Building' },
@@ -88,9 +88,9 @@ const COLOR_OPTIONS = [
 // Get unique categories
 const ICON_CATEGORIES = [...new Set(ICON_OPTIONS.map(o => o.category))];
 
-export default function CourtTypesAdmin({ embedded = false }) {
+export default function VenueTypesAdmin({ embedded = false }) {
   const { user } = useAuth();
-  const [courtTypes, setCourtTypes] = useState([]);
+  const [venueTypes, setVenueTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -126,12 +126,12 @@ export default function CourtTypesAdmin({ embedded = false }) {
   const loadCourtTypes = async () => {
     setLoading(true);
     try {
-      const response = await courtTypesApi.getAll(showInactive);
+      const response = await venueTypesApi.getAll(showInactive);
       if (response.success) {
-        setCourtTypes(response.data || []);
+        setVenueTypes(response.data || []);
       }
     } catch (err) {
-      console.error('Error loading court types:', err);
+      console.error('Error loading venue types:', err);
     } finally {
       setLoading(false);
     }
@@ -144,7 +144,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
       description: '',
       icon: 'Building2',
       color: 'green',
-      sortOrder: courtTypes.length,
+      sortOrder: venueTypes.length,
       isActive: true
     });
     setIconSearch('');
@@ -153,15 +153,15 @@ export default function CourtTypesAdmin({ embedded = false }) {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (courtType) => {
-    setEditingType(courtType);
+  const handleEdit = (venueType) => {
+    setEditingType(venueType);
     setFormData({
-      name: courtType.name,
-      description: courtType.description || '',
-      icon: courtType.icon || 'Building2',
-      color: courtType.color || 'green',
-      sortOrder: courtType.sortOrder,
-      isActive: courtType.isActive
+      name: venueType.name,
+      description: venueType.description || '',
+      icon: venueType.icon || 'Building2',
+      color: venueType.color || 'green',
+      sortOrder: venueType.sortOrder,
+      isActive: venueType.isActive
     });
     setIconSearch('');
     setIconCategory('All');
@@ -177,26 +177,26 @@ export default function CourtTypesAdmin({ embedded = false }) {
     setError('');
     try {
       if (editingType) {
-        const response = await courtTypesApi.update(editingType.id, formData);
+        const response = await venueTypesApi.update(editingType.id, formData);
         if (response.success) {
-          setCourtTypes(courtTypes.map(ct =>
+          setVenueTypes(venueTypes.map(ct =>
             ct.id === editingType.id ? response.data : ct
           ));
           setIsModalOpen(false);
         } else {
-          setError(response.message || 'Failed to update court type');
+          setError(response.message || 'Failed to update venue type');
         }
       } else {
-        const response = await courtTypesApi.create(formData);
+        const response = await venueTypesApi.create(formData);
         if (response.success) {
-          setCourtTypes([...courtTypes, response.data]);
+          setVenueTypes([...venueTypes, response.data]);
           setIsModalOpen(false);
         } else {
-          setError(response.message || 'Failed to create court type');
+          setError(response.message || 'Failed to create venue type');
         }
       }
     } catch (err) {
-      console.error('Error saving court type:', err);
+      console.error('Error saving venue type:', err);
       const errorMessage = err.response?.data?.message || err.message || 'An error occurred while saving';
       setError(errorMessage);
     } finally {
@@ -204,35 +204,35 @@ export default function CourtTypesAdmin({ embedded = false }) {
     }
   };
 
-  const handleDelete = async (courtType) => {
-    if (!confirm(`Are you sure you want to deactivate "${courtType.name}"?`)) return;
+  const handleDelete = async (venueType) => {
+    if (!confirm(`Are you sure you want to deactivate "${venueType.name}"?`)) return;
 
     try {
-      const response = await courtTypesApi.delete(courtType.id);
+      const response = await venueTypesApi.delete(venueType.id);
       if (response.success) {
         if (showInactive) {
-          setCourtTypes(courtTypes.map(ct =>
-            ct.id === courtType.id ? { ...ct, isActive: false } : ct
+          setVenueTypes(venueTypes.map(ct =>
+            ct.id === venueType.id ? { ...ct, isActive: false } : ct
           ));
         } else {
-          setCourtTypes(courtTypes.filter(ct => ct.id !== courtType.id));
+          setVenueTypes(venueTypes.filter(ct => ct.id !== venueType.id));
         }
       }
     } catch (err) {
-      console.error('Error deleting court type:', err);
+      console.error('Error deleting venue type:', err);
     }
   };
 
-  const handleRestore = async (courtType) => {
+  const handleRestore = async (venueType) => {
     try {
-      const response = await courtTypesApi.restore(courtType.id);
+      const response = await venueTypesApi.restore(venueType.id);
       if (response.success) {
-        setCourtTypes(courtTypes.map(ct =>
-          ct.id === courtType.id ? response.data : ct
+        setVenueTypes(venueTypes.map(ct =>
+          ct.id === venueType.id ? response.data : ct
         ));
       }
     } catch (err) {
-      console.error('Error restoring court type:', err);
+      console.error('Error restoring venue type:', err);
     }
   };
 
@@ -278,29 +278,29 @@ export default function CourtTypesAdmin({ embedded = false }) {
               onChange={(e) => setShowInactive(e.target.checked)}
               className="rounded border-gray-300 text-green-600 focus:ring-green-500"
             />
-            Show inactive court types
+            Show inactive venue types
           </label>
           <span className="text-sm text-gray-500">
-            {courtTypes.length} court type{courtTypes.length !== 1 ? 's' : ''}
+            {venueTypes.length} venue type{venueTypes.length !== 1 ? 's' : ''}
           </span>
         </div>
 
-        {/* Court Types List */}
+        {/* Venue Types List */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
           </div>
-        ) : courtTypes.length === 0 ? (
+        ) : venueTypes.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
             <Building2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Court Types</h3>
-            <p className="text-gray-500 mb-6">Get started by adding your first court type.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Venue Types</h3>
+            <p className="text-gray-500 mb-6">Get started by adding your first venue type.</p>
             <button
               onClick={handleCreate}
               className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
               <Plus className="w-5 h-5" />
-              Add Court Type
+              Add Venue Type
             </button>
           </div>
         ) : (
@@ -309,7 +309,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Court Type
+                    Venue Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
@@ -323,26 +323,26 @@ export default function CourtTypesAdmin({ embedded = false }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {courtTypes.map((courtType) => (
-                  <tr key={courtType.id} className={!courtType.isActive ? 'bg-gray-50 opacity-60' : ''}>
+                {venueTypes.map((venueType) => (
+                  <tr key={venueType.id} className={!venueType.isActive ? 'bg-gray-50 opacity-60' : ''}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg ${getColorClass(courtType.color)} flex items-center justify-center text-white`}>
-                          {getIconComponent(courtType.icon)}
+                        <div className={`w-10 h-10 rounded-lg ${getColorClass(venueType.color)} flex items-center justify-center text-white`}>
+                          {getIconComponent(venueType.icon)}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900">{courtType.name}</div>
-                          <div className="text-xs text-gray-500">Order: {courtType.sortOrder}</div>
+                          <div className="font-medium text-gray-900">{venueType.name}</div>
+                          <div className="text-xs text-gray-500">Order: {venueType.sortOrder}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-gray-600">
-                        {courtType.description || '-'}
+                        {venueType.description || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {courtType.isActive ? (
+                      {venueType.isActive ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           Active
                         </span>
@@ -355,15 +355,15 @@ export default function CourtTypesAdmin({ embedded = false }) {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => handleEdit(courtType)}
+                          onClick={() => handleEdit(venueType)}
                           className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Edit"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        {courtType.isActive ? (
+                        {venueType.isActive ? (
                           <button
-                            onClick={() => handleDelete(courtType)}
+                            onClick={() => handleDelete(venueType)}
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deactivate"
                           >
@@ -371,7 +371,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleRestore(courtType)}
+                            onClick={() => handleRestore(venueType)}
                             className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                             title="Restore"
                           >
@@ -395,7 +395,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
             {/* Fixed Header */}
             <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingType ? 'Edit Court Type' : 'Add Court Type'}
+                {editingType ? 'Edit Venue Type' : 'Add Venue Type'}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -438,7 +438,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of this court type..."
+                    placeholder="Brief description of this venue type..."
                     rows={2}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
                   />
@@ -567,7 +567,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
                       {getIconComponent(formData.icon)}
                     </div>
                     <div>
-                      <div className="font-medium text-gray-900">{formData.name || 'Court Type Name'}</div>
+                      <div className="font-medium text-gray-900">{formData.name || 'Venue Type Name'}</div>
                       <div className="text-sm text-gray-500">{formData.description || 'Description...'}</div>
                     </div>
                   </div>
@@ -623,7 +623,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Court Types</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Venue Types</h1>
                 <p className="text-sm text-gray-500">Manage court categories (Public, Private, Commercial, etc.)</p>
               </div>
             </div>
@@ -632,7 +632,7 @@ export default function CourtTypesAdmin({ embedded = false }) {
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Plus className="w-5 h-5" />
-              Add Court Type
+              Add Venue Type
             </button>
           </div>
         </div>

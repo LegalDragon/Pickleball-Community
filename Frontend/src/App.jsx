@@ -10,7 +10,7 @@ import PlayerReview from './pages/PlayerReview'
 import MyCertificate from './pages/MyCertificate'
 import CertificationAdmin from './pages/CertificationAdmin'
 import EventTypesAdmin from './pages/EventTypesAdmin'
-import CourtTypesAdmin from './pages/CourtTypesAdmin'
+import VenueTypesAdmin from './pages/VenueTypesAdmin'
 import ClubMemberRolesAdmin from './pages/ClubMemberRolesAdmin'
 import TeamUnitsAdmin from './pages/TeamUnitsAdmin'
 import SkillLevelsAdmin from './pages/SkillLevelsAdmin'
@@ -20,7 +20,7 @@ import Feedback from './pages/Feedback'
 import FeedbackAdmin from './pages/FeedbackAdmin'
 import Events from './pages/Events'
 import TournamentManage from './pages/TournamentManage'
-import Courts from './pages/Courts'
+import Venues from './pages/Venues'
 import Clubs from './pages/Clubs'
 import Blog from './pages/Blog'
 import BlogAdmin from './pages/BlogAdmin'
@@ -56,7 +56,8 @@ function App() {
           <TournamentManage />
         </ProtectedRoute>
       } />
-      <Route path="/courts" element={<Courts />} />
+      <Route path="/venues" element={<Venues />} />
+      <Route path="/courts" element={<Navigate to="/venues" replace />} />
       <Route path="/clubs" element={<Clubs />} />
       <Route path="/blog" element={<Blog />} />
       <Route path="/faq" element={<Faq />} />
@@ -126,11 +127,12 @@ function App() {
         </ProtectedRoute>
       } />
 
-      <Route path="/admin/court-types" element={
+      <Route path="/admin/venue-types" element={
         <ProtectedRoute role="Admin">
-          <CourtTypesAdmin />
+          <VenueTypesAdmin />
         </ProtectedRoute>
       } />
+      <Route path="/admin/court-types" element={<Navigate to="/admin/venue-types" replace />} />
 
       <Route path="/admin/club-member-roles" element={
         <ProtectedRoute role="Admin">

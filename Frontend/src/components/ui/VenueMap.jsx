@@ -2,47 +2,54 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import L from 'leaflet';
 
-export default function CourtMap({
-  courts,
+export default function VenueMap({
+  venues,
+  courts, // Backward compatibility alias for venues
   center,
   zoom = 10,
-  onCourtClick,
+  onVenueClick,
+  onCourtClick, // Backward compatibility
   onMarkerSelect,
-  selectedCourtId,
+  selectedVenueId,
+  selectedCourtId, // Backward compatibility
   userLocation,
   fitBounds = true,
   showNumbers = false
 }) {
+  // Support both venues and courts props for backward compatibility
+  const items = venues || courts || [];
+  const selectedId = selectedVenueId || selectedCourtId;
+  const handleItemClick = onVenueClick || onCourtClick;
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
   const [isClient, setIsClient] = useState(false);
 
-  // Filter courts with valid coordinates
-  const courtsWithCoords = useMemo(() => {
-    if (!courts) return [];
-    return courts.filter(court => {
-      const lat = parseFloat(court.latitude || court.gpsLat);
-      const lng = parseFloat(court.longitude || court.gpsLng);
+  // Filter venues with valid coordinates
+  const venuesWithCoords = useMemo(() => {
+    if (!items) return [];
+    return items.filter(venue => {
+      const lat = parseFloat(venue.latitude || venue.gpsLat);
+      const lng = parseFloat(venue.longitude || venue.gpsLng);
       return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
-    }).map((court, index) => ({
-      ...court,
-      lat: parseFloat(court.latitude || court.gpsLat),
-      lng: parseFloat(court.longitude || court.gpsLng),
+    }).map((venue, index) => ({
+      ...venue,
+      lat: parseFloat(venue.latitude || venue.gpsLat),
+      lng: parseFloat(venue.longitude || venue.gpsLng),
       listIndex: index + 1
     }));
-  }, [courts]);
+  }, [items]);
 
   // Default center
   const defaultCenter = useMemo(() => {
     if (userLocation) {
       return [userLocation.lat, userLocation.lng];
     }
-    if (courtsWithCoords.length > 0) {
-      return [courtsWithCoords[0].lat, courtsWithCoords[0].lng];
+    if (venuesWithCoords.length > 0) {
+      return [venuesWithCoords[0].lat, venuesWithCoords[0].lng];
     }
     return [39.8283, -98.5795]; // Center of US
-  }, [userLocation, courtsWithCoords]);
+  }, [userLocation, venuesWithCoords]);
 
   // Set client-side flag
   useEffect(() => {
@@ -118,7 +125,7 @@ export default function CourtMap({
     markersRef.current = [];
 
     // Add court markers
-    courtsWithCoords.forEach((court, index) => {
+    venuesWithCoords.forEach((court, index) => {
       const number = index + 1;
       const isSelected = selectedCourtId === court.courtId || selectedCourtId === court.id;
 
@@ -175,14 +182,14 @@ export default function CourtMap({
     }
 
     // Fit bounds if requested
-    if (fitBounds && courtsWithCoords.length > 0) {
-      const bounds = L.latLngBounds(courtsWithCoords.map(c => [c.lat, c.lng]));
+    if (fitBounds && venuesWithCoords.length > 0) {
+      const bounds = L.latLngBounds(venuesWithCoords.map(c => [c.lat, c.lng]));
       if (userLocation) {
         bounds.extend([userLocation.lat, userLocation.lng]);
       }
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
     }
-  }, [courtsWithCoords, userLocation, fitBounds, onCourtClick, onMarkerSelect, selectedCourtId, showNumbers]);
+  }, [venuesWithCoords, userLocation, fitBounds, onCourtClick, onMarkerSelect, selectedCourtId, showNumbers]);
 
   // Update marker styles when selection changes
   useEffect(() => {
@@ -261,7 +268,7 @@ export default function CourtMap({
     );
   }
 
-  if (courtsWithCoords.length === 0) {
+  if (venuesWithCoords.length === 0) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
         <div className="text-center p-8">

@@ -3,15 +3,15 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Pickleball.Community.Models.Entities;
 
-[Table("Court_GeoCodes")]
-public class CourtGeoCode
+[Table("VenueGeoCodes")]
+public class VenueGeoCode
 {
     [Key]
     [Column("GEO_ID")]
     public int GeoId { get; set; }
 
-    [Column("Court_ID")]
-    public int? CourtId { get; set; }
+    [Column("VenueId")]
+    public int? VenueId { get; set; }
 
     [Column("GEOCodeType_ID")]
     public int? GeoCodeTypeId { get; set; }
@@ -27,8 +27,8 @@ public class CourtGeoCode
     [Column("DT_Code")]
     public DateTime? DateCoded { get; set; }
 
-    [ForeignKey("CourtId")]
-    public Court? Court { get; set; }
+    [ForeignKey("VenueId")]
+    public Venue? Venue { get; set; }
 
     [ForeignKey("GeoCodeTypeId")]
     public GeoCodeType? GeoCodeType { get; set; }

@@ -12,12 +12,12 @@ namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class CourtsController : ControllerBase
+public class VenuesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<CourtsController> _logger;
+    private readonly ILogger<VenuesController> _logger;
 
-    public CourtsController(ApplicationDbContext context, ILogger<CourtsController> logger)
+    public VenuesController(ApplicationDbContext context, ILogger<VenuesController> logger)
     {
         _context = context;
         _logger = logger;
@@ -29,13 +29,13 @@ public class CourtsController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
-    // GET: /courts/search - Search for courts using stored procedure
+    // GET: /venues/search - Search for venues using stored procedure
     [HttpGet("search")]
-    public async Task<ActionResult<ApiResponse<PagedResult<CourtDto>>>> SearchCourts([FromQuery] CourtSearchRequest request)
+    public async Task<ActionResult<ApiResponse<PagedResult<VenueDto>>>> SearchVenues([FromQuery] VenueSearchRequest request)
     {
         try
         {
-            var courts = new List<CourtDto>();
+            var venues = new List<VenueDto>();
             int totalCount = 0;
 
             var connection = _context.Database.GetDbConnection();
@@ -44,7 +44,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "sp_SearchCourts";
+                command.CommandText = "sp_SearchVenues";
                 command.CommandType = CommandType.StoredProcedure;
 
                 // Add parameters
@@ -63,9 +63,9 @@ public class CourtsController : ControllerBase
                 using var reader = await command.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
-                    var court = new CourtDto
+                    var venue = new VenueDto
                     {
-                        Id = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                        Id = reader.GetInt32(reader.GetOrdinal("VenueId")),
                         Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? null : reader.GetString(reader.GetOrdinal("Name")),
                         Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
                         City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
@@ -83,7 +83,7 @@ public class CourtsController : ControllerBase
                         Latitude = reader.IsDBNull(reader.GetOrdinal("Latitude")) ? null : reader.GetDouble(reader.GetOrdinal("Latitude")),
                         Longitude = reader.IsDBNull(reader.GetOrdinal("Longitude")) ? null : reader.GetDouble(reader.GetOrdinal("Longitude")),
                         Distance = reader.IsDBNull(reader.GetOrdinal("Distance")) ? null : reader.GetDouble(reader.GetOrdinal("Distance")),
-                        AggregatedInfo = new CourtAggregatedInfoDto
+                        AggregatedInfo = new VenueAggregatedInfoDto
                         {
                             ConfirmationCount = reader.GetInt32(reader.GetOrdinal("ConfirmationCount")),
                             AverageRating = reader.IsDBNull(reader.GetOrdinal("AverageRating")) ? null : reader.GetDouble(reader.GetOrdinal("AverageRating")),
@@ -93,7 +93,7 @@ public class CourtsController : ControllerBase
                     };
 
                     totalCount = reader.GetInt32(reader.GetOrdinal("TotalCount"));
-                    courts.Add(court);
+                    venues.Add(venue);
                 }
             }
             finally
@@ -101,12 +101,12 @@ public class CourtsController : ControllerBase
                 await connection.CloseAsync();
             }
 
-            return Ok(new ApiResponse<PagedResult<CourtDto>>
+            return Ok(new ApiResponse<PagedResult<VenueDto>>
             {
                 Success = true,
-                Data = new PagedResult<CourtDto>
+                Data = new PagedResult<VenueDto>
                 {
-                    Items = courts,
+                    Items = venues,
                     TotalCount = totalCount,
                     Page = request.Page,
                     PageSize = request.PageSize
@@ -116,69 +116,69 @@ public class CourtsController : ControllerBase
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Stored procedure not created yet - fall back to LINQ
-            _logger.LogWarning("Stored procedure sp_SearchCourts not found, falling back to LINQ query");
-            return await SearchCourtsLinq(request);
+            _logger.LogWarning("Stored procedure sp_SearchVenues not found, falling back to LINQ query");
+            return await SearchVenuesLinq(request);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching courts");
-            return StatusCode(500, new ApiResponse<PagedResult<CourtDto>> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error searching venues");
+            return StatusCode(500, new ApiResponse<PagedResult<VenueDto>> { Success = false, Message = "An error occurred" });
         }
     }
 
     // Fallback LINQ-based search (used when stored procedure doesn't exist)
-    private async Task<ActionResult<ApiResponse<PagedResult<CourtDto>>>> SearchCourtsLinq(CourtSearchRequest request)
+    private async Task<ActionResult<ApiResponse<PagedResult<VenueDto>>>> SearchVenuesLinq(VenueSearchRequest request)
     {
-        var query = _context.Courts.AsQueryable();
+        var query = _context.Venues.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Country))
         {
             var searchCountry = request.Country == "Unknown" ? null : request.Country;
-            query = query.Where(c => searchCountry == null ? c.Country == null : c.Country == searchCountry);
+            query = query.Where(v => searchCountry == null ? v.Country == null : v.Country == searchCountry);
         }
 
         if (!string.IsNullOrWhiteSpace(request.State))
         {
             var searchState = request.State == "Unknown" ? null : request.State;
-            query = query.Where(c => searchState == null ? c.State == null : c.State == searchState);
+            query = query.Where(v => searchState == null ? v.State == null : v.State == searchState);
         }
 
         if (!string.IsNullOrWhiteSpace(request.City))
         {
             var cityPattern = $"%{request.City}%";
-            query = query.Where(c => c.City != null && EF.Functions.Like(c.City, cityPattern));
+            query = query.Where(v => v.City != null && EF.Functions.Like(v.City, cityPattern));
         }
 
         if (request.HasLights.HasValue && request.HasLights.Value)
-            query = query.Where(c => c.Lights == "Y");
+            query = query.Where(v => v.Lights == "Y");
 
         if (request.IsIndoor.HasValue && request.IsIndoor.Value)
-            query = query.Where(c => c.IndoorNum > 0);
+            query = query.Where(v => v.IndoorNum > 0);
 
-        if (request.CourtTypeId.HasValue)
-            query = query.Where(c => c.CourtTypeId == request.CourtTypeId.Value);
+        if (request.VenueTypeId.HasValue)
+            query = query.Where(v => v.VenueTypeId == request.VenueTypeId.Value);
 
         if (!string.IsNullOrWhiteSpace(request.Query))
         {
             var searchPattern = $"%{request.Query}%";
-            query = query.Where(c =>
-                (c.Name != null && EF.Functions.Like(c.Name, searchPattern)) ||
-                (c.City != null && EF.Functions.Like(c.City, searchPattern)) ||
-                (c.Addr1 != null && EF.Functions.Like(c.Addr1, searchPattern)));
+            query = query.Where(v =>
+                (v.Name != null && EF.Functions.Like(v.Name, searchPattern)) ||
+                (v.City != null && EF.Functions.Like(v.City, searchPattern)) ||
+                (v.Addr1 != null && EF.Functions.Like(v.Addr1, searchPattern)));
         }
 
-        var courts = await query.ToListAsync();
+        var venues = await query.ToListAsync();
 
-        List<(Court court, double? distance)> courtsWithDistance;
+        List<(Venue venue, double? distance)> venuesWithDistance;
         if (request.Latitude.HasValue && request.Longitude.HasValue)
         {
-            courtsWithDistance = courts
-                .Select(c =>
+            venuesWithDistance = venues
+                .Select(v =>
                 {
                     double? distance = null;
-                    if (double.TryParse(c.GpsLat, out var lat) && double.TryParse(c.GpsLng, out var lng))
+                    if (double.TryParse(v.GpsLat, out var lat) && double.TryParse(v.GpsLng, out var lng))
                         distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, lat, lng);
-                    return (court: c, distance);
+                    return (venue: v, distance);
                 })
                 .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)
                 .OrderBy(x => x.distance ?? double.MaxValue)
@@ -186,44 +186,44 @@ public class CourtsController : ControllerBase
         }
         else
         {
-            courtsWithDistance = courts.Select(c => (court: c, distance: (double?)null)).ToList();
+            venuesWithDistance = venues.Select(v => (venue: v, distance: (double?)null)).ToList();
         }
 
-        var totalCount = courtsWithDistance.Count;
-        var pagedCourts = courtsWithDistance
+        var totalCount = venuesWithDistance.Count;
+        var pagedVenues = venuesWithDistance
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToList();
 
-        var courtDtos = pagedCourts.Select(x => new CourtDto
+        var venueDtos = pagedVenues.Select(x => new VenueDto
         {
-            Id = x.court.CourtId,
-            Name = x.court.Name,
-            Address = string.Join(" ", new[] { x.court.Addr1, x.court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-            City = x.court.City,
-            County = x.court.County,
-            State = x.court.State,
-            Zip = x.court.Zip,
-            Country = x.court.Country,
-            Phone = x.court.Phone,
-            Website = x.court.Website,
-            Email = x.court.Email,
-            IndoorNum = x.court.IndoorNum,
-            OutdoorNum = x.court.OutdoorNum,
-            CoveredNum = x.court.CoveredNum,
-            HasLights = x.court.Lights == "Y",
-            Latitude = double.TryParse(x.court.GpsLat, out var lat) ? lat : null,
-            Longitude = double.TryParse(x.court.GpsLng, out var lng) ? lng : null,
+            Id = x.venue.VenueId,
+            Name = x.venue.Name,
+            Address = string.Join(" ", new[] { x.venue.Addr1, x.venue.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+            City = x.venue.City,
+            County = x.venue.County,
+            State = x.venue.State,
+            Zip = x.venue.Zip,
+            Country = x.venue.Country,
+            Phone = x.venue.Phone,
+            Website = x.venue.Website,
+            Email = x.venue.Email,
+            IndoorNum = x.venue.IndoorNum,
+            OutdoorNum = x.venue.OutdoorNum,
+            CoveredNum = x.venue.CoveredNum,
+            HasLights = x.venue.Lights == "Y",
+            Latitude = double.TryParse(x.venue.GpsLat, out var lat) ? lat : null,
+            Longitude = double.TryParse(x.venue.GpsLng, out var lng) ? lng : null,
             Distance = x.distance,
-            AggregatedInfo = new CourtAggregatedInfoDto { ConfirmationCount = 0 }
+            AggregatedInfo = new VenueAggregatedInfoDto { ConfirmationCount = 0 }
         }).ToList();
 
-        return Ok(new ApiResponse<PagedResult<CourtDto>>
+        return Ok(new ApiResponse<PagedResult<VenueDto>>
         {
             Success = true,
-            Data = new PagedResult<CourtDto>
+            Data = new PagedResult<VenueDto>
             {
-                Items = courtDtos,
+                Items = venueDtos,
                 TotalCount = totalCount,
                 Page = request.Page,
                 PageSize = request.PageSize
@@ -231,15 +231,15 @@ public class CourtsController : ControllerBase
         });
     }
 
-    // GET: /courts/{id} - Get court details using stored procedure
+    // GET: /venues/{id} - Get venue details using stored procedure
     [HttpGet("{id}")]
-    public async Task<ActionResult<ApiResponse<CourtDetailDto>>> GetCourt(int id, [FromQuery] double? userLat, [FromQuery] double? userLng)
+    public async Task<ActionResult<ApiResponse<VenueDetailDto>>> GetVenue(int id, [FromQuery] double? userLat, [FromQuery] double? userLng)
     {
         try
         {
-            CourtDetailDto? dto = null;
-            var recentConfirmations = new List<CourtConfirmationDto>();
-            CourtAggregatedInfoDto aggregatedInfo = new() { ConfirmationCount = 0 };
+            VenueDetailDto? dto = null;
+            var recentConfirmations = new List<VenueConfirmationDto>();
+            VenueAggregatedInfoDto aggregatedInfo = new() { ConfirmationCount = 0 };
 
             var connection = _context.Database.GetDbConnection();
             await connection.OpenAsync();
@@ -247,21 +247,21 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "sp_GetCourtDetail";
+                command.CommandText = "sp_GetVenueDetail";
                 command.CommandType = CommandType.StoredProcedure;
 
-                command.Parameters.Add(new SqlParameter("@CourtId", SqlDbType.Int) { Value = id });
+                command.Parameters.Add(new SqlParameter("@VenueId", SqlDbType.Int) { Value = id });
                 command.Parameters.Add(new SqlParameter("@UserLat", SqlDbType.Float) { Value = (object?)userLat ?? DBNull.Value });
                 command.Parameters.Add(new SqlParameter("@UserLng", SqlDbType.Float) { Value = (object?)userLng ?? DBNull.Value });
 
                 using var reader = await command.ExecuteReaderAsync();
 
-                // First result set: Court basic info
+                // First result set: Venue basic info
                 if (await reader.ReadAsync())
                 {
-                    dto = new CourtDetailDto
+                    dto = new VenueDetailDto
                     {
-                        Id = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                        Id = reader.GetInt32(reader.GetOrdinal("VenueId")),
                         Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? null : reader.GetString(reader.GetOrdinal("Name")),
                         Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
                         City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
@@ -283,12 +283,12 @@ public class CourtsController : ControllerBase
                 }
 
                 if (dto == null)
-                    return NotFound(new ApiResponse<CourtDetailDto> { Success = false, Message = "Court not found" });
+                    return NotFound(new ApiResponse<VenueDetailDto> { Success = false, Message = "Venue not found" });
 
                 // Second result set: Aggregated confirmation data
                 if (await reader.NextResultAsync() && await reader.ReadAsync())
                 {
-                    aggregatedInfo = new CourtAggregatedInfoDto
+                    aggregatedInfo = new VenueAggregatedInfoDto
                     {
                         ConfirmationCount = reader.GetInt32(reader.GetOrdinal("ConfirmationCount")),
                         AverageRating = reader.IsDBNull(reader.GetOrdinal("AverageRating")) ? null : reader.GetDouble(reader.GetOrdinal("AverageRating")),
@@ -309,10 +309,10 @@ public class CourtsController : ControllerBase
                 {
                     while (await reader.ReadAsync())
                     {
-                        var confirmation = new CourtConfirmationDto
+                        var confirmation = new VenueConfirmationDto
                         {
                             Id = reader.GetInt32(reader.GetOrdinal("Id")),
-                            CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
+                            VenueId = reader.GetInt32(reader.GetOrdinal("VenueId")),
                             UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
                             UserName = reader.IsDBNull(reader.GetOrdinal("UserName")) ? null : reader.GetString(reader.GetOrdinal("UserName")),
                             UserProfileImageUrl = reader.IsDBNull(reader.GetOrdinal("UserProfileImageUrl")) ? null : reader.GetString(reader.GetOrdinal("UserProfileImageUrl")),
@@ -353,94 +353,94 @@ public class CourtsController : ControllerBase
                 await connection.CloseAsync();
             }
 
-            return Ok(new ApiResponse<CourtDetailDto> { Success = true, Data = dto });
+            return Ok(new ApiResponse<VenueDetailDto> { Success = true, Data = dto });
         }
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Stored procedure not created yet - fall back to LINQ
-            _logger.LogWarning("Stored procedure sp_GetCourtDetail not found, falling back to LINQ query");
-            return await GetCourtLinq(id, userLat, userLng);
+            _logger.LogWarning("Stored procedure sp_GetVenueDetail not found, falling back to LINQ query");
+            return await GetVenueLinq(id, userLat, userLng);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching court {CourtId}", id);
-            return StatusCode(500, new ApiResponse<CourtDetailDto> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error fetching venue {VenueId}", id);
+            return StatusCode(500, new ApiResponse<VenueDetailDto> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // Fallback LINQ-based get court (used when stored procedure doesn't exist)
-    private async Task<ActionResult<ApiResponse<CourtDetailDto>>> GetCourtLinq(int id, double? userLat, double? userLng)
+    // Fallback LINQ-based get venue (used when stored procedure doesn't exist)
+    private async Task<ActionResult<ApiResponse<VenueDetailDto>>> GetVenueLinq(int id, double? userLat, double? userLng)
     {
-        var court = await _context.Courts.FindAsync(id);
-        if (court == null)
-            return NotFound(new ApiResponse<CourtDetailDto> { Success = false, Message = "Court not found" });
+        var venue = await _context.Venues.FindAsync(id);
+        if (venue == null)
+            return NotFound(new ApiResponse<VenueDetailDto> { Success = false, Message = "Venue not found" });
 
-        List<CourtConfirmation> confirmations = new();
+        List<VenueConfirmation> confirmations = new();
         try
         {
-            confirmations = await _context.CourtConfirmations
-                .Include(cc => cc.User)
-                .Where(cc => cc.CourtId == id)
-                .OrderByDescending(cc => cc.UpdatedAt)
+            confirmations = await _context.VenueConfirmations
+                .Include(vc => vc.User)
+                .Where(vc => vc.VenueId == id)
+                .OrderByDescending(vc => vc.UpdatedAt)
                 .ToListAsync();
         }
         catch { /* Table may not exist */ }
 
         double? distance = null;
         if (userLat.HasValue && userLng.HasValue &&
-            double.TryParse(court.GpsLat, out var lat) && double.TryParse(court.GpsLng, out var lng))
+            double.TryParse(venue.GpsLat, out var lat) && double.TryParse(venue.GpsLng, out var lng))
         {
             distance = CalculateDistance(userLat.Value, userLng.Value, lat, lng);
         }
 
         var userId = GetCurrentUserId();
-        var dto = new CourtDetailDto
+        var dto = new VenueDetailDto
         {
-            Id = court.CourtId,
-            Name = court.Name,
-            Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-            City = court.City,
-            County = court.County,
-            State = court.State,
-            Zip = court.Zip,
-            Country = court.Country,
-            Phone = court.Phone,
-            Website = court.Website,
-            Email = court.Email,
-            IndoorNum = court.IndoorNum,
-            OutdoorNum = court.OutdoorNum,
-            CoveredNum = court.CoveredNum,
-            HasLights = court.Lights == "Y",
-            Latitude = double.TryParse(court.GpsLat, out var courtLat) ? courtLat : null,
-            Longitude = double.TryParse(court.GpsLng, out var courtLng) ? courtLng : null,
+            Id = venue.VenueId,
+            Name = venue.Name,
+            Address = string.Join(" ", new[] { venue.Addr1, venue.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+            City = venue.City,
+            County = venue.County,
+            State = venue.State,
+            Zip = venue.Zip,
+            Country = venue.Country,
+            Phone = venue.Phone,
+            Website = venue.Website,
+            Email = venue.Email,
+            IndoorNum = venue.IndoorNum,
+            OutdoorNum = venue.OutdoorNum,
+            CoveredNum = venue.CoveredNum,
+            HasLights = venue.Lights == "Y",
+            Latitude = double.TryParse(venue.GpsLat, out var venueLat) ? venueLat : null,
+            Longitude = double.TryParse(venue.GpsLng, out var venueLng) ? venueLng : null,
             Distance = distance,
             AggregatedInfo = GetAggregatedInfo(confirmations),
-            RecentConfirmations = confirmations.Take(10).Select(cc => MapToConfirmationDto(cc)).ToList(),
+            RecentConfirmations = confirmations.Take(10).Select(vc => MapToConfirmationDto(vc)).ToList(),
             MyConfirmation = userId.HasValue
-                ? confirmations.Where(cc => cc.UserId == userId.Value).Select(cc => MapToConfirmationDto(cc)).FirstOrDefault()
+                ? confirmations.Where(vc => vc.UserId == userId.Value).Select(vc => MapToConfirmationDto(vc)).FirstOrDefault()
                 : null
         };
 
-        return Ok(new ApiResponse<CourtDetailDto> { Success = true, Data = dto });
+        return Ok(new ApiResponse<VenueDetailDto> { Success = true, Data = dto });
     }
 
-    // POST: /courts/{id}/confirmations - Submit or update court confirmation
+    // POST: /venues/{id}/confirmations - Submit or update venue confirmation
     [HttpPost("{id}/confirmations")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<CourtConfirmationDto>>> SubmitConfirmation(int id, [FromBody] SubmitCourtConfirmationDto dto)
+    public async Task<ActionResult<ApiResponse<VenueConfirmationDto>>> SubmitConfirmation(int id, [FromBody] SubmitVenueConfirmationDto dto)
     {
         try
         {
             var userId = GetCurrentUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<CourtConfirmationDto> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<VenueConfirmationDto> { Success = false, Message = "User not authenticated" });
 
-            var court = await _context.Courts.FindAsync(id);
-            if (court == null)
-                return NotFound(new ApiResponse<CourtConfirmationDto> { Success = false, Message = "Court not found" });
+            var venue = await _context.Venues.FindAsync(id);
+            if (venue == null)
+                return NotFound(new ApiResponse<VenueConfirmationDto> { Success = false, Message = "Venue not found" });
 
-            var existingConfirmation = await _context.CourtConfirmations
-                .FirstOrDefaultAsync(cc => cc.CourtId == id && cc.UserId == userId.Value);
+            var existingConfirmation = await _context.VenueConfirmations
+                .FirstOrDefaultAsync(vc => vc.VenueId == id && vc.UserId == userId.Value);
 
             if (existingConfirmation != null)
             {
@@ -468,7 +468,7 @@ public class CourtsController : ControllerBase
 
                 await _context.SaveChangesAsync();
 
-                return Ok(new ApiResponse<CourtConfirmationDto>
+                return Ok(new ApiResponse<VenueConfirmationDto>
                 {
                     Success = true,
                     Message = "Confirmation updated",
@@ -477,9 +477,9 @@ public class CourtsController : ControllerBase
             }
             else
             {
-                var confirmation = new CourtConfirmation
+                var confirmation = new VenueConfirmation
                 {
-                    CourtId = id,
+                    VenueId = id,
                     UserId = userId.Value,
                     NameConfirmed = dto.NameConfirmed,
                     SuggestedName = dto.SuggestedName,
@@ -502,10 +502,10 @@ public class CourtsController : ControllerBase
                     Amenities = dto.Amenities != null ? string.Join(",", dto.Amenities) : null
                 };
 
-                _context.CourtConfirmations.Add(confirmation);
+                _context.VenueConfirmations.Add(confirmation);
                 await _context.SaveChangesAsync();
 
-                return Ok(new ApiResponse<CourtConfirmationDto>
+                return Ok(new ApiResponse<VenueConfirmationDto>
                 {
                     Success = true,
                     Message = "Confirmation submitted",
@@ -515,34 +515,34 @@ public class CourtsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error submitting court confirmation");
-            return StatusCode(500, new ApiResponse<CourtConfirmationDto> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error submitting venue confirmation");
+            return StatusCode(500, new ApiResponse<VenueConfirmationDto> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // GET: /courts/{id}/confirmations - Get all confirmations for a court
+    // GET: /venues/{id}/confirmations - Get all confirmations for a venue
     [HttpGet("{id}/confirmations")]
-    public async Task<ActionResult<ApiResponse<List<CourtConfirmationDto>>>> GetConfirmations(int id)
+    public async Task<ActionResult<ApiResponse<List<VenueConfirmationDto>>>> GetConfirmations(int id)
     {
         try
         {
-            var confirmations = await _context.CourtConfirmations
-                .Include(cc => cc.User)
-                .Where(cc => cc.CourtId == id)
-                .OrderByDescending(cc => cc.UpdatedAt)
+            var confirmations = await _context.VenueConfirmations
+                .Include(vc => vc.User)
+                .Where(vc => vc.VenueId == id)
+                .OrderByDescending(vc => vc.UpdatedAt)
                 .ToListAsync();
 
-            var dtos = confirmations.Select(cc => MapToConfirmationDto(cc)).ToList();
-            return Ok(new ApiResponse<List<CourtConfirmationDto>> { Success = true, Data = dtos });
+            var dtos = confirmations.Select(vc => MapToConfirmationDto(vc)).ToList();
+            return Ok(new ApiResponse<List<VenueConfirmationDto>> { Success = true, Data = dtos });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching court confirmations");
-            return StatusCode(500, new ApiResponse<List<CourtConfirmationDto>> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error fetching venue confirmations");
+            return StatusCode(500, new ApiResponse<List<VenueConfirmationDto>> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // GET: /courts/countries - Get countries with court counts
+    // GET: /venues/countries - Get countries with venue counts
     [HttpGet("countries")]
     public async Task<ActionResult<ApiResponse<List<LocationCountDto>>>> GetCountries()
     {
@@ -556,7 +556,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "GetCourtCountries";
+                command.CommandText = "GetVenueCountries";
                 command.CommandType = CommandType.StoredProcedure;
 
                 using var reader = await command.ExecuteReaderAsync();
@@ -565,7 +565,7 @@ public class CourtsController : ControllerBase
                     countries.Add(new LocationCountDto
                     {
                         Name = reader.GetString(reader.GetOrdinal("Country")),
-                        Count = reader.GetInt32(reader.GetOrdinal("CourtCount"))
+                        Count = reader.GetInt32(reader.GetOrdinal("VenueCount"))
                     });
                 }
             }
@@ -579,9 +579,9 @@ public class CourtsController : ControllerBase
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Fallback to LINQ
-            _logger.LogWarning("Stored procedure GetCourtCountries not found, falling back to LINQ");
-            var countries = await _context.Courts
-                .GroupBy(c => c.Country ?? "Unknown")
+            _logger.LogWarning("Stored procedure GetVenueCountries not found, falling back to LINQ");
+            var countries = await _context.Venues
+                .GroupBy(v => v.Country ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .ThenBy(x => x.Name)
@@ -596,7 +596,7 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // GET: /courts/countries/{country}/states - Get states for a country with court counts
+    // GET: /venues/countries/{country}/states - Get states for a country with venue counts
     [HttpGet("countries/{country}/states")]
     public async Task<ActionResult<ApiResponse<List<LocationCountDto>>>> GetStatesByCountry(string country)
     {
@@ -610,7 +610,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "GetCourtStatesByCountry";
+                command.CommandText = "GetVenueStatesByCountry";
                 command.CommandType = CommandType.StoredProcedure;
 
                 command.Parameters.Add(new SqlParameter("@Country", SqlDbType.NVarChar, 100) { Value = country });
@@ -621,7 +621,7 @@ public class CourtsController : ControllerBase
                     states.Add(new LocationCountDto
                     {
                         Name = reader.GetString(reader.GetOrdinal("State")),
-                        Count = reader.GetInt32(reader.GetOrdinal("CourtCount"))
+                        Count = reader.GetInt32(reader.GetOrdinal("VenueCount"))
                     });
                 }
             }
@@ -635,11 +635,11 @@ public class CourtsController : ControllerBase
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Fallback to LINQ
-            _logger.LogWarning("Stored procedure GetCourtStatesByCountry not found, falling back to LINQ");
+            _logger.LogWarning("Stored procedure GetVenueStatesByCountry not found, falling back to LINQ");
             var searchCountry = country == "Unknown" ? null : country;
-            var states = await _context.Courts
-                .Where(c => searchCountry == null ? c.Country == null : c.Country == searchCountry)
-                .GroupBy(c => c.State ?? "Unknown")
+            var states = await _context.Venues
+                .Where(v => searchCountry == null ? v.Country == null : v.Country == searchCountry)
+                .GroupBy(v => v.State ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .ThenBy(x => x.Name)
@@ -654,7 +654,7 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // GET: /courts/countries/{country}/states/{state}/cities - Get cities for a state with court counts
+    // GET: /venues/countries/{country}/states/{state}/cities - Get cities for a state with venue counts
     [HttpGet("countries/{country}/states/{state}/cities")]
     public async Task<ActionResult<ApiResponse<List<LocationCountDto>>>> GetCitiesByState(string country, string state)
     {
@@ -668,7 +668,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "GetCourtCitiesByState";
+                command.CommandText = "GetVenueCitiesByState";
                 command.CommandType = CommandType.StoredProcedure;
 
                 command.Parameters.Add(new SqlParameter("@Country", SqlDbType.NVarChar, 100) { Value = country });
@@ -680,7 +680,7 @@ public class CourtsController : ControllerBase
                     cities.Add(new LocationCountDto
                     {
                         Name = reader.GetString(reader.GetOrdinal("City")),
-                        Count = reader.GetInt32(reader.GetOrdinal("CourtCount"))
+                        Count = reader.GetInt32(reader.GetOrdinal("VenueCount"))
                     });
                 }
             }
@@ -694,13 +694,13 @@ public class CourtsController : ControllerBase
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Fallback to LINQ
-            _logger.LogWarning("Stored procedure GetCourtCitiesByState not found, falling back to LINQ");
+            _logger.LogWarning("Stored procedure GetVenueCitiesByState not found, falling back to LINQ");
             var searchCountry = country == "Unknown" ? null : country;
             var searchState = state == "Unknown" ? null : state;
-            var cities = await _context.Courts
-                .Where(c => (searchCountry == null ? c.Country == null : c.Country == searchCountry)
-                    && (searchState == null ? c.State == null : c.State == searchState))
-                .GroupBy(c => c.City ?? "Unknown")
+            var cities = await _context.Venues
+                .Where(v => (searchCountry == null ? v.Country == null : v.Country == searchCountry)
+                    && (searchState == null ? v.State == null : v.State == searchState))
+                .GroupBy(v => v.City ?? "Unknown")
                 .Select(g => new LocationCountDto { Name = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .ThenBy(x => x.Name)
@@ -715,7 +715,7 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // GET: /courts/states - Get list of states with courts using stored procedure
+    // GET: /venues/states - Get list of states with venues using stored procedure
     [HttpGet("states")]
     public async Task<ActionResult<ApiResponse<List<string>>>> GetStates()
     {
@@ -729,7 +729,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "sp_GetCourtStates";
+                command.CommandText = "sp_GetVenueStates";
                 command.CommandType = CommandType.StoredProcedure;
 
                 using var reader = await command.ExecuteReaderAsync();
@@ -749,10 +749,10 @@ public class CourtsController : ControllerBase
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
             // Stored procedure not created yet - fall back to LINQ
-            _logger.LogWarning("Stored procedure sp_GetCourtStates not found, falling back to LINQ query");
-            var states = await _context.Courts
-                .Where(c => c.State != null && c.State != "")
-                .Select(c => c.State!)
+            _logger.LogWarning("Stored procedure sp_GetVenueStates not found, falling back to LINQ query");
+            var states = await _context.Venues
+                .Where(v => v.State != null && v.State != "")
+                .Select(v => v.State!)
                 .Distinct()
                 .OrderBy(s => s)
                 .ToListAsync();
@@ -766,22 +766,22 @@ public class CourtsController : ControllerBase
         }
     }
 
-    // POST: /courts/check-nearby - Check for nearby courts within specified radius
+    // POST: /venues/check-nearby - Check for nearby venues within specified radius
     [HttpPost("check-nearby")]
-    public async Task<ActionResult<ApiResponse<NearbyCourtsResponse>>> CheckNearbyCourts([FromBody] CheckNearbyCourtsRequest request)
+    public async Task<ActionResult<ApiResponse<NearbyVenuesResponse>>> CheckNearbyVenues([FromBody] CheckNearbyVenuesRequest request)
     {
         try
         {
             // Convert yards to miles for distance calculation (1 mile = 1760 yards)
             var radiusMiles = request.RadiusYards / 1760.0;
 
-            // Get all courts with coordinates
-            var courts = await _context.Courts.ToListAsync();
+            // Get all venues with coordinates
+            var venues = await _context.Venues.ToListAsync();
 
-            var nearbyCourts = courts
-                .Select(c =>
+            var nearbyVenues = venues
+                .Select(v =>
                 {
-                    if (!double.TryParse(c.GpsLat, out var lat) || !double.TryParse(c.GpsLng, out var lng))
+                    if (!double.TryParse(v.GpsLat, out var lat) || !double.TryParse(v.GpsLng, out var lng))
                         return null;
 
                     var distanceMiles = CalculateDistance(request.Latitude, request.Longitude, lat, lng);
@@ -790,62 +790,62 @@ public class CourtsController : ControllerBase
                     if (distanceYards > request.RadiusYards)
                         return null;
 
-                    return new NearbyCourtDto
+                    return new NearbyVenueDto
                     {
-                        Id = c.CourtId,
-                        Name = c.Name,
-                        Address = string.Join(" ", new[] { c.Addr1, c.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-                        City = c.City,
-                        State = c.State,
-                        Country = c.Country,
+                        Id = v.VenueId,
+                        Name = v.Name,
+                        Address = string.Join(" ", new[] { v.Addr1, v.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+                        City = v.City,
+                        State = v.State,
+                        Country = v.Country,
                         Latitude = lat,
                         Longitude = lng,
                         DistanceYards = Math.Round(distanceYards, 1),
-                        IndoorNum = c.IndoorNum,
-                        OutdoorNum = c.OutdoorNum,
-                        HasLights = c.Lights == "Y"
+                        IndoorNum = v.IndoorNum,
+                        OutdoorNum = v.OutdoorNum,
+                        HasLights = v.Lights == "Y"
                     };
                 })
-                .Where(c => c != null)
-                .OrderBy(c => c!.DistanceYards)
+                .Where(v => v != null)
+                .OrderBy(v => v!.DistanceYards)
                 .ToList();
 
-            return Ok(new ApiResponse<NearbyCourtsResponse>
+            return Ok(new ApiResponse<NearbyVenuesResponse>
             {
                 Success = true,
-                Data = new NearbyCourtsResponse
+                Data = new NearbyVenuesResponse
                 {
-                    NearbyCourts = nearbyCourts!
+                    NearbyVenues = nearbyVenues!
                 }
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking for nearby courts");
-            return StatusCode(500, new ApiResponse<NearbyCourtsResponse> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error checking for nearby venues");
+            return StatusCode(500, new ApiResponse<NearbyVenuesResponse> { Success = false, Message = "An error occurred" });
         }
     }
 
-    // POST: /courts - Add a new court
+    // POST: /venues - Add a new venue
     [HttpPost]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<CourtDto>>> AddCourt([FromBody] AddCourtRequest request)
+    public async Task<ActionResult<ApiResponse<VenueDto>>> AddVenue([FromBody] AddVenueRequest request)
     {
         try
         {
             var userId = GetCurrentUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<CourtDto> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<VenueDto> { Success = false, Message = "User not authenticated" });
 
             // Validate required fields
             if (string.IsNullOrWhiteSpace(request.Name))
-                return BadRequest(new ApiResponse<CourtDto> { Success = false, Message = "Court name is required" });
+                return BadRequest(new ApiResponse<VenueDto> { Success = false, Message = "Venue name is required" });
 
             if (request.Latitude == 0 && request.Longitude == 0)
-                return BadRequest(new ApiResponse<CourtDto> { Success = false, Message = "Valid location coordinates are required" });
+                return BadRequest(new ApiResponse<VenueDto> { Success = false, Message = "Valid location coordinates are required" });
 
-            // Create the court
-            var court = new Court
+            // Create the venue
+            var venue = new Venue
             {
                 Name = request.Name,
                 Addr1 = request.Addr1,
@@ -861,59 +861,59 @@ public class CourtsController : ControllerBase
                 OutdoorNum = request.OutdoorNum ?? 0,
                 CoveredNum = request.CoveredNum ?? 0,
                 Lights = request.HasLights ? "Y" : "N",
-                CourtTypeId = request.CourtTypeId,
+                VenueTypeId = request.VenueTypeId,
                 GpsLat = request.Latitude.ToString(),
                 GpsLng = request.Longitude.ToString(),
                 AdminUid = userId.Value
             };
 
-            _context.Courts.Add(court);
+            _context.Venues.Add(venue);
             await _context.SaveChangesAsync();
 
-            // Load court type name if applicable
-            string? courtTypeName = null;
-            if (court.CourtTypeId.HasValue)
+            // Load venue type name if applicable
+            string? venueTypeName = null;
+            if (venue.VenueTypeId.HasValue)
             {
-                var courtType = await _context.CourtTypes.FindAsync(court.CourtTypeId.Value);
-                courtTypeName = courtType?.Name;
+                var venueType = await _context.VenueTypes.FindAsync(venue.VenueTypeId.Value);
+                venueTypeName = venueType?.Name;
             }
 
-            var dto = new CourtDto
+            var dto = new VenueDto
             {
-                Id = court.CourtId,
-                Name = court.Name,
-                Address = string.Join(" ", new[] { court.Addr1, court.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
-                City = court.City,
-                State = court.State,
-                Zip = court.Zip,
-                Country = court.Country,
-                Phone = court.Phone,
-                Website = court.Website,
-                Email = court.Email,
-                IndoorNum = court.IndoorNum,
-                OutdoorNum = court.OutdoorNum,
-                CoveredNum = court.CoveredNum,
-                HasLights = court.Lights == "Y",
-                CourtTypeId = court.CourtTypeId,
-                CourtTypeName = courtTypeName,
+                Id = venue.VenueId,
+                Name = venue.Name,
+                Address = string.Join(" ", new[] { venue.Addr1, venue.Addr2 }.Where(a => !string.IsNullOrEmpty(a))),
+                City = venue.City,
+                State = venue.State,
+                Zip = venue.Zip,
+                Country = venue.Country,
+                Phone = venue.Phone,
+                Website = venue.Website,
+                Email = venue.Email,
+                IndoorNum = venue.IndoorNum,
+                OutdoorNum = venue.OutdoorNum,
+                CoveredNum = venue.CoveredNum,
+                HasLights = venue.Lights == "Y",
+                VenueTypeId = venue.VenueTypeId,
+                VenueTypeName = venueTypeName,
                 Latitude = request.Latitude,
                 Longitude = request.Longitude,
-                AggregatedInfo = new CourtAggregatedInfoDto { ConfirmationCount = 0 }
+                AggregatedInfo = new VenueAggregatedInfoDto { ConfirmationCount = 0 }
             };
 
-            _logger.LogInformation("User {UserId} added court {CourtId}: {CourtName}", userId.Value, court.CourtId, court.Name);
+            _logger.LogInformation("User {UserId} added venue {VenueId}: {VenueName}", userId.Value, venue.VenueId, venue.Name);
 
-            return Ok(new ApiResponse<CourtDto>
+            return Ok(new ApiResponse<VenueDto>
             {
                 Success = true,
-                Message = "Court added successfully",
+                Message = "Venue added successfully",
                 Data = dto
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding court");
-            return StatusCode(500, new ApiResponse<CourtDto> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error adding venue");
+            return StatusCode(500, new ApiResponse<VenueDto> { Success = false, Message = "An error occurred" });
         }
     }
 
@@ -935,12 +935,12 @@ public class CourtsController : ControllerBase
     }
 
     // Helper for LINQ fallback
-    private static CourtAggregatedInfoDto GetAggregatedInfo(List<CourtConfirmation> confirmations)
+    private static VenueAggregatedInfoDto GetAggregatedInfo(List<VenueConfirmation> confirmations)
     {
         if (confirmations.Count == 0)
-            return new CourtAggregatedInfoDto { ConfirmationCount = 0 };
+            return new VenueAggregatedInfoDto { ConfirmationCount = 0 };
 
-        return new CourtAggregatedInfoDto
+        return new VenueAggregatedInfoDto
         {
             ConfirmationCount = confirmations.Count,
             AverageRating = confirmations.Where(c => c.Rating.HasValue).Any()
@@ -956,43 +956,43 @@ public class CourtsController : ControllerBase
         };
     }
 
-    private static CourtConfirmationDto MapToConfirmationDto(CourtConfirmation cc)
+    private static VenueConfirmationDto MapToConfirmationDto(VenueConfirmation vc)
     {
-        return new CourtConfirmationDto
+        return new VenueConfirmationDto
         {
-            Id = cc.Id,
-            CourtId = cc.CourtId,
-            UserId = cc.UserId,
-            UserName = cc.User != null ? $"{cc.User.FirstName} {cc.User.LastName}".Trim() : null,
-            UserProfileImageUrl = cc.User?.ProfileImageUrl,
-            NameConfirmed = cc.NameConfirmed,
-            SuggestedName = cc.SuggestedName,
-            NotACourt = cc.NotACourt,
-            ConfirmedIndoorCount = cc.ConfirmedIndoorCount,
-            ConfirmedOutdoorCount = cc.ConfirmedOutdoorCount,
-            ConfirmedCoveredCount = cc.ConfirmedCoveredCount,
-            HasLights = cc.HasLights,
-            HasFee = cc.HasFee,
-            FeeAmount = cc.FeeAmount,
-            FeeNotes = cc.FeeNotes,
-            Hours = cc.Hours,
-            Rating = cc.Rating,
-            Notes = cc.Notes,
-            SurfaceType = cc.SurfaceType,
-            ConfirmedAddress = cc.ConfirmedAddress,
-            ConfirmedCity = cc.ConfirmedCity,
-            ConfirmedState = cc.ConfirmedState,
-            ConfirmedCountry = cc.ConfirmedCountry,
-            Amenities = cc.Amenities?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
-            CreatedAt = cc.CreatedAt,
-            UpdatedAt = cc.UpdatedAt
+            Id = vc.Id,
+            VenueId = vc.VenueId,
+            UserId = vc.UserId,
+            UserName = vc.User != null ? $"{vc.User.FirstName} {vc.User.LastName}".Trim() : null,
+            UserProfileImageUrl = vc.User?.ProfileImageUrl,
+            NameConfirmed = vc.NameConfirmed,
+            SuggestedName = vc.SuggestedName,
+            NotACourt = vc.NotACourt,
+            ConfirmedIndoorCount = vc.ConfirmedIndoorCount,
+            ConfirmedOutdoorCount = vc.ConfirmedOutdoorCount,
+            ConfirmedCoveredCount = vc.ConfirmedCoveredCount,
+            HasLights = vc.HasLights,
+            HasFee = vc.HasFee,
+            FeeAmount = vc.FeeAmount,
+            FeeNotes = vc.FeeNotes,
+            Hours = vc.Hours,
+            Rating = vc.Rating,
+            Notes = vc.Notes,
+            SurfaceType = vc.SurfaceType,
+            ConfirmedAddress = vc.ConfirmedAddress,
+            ConfirmedCity = vc.ConfirmedCity,
+            ConfirmedState = vc.ConfirmedState,
+            ConfirmedCountry = vc.ConfirmedCountry,
+            Amenities = vc.Amenities?.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+            CreatedAt = vc.CreatedAt,
+            UpdatedAt = vc.UpdatedAt
         };
     }
 
-    // GET: /courts/top-for-events - Get top courts for event creation based on user history and location
+    // GET: /venues/top-for-events - Get top venues for event creation based on user history and location
     [HttpGet("top-for-events")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<List<TopCourtForEventDto>>>> GetTopCourtsForEvents(
+    public async Task<ActionResult<ApiResponse<List<TopVenueForEventDto>>>> GetTopVenuesForEvents(
         [FromQuery] double? latitude = null,
         [FromQuery] double? longitude = null,
         [FromQuery] int topN = 10)
@@ -1001,9 +1001,9 @@ public class CourtsController : ControllerBase
         {
             var userId = GetCurrentUserId();
             if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<List<TopCourtForEventDto>> { Success = false, Message = "User not authenticated" });
+                return Unauthorized(new ApiResponse<List<TopVenueForEventDto>> { Success = false, Message = "User not authenticated" });
 
-            var courts = new List<TopCourtForEventDto>();
+            var venues = new List<TopVenueForEventDto>();
 
             var connection = _context.Database.GetDbConnection();
             await connection.OpenAsync();
@@ -1011,7 +1011,7 @@ public class CourtsController : ControllerBase
             try
             {
                 using var command = connection.CreateCommand();
-                command.CommandText = "sp_GetTopCourtsForUser";
+                command.CommandText = "sp_GetTopVenuesForUser";
                 command.CommandType = CommandType.StoredProcedure;
 
                 command.Parameters.Add(new SqlParameter("@UserId", SqlDbType.Int) { Value = userId.Value });
@@ -1022,10 +1022,10 @@ public class CourtsController : ControllerBase
                 using var reader = await command.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
-                    courts.Add(new TopCourtForEventDto
+                    venues.Add(new TopVenueForEventDto
                     {
-                        CourtId = reader.GetInt32(reader.GetOrdinal("CourtId")),
-                        CourtName = reader.IsDBNull(reader.GetOrdinal("CourtName")) ? null : reader.GetString(reader.GetOrdinal("CourtName")),
+                        VenueId = reader.GetInt32(reader.GetOrdinal("VenueId")),
+                        VenueName = reader.IsDBNull(reader.GetOrdinal("VenueName")) ? null : reader.GetString(reader.GetOrdinal("VenueName")),
                         City = reader.IsDBNull(reader.GetOrdinal("City")) ? null : reader.GetString(reader.GetOrdinal("City")),
                         State = reader.IsDBNull(reader.GetOrdinal("State")) ? null : reader.GetString(reader.GetOrdinal("State")),
                         Country = reader.IsDBNull(reader.GetOrdinal("Country")) ? null : reader.GetString(reader.GetOrdinal("Country")),
@@ -1036,7 +1036,7 @@ public class CourtsController : ControllerBase
                         IndoorCourts = reader.IsDBNull(reader.GetOrdinal("IndoorCourts")) ? null : reader.GetInt32(reader.GetOrdinal("IndoorCourts")),
                         OutdoorCourts = reader.IsDBNull(reader.GetOrdinal("OutdoorCourts")) ? null : reader.GetInt32(reader.GetOrdinal("OutdoorCourts")),
                         HasLights = !reader.IsDBNull(reader.GetOrdinal("HasLights")) && reader.GetString(reader.GetOrdinal("HasLights")) == "Y",
-                        CourtTypeName = reader.IsDBNull(reader.GetOrdinal("CourtTypeName")) ? null : reader.GetString(reader.GetOrdinal("CourtTypeName")),
+                        VenueTypeName = reader.IsDBNull(reader.GetOrdinal("VenueTypeName")) ? null : reader.GetString(reader.GetOrdinal("VenueTypeName")),
                         DistanceMiles = reader.IsDBNull(reader.GetOrdinal("DistanceMiles")) ? null : reader.GetDouble(reader.GetOrdinal("DistanceMiles")),
                         PriorityScore = reader.GetInt32(reader.GetOrdinal("PriorityScore"))
                     });
@@ -1047,22 +1047,22 @@ public class CourtsController : ControllerBase
                 await connection.CloseAsync();
             }
 
-            return Ok(new ApiResponse<List<TopCourtForEventDto>> { Success = true, Data = courts });
+            return Ok(new ApiResponse<List<TopVenueForEventDto>> { Success = true, Data = venues });
         }
         catch (SqlException ex) when (ex.Message.Contains("Could not find stored procedure"))
         {
-            _logger.LogWarning("Stored procedure sp_GetTopCourtsForUser not found, falling back to empty list");
-            return Ok(new ApiResponse<List<TopCourtForEventDto>>
+            _logger.LogWarning("Stored procedure sp_GetTopVenuesForUser not found, falling back to empty list");
+            return Ok(new ApiResponse<List<TopVenueForEventDto>>
             {
                 Success = true,
-                Data = new List<TopCourtForEventDto>(),
-                Message = "Please run migration 037 to enable this feature"
+                Data = new List<TopVenueForEventDto>(),
+                Message = "Please run migration 042 to enable this feature"
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching top courts for events");
-            return StatusCode(500, new ApiResponse<List<TopCourtForEventDto>> { Success = false, Message = "An error occurred" });
+            _logger.LogError(ex, "Error fetching top venues for events");
+            return StatusCode(500, new ApiResponse<List<TopVenueForEventDto>> { Success = false, Message = "An error occurred" });
         }
     }
 }

@@ -4,14 +4,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// Images and videos uploaded for a court
+/// Images and videos uploaded for a venue
 /// </summary>
-public class CourtAsset
+public class VenueAsset
 {
     public int Id { get; set; }
 
     [Required]
-    public int CourtId { get; set; }
+    public int VenueId { get; set; }
 
     [Required]
     public int UserId { get; set; }
@@ -43,19 +43,19 @@ public class CourtAsset
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
-    [ForeignKey("CourtId")]
-    public Court? Court { get; set; }
+    [ForeignKey("VenueId")]
+    public Venue? Venue { get; set; }
 
     [ForeignKey("UserId")]
     public User? User { get; set; }
 
-    public ICollection<CourtAssetLike>? Likes { get; set; }
+    public ICollection<VenueAssetLike>? Likes { get; set; }
 }
 
 /// <summary>
-/// Like/dislike votes on court assets
+/// Like/dislike votes on venue assets
 /// </summary>
-public class CourtAssetLike
+public class VenueAssetLike
 {
     public int Id { get; set; }
 
@@ -71,7 +71,7 @@ public class CourtAssetLike
 
     // Navigation properties
     [ForeignKey("AssetId")]
-    public CourtAsset? Asset { get; set; }
+    public VenueAsset? Asset { get; set; }
 
     [ForeignKey("UserId")]
     public User? User { get; set; }

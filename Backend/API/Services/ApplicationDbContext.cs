@@ -40,14 +40,14 @@ public class ApplicationDbContext : DbContext
     public DbSet<FriendRequest> FriendRequests { get; set; }
     public DbSet<Friendship> Friendships { get; set; }
 
-    // Courts
-    public DbSet<Court> Courts { get; set; }
-    public DbSet<CourtType> CourtTypes { get; set; }
-    public DbSet<CourtGeoCode> CourtGeoCodes { get; set; }
+    // Venues (places with pickleball courts)
+    public DbSet<Venue> Venues { get; set; }
+    public DbSet<VenueType> VenueTypes { get; set; }
+    public DbSet<VenueGeoCode> VenueGeoCodes { get; set; }
     public DbSet<GeoCodeType> GeoCodeTypes { get; set; }
-    public DbSet<CourtConfirmation> CourtConfirmations { get; set; }
-    public DbSet<CourtAsset> CourtAssets { get; set; }
-    public DbSet<CourtAssetLike> CourtAssetLikes { get; set; }
+    public DbSet<VenueConfirmation> VenueConfirmations { get; set; }
+    public DbSet<VenueAsset> VenueAssets { get; set; }
+    public DbSet<VenueAssetLike> VenueAssetLikes { get; set; }
 
     // Events
     public DbSet<EventType> EventTypes { get; set; }
@@ -383,31 +383,31 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(f => f.UserId2);
         });
 
-        // Court configuration
-        modelBuilder.Entity<Court>(entity =>
+        // Venue configuration
+        modelBuilder.Entity<Venue>(entity =>
         {
-            entity.HasKey(c => c.CourtId);
-            entity.HasMany(c => c.GeoCodes)
-                  .WithOne(g => g.Court)
-                  .HasForeignKey(g => g.CourtId);
-            entity.HasMany(c => c.Confirmations)
-                  .WithOne(cc => cc.Court)
-                  .HasForeignKey(cc => cc.CourtId);
-            entity.HasOne(c => c.CourtType)
+            entity.HasKey(v => v.VenueId);
+            entity.HasMany(v => v.GeoCodes)
+                  .WithOne(g => g.Venue)
+                  .HasForeignKey(g => g.VenueId);
+            entity.HasMany(v => v.Confirmations)
+                  .WithOne(vc => vc.Venue)
+                  .HasForeignKey(vc => vc.VenueId);
+            entity.HasOne(v => v.VenueType)
                   .WithMany()
-                  .HasForeignKey(c => c.CourtTypeId)
+                  .HasForeignKey(v => v.VenueTypeId)
                   .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // Court Type configuration
-        modelBuilder.Entity<CourtType>(entity =>
+        // Venue Type configuration
+        modelBuilder.Entity<VenueType>(entity =>
         {
-            entity.Property(ct => ct.Name).IsRequired().HasMaxLength(50);
-            entity.HasIndex(ct => ct.SortOrder);
+            entity.Property(vt => vt.Name).IsRequired().HasMaxLength(50);
+            entity.HasIndex(vt => vt.SortOrder);
         });
 
-        // Court GeoCode configuration
-        modelBuilder.Entity<CourtGeoCode>(entity =>
+        // Venue GeoCode configuration
+        modelBuilder.Entity<VenueGeoCode>(entity =>
         {
             entity.HasKey(g => g.GeoId);
             entity.HasOne(g => g.GeoCodeType)
@@ -421,49 +421,49 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(t => t.GeoCodeTypeId);
         });
 
-        // Court Confirmation configuration
-        modelBuilder.Entity<CourtConfirmation>(entity =>
+        // Venue Confirmation configuration
+        modelBuilder.Entity<VenueConfirmation>(entity =>
         {
-            entity.HasOne(cc => cc.User)
+            entity.HasOne(vc => vc.User)
                   .WithMany()
-                  .HasForeignKey(cc => cc.UserId)
+                  .HasForeignKey(vc => vc.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(cc => new { cc.CourtId, cc.UserId }).IsUnique();
-            entity.HasIndex(cc => cc.CourtId);
+            entity.HasIndex(vc => new { vc.VenueId, vc.UserId }).IsUnique();
+            entity.HasIndex(vc => vc.VenueId);
         });
 
-        modelBuilder.Entity<CourtAsset>(entity =>
+        modelBuilder.Entity<VenueAsset>(entity =>
         {
-            entity.HasOne(ca => ca.Court)
+            entity.HasOne(va => va.Venue)
                   .WithMany()
-                  .HasForeignKey(ca => ca.CourtId)
+                  .HasForeignKey(va => va.VenueId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(ca => ca.User)
+            entity.HasOne(va => va.User)
                   .WithMany()
-                  .HasForeignKey(ca => ca.UserId)
+                  .HasForeignKey(va => va.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(ca => ca.CourtId);
-            entity.HasIndex(ca => ca.UserId);
-            entity.HasIndex(ca => ca.CreatedAt);
+            entity.HasIndex(va => va.VenueId);
+            entity.HasIndex(va => va.UserId);
+            entity.HasIndex(va => va.CreatedAt);
         });
 
-        modelBuilder.Entity<CourtAssetLike>(entity =>
+        modelBuilder.Entity<VenueAssetLike>(entity =>
         {
-            entity.HasOne(cal => cal.Asset)
+            entity.HasOne(val => val.Asset)
                   .WithMany(a => a.Likes)
-                  .HasForeignKey(cal => cal.AssetId)
+                  .HasForeignKey(val => val.AssetId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(cal => cal.User)
+            entity.HasOne(val => val.User)
                   .WithMany()
-                  .HasForeignKey(cal => cal.UserId)
+                  .HasForeignKey(val => val.UserId)
                   .OnDelete(DeleteBehavior.NoAction);
 
-            entity.HasIndex(cal => new { cal.AssetId, cal.UserId }).IsUnique();
-            entity.HasIndex(cal => cal.AssetId);
+            entity.HasIndex(val => new { val.AssetId, val.UserId }).IsUnique();
+            entity.HasIndex(val => val.AssetId);
         });
 
         // Club Member Roles configuration
@@ -651,9 +651,9 @@ public class ApplicationDbContext : DbContext
                   .HasForeignKey(c => c.EventId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(c => c.Court)
+            entity.HasOne(c => c.Venue)
                   .WithMany()
-                  .HasForeignKey(c => c.CourtId)
+                  .HasForeignKey(c => c.VenueId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(c => c.CurrentGame)

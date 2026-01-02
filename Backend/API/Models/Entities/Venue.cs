@@ -3,12 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Pickleball.Community.Models.Entities;
 
-[Table("Courts")]
-public class Court
+[Table("Venues")]
+public class Venue
 {
     [Key]
     [Column("Id")]
-    public int CourtId { get; set; }
+    public int VenueId { get; set; }
 
     [MaxLength(50)]
     public string? Name { get; set; }
@@ -81,11 +81,11 @@ public class Court
     [MaxLength(50)]
     public string? GpsLng2 { get; set; }
 
-    [Column("CourtTypeId")]
-    public int? CourtTypeId { get; set; }
+    [Column("VenueTypeId")]
+    public int? VenueTypeId { get; set; }
 
     // Navigation properties
-    public CourtType? CourtType { get; set; }
-    public ICollection<CourtGeoCode>? GeoCodes { get; set; }
-    public ICollection<CourtConfirmation>? Confirmations { get; set; }
+    public VenueType? VenueType { get; set; }
+    public ICollection<VenueGeoCode>? GeoCodes { get; set; }
+    public ICollection<VenueConfirmation>? Confirmations { get; set; }
 }

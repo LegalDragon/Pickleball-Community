@@ -3,9 +3,9 @@ using System.ComponentModel.DataAnnotations;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// Court types that can be selected when adding courts (e.g., Public, Private, Commercial)
+/// Venue types that can be selected when adding venues (e.g., Public, Private, Commercial)
 /// </summary>
-public class CourtType
+public class VenueType
 {
     public int Id { get; set; }
 

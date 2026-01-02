@@ -16,7 +16,7 @@ import FaqAdmin from './FaqAdmin'
 import FeedbackAdmin from './FeedbackAdmin'
 import CertificationAdmin from './CertificationAdmin'
 import EventTypesAdmin from './EventTypesAdmin'
-import CourtTypesAdmin from './CourtTypesAdmin'
+import VenueTypesAdmin from './VenueTypesAdmin'
 import ClubMemberRolesAdmin from './ClubMemberRolesAdmin'
 import TeamUnitsAdmin from './TeamUnitsAdmin'
 import SkillLevelsAdmin from './SkillLevelsAdmin'
@@ -416,7 +416,7 @@ const AdminDashboard = () => {
       title: 'Configuration',
       items: [
         { id: 'eventTypes', label: 'Event Types', icon: Tags },
-        { id: 'courtTypes', label: 'Court Types', icon: Building2 },
+        { id: 'venueTypes', label: 'Venue Types', icon: Building2 },
         { id: 'clubRoles', label: 'Club Roles', icon: UserCog },
         { id: 'teamUnits', label: 'Team Units', icon: Users },
         { id: 'skillLevels', label: 'Skill Levels', icon: Award }
@@ -1473,8 +1473,8 @@ const AdminDashboard = () => {
           {/* Event Types Admin */}
           {activeTab === 'eventTypes' && <EventTypesAdmin embedded />}
 
-          {/* Court Types Admin */}
-          {activeTab === 'courtTypes' && <CourtTypesAdmin embedded />}
+          {/* Venue Types Admin */}
+          {activeTab === 'venueTypes' && <VenueTypesAdmin embedded />}
 
           {/* Club Roles Admin */}
           {activeTab === 'clubRoles' && <ClubMemberRolesAdmin embedded />}

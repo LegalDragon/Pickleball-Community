@@ -4,14 +4,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// User confirmations and feedback about court information
+/// User confirmations and feedback about venue information
 /// </summary>
-public class CourtConfirmation
+public class VenueConfirmation
 {
     public int Id { get; set; }
 
     [Required]
-    public int CourtId { get; set; }
+    public int VenueId { get; set; }
 
     [Required]
     public int UserId { get; set; }
@@ -22,10 +22,10 @@ public class CourtConfirmation
     [MaxLength(100)]
     public string? SuggestedName { get; set; }
 
-    // Flag to indicate this location is no longer a pickleball court
+    // Flag to indicate this location is no longer a pickleball venue
     public bool? NotACourt { get; set; }
 
-    // Court count confirmations
+    // Court count confirmations (number of courts at this venue)
     public int? ConfirmedIndoorCount { get; set; }
     public int? ConfirmedOutdoorCount { get; set; }
     public int? ConfirmedCoveredCount { get; set; }
@@ -79,8 +79,8 @@ public class CourtConfirmation
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
-    [ForeignKey("CourtId")]
-    public Court? Court { get; set; }
+    [ForeignKey("VenueId")]
+    public Venue? Venue { get; set; }
 
     [ForeignKey("UserId")]
     public User? User { get; set; }

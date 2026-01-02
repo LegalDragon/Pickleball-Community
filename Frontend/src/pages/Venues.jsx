@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, ThumbsDown, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate, Image, Video, Upload, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { courtsApi, courtTypesApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
-import CourtMap from '../components/ui/CourtMap';
+import { venuesApi, venueTypesApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import VenueMap from '../components/ui/VenueMap';
 import L from 'leaflet';
 
 const SURFACE_TYPES = [
@@ -18,9 +18,9 @@ const AMENITY_OPTIONS = [
   'restrooms', 'water', 'benches', 'shade', 'parking', 'pro_shop', 'lessons', 'equipment_rental'
 ];
 
-export default function Courts() {
+export default function Venues() {
   const { user, isAuthenticated } = useAuth();
-  const [courts, setCourts] = useState([]);
+  const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Add Court Modal
@@ -162,7 +162,7 @@ export default function Courts() {
   useEffect(() => {
     const loadCountries = async () => {
       try {
-        const response = await courtsApi.getCountries();
+        const response = await venuesApi.getCountries();
         if (response.success) {
           setCountries(response.data || []);
         }
@@ -177,7 +177,7 @@ export default function Courts() {
   useEffect(() => {
     const loadCourtTypes = async () => {
       try {
-        const response = await courtTypesApi.getAll();
+        const response = await venueTypesApi.getAll();
         if (response.success) {
           setCourtTypes(response.data || []);
         }
@@ -200,7 +200,7 @@ export default function Courts() {
 
     const loadStates = async () => {
       try {
-        const response = await courtsApi.getStatesByCountry(selectedCountry);
+        const response = await venuesApi.getStatesByCountry(selectedCountry);
         if (response.success) {
           // Sort alphabetically by name
           const sorted = (response.data || []).sort((a, b) =>
@@ -225,7 +225,7 @@ export default function Courts() {
 
     const loadCities = async () => {
       try {
-        const response = await courtsApi.getCitiesByState(selectedCountry, selectedState);
+        const response = await venuesApi.getCitiesByState(selectedCountry, selectedState);
         if (response.success) {
           // Sort alphabetically by name
           const sorted = (response.data || []).sort((a, b) =>
@@ -244,7 +244,7 @@ export default function Courts() {
   useEffect(() => {
     const loadStates = async () => {
       try {
-        const response = await courtsApi.getStates();
+        const response = await venuesApi.getStates();
         if (response.success) {
           setStates(response.data || []);
         }
@@ -284,7 +284,7 @@ export default function Courts() {
         if (courtNameSearch) params.query = courtNameSearch;
       }
 
-      const response = await courtsApi.search(params);
+      const response = await venuesApi.search(params);
       if (response.success && response.data) {
         let items = response.data.items || [];
 
@@ -362,7 +362,7 @@ export default function Courts() {
 
   const handleViewDetails = async (court) => {
     try {
-      const response = await courtsApi.getCourt(court.id, userLocation?.lat, userLocation?.lng);
+      const response = await venuesApi.getCourt(court.id, userLocation?.lat, userLocation?.lng);
       if (response.success) {
         setSelectedCourt(response.data);
       }
@@ -776,7 +776,7 @@ export default function Courts() {
                   </div>
                   {/* Map */}
                   <div className="flex-1">
-                    <CourtMap
+                    <VenueMap
                       courts={courts}
                       userLocation={userLocation}
                       onCourtClick={(court) => handleViewDetails(court)}
@@ -1001,7 +1001,7 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
     const loadAssets = async () => {
       setAssetsLoading(true);
       try {
-        const response = await courtsApi.getAssets(court.id);
+        const response = await venuesApi.getAssets(court.id);
         if (response.success) {
           setAssets(response.data || []);
         }
@@ -1023,13 +1023,13 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
 
       // If user already has the same vote, remove it
       if (asset.userLiked === isLike) {
-        const response = await courtsApi.removeAssetVote(assetId);
+        const response = await venuesApi.removeAssetVote(assetId);
         if (response.success) {
           setAssets(prev => prev.map(a => a.id === assetId ? response.data : a));
         }
       } else {
         // Add or change vote
-        const response = await courtsApi.voteOnAsset(assetId, isLike);
+        const response = await venuesApi.voteOnAsset(assetId, isLike);
         if (response.success) {
           setAssets(prev => prev.map(a => a.id === assetId ? response.data : a));
         }
@@ -1089,7 +1089,7 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
         mimeType: file.type
       };
 
-      const response = await courtsApi.uploadAsset(court.id, assetData);
+      const response = await venuesApi.uploadAsset(court.id, assetData);
       if (response.success) {
         setAssets(prev => [response.data, ...prev]);
       }
@@ -1108,7 +1108,7 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
     if (!confirm('Are you sure you want to delete this photo/video?')) return;
 
     try {
-      const response = await courtsApi.deleteAsset(assetId);
+      const response = await venuesApi.deleteAsset(assetId);
       if (response.success) {
         setAssets(prev => prev.filter(a => a.id !== assetId));
       }
@@ -1130,10 +1130,10 @@ function CourtDetailModal({ court, isAuthenticated, onClose, onConfirmationSubmi
         confirmedCoveredCount: formData.confirmedCoveredCount !== '' ? parseInt(formData.confirmedCoveredCount) : null,
       };
 
-      const response = await courtsApi.submitConfirmation(court.id, submitData);
+      const response = await venuesApi.submitConfirmation(court.id, submitData);
       if (response.success) {
         // Reload court details
-        const updatedCourt = await courtsApi.getCourt(court.id);
+        const updatedCourt = await venuesApi.getCourt(court.id);
         if (updatedCourt.success) {
           onConfirmationSubmitted(updatedCourt.data);
         }
@@ -2011,7 +2011,7 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
     setError(null);
 
     try {
-      const response = await courtsApi.checkNearby(formData.latitude, formData.longitude, 200);
+      const response = await venuesApi.checkNearby(formData.latitude, formData.longitude, 200);
       if (response.success) {
         setNearbyCourts(response.data.nearbyCourts || []);
         if (response.data.nearbyCourts?.length > 0) {
@@ -2043,7 +2043,7 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
     setError(null);
 
     try {
-      const response = await courtsApi.addCourt(formData);
+      const response = await venuesApi.addCourt(formData);
       if (response.success) {
         onCourtAdded(response.data);
       } else {

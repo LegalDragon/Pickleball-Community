@@ -597,9 +597,9 @@ export const certificationApi = {
     api.get('/playercertification/certificate')
 }
 
-// Courts API
-export const courtsApi = {
-  // Search courts with filters
+// Venues API (formerly Courts - places with pickleball courts)
+export const venuesApi = {
+  // Search venues with filters
   search: (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.query) queryParams.append('query', params.query);
@@ -609,67 +609,70 @@ export const courtsApi = {
     if (params.country) queryParams.append('country', params.country);
     if (params.state) queryParams.append('state', params.state);
     if (params.city) queryParams.append('city', params.city);
-    if (params.courtTypeId) queryParams.append('courtTypeId', params.courtTypeId);
+    if (params.venueTypeId) queryParams.append('venueTypeId', params.venueTypeId);
     if (params.hasLights !== undefined) queryParams.append('hasLights', params.hasLights);
     if (params.isIndoor !== undefined) queryParams.append('isIndoor', params.isIndoor);
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
-    return api.get(`/courts/search?${queryParams.toString()}`);
+    return api.get(`/venues/search?${queryParams.toString()}`);
   },
 
-  // Get court details
-  getCourt: (id, userLat, userLng) => {
+  // Get venue details
+  getVenue: (id, userLat, userLng) => {
     const params = new URLSearchParams();
     if (userLat) params.append('userLat', userLat);
     if (userLng) params.append('userLng', userLng);
-    return api.get(`/courts/${id}?${params.toString()}`);
+    return api.get(`/venues/${id}?${params.toString()}`);
   },
 
-  // Submit court confirmation/feedback
-  submitConfirmation: (courtId, data) =>
-    api.post(`/courts/${courtId}/confirmations`, data),
+  // Submit venue confirmation/feedback
+  submitConfirmation: (venueId, data) =>
+    api.post(`/venues/${venueId}/confirmations`, data),
 
-  // Get all confirmations for a court
-  getConfirmations: (courtId) =>
-    api.get(`/courts/${courtId}/confirmations`),
+  // Get all confirmations for a venue
+  getConfirmations: (venueId) =>
+    api.get(`/venues/${venueId}/confirmations`),
 
-  // Get list of states with courts
-  getStates: () => api.get('/courts/states'),
+  // Get list of states with venues
+  getStates: () => api.get('/venues/states'),
 
-  // Get countries with court counts
-  getCountries: () => api.get('/courts/countries'),
+  // Get countries with venue counts
+  getCountries: () => api.get('/venues/countries'),
 
-  // Get states for a country with court counts
-  getStatesByCountry: (country) => api.get(`/courts/countries/${encodeURIComponent(country)}/states`),
+  // Get states for a country with venue counts
+  getStatesByCountry: (country) => api.get(`/venues/countries/${encodeURIComponent(country)}/states`),
 
-  // Get cities for a state with court counts
-  getCitiesByState: (country, state) => api.get(`/courts/countries/${encodeURIComponent(country)}/states/${encodeURIComponent(state)}/cities`),
+  // Get cities for a state with venue counts
+  getCitiesByState: (country, state) => api.get(`/venues/countries/${encodeURIComponent(country)}/states/${encodeURIComponent(state)}/cities`),
 
-  // Court Assets
-  getAssets: (courtId) => api.get(`/courts/${courtId}/assets`),
-  uploadAsset: (courtId, data) => api.post(`/courts/${courtId}/assets`, data),
-  deleteAsset: (assetId) => api.delete(`/courts/assets/${assetId}`),
-  voteOnAsset: (assetId, isLike) => api.post(`/courts/assets/${assetId}/vote`, { isLike }),
-  removeAssetVote: (assetId) => api.delete(`/courts/assets/${assetId}/vote`),
+  // Venue Assets
+  getAssets: (venueId) => api.get(`/venues/${venueId}/assets`),
+  uploadAsset: (venueId, data) => api.post(`/venues/${venueId}/assets`, data),
+  deleteAsset: (assetId) => api.delete(`/venues/assets/${assetId}`),
+  voteOnAsset: (assetId, isLike) => api.post(`/venues/assets/${assetId}/vote`, { isLike }),
+  removeAssetVote: (assetId) => api.delete(`/venues/assets/${assetId}/vote`),
 
-  // Check for nearby courts (duplicate detection)
+  // Check for nearby venues (duplicate detection)
   checkNearby: (latitude, longitude, radiusYards = 200) =>
-    api.post('/courts/check-nearby', { latitude, longitude, radiusYards }),
+    api.post('/venues/check-nearby', { latitude, longitude, radiusYards }),
 
-  // Add a new court
-  addCourt: (data) => api.post('/courts', data),
+  // Add a new venue
+  addVenue: (data) => api.post('/venues', data),
 
-  // Get top courts for event creation (based on user history and location)
+  // Get top venues for event creation (based on user history and location)
   getTopForEvents: (latitude, longitude, topN = 10) => {
     const params = new URLSearchParams();
     if (latitude) params.append('latitude', latitude);
     if (longitude) params.append('longitude', longitude);
     if (topN) params.append('topN', topN);
-    return api.get(`/courts/top-for-events?${params.toString()}`);
+    return api.get(`/venues/top-for-events?${params.toString()}`);
   }
 }
+
+// Backward compatibility alias
+export const courtsApi = venuesApi;
 
 // Event Types API
 export const eventTypesApi = {
@@ -696,30 +699,33 @@ export const eventTypesApi = {
   reorder: (orderedIds) => api.put('/eventtypes/reorder', orderedIds)
 }
 
-// Court Types API
-export const courtTypesApi = {
-  // Get all court types (public)
+// Venue Types API (formerly Court Types)
+export const venueTypesApi = {
+  // Get all venue types (public)
   getAll: (includeInactive = false) =>
-    api.get(`/courttypes${includeInactive ? '?includeInactive=true' : ''}`),
+    api.get(`/venuetypes${includeInactive ? '?includeInactive=true' : ''}`),
 
-  // Get single court type
-  getById: (id) => api.get(`/courttypes/${id}`),
+  // Get single venue type
+  getById: (id) => api.get(`/venuetypes/${id}`),
 
-  // Create new court type (admin)
-  create: (data) => api.post('/courttypes', data),
+  // Create new venue type (admin)
+  create: (data) => api.post('/venuetypes', data),
 
-  // Update court type (admin)
-  update: (id, data) => api.put(`/courttypes/${id}`, data),
+  // Update venue type (admin)
+  update: (id, data) => api.put(`/venuetypes/${id}`, data),
 
-  // Delete/deactivate court type (admin)
-  delete: (id) => api.delete(`/courttypes/${id}`),
+  // Delete/deactivate venue type (admin)
+  delete: (id) => api.delete(`/venuetypes/${id}`),
 
-  // Restore court type (admin)
-  restore: (id) => api.post(`/courttypes/${id}/restore`),
+  // Restore venue type (admin)
+  restore: (id) => api.post(`/venuetypes/${id}/restore`),
 
-  // Reorder court types (admin)
-  reorder: (orderedIds) => api.put('/courttypes/reorder', orderedIds)
+  // Reorder venue types (admin)
+  reorder: (orderedIds) => api.put('/venuetypes/reorder', orderedIds)
 }
+
+// Backward compatibility alias
+export const courtTypesApi = venueTypesApi;
 
 // Events API (full event management)
 export const eventsApi = {
