@@ -363,20 +363,40 @@ const AdminDashboard = () => {
   }
 
   // Sidebar navigation items
-  const navItems = [
-    { id: 'users', label: 'Users', icon: Users, count: users.length },
-    { id: 'theme', label: 'Theme', icon: Palette },
-    { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' },
-    { id: 'blog', label: 'Blog', icon: BookOpen, link: '/admin/blog' },
-    { id: 'faq', label: 'FAQ', icon: HelpCircle, link: '/admin/faq' },
-    { id: 'feedback', label: 'Feedback', icon: MessageSquare, link: '/admin/feedback' },
-    { id: 'eventTypes', label: 'Event Types', icon: Tags, link: '/admin/event-types' },
-    { id: 'courtTypes', label: 'Court Types', icon: Building2, link: '/admin/court-types' },
-    { id: 'clubRoles', label: 'Club Roles', icon: UserCog, link: '/admin/club-member-roles' },
-    { id: 'teamUnits', label: 'Team Units', icon: Users, link: '/admin/team-units' },
-    { id: 'skillLevels', label: 'Skill Levels', icon: Award, link: '/admin/skill-levels' },
-    { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
-    { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
+  const navGroups = [
+    {
+      title: 'Core',
+      items: [
+        { id: 'users', label: 'Users', icon: Users, count: users.length },
+        { id: 'theme', label: 'Theme', icon: Palette }
+      ]
+    },
+    {
+      title: 'Content',
+      items: [
+        { id: 'blog', label: 'Blog', icon: BookOpen, link: '/admin/blog' },
+        { id: 'faq', label: 'FAQ', icon: HelpCircle, link: '/admin/faq' },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare, link: '/admin/feedback' },
+        { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' }
+      ]
+    },
+    {
+      title: 'Configuration',
+      items: [
+        { id: 'eventTypes', label: 'Event Types', icon: Tags, link: '/admin/event-types' },
+        { id: 'courtTypes', label: 'Court Types', icon: Building2, link: '/admin/court-types' },
+        { id: 'clubRoles', label: 'Club Roles', icon: UserCog, link: '/admin/club-member-roles' },
+        { id: 'teamUnits', label: 'Team Units', icon: Users, link: '/admin/team-units' },
+        { id: 'skillLevels', label: 'Skill Levels', icon: Award, link: '/admin/skill-levels' }
+      ]
+    },
+    {
+      title: 'Coming Soon',
+      items: [
+        { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
+        { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
+      ]
+    }
   ]
 
   return (
@@ -388,48 +408,57 @@ const AdminDashboard = () => {
             <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
             <p className="text-sm text-gray-500 mt-1">System Management</p>
           </div>
-          <nav className="p-4 space-y-2">
-            {navItems.map(item => (
-              item.link ? (
-                <Link
-                  key={item.id}
-                  to={item.link}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg transition text-gray-600 hover:bg-gray-50"
-                >
-                  <div className="flex items-center">
-                    <item.icon className="w-5 h-5 mr-3" />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                </Link>
-              ) : (
-                <button
-                  key={item.id}
-                  onClick={() => !item.disabled && setActiveTab(item.id)}
-                  disabled={item.disabled}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${
-                    activeTab === item.id
-                      ? 'bg-blue-50 text-blue-700'
-                      : item.disabled
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <item.icon className="w-5 h-5 mr-3" />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  {item.count > 0 && (
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {item.count}
-                    </span>
-                  )}
-                  {item.disabled && (
-                    <span className="text-xs text-gray-400">Soon</span>
-                  )}
-                </button>
-              )
+          <nav className="p-4 space-y-4">
+            {navGroups.map(group => (
+              <div key={group.title}>
+                <h3 className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  {group.title}
+                </h3>
+                <div className="space-y-1">
+                  {group.items.map(item => (
+                    item.link ? (
+                      <Link
+                        key={item.id}
+                        to={item.link}
+                        className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition text-gray-600 hover:bg-gray-50"
+                      >
+                        <div className="flex items-center">
+                          <item.icon className="w-5 h-5 mr-3" />
+                          <span className="font-medium text-sm">{item.label}</span>
+                        </div>
+                      </Link>
+                    ) : (
+                      <button
+                        key={item.id}
+                        onClick={() => !item.disabled && setActiveTab(item.id)}
+                        disabled={item.disabled}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition ${
+                          activeTab === item.id
+                            ? 'bg-blue-50 text-blue-700'
+                            : item.disabled
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          <item.icon className="w-5 h-5 mr-3" />
+                          <span className="font-medium text-sm">{item.label}</span>
+                        </div>
+                        {item.count > 0 && (
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
+                          }`}>
+                            {item.count}
+                          </span>
+                        )}
+                        {item.disabled && (
+                          <span className="text-xs text-gray-400">Soon</span>
+                        )}
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
         </div>
