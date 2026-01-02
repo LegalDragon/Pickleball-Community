@@ -1292,8 +1292,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   // Handle court selection in edit mode
   const handleSelectCourt = (court) => {
     const courtData = {
-      courtId: court.courtId || court.id,
-      courtName: court.courtName || court.name,
+      courtId: court.venueId || court.courtId || court.id,
+      courtName: court.venueName || court.courtName || court.name,
       city: court.city,
       state: court.state,
       country: court.country,
@@ -2300,17 +2300,17 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                 <div className="space-y-2">
                   {(courtSearchQuery ? searchedCourts : topCourts).map(court => (
                     <button
-                      key={court.courtId || court.id}
+                      key={court.venueId || court.courtId || court.id}
                       onClick={() => {
                         handleSelectCourt(court);
                         setShowCourtPicker(false);
                         setCourtSearchQuery('');
                       }}
                       className={`w-full p-3 text-left border rounded-lg hover:bg-gray-50 transition-colors ${
-                        selectedCourt?.courtId === (court.courtId || court.id) ? 'border-orange-500 bg-orange-50' : 'border-gray-200'
+                        selectedCourt?.courtId === (court.venueId || court.courtId || court.id) ? 'border-orange-500 bg-orange-50' : 'border-gray-200'
                       }`}
                     >
-                      <div className="font-medium text-gray-900">{court.courtName || court.name || 'UnNamed'}</div>
+                      <div className="font-medium text-gray-900">{court.venueName || court.courtName || court.name || 'UnNamed'}</div>
                       {(court.address || court.addr1) && (
                         <div className="text-sm text-gray-600">{court.address || court.addr1}</div>
                       )}
@@ -2544,8 +2544,8 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
   // Handle court selection
   const handleSelectCourt = (court) => {
     setSelectedCourt({
-      courtId: court.courtId || court.id,
-      courtName: court.courtName || court.name,
+      courtId: court.venueId || court.courtId || court.id,
+      courtName: court.venueName || court.courtName || court.name,
       city: court.city,
       state: court.state,
       country: court.country,
@@ -2554,7 +2554,7 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
     // Auto-fill location fields
     setFormData(prev => ({
       ...prev,
-      venueName: court.courtName || court.name || '',
+      venueName: court.venueName || court.courtName || court.name || '',
       address: court.address || court.addr1 || '',
       city: court.city || '',
       state: court.state || '',
@@ -2745,17 +2745,17 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
                     <div className="border rounded-lg divide-y max-h-80 overflow-y-auto">
                       {topCourts.map(court => (
                         <button
-                          key={court.courtId}
+                          key={court.venueId || court.courtId || court.id}
                           type="button"
                           onClick={() => handleSelectCourt(court)}
                           className={`w-full p-3 text-left hover:bg-orange-50 flex items-center gap-3 ${
-                            selectedCourt?.courtId === court.courtId ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''
+                            selectedCourt?.courtId === (court.venueId || court.courtId) ? 'bg-orange-50 border-l-4 border-l-orange-500' : ''
                           }`}
                         >
                           <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-gray-900 truncate">
-                              {court.courtName || 'UnNamed'}
+                              {court.venueName || court.courtName || 'UnNamed'}
                             </div>
                             {court.address && (
                               <div className="text-sm text-gray-600 truncate">{court.address}</div>
