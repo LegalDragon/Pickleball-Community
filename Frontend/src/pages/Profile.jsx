@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../contexts/AuthContext'
 import { userApi, assetApi, sharedUserApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
@@ -7,7 +8,7 @@ import {
   User, Camera, Video, MapPin, Phone, Calendar,
   Edit2, Save, Upload, X, Play, Award, Target,
   Zap, Heart, Activity, TrendingUp, ChevronRight,
-  MessageCircle, Shield
+  MessageCircle, Shield, Eye
 } from 'lucide-react'
 
 const Profile = () => {
@@ -425,10 +426,29 @@ const Profile = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-2xl px-6 py-8">
-          <h1 className="text-3xl font-bold text-white">My Profile</h1>
-          <p className="text-blue-100 mt-2">
-            Complete your profile to enhance your pickleball experience
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">My Profile</h1>
+              <p className="text-blue-100 mt-2">
+                Complete your profile to enhance your pickleball experience
+              </p>
+            </div>
+            {user?.id && (
+              <Link
+                to={`/users/${user.id}`}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                Preview public profile
+              </Link>
+            )}
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded-lg">
+            <p className="text-white/90 text-sm">
+              This is your shared profile across all Funtime Pickleball sites including pickleball.community, pickleball.date, pickleball.college, and more.
+              Each site may have additional profile fields specific to its features, but your basic information stays consistent everywhere.
+            </p>
+          </div>
         </div>
 
         <div className="bg-white rounded-b-2xl shadow-xl">
