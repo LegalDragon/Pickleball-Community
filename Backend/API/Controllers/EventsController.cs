@@ -215,7 +215,7 @@ public class EventsController : ControllerBase
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.OrganizedByClub)
-                .Include(e => e.Court)
+                .Include(e => e.Venue)
                 .Include(e => e.Divisions.Where(d => d.IsActive))
                     .ThenInclude(d => d.Registrations)
                 .Include(e => e.Divisions.Where(d => d.IsActive))
@@ -260,7 +260,7 @@ public class EventsController : ControllerBase
                 Latitude = evt.Latitude,
                 Longitude = evt.Longitude,
                 CourtId = evt.CourtId,
-                CourtName = evt.Court?.Name,
+                CourtName = evt.Venue?.Name,
                 PosterImageUrl = evt.PosterImageUrl,
                 BannerImageUrl = evt.BannerImageUrl,
                 RegistrationFee = evt.RegistrationFee,

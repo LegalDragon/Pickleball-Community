@@ -152,7 +152,7 @@ public class RatingService : IRatingService
             "Player" => await _context.Users.AnyAsync(u => u.Id == ratableId),
             "BlogPost" => await _context.BlogPosts.AnyAsync(p => p.Id == ratableId),
             "Club" => await _context.Clubs.AnyAsync(c => c.Id == ratableId),
-            "Court" => await _context.Courts.AnyAsync(c => c.CourtId == ratableId),
+            "Court" => await _context.Venues.AnyAsync(v => v.Id == ratableId),
             "Event" => await _context.Events.AnyAsync(e => e.Id == ratableId),
             _ => false
         };
