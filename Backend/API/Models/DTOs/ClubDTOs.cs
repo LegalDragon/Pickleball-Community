@@ -200,6 +200,7 @@ public class ClubMemberRoleDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Color { get; set; }
+    public string? Icon { get; set; }
     public int SortOrder { get; set; }
     public bool IsSystemRole { get; set; }
     public bool CanManageMembers { get; set; }
@@ -214,6 +215,7 @@ public class CreateClubMemberRoleDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Color { get; set; }
+    public string? Icon { get; set; }
     public int SortOrder { get; set; } = 50;
     public bool CanManageMembers { get; set; } = false;
     public bool CanManageClub { get; set; } = false;
@@ -227,6 +229,7 @@ public class UpdateClubMemberRoleDto
     public string? Name { get; set; }
     public string? Description { get; set; }
     public string? Color { get; set; }
+    public string? Icon { get; set; }
     public int? SortOrder { get; set; }
     public bool? CanManageMembers { get; set; }
     public bool? CanManageClub { get; set; }

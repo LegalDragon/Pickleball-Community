@@ -42,6 +42,7 @@ public class ClubMemberRolesController : ControllerBase
                     Name = r.Name,
                     Description = r.Description,
                     Color = r.Color,
+                    Icon = r.Icon,
                     SortOrder = r.SortOrder,
                     IsSystemRole = r.IsSystemRole,
                     CanManageMembers = r.CanManageMembers,
@@ -76,6 +77,7 @@ public class ClubMemberRolesController : ControllerBase
                 Name = role.Name,
                 Description = role.Description,
                 Color = role.Color,
+                Icon = role.Icon,
                 SortOrder = role.SortOrder,
                 IsSystemRole = role.IsSystemRole,
                 CanManageMembers = role.CanManageMembers,
@@ -110,6 +112,7 @@ public class ClubMemberRolesController : ControllerBase
                 Name = dto.Name,
                 Description = dto.Description,
                 Color = dto.Color,
+                Icon = dto.Icon,
                 SortOrder = dto.SortOrder,
                 IsSystemRole = false, // New roles are never system roles
                 CanManageMembers = dto.CanManageMembers,
@@ -127,6 +130,7 @@ public class ClubMemberRolesController : ControllerBase
                 Name = role.Name,
                 Description = role.Description,
                 Color = role.Color,
+                Icon = role.Icon,
                 SortOrder = role.SortOrder,
                 IsSystemRole = role.IsSystemRole,
                 CanManageMembers = role.CanManageMembers,
@@ -170,6 +174,7 @@ public class ClubMemberRolesController : ControllerBase
             role.Name = dto.Name ?? role.Name;
             role.Description = dto.Description ?? role.Description;
             role.Color = dto.Color ?? role.Color;
+            role.Icon = dto.Icon ?? role.Icon;
             role.SortOrder = dto.SortOrder ?? role.SortOrder;
             role.CanManageMembers = dto.CanManageMembers ?? role.CanManageMembers;
             role.CanManageClub = dto.CanManageClub ?? role.CanManageClub;
@@ -185,6 +190,7 @@ public class ClubMemberRolesController : ControllerBase
                 Name = role.Name,
                 Description = role.Description,
                 Color = role.Color,
+                Icon = role.Icon,
                 SortOrder = role.SortOrder,
                 IsSystemRole = role.IsSystemRole,
                 CanManageMembers = role.CanManageMembers,
@@ -262,6 +268,7 @@ public class ClubMemberRolesController : ControllerBase
                 Name = role.Name,
                 Description = role.Description,
                 Color = role.Color,
+                Icon = role.Icon,
                 SortOrder = role.SortOrder,
                 IsSystemRole = role.IsSystemRole,
                 CanManageMembers = role.CanManageMembers,

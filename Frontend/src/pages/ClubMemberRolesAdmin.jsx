@@ -2,10 +2,39 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Edit2, Trash2, RotateCcw, Save, X,
-  Users, Shield, UserCog, Megaphone, Lock
+  Users, Shield, UserCog, Megaphone, Lock, Crown, DollarSign,
+  Star, Heart, Award, Briefcase, Calendar, ClipboardList, Flag,
+  Key, Medal, Settings, Trophy, Wrench, Zap
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { clubMemberRolesApi } from '../services/api';
+
+const ICON_OPTIONS = [
+  { value: 'Crown', label: 'Crown', icon: Crown },
+  { value: 'Shield', label: 'Shield', icon: Shield },
+  { value: 'DollarSign', label: 'Money', icon: DollarSign },
+  { value: 'Users', label: 'Users', icon: Users },
+  { value: 'Star', label: 'Star', icon: Star },
+  { value: 'Heart', label: 'Heart', icon: Heart },
+  { value: 'Award', label: 'Award', icon: Award },
+  { value: 'Medal', label: 'Medal', icon: Medal },
+  { value: 'Trophy', label: 'Trophy', icon: Trophy },
+  { value: 'Briefcase', label: 'Briefcase', icon: Briefcase },
+  { value: 'Calendar', label: 'Calendar', icon: Calendar },
+  { value: 'ClipboardList', label: 'Clipboard', icon: ClipboardList },
+  { value: 'Flag', label: 'Flag', icon: Flag },
+  { value: 'Key', label: 'Key', icon: Key },
+  { value: 'Settings', label: 'Settings', icon: Settings },
+  { value: 'Wrench', label: 'Wrench', icon: Wrench },
+  { value: 'Zap', label: 'Zap', icon: Zap },
+  { value: 'Megaphone', label: 'Megaphone', icon: Megaphone },
+  { value: 'UserCog', label: 'User Cog', icon: UserCog },
+];
+
+const getIconComponent = (iconName) => {
+  const option = ICON_OPTIONS.find(o => o.value === iconName);
+  return option?.icon || Users;
+};
 
 const COLOR_OPTIONS = [
   { value: 'red', label: 'Red', class: 'bg-red-500', bgClass: 'bg-red-100', textClass: 'text-red-700' },
@@ -32,6 +61,7 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
     name: '',
     description: '',
     color: 'green',
+    icon: 'Users',
     sortOrder: 50,
     canManageMembers: false,
     canManageClub: false,
@@ -64,6 +94,7 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
       name: '',
       description: '',
       color: 'green',
+      icon: 'Users',
       sortOrder: roles.length * 10 + 10,
       canManageMembers: false,
       canManageClub: false,
@@ -80,6 +111,7 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
       name: role.name,
       description: role.description || '',
       color: role.color || 'green',
+      icon: role.icon || 'Users',
       sortOrder: role.sortOrder,
       canManageMembers: role.canManageMembers,
       canManageClub: role.canManageClub,
@@ -254,7 +286,10 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-lg ${getColorClass(role.color)} flex items-center justify-center text-white`}>
-                          {role.isSystemRole ? <Lock className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                          {(() => {
+                            const IconComponent = role.isSystemRole ? Lock : getIconComponent(role.icon);
+                            return <IconComponent className="w-5 h-5" />;
+                          })()}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
@@ -435,6 +470,33 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
                   </div>
                 </div>
 
+                {/* Icon Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Icon
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {ICON_OPTIONS.map((option) => {
+                      const IconComp = option.icon;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, icon: option.value })}
+                          className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center transition-all ${
+                            formData.icon === option.value
+                              ? 'border-green-500 bg-green-50 text-green-600 scale-110'
+                              : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:scale-105'
+                          }`}
+                          title={option.label}
+                        >
+                          <IconComp className="w-5 h-5" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Sort Order */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -508,6 +570,12 @@ export default function ClubMemberRolesAdmin({ embedded = false }) {
                     Preview
                   </label>
                   <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className={`w-10 h-10 rounded-lg ${getColorClass(formData.color)} flex items-center justify-center text-white`}>
+                      {(() => {
+                        const IconComponent = getIconComponent(formData.icon);
+                        return <IconComponent className="w-5 h-5" />;
+                      })()}
+                    </div>
                     <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${getColorBgClass(formData.color)} ${getColorTextClass(formData.color)}`}>
                       {formData.name || 'Role Name'}
                     </span>

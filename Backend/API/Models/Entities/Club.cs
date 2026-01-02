@@ -192,6 +192,9 @@ public class ClubMemberRole
     [MaxLength(20)]
     public string? Color { get; set; }
 
+    [MaxLength(50)]
+    public string? Icon { get; set; } // Lucide icon name (e.g., "Crown", "DollarSign", "Shield")
+
     public int SortOrder { get; set; } = 0;
 
     public bool IsSystemRole { get; set; } = false; // System roles (Admin, Member) cannot be deleted

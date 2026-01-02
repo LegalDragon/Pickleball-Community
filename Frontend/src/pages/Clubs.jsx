@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2 } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog } from 'lucide-react';
+
+// Icon mapping for role icons
+const ROLE_ICON_MAP = {
+  Crown, Shield, DollarSign, Users, Star, Heart, Award, Medal, Trophy,
+  Briefcase, Calendar, ClipboardList, Flag, Key, Settings, Wrench, Zap, Megaphone, UserCog
+};
+
+const getRoleIcon = (iconName) => {
+  return ROLE_ICON_MAP[iconName] || null;
+};
 import { useAuth } from '../contexts/AuthContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
@@ -1518,8 +1528,21 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                           </div>
                         )}
                         <span className="text-sm text-gray-700">{member.name}</span>
-                        {member.role === 'Admin' && <Crown className="w-4 h-4 text-yellow-500" />}
-                        {member.role === 'Moderator' && <Shield className="w-4 h-4 text-blue-500" />}
+                        {(() => {
+                          const roleData = memberRoles.find(r => r.name === member.role);
+                          const IconComponent = roleData?.icon ? getRoleIcon(roleData.icon) : null;
+                          if (IconComponent) {
+                            const colorClass = roleData.color === 'yellow' ? 'text-yellow-500' :
+                                               roleData.color === 'blue' ? 'text-blue-500' :
+                                               roleData.color === 'green' ? 'text-green-500' :
+                                               roleData.color === 'red' ? 'text-red-500' :
+                                               roleData.color === 'purple' ? 'text-purple-500' :
+                                               roleData.color === 'orange' ? 'text-orange-500' :
+                                               'text-gray-500';
+                            return <IconComponent className={`w-4 h-4 ${colorClass}`} />;
+                          }
+                          return null;
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1555,8 +1578,21 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-gray-900 hover:text-purple-600">{member.name}</span>
-                            {member.role === 'Admin' && <Crown className="w-4 h-4 text-yellow-500" />}
-                            {member.role === 'Moderator' && <Shield className="w-4 h-4 text-blue-500" />}
+                            {(() => {
+                              const roleData = memberRoles.find(r => r.name === member.role);
+                              const IconComponent = roleData?.icon ? getRoleIcon(roleData.icon) : null;
+                              if (IconComponent) {
+                                const colorClass = roleData.color === 'yellow' ? 'text-yellow-500' :
+                                                   roleData.color === 'blue' ? 'text-blue-500' :
+                                                   roleData.color === 'green' ? 'text-green-500' :
+                                                   roleData.color === 'red' ? 'text-red-500' :
+                                                   roleData.color === 'purple' ? 'text-purple-500' :
+                                                   roleData.color === 'orange' ? 'text-orange-500' :
+                                                   'text-gray-500';
+                                return <IconComponent className={`w-4 h-4 ${colorClass}`} />;
+                              }
+                              return null;
+                            })()}
                             {member.title && (
                               <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">{member.title}</span>
                             )}
