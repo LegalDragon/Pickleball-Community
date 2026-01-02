@@ -28,7 +28,7 @@ export default function Events() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('upcoming'); // upcoming, my-events
+  const [activeTab, setActiveTab] = useState('my-events'); // my-events, upcoming
   const pageSize = 20;
 
   // Get user's location on mount
@@ -227,16 +227,6 @@ export default function Events() {
           <div className="mb-6 border-b">
             <div className="flex gap-4">
               <button
-                onClick={() => setActiveTab('upcoming')}
-                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
-                  activeTab === 'upcoming'
-                    ? 'border-orange-600 text-orange-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Find Events
-              </button>
-              <button
                 onClick={() => setActiveTab('my-events')}
                 className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
                   activeTab === 'my-events'
@@ -250,6 +240,16 @@ export default function Events() {
                     {myEvents.eventsIOrganize.length + myEvents.eventsImRegisteredFor.length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => setActiveTab('upcoming')}
+                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'upcoming'
+                    ? 'border-orange-600 text-orange-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Search Events
               </button>
             </div>
           </div>
