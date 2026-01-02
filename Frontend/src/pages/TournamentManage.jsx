@@ -24,6 +24,10 @@ export default function TournamentManage() {
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
   const [assigningNumbers, setAssigningNumbers] = useState(false);
 
+  // Schedule display state
+  const [schedule, setSchedule] = useState(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
+
   // Status update state
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
@@ -33,6 +37,14 @@ export default function TournamentManage() {
       loadEvent();
     }
   }, [eventId]);
+
+  useEffect(() => {
+    if (selectedDivision?.scheduleReady) {
+      loadSchedule(selectedDivision.id);
+    } else {
+      setSchedule(null);
+    }
+  }, [selectedDivision]);
 
   const loadDashboard = async () => {
     try {
@@ -61,6 +73,20 @@ export default function TournamentManage() {
       }
     } catch (err) {
       console.error('Error loading event:', err);
+    }
+  };
+
+  const loadSchedule = async (divisionId) => {
+    setLoadingSchedule(true);
+    try {
+      const response = await tournamentApi.getSchedule(divisionId);
+      if (response.success) {
+        setSchedule(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading schedule:', err);
+    } finally {
+      setLoadingSchedule(false);
     }
   };
 
@@ -503,12 +529,124 @@ export default function TournamentManage() {
             )}
 
             {selectedDivision?.scheduleReady ? (
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-600">
-                  Schedule for {selectedDivision.name} is ready.
-                  {selectedDivision.completedMatches} of {selectedDivision.totalMatches} matches completed.
-                </p>
-              </div>
+              loadingSchedule ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+                </div>
+              ) : schedule ? (
+                <div className="space-y-6">
+                  {/* Rounds and Matches */}
+                  {schedule.rounds?.map((round, roundIdx) => (
+                    <div key={roundIdx} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b">
+                        <h3 className="font-medium text-gray-900">
+                          {round.roundName || `${round.roundType} - Round ${round.roundNumber}`}
+                        </h3>
+                      </div>
+                      <div className="divide-y">
+                        {round.matches?.map((match, matchIdx) => (
+                          <div key={matchIdx} className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4 flex-1">
+                                <div className="text-sm text-gray-400 w-8">#{match.matchNumber}</div>
+                                <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                                  <div className={`text-right ${match.winnerName === match.unit1Name ? 'font-semibold text-green-600' : 'text-gray-900'}`}>
+                                    {match.unit1Name || `Unit #${match.unit1Number || '?'}`}
+                                  </div>
+                                  <div className="text-center">
+                                    {match.score ? (
+                                      <span className="font-medium text-gray-700">{match.score}</span>
+                                    ) : (
+                                      <span className="text-gray-400">vs</span>
+                                    )}
+                                  </div>
+                                  <div className={`${match.winnerName === match.unit2Name ? 'font-semibold text-green-600' : 'text-gray-900'}`}>
+                                    {match.unit2Name || `Unit #${match.unit2Number || '?'}`}
+                                  </div>
+                                </div>
+                              </div>
+                              <span className={`ml-4 px-2 py-1 text-xs font-medium rounded-full ${
+                                match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {match.status}
+                              </span>
+                            </div>
+                            {match.courtLabel && (
+                              <div className="mt-2 text-sm text-gray-500 flex items-center gap-2">
+                                <MapPin className="w-3 h-3" />
+                                {match.courtLabel}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Pool Standings */}
+                  {schedule.poolStandings?.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b">
+                        <h3 className="font-medium text-gray-900">Pool Standings</h3>
+                      </div>
+                      <div className="p-4 space-y-6">
+                        {schedule.poolStandings.map((pool, poolIdx) => (
+                          <div key={poolIdx}>
+                            <h4 className="font-medium text-gray-700 mb-2">
+                              {pool.poolName || `Pool ${pool.poolNumber}`}
+                            </h4>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead className="text-gray-500 border-b">
+                                  <tr>
+                                    <th className="text-left py-2 pr-4">#</th>
+                                    <th className="text-left py-2 pr-4">Team</th>
+                                    <th className="text-center py-2 px-2">W</th>
+                                    <th className="text-center py-2 px-2">L</th>
+                                    <th className="text-center py-2 px-2">GW</th>
+                                    <th className="text-center py-2 px-2">GL</th>
+                                    <th className="text-center py-2 px-2">+/-</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pool.standings?.map((standing, idx) => (
+                                    <tr key={idx} className="border-b last:border-0">
+                                      <td className="py-2 pr-4 font-medium text-gray-400">{standing.rank}</td>
+                                      <td className="py-2 pr-4 text-gray-900">
+                                        {standing.unitName || `Unit #${standing.unitNumber}`}
+                                      </td>
+                                      <td className="py-2 px-2 text-center text-green-600">{standing.matchesWon}</td>
+                                      <td className="py-2 px-2 text-center text-red-600">{standing.matchesLost}</td>
+                                      <td className="py-2 px-2 text-center text-gray-600">{standing.gamesWon}</td>
+                                      <td className="py-2 px-2 text-center text-gray-600">{standing.gamesLost}</td>
+                                      <td className={`py-2 px-2 text-center ${
+                                        standing.pointDifferential > 0 ? 'text-green-600' :
+                                        standing.pointDifferential < 0 ? 'text-red-600' : 'text-gray-400'
+                                      }`}>
+                                        {standing.pointDifferential > 0 ? '+' : ''}{standing.pointDifferential}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl shadow-sm p-6">
+                  <p className="text-gray-600">
+                    Schedule for {selectedDivision.name} is ready.
+                    {selectedDivision.completedMatches} of {selectedDivision.totalMatches} matches completed.
+                  </p>
+                </div>
+              )
             ) : (
               <div className="bg-white rounded-xl shadow-sm p-12 text-center">
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
