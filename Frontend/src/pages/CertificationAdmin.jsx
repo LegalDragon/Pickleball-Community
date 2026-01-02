@@ -5,7 +5,7 @@ import {
   GraduationCap, Target, AlertCircle, CheckCircle, Layers, Scale
 } from 'lucide-react';
 
-export default function CertificationAdmin() {
+export default function CertificationAdmin({ embedded = false }) {
   const [knowledgeLevels, setKnowledgeLevels] = useState([]);
   const [skillGroups, setSkillGroups] = useState([]);
   const [skillAreas, setSkillAreas] = useState([]);
@@ -156,23 +156,8 @@ export default function CertificationAdmin() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Settings className="w-12 h-12" />
-            <div>
-              <h1 className="text-3xl font-bold">Certification Configuration</h1>
-              <p className="text-primary-100 mt-1">
-                Manage skill groups, weights, and evaluation criteria
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
+  const content = (
+    <>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Notifications */}
         {error && (
@@ -554,6 +539,31 @@ export default function CertificationAdmin() {
           onSave={handleSaveSkill}
         />
       )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-primary-600 to-primary-800 text-white py-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4">
+            <Settings className="w-12 h-12" />
+            <div>
+              <h1 className="text-3xl font-bold">Certification Configuration</h1>
+              <p className="text-primary-100 mt-1">
+                Manage skill groups, weights, and evaluation criteria
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {content}
     </div>
   );
 }

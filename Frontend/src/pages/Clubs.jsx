@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
+import CourtMap from '../components/ui/CourtMap';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -26,11 +27,26 @@ export default function Clubs() {
   const [totalCount, setTotalCount] = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [inviteClub, setInviteClub] = useState(null);
-  const [activeTab, setActiveTab] = useState('search'); // search, my-clubs
+  const [activeTab, setActiveTab] = useState('my-clubs'); // my-clubs, search
   const [joinMessage, setJoinMessage] = useState(null); // { type: 'success'|'error', text: string }
   const [memberRoles, setMemberRoles] = useState([]);
   const [profileModalUserId, setProfileModalUserId] = useState(null);
   const pageSize = 20;
+
+  // View mode: 'list' or 'map'
+  const [viewMode, setViewMode] = useState('list');
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('distance'); // distance, name
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  // Location state
+  const [locationError, setLocationError] = useState(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationBlocked, setLocationBlocked] = useState(false);
+
+  // For map view hover
+  const [hoveredClubId, setHoveredClubId] = useState(null);
 
   // Load available member roles on mount
   useEffect(() => {
@@ -47,22 +63,89 @@ export default function Clubs() {
     loadRoles();
   }, []);
 
-  // Get user's location on mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.warn('Geolocation error:', error);
+  // Get user's location on mount with improved two-stage approach
+  const getLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      setSortBy('name');
+      return;
+    }
+
+    // Check permission state first if available
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus.state === 'denied') {
+          setLocationBlocked(true);
+          setLocationError('Location access is blocked. Enable location in browser settings to sort by distance.');
+          setSortBy('name');
+          return;
         }
-      );
+        setLocationBlocked(false);
+      } catch (e) {
+        // Permissions API not fully supported, continue anyway
+      }
+    }
+
+    setGettingLocation(true);
+    setLocationError(null);
+
+    // Try with lower accuracy first (faster, uses IP/WiFi)
+    const tryGetPosition = (highAccuracy, timeout) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: highAccuracy,
+          timeout: timeout,
+          maximumAge: 300000 // Cache for 5 minutes
+        });
+      });
+    };
+
+    try {
+      // First try: fast, low accuracy (IP/WiFi based) - 5 second timeout
+      const position = await tryGetPosition(false, 5000);
+      setUserLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      });
+      setGettingLocation(false);
+      setLocationBlocked(false);
+      setSortBy('distance');
+    } catch (firstError) {
+      // Second try: high accuracy (GPS) - 15 second timeout
+      try {
+        const position = await tryGetPosition(true, 15000);
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setGettingLocation(false);
+        setLocationBlocked(false);
+        setSortBy('distance');
+      } catch (error) {
+        console.warn('Geolocation error:', error);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationBlocked(true);
+          setLocationError('Location access was denied. Sort by distance unavailable.');
+          setSortBy('name');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError('Location unavailable.');
+          setSortBy('name');
+        } else if (error.code === error.TIMEOUT) {
+          setLocationError('Location request timed out.');
+          setSortBy('name');
+        } else {
+          setLocationError('Unable to get your location.');
+          setSortBy('name');
+        }
+        setGettingLocation(false);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    getLocation();
+  }, [getLocation]);
 
   // Check invite code on mount
   useEffect(() => {
@@ -114,6 +197,8 @@ export default function Clubs() {
         latitude: userLocation?.lat,
         longitude: userLocation?.lng,
         radiusMiles: userLocation ? radiusMiles : undefined,
+        sortBy: sortBy,
+        sortOrder: sortOrder
       };
 
       const response = await clubsApi.search(params);
@@ -128,7 +213,7 @@ export default function Clubs() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, country, state, city, userLocation, radiusMiles]);
+  }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder]);
 
   useEffect(() => {
     if (activeTab === 'search') {
@@ -273,16 +358,6 @@ export default function Clubs() {
           <div className="mb-6 border-b">
             <div className="flex gap-4">
               <button
-                onClick={() => setActiveTab('search')}
-                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
-                  activeTab === 'search'
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Find Clubs
-              </button>
-              <button
                 onClick={() => setActiveTab('my-clubs')}
                 className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
                   activeTab === 'my-clubs'
@@ -296,6 +371,16 @@ export default function Clubs() {
                     {myClubs.clubsIManage.length + myClubs.clubsIBelong.length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'search'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Search Clubs
               </button>
             </div>
           </div>
@@ -363,24 +448,160 @@ export default function Clubs() {
                   </select>
                 )}
               </div>
+
+              {/* Second row: Sort, View Mode */}
+              <div className="flex flex-wrap gap-4 items-center mt-4 pt-4 border-t border-gray-100">
+                {/* Sort By */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Sort:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    {userLocation && <option value="distance">Distance</option>}
+                    <option value="name">Name</option>
+                    <option value="memberCount">Members</option>
+                  </select>
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-3 py-2 flex items-center gap-1 ${
+                      viewMode === 'list'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                    <span className="text-sm">List</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('map')}
+                    className={`px-3 py-2 flex items-center gap-1 ${
+                      viewMode === 'map'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Map className="w-4 h-4" />
+                    <span className="text-sm">Map</span>
+                  </button>
+                </div>
+
+                {/* Location Status */}
+                {gettingLocation && (
+                  <span className="text-sm text-gray-500 flex items-center gap-1">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Getting location...
+                  </span>
+                )}
+                {locationError && !gettingLocation && (
+                  <span className="text-sm text-amber-600">{locationError}</span>
+                )}
+              </div>
             </div>
 
-            {/* Clubs List */}
+            {/* Clubs Results */}
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
               </div>
             ) : clubs.length > 0 ? (
               <>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {clubs.map(club => (
-                    <ClubCard
-                      key={club.id}
-                      club={club}
-                      onViewDetails={() => handleViewDetails(club)}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'map' ? (
+                  /* Map View with Side List */
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="flex h-[600px]">
+                      {/* Compact Club List */}
+                      <div className="w-80 border-r border-gray-200 flex flex-col">
+                        <div className="p-3 border-b bg-gray-50">
+                          <p className="text-sm font-medium text-gray-700">
+                            {clubs.filter(c => c.latitude || c.gpsLat).length} clubs on map
+                          </p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                          {clubs.filter(c => c.latitude || c.gpsLat).map((club, index) => {
+                            const clubId = club.id;
+                            const isSelected = hoveredClubId === clubId;
+                            return (
+                              <div
+                                key={clubId}
+                                className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-purple-50 border-l-4 border-l-purple-500' : 'hover:bg-gray-50'
+                                }`}
+                                onClick={() => handleViewDetails(club)}
+                                onMouseEnter={() => setHoveredClubId(clubId)}
+                                onMouseLeave={() => setHoveredClubId(null)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
+                                    isSelected ? 'bg-purple-600' : 'bg-blue-600'
+                                  }`}>
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-medium text-gray-900 text-sm truncate">
+                                      {club.name}
+                                    </h4>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {[club.city, club.state].filter(Boolean).join(', ')}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {club.distance && (
+                                        <span className="text-xs text-purple-600 font-medium">
+                                          {club.distance.toFixed(1)} mi
+                                        </span>
+                                      )}
+                                      <span className="text-xs text-gray-400">
+                                        {club.memberCount} members
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {clubs.filter(c => !(c.latitude || c.gpsLat)).length > 0 && (
+                            <div className="p-3 text-xs text-gray-400 text-center">
+                              {clubs.filter(c => !(c.latitude || c.gpsLat)).length} clubs without coordinates
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Map */}
+                      <div className="flex-1">
+                        <CourtMap
+                          courts={clubs.map(c => ({
+                            ...c,
+                            courtId: c.id,
+                            name: c.name,
+                            latitude: c.latitude,
+                            longitude: c.longitude
+                          }))}
+                          userLocation={userLocation}
+                          onCourtClick={(club) => handleViewDetails(club)}
+                          onMarkerSelect={(club) => setHoveredClubId(club.id || club.courtId)}
+                          selectedCourtId={hoveredClubId}
+                          showNumbers={true}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* List View */
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {clubs.map(club => (
+                      <ClubCard
+                        key={club.id}
+                        club={club}
+                        onViewDetails={() => handleViewDetails(club)}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (
@@ -507,7 +728,7 @@ export default function Clubs() {
                     onClick={() => setActiveTab('search')}
                     className="px-6 py-2 border border-purple-600 text-purple-600 rounded-lg font-medium hover:bg-purple-50 transition-colors"
                   >
-                    Find Clubs
+                    Search Clubs
                   </button>
                   <button
                     onClick={() => setShowCreateModal(true)}

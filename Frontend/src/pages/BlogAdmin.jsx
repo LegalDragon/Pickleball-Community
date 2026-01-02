@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-export default function BlogAdmin() {
+export default function BlogAdmin({ embedded = false }) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('categories');
   const [loading, setLoading] = useState(true);
@@ -200,24 +200,8 @@ export default function BlogAdmin() {
     { id: 'posts', label: 'All Posts', icon: FileText }
   ];
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link to="/admin/dashboard" className="p-2 hover:bg-white/10 rounded-lg">
-              <ChevronLeft className="w-6 h-6" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold">Blog Management</h1>
-              <p className="text-purple-100">Manage categories, writers, and posts</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  const content = (
+    <div className={embedded ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-6">
           <div className="flex border-b">
@@ -527,6 +511,30 @@ export default function BlogAdmin() {
           onAdd={handleAddWriter}
         />
       )}
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4">
+            <Link to="/admin/dashboard" className="p-2 hover:bg-white/10 rounded-lg">
+              <ChevronLeft className="w-6 h-6" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold">Blog Management</h1>
+              <p className="text-purple-100">Manage categories, writers, and posts</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {content}
     </div>
   );
 }

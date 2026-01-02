@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, getSharedAssetUrl } from '../services/api';
+import CourtMap from '../components/ui/CourtMap';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
@@ -28,25 +29,110 @@ export default function Events() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('my-events'); // my-events, upcoming
+  const [activeTab, setActiveTab] = useState('my-events'); // my-events, search
   const pageSize = 20;
 
-  // Get user's location on mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.warn('Geolocation error:', error);
+  // View mode: 'list' or 'map'
+  const [viewMode, setViewMode] = useState('list');
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('distance'); // distance, date, name
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  // Location state
+  const [locationError, setLocationError] = useState(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationBlocked, setLocationBlocked] = useState(false);
+
+  // Show recent events (last month)
+  const [showRecentEvents, setShowRecentEvents] = useState(false);
+
+  // For map view hover
+  const [hoveredEventId, setHoveredEventId] = useState(null);
+
+  // Get user's location on mount with improved two-stage approach
+  const getLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      setSortBy('date');
+      return;
+    }
+
+    // Check permission state first if available
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus.state === 'denied') {
+          setLocationBlocked(true);
+          setLocationError('Location access is blocked. Enable location in browser settings to sort by distance.');
+          setSortBy('date');
+          return;
         }
-      );
+        setLocationBlocked(false);
+      } catch (e) {
+        // Permissions API not fully supported, continue anyway
+      }
+    }
+
+    setGettingLocation(true);
+    setLocationError(null);
+
+    // Try with lower accuracy first (faster, uses IP/WiFi)
+    const tryGetPosition = (highAccuracy, timeout) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: highAccuracy,
+          timeout: timeout,
+          maximumAge: 300000 // Cache for 5 minutes
+        });
+      });
+    };
+
+    try {
+      // First try: fast, low accuracy (IP/WiFi based) - 5 second timeout
+      const position = await tryGetPosition(false, 5000);
+      setUserLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      });
+      setGettingLocation(false);
+      setLocationBlocked(false);
+      setSortBy('distance');
+    } catch (firstError) {
+      // Second try: high accuracy (GPS) - 15 second timeout
+      try {
+        const position = await tryGetPosition(true, 15000);
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setGettingLocation(false);
+        setLocationBlocked(false);
+        setSortBy('distance');
+      } catch (error) {
+        console.warn('Geolocation error:', error);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationBlocked(true);
+          setLocationError('Location access was denied. Sort by distance unavailable.');
+          setSortBy('date');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError('Location unavailable.');
+          setSortBy('date');
+        } else if (error.code === error.TIMEOUT) {
+          setLocationError('Location request timed out.');
+          setSortBy('date');
+        } else {
+          setLocationError('Unable to get your location.');
+          setSortBy('date');
+        }
+        setGettingLocation(false);
+      }
     }
   }, []);
+
+  useEffect(() => {
+    getLocation();
+  }, [getLocation]);
 
   // Load event types, team units, and skill levels
   useEffect(() => {
@@ -118,7 +204,10 @@ export default function Events() {
         latitude: userLocation?.lat,
         longitude: userLocation?.lng,
         radiusMiles: userLocation ? radiusMiles : undefined,
-        isUpcoming: activeTab === 'upcoming'
+        isUpcoming: !showRecentEvents,
+        includeRecent: showRecentEvents,
+        sortBy: sortBy,
+        sortOrder: sortOrder
       };
 
       const response = await eventsApi.search(params);
@@ -132,10 +221,10 @@ export default function Events() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, selectedEventType, country, state, city, userLocation, radiusMiles, activeTab]);
+  }, [page, searchQuery, selectedEventType, country, state, city, userLocation, radiusMiles, showRecentEvents, sortBy, sortOrder]);
 
   useEffect(() => {
-    if (activeTab === 'upcoming') {
+    if (activeTab === 'search') {
       loadEvents();
     }
   }, [loadEvents, activeTab]);
@@ -242,9 +331,9 @@ export default function Events() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('upcoming')}
+                onClick={() => setActiveTab('search')}
                 className={`pb-3 px-1 font-medium text-sm border-b-2 transition-colors ${
-                  activeTab === 'upcoming'
+                  activeTab === 'search'
                     ? 'border-orange-600 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
@@ -255,7 +344,7 @@ export default function Events() {
           </div>
         )}
 
-        {activeTab === 'upcoming' && (
+        {activeTab === 'search' && (
           <>
             {/* Filters */}
             <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -318,26 +407,176 @@ export default function Events() {
                   </select>
                 )}
               </div>
+
+              {/* Second row: Sort, View Mode, Show Recent */}
+              <div className="flex flex-wrap gap-4 items-center mt-4 pt-4 border-t border-gray-100">
+                {/* Sort By */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Sort:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    {userLocation && <option value="distance">Distance</option>}
+                    <option value="date">Date</option>
+                    <option value="name">Name</option>
+                  </select>
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-3 py-2 flex items-center gap-1 ${
+                      viewMode === 'list'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                    <span className="text-sm">List</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('map')}
+                    className={`px-3 py-2 flex items-center gap-1 ${
+                      viewMode === 'map'
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Map className="w-4 h-4" />
+                    <span className="text-sm">Map</span>
+                  </button>
+                </div>
+
+                {/* Show Recent Events Toggle */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showRecentEvents}
+                    onChange={(e) => { setShowRecentEvents(e.target.checked); setPage(1); }}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <span className="text-sm text-gray-700">Show recent events</span>
+                </label>
+
+                {/* Location Status */}
+                {gettingLocation && (
+                  <span className="text-sm text-gray-500 flex items-center gap-1">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Getting location...
+                  </span>
+                )}
+                {locationError && !gettingLocation && (
+                  <span className="text-sm text-amber-600">{locationError}</span>
+                )}
+              </div>
             </div>
 
-            {/* Events List */}
+            {/* Events Results */}
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-600"></div>
               </div>
             ) : events.length > 0 ? (
               <>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {events.map(event => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      formatDate={formatDate}
-                      formatTime={formatTime}
-                      onViewDetails={() => handleViewDetails(event)}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'map' ? (
+                  /* Map View with Side List */
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="flex h-[600px]">
+                      {/* Compact Event List */}
+                      <div className="w-80 border-r border-gray-200 flex flex-col">
+                        <div className="p-3 border-b bg-gray-50">
+                          <p className="text-sm font-medium text-gray-700">
+                            {events.filter(e => e.latitude || e.gpsLat).length} events on map
+                          </p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                          {events.filter(e => e.latitude || e.gpsLat).map((event, index) => {
+                            const eventId = event.id;
+                            const isSelected = hoveredEventId === eventId;
+                            return (
+                              <div
+                                key={eventId}
+                                className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-orange-50 border-l-4 border-l-orange-500' : 'hover:bg-gray-50'
+                                }`}
+                                onClick={() => handleViewDetails(event)}
+                                onMouseEnter={() => setHoveredEventId(eventId)}
+                                onMouseLeave={() => setHoveredEventId(null)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
+                                    isSelected ? 'bg-orange-600' : 'bg-blue-600'
+                                  }`}>
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-medium text-gray-900 text-sm truncate">
+                                      {event.name}
+                                    </h4>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {formatDate(event.startDate)}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {event.venueName || [event.city, event.state].filter(Boolean).join(', ')}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {event.distance && (
+                                        <span className="text-xs text-orange-600 font-medium">
+                                          {event.distance.toFixed(1)} mi
+                                        </span>
+                                      )}
+                                      <span className="text-xs text-gray-400">
+                                        {event.eventTypeName || 'Event'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {events.filter(e => !(e.latitude || e.gpsLat)).length > 0 && (
+                            <div className="p-3 text-xs text-gray-400 text-center">
+                              {events.filter(e => !(e.latitude || e.gpsLat)).length} events without coordinates
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Map */}
+                      <div className="flex-1">
+                        <CourtMap
+                          courts={events.map(e => ({
+                            ...e,
+                            courtId: e.id,
+                            name: e.name,
+                            latitude: e.latitude,
+                            longitude: e.longitude
+                          }))}
+                          userLocation={userLocation}
+                          onCourtClick={(event) => handleViewDetails(event)}
+                          onMarkerSelect={(event) => setHoveredEventId(event.id || event.courtId)}
+                          selectedCourtId={hoveredEventId}
+                          showNumbers={true}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* List View */
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {events.map(event => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        formatDate={formatDate}
+                        formatTime={formatTime}
+                        onViewDetails={() => handleViewDetails(event)}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (
@@ -369,6 +608,8 @@ export default function Events() {
                 <p className="text-gray-500 mb-6">
                   {searchQuery || state || city
                     ? 'No events match your search criteria.'
+                    : showRecentEvents
+                    ? 'No events found in the past month.'
                     : 'No upcoming events scheduled.'}
                 </p>
                 {isAuthenticated && (
@@ -462,10 +703,10 @@ export default function Events() {
                 </p>
                 <div className="flex gap-4 justify-center">
                   <button
-                    onClick={() => setActiveTab('upcoming')}
+                    onClick={() => setActiveTab('search')}
                     className="px-6 py-2 border border-orange-600 text-orange-600 rounded-lg font-medium hover:bg-orange-50"
                   >
-                    Find Events
+                    Search Events
                   </button>
                   <button
                     onClick={() => setShowCreateModal(true)}

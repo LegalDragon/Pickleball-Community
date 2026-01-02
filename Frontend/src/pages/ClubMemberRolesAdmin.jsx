@@ -20,7 +20,7 @@ const COLOR_OPTIONS = [
   { value: 'gray', label: 'Gray', class: 'bg-gray-500', bgClass: 'bg-gray-100', textClass: 'text-gray-700' },
 ];
 
-export default function ClubMemberRolesAdmin() {
+export default function ClubMemberRolesAdmin({ embedded = false }) {
   const { user } = useAuth();
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,32 +191,8 @@ export default function ClubMemberRolesAdmin() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Club Member Roles</h1>
-                <p className="text-sm text-gray-500">Define roles and permissions for club members</p>
-              </div>
-            </div>
-            <button
-              onClick={handleCreate}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Add Role
-            </button>
-          </div>
-        </div>
-      </div>
-
+  const content = (
+    <>
       {/* Content */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
@@ -570,6 +546,40 @@ export default function ClubMemberRolesAdmin() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Club Member Roles</h1>
+                <p className="text-sm text-gray-500">Define roles and permissions for club members</p>
+              </div>
+            </div>
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Add Role
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {content}
     </div>
   );
 }

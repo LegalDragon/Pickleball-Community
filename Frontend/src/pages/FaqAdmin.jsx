@@ -15,7 +15,7 @@ const COLOR_OPTIONS = [
   { value: 'teal', label: 'Teal', class: 'bg-teal-500' }
 ];
 
-export default function FaqAdmin() {
+export default function FaqAdmin({ embedded = false }) {
   const { user } = useAuth();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -247,41 +247,8 @@ export default function FaqAdmin() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">FAQ Management</h1>
-                <p className="text-sm text-gray-500">Manage FAQ categories and entries</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Link
-                to="/faq"
-                target="_blank"
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Preview
-              </Link>
-              <button
-                onClick={handleCreateCategory}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <FolderPlus className="w-5 h-5" />
-                Add Category
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+  const content = (
+    <>
       {/* Content */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
@@ -625,6 +592,49 @@ export default function FaqAdmin() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">FAQ Management</h1>
+                <p className="text-sm text-gray-500">Manage FAQ categories and entries</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Link
+                to="/faq"
+                target="_blank"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Preview
+              </Link>
+              <button
+                onClick={handleCreateCategory}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <FolderPlus className="w-5 h-5" />
+                Add Category
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {content}
     </div>
   );
 }

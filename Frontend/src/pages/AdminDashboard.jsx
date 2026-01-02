@@ -4,12 +4,22 @@ import { useTheme } from '../contexts/ThemeContext'
 import { userApi, themeApi, sharedAssetApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
-  ChevronLeft, ChevronRight, Filter, MoreVertical, Eye, X,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
+
+// Import admin components for inline rendering
+import BlogAdmin from './BlogAdmin'
+import FaqAdmin from './FaqAdmin'
+import FeedbackAdmin from './FeedbackAdmin'
+import CertificationAdmin from './CertificationAdmin'
+import EventTypesAdmin from './EventTypesAdmin'
+import CourtTypesAdmin from './CourtTypesAdmin'
+import ClubMemberRolesAdmin from './ClubMemberRolesAdmin'
+import TeamUnitsAdmin from './TeamUnitsAdmin'
+import SkillLevelsAdmin from './SkillLevelsAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -41,6 +51,16 @@ const AdminDashboard = () => {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+
+  // Collapsed groups state (all expanded by default)
+  const [collapsedGroups, setCollapsedGroups] = useState({})
+
+  const toggleGroup = (groupTitle) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [groupTitle]: !prev[groupTitle]
+    }))
+  }
 
   // Fetch data based on active tab
   useEffect(() => {
@@ -362,7 +382,7 @@ const AdminDashboard = () => {
     }
   }
 
-  // Sidebar navigation items
+  // Sidebar navigation items - all render inline now
   const navGroups = [
     {
       title: 'Core',
@@ -374,20 +394,20 @@ const AdminDashboard = () => {
     {
       title: 'Content',
       items: [
-        { id: 'blog', label: 'Blog', icon: BookOpen, link: '/admin/blog' },
-        { id: 'faq', label: 'FAQ', icon: HelpCircle, link: '/admin/faq' },
-        { id: 'feedback', label: 'Feedback', icon: MessageSquare, link: '/admin/feedback' },
-        { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' }
+        { id: 'blog', label: 'Blog', icon: BookOpen },
+        { id: 'faq', label: 'FAQ', icon: HelpCircle },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+        { id: 'certification', label: 'Certification', icon: Award }
       ]
     },
     {
       title: 'Configuration',
       items: [
-        { id: 'eventTypes', label: 'Event Types', icon: Tags, link: '/admin/event-types' },
-        { id: 'courtTypes', label: 'Court Types', icon: Building2, link: '/admin/court-types' },
-        { id: 'clubRoles', label: 'Club Roles', icon: UserCog, link: '/admin/club-member-roles' },
-        { id: 'teamUnits', label: 'Team Units', icon: Users, link: '/admin/team-units' },
-        { id: 'skillLevels', label: 'Skill Levels', icon: Award, link: '/admin/skill-levels' }
+        { id: 'eventTypes', label: 'Event Types', icon: Tags },
+        { id: 'courtTypes', label: 'Court Types', icon: Building2 },
+        { id: 'clubRoles', label: 'Club Roles', icon: UserCog },
+        { id: 'teamUnits', label: 'Team Units', icon: Users },
+        { id: 'skillLevels', label: 'Skill Levels', icon: Award }
       ]
     },
     {
@@ -408,58 +428,58 @@ const AdminDashboard = () => {
             <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
             <p className="text-sm text-gray-500 mt-1">System Management</p>
           </div>
-          <nav className="p-4 space-y-4">
-            {navGroups.map(group => (
-              <div key={group.title}>
-                <h3 className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  {group.title}
-                </h3>
-                <div className="space-y-1">
-                  {group.items.map(item => (
-                    item.link ? (
-                      <Link
-                        key={item.id}
-                        to={item.link}
-                        className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition text-gray-600 hover:bg-gray-50"
-                      >
-                        <div className="flex items-center">
-                          <item.icon className="w-5 h-5 mr-3" />
-                          <span className="font-medium text-sm">{item.label}</span>
-                        </div>
-                      </Link>
+          <nav className="p-4 space-y-2">
+            {navGroups.map(group => {
+              const isCollapsed = collapsedGroups[group.title]
+              return (
+                <div key={group.title}>
+                  <button
+                    onClick={() => toggleGroup(group.title)}
+                    className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-lg transition"
+                  >
+                    <span>{group.title}</span>
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4" />
                     ) : (
-                      <button
-                        key={item.id}
-                        onClick={() => !item.disabled && setActiveTab(item.id)}
-                        disabled={item.disabled}
-                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition ${
-                          activeTab === item.id
-                            ? 'bg-blue-50 text-blue-700'
-                            : item.disabled
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : 'text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <item.icon className="w-5 h-5 mr-3" />
-                          <span className="font-medium text-sm">{item.label}</span>
-                        </div>
-                        {item.count > 0 && (
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
-                          }`}>
-                            {item.count}
-                          </span>
-                        )}
-                        {item.disabled && (
-                          <span className="text-xs text-gray-400">Soon</span>
-                        )}
-                      </button>
-                    )
-                  ))}
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {!isCollapsed && (
+                    <div className="space-y-1 mt-1">
+                      {group.items.map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => !item.disabled && setActiveTab(item.id)}
+                          disabled={item.disabled}
+                          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition ${
+                            activeTab === item.id
+                              ? 'bg-blue-50 text-blue-700'
+                              : item.disabled
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <item.icon className="w-5 h-5 mr-3" />
+                            <span className="font-medium text-sm">{item.label}</span>
+                          </div>
+                          {item.count > 0 && (
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                          {item.disabled && (
+                            <span className="text-xs text-gray-400">Soon</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </nav>
         </div>
 
@@ -1410,6 +1430,33 @@ const AdminDashboard = () => {
               <p className="text-gray-500">Coming soon. View and manage all payment transactions.</p>
             </div>
           )}
+
+          {/* Blog Admin */}
+          {activeTab === 'blog' && <BlogAdmin embedded />}
+
+          {/* FAQ Admin */}
+          {activeTab === 'faq' && <FaqAdmin embedded />}
+
+          {/* Feedback Admin */}
+          {activeTab === 'feedback' && <FeedbackAdmin embedded />}
+
+          {/* Certification Admin */}
+          {activeTab === 'certification' && <CertificationAdmin embedded />}
+
+          {/* Event Types Admin */}
+          {activeTab === 'eventTypes' && <EventTypesAdmin embedded />}
+
+          {/* Court Types Admin */}
+          {activeTab === 'courtTypes' && <CourtTypesAdmin embedded />}
+
+          {/* Club Roles Admin */}
+          {activeTab === 'clubRoles' && <ClubMemberRolesAdmin embedded />}
+
+          {/* Team Units Admin */}
+          {activeTab === 'teamUnits' && <TeamUnitsAdmin embedded />}
+
+          {/* Skill Levels Admin */}
+          {activeTab === 'skillLevels' && <SkillLevelsAdmin embedded />}
         </div>
       </div>
 
