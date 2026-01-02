@@ -1,19 +1,31 @@
 -- Migration 044: Import Pickleball Venues
--- Imports well-known pickleball venues, checking for duplicates by GPS coordinates
+-- Imports well-known pickleball venues, updating existing ones if GPS matches
 
 PRINT 'Starting Migration 044: Import Pickleball Venues'
 GO
 
--- Helper function to check if venue exists within ~50 meters of given coordinates
--- Using a simple coordinate comparison (0.0005 degrees ≈ 55 meters at equator)
+-- Helper: coordinate tolerance (0.0005 degrees ≈ 55 meters at equator)
 DECLARE @CoordTolerance FLOAT = 0.0005;
+DECLARE @ExistingId INT;
 
 -- 1. Plantation Central Park (Pickleball Courts)
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.127818) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.2716685)) < @CoordTolerance
-)
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.127818) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.2716685)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'Plantation Central Park (Pickleball Courts)',
+        Addr1 = '9151 NW 2nd St',
+        City = 'Plantation',
+        State = 'FL',
+        Zip = '33324',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: Plantation Central Park (Pickleball Courts)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -25,24 +37,34 @@ BEGIN
         'USA',
         '26.127818',
         '-80.2716685',
-        8, -- Estimated outdoor courts
+        8,
         'Y'
     );
     PRINT 'Added: Plantation Central Park (Pickleball Courts)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): Plantation Central Park'
 END
 GO
 
 -- 2. East Naples Community Park (USOP National Pickleball Center / US Open venue)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.106159682) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-81.763739921)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.106159682) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-81.763739921)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'East Naples Community Park (USOP National Pickleball Center)',
+        Addr1 = '3500 Thomasson Dr',
+        City = 'Naples',
+        State = 'FL',
+        Zip = '34112',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: East Naples Community Park (USOP National Pickleball Center)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -54,24 +76,34 @@ BEGIN
         'USA',
         '26.106159682',
         '-81.763739921',
-        64, -- Major tournament venue
+        64,
         'Y'
     );
     PRINT 'Added: East Naples Community Park (USOP National Pickleball Center)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): East Naples Community Park'
 END
 GO
 
 -- 3. Barnes Tennis Center (USA Pickleball Nationals venue)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 32.7543638) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-117.2348861)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 32.7543638) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-117.2348861)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'Barnes Tennis Center (USA Pickleball Nationals)',
+        Addr1 = '4490 W Point Loma Blvd',
+        City = 'San Diego',
+        State = 'CA',
+        Zip = '92107',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: Barnes Tennis Center (USA Pickleball Nationals)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -83,24 +115,34 @@ BEGIN
         'USA',
         '32.7543638',
         '-117.2348861',
-        24, -- Major tournament venue
+        24,
         'Y'
     );
     PRINT 'Added: Barnes Tennis Center (USA Pickleball Nationals)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): Barnes Tennis Center'
 END
 GO
 
 -- 4. The Fort (Fort Lauderdale Pickleball Club)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.0817592) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.1510102)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.0817592) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.1510102)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'The Fort (Fort Lauderdale Pickleball Club)',
+        Addr1 = '891 Southwest 34th Street',
+        City = 'Fort Lauderdale',
+        State = 'FL',
+        Zip = '33315',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: The Fort (Fort Lauderdale Pickleball Club)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Indoor_Num, Lights)
     VALUES (
@@ -112,24 +154,34 @@ BEGIN
         'USA',
         '26.0817592',
         '-80.1510102',
-        12, -- Indoor facility
+        12,
         'Y'
     );
     PRINT 'Added: The Fort (Fort Lauderdale Pickleball Club)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): The Fort'
 END
 GO
 
 -- 5. Holiday Park (Pickleball Courts)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.133963) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.132745)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.133963) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.132745)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'Holiday Park (Pickleball Courts)',
+        Addr1 = '1150 G Harold Martin Dr',
+        City = 'Fort Lauderdale',
+        State = 'FL',
+        Zip = '33304',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: Holiday Park (Pickleball Courts)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -141,24 +193,34 @@ BEGIN
         'USA',
         '26.133963',
         '-80.132745',
-        6, -- Estimated courts
+        6,
         'Y'
     );
     PRINT 'Added: Holiday Park (Pickleball Courts)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): Holiday Park'
 END
 GO
 
 -- 6. George English Park (Pickleball Courts)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.14054) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.11586)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.14054) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.11586)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'George English Park (Pickleball Courts)',
+        Addr1 = '1101 Bayview Dr',
+        City = 'Fort Lauderdale',
+        State = 'FL',
+        Zip = '33304',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: George English Park (Pickleball Courts)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -170,24 +232,34 @@ BEGIN
         'USA',
         '26.14054',
         '-80.11586',
-        4, -- Estimated courts
+        4,
         'Y'
     );
     PRINT 'Added: George English Park (Pickleball Courts)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): George English Park'
 END
 GO
 
 -- 7. Benenson Park (Pickleball Courts)
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.1035359) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.190198)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 26.1035359) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-80.190198)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'Benenson Park (Pickleball Courts)',
+        Addr1 = '1330 SW 33rd Terrace',
+        City = 'Fort Lauderdale',
+        State = 'FL',
+        Zip = '33312',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: Benenson Park (Pickleball Courts)'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Lights)
     VALUES (
@@ -199,24 +271,34 @@ BEGIN
         'USA',
         '26.1035359',
         '-80.190198',
-        4, -- Estimated courts
+        4,
         'Y'
     );
     PRINT 'Added: Benenson Park (Pickleball Courts)'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): Benenson Park'
 END
 GO
 
 -- 8. Pictona at Holly Hill
 DECLARE @CoordTolerance FLOAT = 0.0005;
-IF NOT EXISTS (
-    SELECT 1 FROM Venues
-    WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 29.244535) < @CoordTolerance
-      AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-81.04128)) < @CoordTolerance
-)
+DECLARE @ExistingId INT;
+
+SELECT @ExistingId = Id FROM Venues
+WHERE ABS(TRY_CAST(GPSLat AS FLOAT) - 29.244535) < @CoordTolerance
+  AND ABS(TRY_CAST(GPSLng AS FLOAT) - (-81.04128)) < @CoordTolerance;
+
+IF @ExistingId IS NOT NULL
+BEGIN
+    UPDATE Venues SET
+        Name = 'Pictona at Holly Hill',
+        Addr1 = '1060 Ridgewood Ave',
+        City = 'Holly Hill',
+        State = 'FL',
+        Zip = '32117',
+        Country = 'USA'
+    WHERE Id = @ExistingId;
+    PRINT 'Updated: Pictona at Holly Hill'
+END
+ELSE
 BEGIN
     INSERT INTO Venues (Name, Addr1, City, State, Zip, Country, GPSLat, GPSLng, Outdoor_Num, Covered_Num, Lights)
     VALUES (
@@ -228,15 +310,11 @@ BEGIN
         'USA',
         '29.244535',
         '-81.04128',
-        24, -- Major dedicated pickleball facility
-        8,  -- Some covered courts
+        24,
+        8,
         'Y'
     );
     PRINT 'Added: Pictona at Holly Hill'
-END
-ELSE
-BEGIN
-    PRINT 'Skipped (duplicate): Pictona at Holly Hill'
 END
 GO
 
