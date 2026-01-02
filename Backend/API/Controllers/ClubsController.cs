@@ -262,6 +262,7 @@ public class ClubsController : ControllerBase
                 Phone = club.Phone,
                 IsPublic = club.IsPublic,
                 RequiresApproval = club.RequiresApproval,
+                ChatEnabled = club.ChatEnabled,
                 InviteCode = isAdmin ? club.InviteCode : null, // Only show to admins
                 HasMembershipFee = club.HasMembershipFee,
                 MembershipFeeAmount = club.MembershipFeeAmount,

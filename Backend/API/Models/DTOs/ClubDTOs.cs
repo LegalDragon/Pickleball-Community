@@ -34,6 +34,7 @@ public class ClubDetailDto : ClubDto
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public bool RequiresApproval { get; set; }
+    public bool ChatEnabled { get; set; } // Whether club chat is enabled
     public string? InviteCode { get; set; } // Only for admins
     public int CreatedByUserId { get; set; }
     public string? CreatedByUserName { get; set; }
