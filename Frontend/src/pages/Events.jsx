@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
@@ -1164,6 +1164,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const [editFormData, setEditFormData] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState(null);
+  const [uploadingEditImage, setUploadingEditImage] = useState(false);
 
   // Registration management state
   const [allRegistrations, setAllRegistrations] = useState([]);
@@ -1311,6 +1312,39 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
     }));
   };
 
+  // Handle image upload for edit mode
+  const handleEditImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setEditError('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setEditError('Image must be less than 5MB');
+      return;
+    }
+
+    setUploadingEditImage(true);
+    setEditError(null);
+    try {
+      const response = await sharedAssetApi.upload(file, 'image', 'event');
+      if (response?.data?.url) {
+        setEditFormData({ ...editFormData, posterImageUrl: response.data.url });
+      } else if (response?.url) {
+        setEditFormData({ ...editFormData, posterImageUrl: response.url });
+      } else {
+        setEditError(response.message || 'Upload failed');
+      }
+    } catch (err) {
+      setEditError(err.message || 'Failed to upload image');
+    } finally {
+      setUploadingEditImage(false);
+    }
+  };
+
   // Initialize edit form data when entering edit mode
   const startEditing = () => {
     // Extract date and time directly from ISO string without timezone conversion
@@ -1348,7 +1382,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       contactPhone: event.contactPhone || '',
       maxParticipants: event.maxParticipants || '',
       isPublished: event.isPublished,
-      isPrivate: event.isPrivate
+      isPrivate: event.isPrivate,
+      posterImageUrl: event.posterImageUrl || ''
     });
     setSelectedCourt(event.courtId ? {
       courtId: event.courtId,
@@ -1954,6 +1989,48 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                     <textarea value={editFormData?.description || ''} onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })} rows={3} className="w-full border border-gray-300 rounded-lg p-2" />
                   </div>
 
+                  {/* Event Thumbnail */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Thumbnail</label>
+                    <div className="flex items-center gap-4">
+                      {editFormData?.posterImageUrl ? (
+                        <div className="relative">
+                          <img
+                            src={getSharedAssetUrl(editFormData.posterImageUrl)}
+                            alt="Event thumbnail"
+                            className="w-24 h-24 rounded-lg object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditFormData({ ...editFormData, posterImageUrl: '' })}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 hover:bg-orange-50">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleEditImageUpload}
+                            className="hidden"
+                            disabled={uploadingEditImage}
+                          />
+                          {uploadingEditImage ? (
+                            <Loader2 className="w-6 h-6 text-orange-600 animate-spin" />
+                          ) : (
+                            <>
+                              <Image className="w-6 h-6 text-gray-400" />
+                              <span className="text-xs text-gray-500 mt-1">Upload</span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                      <p className="text-xs text-gray-500">Max 5MB. JPG or PNG recommended.</p>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
@@ -2483,10 +2560,12 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
     perDivisionFee: 0,
     contactEmail: '',
     contactPhone: '',
+    posterImageUrl: '',
     divisions: []
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [step, setStep] = useState(courtId ? 2 : 1); // Skip court selection if already provided
 
   // Load top courts on mount
@@ -2560,6 +2639,39 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
       state: court.state || '',
       country: court.country || 'USA'
     }));
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const response = await sharedAssetApi.upload(file, 'image', 'event');
+      if (response?.data?.url) {
+        setFormData({ ...formData, posterImageUrl: response.data.url });
+      } else if (response?.url) {
+        setFormData({ ...formData, posterImageUrl: response.url });
+      } else {
+        setError(response.message || 'Upload failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -2856,6 +2968,48 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg p-2"
                 />
+              </div>
+
+              {/* Event Thumbnail */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Event Thumbnail</label>
+                <div className="flex items-center gap-4">
+                  {formData.posterImageUrl ? (
+                    <div className="relative">
+                      <img
+                        src={getSharedAssetUrl(formData.posterImageUrl)}
+                        alt="Event thumbnail"
+                        className="w-24 h-24 rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, posterImageUrl: '' })}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 hover:bg-orange-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={uploadingImage}
+                      />
+                      {uploadingImage ? (
+                        <Loader2 className="w-6 h-6 text-orange-600 animate-spin" />
+                      ) : (
+                        <>
+                          <Image className="w-6 h-6 text-gray-400" />
+                          <span className="text-xs text-gray-500 mt-1">Upload</span>
+                        </>
+                      )}
+                    </label>
+                  )}
+                  <p className="text-xs text-gray-500">Max 5MB. JPG or PNG recommended.</p>
+                </div>
               </div>
             </>
           )}
