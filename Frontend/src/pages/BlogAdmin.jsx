@@ -201,7 +201,8 @@ export default function BlogAdmin({ embedded = false }) {
   ];
 
   const content = (
-    <div className={embedded ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
+    <>
+      <div className={embedded ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
         {/* Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-6">
           <div className="flex border-b">
@@ -511,7 +512,7 @@ export default function BlogAdmin({ embedded = false }) {
           onAdd={handleAddWriter}
         />
       )}
-    </div>
+    </>
   );
 
   if (embedded) {
