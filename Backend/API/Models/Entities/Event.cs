@@ -31,8 +31,8 @@ public class Event
     /// </summary>
     public bool IsPrivate { get; set; } = false;
 
-    // Location
-    public int? CourtId { get; set; }
+    // Location (references Venues table - formerly Courts)
+    public int? CourtId { get; set; } // Column name kept for DB compatibility, references Venues
 
     [MaxLength(200)]
     public string? VenueName { get; set; }
@@ -95,7 +95,7 @@ public class Event
     public EventType? EventType { get; set; }
 
     [ForeignKey("CourtId")]
-    public Court? Court { get; set; }
+    public Venue? Venue { get; set; }
 
     [ForeignKey("OrganizedByUserId")]
     public User? OrganizedBy { get; set; }

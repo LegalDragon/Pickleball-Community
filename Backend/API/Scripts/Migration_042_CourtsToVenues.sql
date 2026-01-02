@@ -308,8 +308,16 @@ END
 GO
 
 -- FK from VenueAssetLikes to VenueAssets
-IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_VenueAssetLikes_VenueAssets')
-   AND EXISTS (SELECT * FROM sys.tables WHERE name = 'VenueAssetLikes')
+-- First drop if exists (in case it was created with wrong column reference)
+IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_VenueAssetLikes_VenueAssets')
+BEGIN
+    ALTER TABLE VenueAssetLikes DROP CONSTRAINT FK_VenueAssetLikes_VenueAssets
+    PRINT 'Dropped existing FK_VenueAssetLikes_VenueAssets (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'VenueAssetLikes')
+   AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('VenueAssetLikes') AND name = 'VenueAssetId')
 BEGIN
     ALTER TABLE VenueAssetLikes
     ADD CONSTRAINT FK_VenueAssetLikes_VenueAssets
@@ -420,6 +428,56 @@ IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetTopCourtsForUser')
 BEGIN
     DROP PROCEDURE sp_GetTopCourtsForUser
     PRINT 'Dropped sp_GetTopCourtsForUser'
+END
+GO
+
+-- Drop new stored procedures if they exist (for idempotency)
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_SearchVenues')
+BEGIN
+    DROP PROCEDURE sp_SearchVenues
+    PRINT 'Dropped existing sp_SearchVenues (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetVenueDetail')
+BEGIN
+    DROP PROCEDURE sp_GetVenueDetail
+    PRINT 'Dropped existing sp_GetVenueDetail (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetVenueStates')
+BEGIN
+    DROP PROCEDURE sp_GetVenueStates
+    PRINT 'Dropped existing sp_GetVenueStates (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'GetVenueCountries')
+BEGIN
+    DROP PROCEDURE GetVenueCountries
+    PRINT 'Dropped existing GetVenueCountries (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'GetVenueStatesByCountry')
+BEGIN
+    DROP PROCEDURE GetVenueStatesByCountry
+    PRINT 'Dropped existing GetVenueStatesByCountry (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'GetVenueCitiesByState')
+BEGIN
+    DROP PROCEDURE GetVenueCitiesByState
+    PRINT 'Dropped existing GetVenueCitiesByState (will recreate)'
+END
+GO
+
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetTopVenuesForUser')
+BEGIN
+    DROP PROCEDURE sp_GetTopVenuesForUser
+    PRINT 'Dropped existing sp_GetTopVenuesForUser (will recreate)'
 END
 GO
 
@@ -688,6 +746,7 @@ PRINT 'Created GetVenueCitiesByState'
 GO
 
 -- Create sp_GetTopVenuesForUser
+-- Note: Uses CourtId and OrganizedByUserId as Events table columns have not been renamed yet
 CREATE PROCEDURE sp_GetTopVenuesForUser
     @UserId INT,
     @Latitude FLOAT = NULL,
@@ -726,12 +785,12 @@ BEGIN
             END AS DistanceMiles,
             -- Priority score
             (
-                -- Events created at this venue
-                ISNULL((SELECT COUNT(*) * 10 FROM Events e WHERE e.VenueId = v.Id AND e.CreatedByUserId = @UserId), 0) +
+                -- Events created at this venue (using CourtId as Events table still uses this column name)
+                ISNULL((SELECT COUNT(*) * 10 FROM Events e WHERE e.CourtId = v.Id AND e.OrganizedByUserId = @UserId), 0) +
                 -- Events attended at this venue
                 ISNULL((SELECT COUNT(*) * 5 FROM EventRegistrations er
                         INNER JOIN Events e ON er.EventId = e.Id
-                        WHERE e.VenueId = v.Id AND er.UserId = @UserId), 0) +
+                        WHERE e.CourtId = v.Id AND er.UserId = @UserId), 0) +
                 -- Venue confirmations by user
                 ISNULL((SELECT COUNT(*) * 3 FROM VenueConfirmations vc WHERE vc.VenueId = v.Id AND vc.UserId = @UserId), 0) +
                 -- Distance bonus (closer = higher priority)
