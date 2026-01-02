@@ -104,6 +104,19 @@ public class UnitJoinRequestDto
     public DateTime CreatedAt { get; set; }
 }
 
+public class MyUnitsDto
+{
+    public List<EventUnitDto> ActiveUnits { get; set; } = new();
+    public List<EventUnitDto> PendingInvitations { get; set; } = new();
+    public List<UnitJoinRequestDto> PendingJoinRequestsAsCaption { get; set; } = new();
+}
+
+public class RespondToInvitationRequest
+{
+    public int UnitId { get; set; }
+    public bool Accept { get; set; }
+}
+
 // ============================================
 // Tournament Court DTOs
 // ============================================

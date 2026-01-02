@@ -411,6 +411,176 @@ public class TournamentController : ControllerBase
         return Ok(new ApiResponse<bool> { Success = true, Data = true });
     }
 
+    /// <summary>
+    /// Get the current user's units (teams they're on) and pending requests
+    /// </summary>
+    [Authorize]
+    [HttpGet("my-units")]
+    public async Task<ActionResult<ApiResponse<MyUnitsDto>>> GetMyUnits()
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<MyUnitsDto> { Success = false, Message = "Unauthorized" });
+
+        // Get units where user is a member
+        var myUnits = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Event)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Members)
+                    .ThenInclude(m => m.User)
+            .Where(m => m.UserId == userId.Value && m.InviteStatus != "Declined")
+            .ToListAsync();
+
+        // Get pending invitations to join teams
+        var pendingInvitations = myUnits
+            .Where(m => m.InviteStatus == "Pending")
+            .Select(m => MapToEventUnitDto(m.Unit!))
+            .ToList();
+
+        // Get units where user is captain with pending join requests
+        var captainUnits = myUnits
+            .Where(m => m.InviteStatus == "Accepted" && m.Unit?.CaptainUserId == userId.Value)
+            .Select(m => m.Unit!.Id)
+            .ToList();
+
+        var pendingJoinRequests = await _context.EventUnitJoinRequests
+            .Include(r => r.Unit)
+            .Include(r => r.User)
+            .Where(r => captainUnits.Contains(r.UnitId) && r.Status == "Pending")
+            .Select(r => new UnitJoinRequestDto
+            {
+                Id = r.Id,
+                UnitId = r.UnitId,
+                UnitName = r.Unit!.Name,
+                UserId = r.UserId,
+                UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : null,
+                ProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
+                Message = r.Message,
+                Status = r.Status,
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync();
+
+        // Get active units (accepted membership)
+        var activeUnits = myUnits
+            .Where(m => m.InviteStatus == "Accepted")
+            .Select(m => MapToEventUnitDto(m.Unit!))
+            .ToList();
+
+        return Ok(new ApiResponse<MyUnitsDto>
+        {
+            Success = true,
+            Data = new MyUnitsDto
+            {
+                ActiveUnits = activeUnits,
+                PendingInvitations = pendingInvitations,
+                PendingJoinRequestsAsCaption = pendingJoinRequests
+            }
+        });
+    }
+
+    /// <summary>
+    /// Accept or decline an invitation to join a unit
+    /// </summary>
+    [Authorize]
+    [HttpPost("units/invitation/respond")]
+    public async Task<ActionResult<ApiResponse<bool>>> RespondToInvitation([FromBody] RespondToInvitationRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var membership = await _context.EventUnitMembers
+            .FirstOrDefaultAsync(m => m.UnitId == request.UnitId && m.UserId == userId.Value && m.InviteStatus == "Pending");
+
+        if (membership == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Invitation not found" });
+
+        membership.InviteStatus = request.Accept ? "Accepted" : "Declined";
+        membership.RespondedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    /// <summary>
+    /// Leave a unit (for non-captain members)
+    /// </summary>
+    [Authorize]
+    [HttpDelete("units/{unitId}/leave")]
+    public async Task<ActionResult<ApiResponse<bool>>> LeaveUnit(int unitId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var membership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .FirstOrDefaultAsync(m => m.UnitId == unitId && m.UserId == userId.Value);
+
+        if (membership == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Membership not found" });
+
+        if (membership.Unit?.CaptainUserId == userId.Value)
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "Captain cannot leave the unit. Disband or transfer captaincy first." });
+
+        _context.EventUnitMembers.Remove(membership);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    private EventUnitDto MapToEventUnitDto(EventUnit unit)
+    {
+        var teamUnit = unit.Division?.TeamUnit;
+        var requiredPlayers = teamUnit?.TotalPlayers ?? unit.Division?.TeamSize ?? 1;
+
+        return new EventUnitDto
+        {
+            Id = unit.Id,
+            EventId = unit.EventId,
+            DivisionId = unit.DivisionId,
+            Name = unit.Name,
+            UnitNumber = unit.UnitNumber,
+            PoolNumber = unit.PoolNumber,
+            PoolName = unit.PoolName,
+            Seed = unit.Seed,
+            Status = unit.Status,
+            WaitlistPosition = unit.WaitlistPosition,
+            CaptainUserId = unit.CaptainUserId,
+            CaptainName = unit.Members?.FirstOrDefault(m => m.UserId == unit.CaptainUserId)?.User != null
+                ? $"{unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.FirstName} {unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.LastName}"
+                : null,
+            CaptainProfileImageUrl = unit.Members?.FirstOrDefault(m => m.UserId == unit.CaptainUserId)?.User?.ProfileImageUrl,
+            MatchesPlayed = unit.MatchesPlayed,
+            MatchesWon = unit.MatchesWon,
+            MatchesLost = unit.MatchesLost,
+            GamesWon = unit.GamesWon,
+            GamesLost = unit.GamesLost,
+            PointsScored = unit.PointsScored,
+            PointsAgainst = unit.PointsAgainst,
+            RequiredPlayers = requiredPlayers,
+            IsComplete = unit.Members?.Count(m => m.InviteStatus == "Accepted") >= requiredPlayers,
+            AllCheckedIn = unit.Members?.All(m => m.IsCheckedIn) ?? false,
+            Members = unit.Members?.Select(m => new EventUnitMemberDto
+            {
+                Id = m.Id,
+                UserId = m.UserId,
+                FirstName = m.User?.FirstName,
+                LastName = m.User?.LastName,
+                ProfileImageUrl = m.User?.ProfileImageUrl,
+                Role = m.Role,
+                InviteStatus = m.InviteStatus,
+                IsCheckedIn = m.IsCheckedIn,
+                CheckedInAt = m.CheckedInAt
+            }).ToList() ?? new List<EventUnitMemberDto>()
+        };
+    }
+
     // ============================================
     // Tournament Courts
     // ============================================

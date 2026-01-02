@@ -1129,9 +1129,13 @@ export const tournamentApi = {
     const params = divisionId ? `?divisionId=${divisionId}` : ''
     return api.get(`/tournament/events/${eventId}/units${params}`)
   },
+  getMyUnits: () => api.get('/tournament/my-units'),
   requestToJoinUnit: (unitId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message }),
   respondToJoinRequest: (requestId, accept, message = null) =>
     api.post('/tournament/units/join-request/respond', { requestId, accept, message }),
+  respondToInvitation: (unitId, accept) =>
+    api.post('/tournament/units/invitation/respond', { unitId, accept }),
+  leaveUnit: (unitId) => api.delete(`/tournament/units/${unitId}/leave`),
 
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),

@@ -19,6 +19,7 @@ export default function Events() {
   const [teamUnits, setTeamUnits] = useState([]);
   const [skillLevels, setSkillLevels] = useState([]);
   const [myEvents, setMyEvents] = useState(null);
+  const [myUnits, setMyUnits] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventType, setSelectedEventType] = useState('');
@@ -173,10 +174,11 @@ export default function Events() {
     loadSkillLevels();
   }, []);
 
-  // Load my events when authenticated
+  // Load my events and units when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadMyEvents();
+      loadMyUnits();
     }
   }, [isAuthenticated]);
 
@@ -188,6 +190,39 @@ export default function Events() {
       }
     } catch (err) {
       console.error('Error loading my events:', err);
+    }
+  };
+
+  const loadMyUnits = async () => {
+    try {
+      const response = await tournamentApi.getMyUnits();
+      if (response.success) {
+        setMyUnits(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading my units:', err);
+    }
+  };
+
+  const handleRespondToJoinRequest = async (requestId, accept) => {
+    try {
+      const response = await tournamentApi.respondToJoinRequest(requestId, accept);
+      if (response.success) {
+        loadMyUnits();
+      }
+    } catch (err) {
+      console.error('Error responding to join request:', err);
+    }
+  };
+
+  const handleRespondToInvitation = async (unitId, accept) => {
+    try {
+      const response = await tournamentApi.respondToInvitation(unitId, accept);
+      if (response.success) {
+        loadMyUnits();
+      }
+    } catch (err) {
+      console.error('Error responding to invitation:', err);
     }
   };
 
@@ -705,8 +740,179 @@ export default function Events() {
               </div>
             )}
 
+            {/* Pending Team Invitations */}
+            {myUnits?.pendingInvitations?.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-blue-500" />
+                  Team Invitations
+                </h2>
+                <div className="space-y-3">
+                  {myUnits.pendingInvitations.map(unit => (
+                    <div key={unit.id} className="bg-white rounded-lg shadow-sm p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {unit.captainProfileImageUrl ? (
+                            <img
+                              src={getSharedAssetUrl(unit.captainProfileImageUrl)}
+                              alt=""
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-medium text-lg">
+                              {unit.captainName?.charAt(0) || '?'}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-medium text-gray-900">{unit.name}</h3>
+                            <p className="text-sm text-gray-500">
+                              Captain: {unit.captainName || 'Unknown'}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {unit.members?.length || 1} / {unit.requiredPlayers} players
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleRespondToInvitation(unit.id, false)}
+                            className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => handleRespondToInvitation(unit.id, true)}
+                            className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending Join Requests (for captains) */}
+            {myUnits?.pendingJoinRequestsAsCaption?.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-500" />
+                  Join Requests for My Teams
+                </h2>
+                <div className="space-y-3">
+                  {myUnits.pendingJoinRequestsAsCaption.map(request => (
+                    <div key={request.id} className="bg-white rounded-lg shadow-sm p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {request.profileImageUrl ? (
+                            <img
+                              src={getSharedAssetUrl(request.profileImageUrl)}
+                              alt=""
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-medium text-lg">
+                              {request.userName?.charAt(0) || '?'}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-medium text-gray-900">{request.userName}</h3>
+                            <p className="text-sm text-gray-500">
+                              Wants to join: {request.unitName}
+                            </p>
+                            {request.message && (
+                              <p className="text-xs text-gray-400 mt-1">"{request.message}"</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleRespondToJoinRequest(request.id, false)}
+                            className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => handleRespondToJoinRequest(request.id, true)}
+                            className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700"
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* My Active Teams */}
+            {myUnits?.activeUnits?.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-orange-500" />
+                  My Teams
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {myUnits.activeUnits.map(unit => (
+                    <div key={unit.id} className="bg-white rounded-lg shadow-sm p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{unit.name}</h3>
+                          <p className="text-sm text-gray-500">
+                            {unit.isComplete ? 'Team Complete' : `${unit.members?.length || 0} / ${unit.requiredPlayers} players`}
+                          </p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          unit.status === 'Registered' ? 'bg-green-100 text-green-700' :
+                          unit.status === 'Waitlisted' ? 'bg-yellow-100 text-yellow-700' :
+                          unit.status === 'CheckedIn' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {unit.status}
+                        </span>
+                      </div>
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {unit.members?.slice(0, 5).map((member, i) => (
+                          member.profileImageUrl ? (
+                            <img
+                              key={member.id}
+                              src={getSharedAssetUrl(member.profileImageUrl)}
+                              alt={`${member.firstName} ${member.lastName}`}
+                              className="w-8 h-8 rounded-full border-2 border-white object-cover"
+                              title={`${member.firstName} ${member.lastName}`}
+                            />
+                          ) : (
+                            <div
+                              key={member.id}
+                              className="w-8 h-8 rounded-full border-2 border-white bg-orange-100 flex items-center justify-center text-orange-600 text-xs font-medium"
+                              title={`${member.firstName} ${member.lastName}`}
+                            >
+                              {member.firstName?.charAt(0)}{member.lastName?.charAt(0)}
+                            </div>
+                          )
+                        ))}
+                        {(unit.members?.length || 0) > 5 && (
+                          <div className="w-8 h-8 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-gray-600 text-xs font-medium">
+                            +{unit.members.length - 5}
+                          </div>
+                        )}
+                      </div>
+                      {!unit.isComplete && unit.captainUserId === user?.id && (
+                        <p className="text-xs text-orange-600 mt-2">
+                          Looking for more players to complete the team
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Empty State */}
-            {myEvents.eventsIOrganize.length === 0 && myEvents.eventsImRegisteredFor.length === 0 && (
+            {myEvents.eventsIOrganize.length === 0 && myEvents.eventsImRegisteredFor.length === 0 && (!myUnits || (myUnits.activeUnits?.length === 0 && myUnits.pendingInvitations?.length === 0)) && (
               <div className="bg-white rounded-xl shadow-sm p-12 text-center">
                 <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">No Events Yet</h3>
