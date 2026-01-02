@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { X, Upload, Link as LinkIcon, Video, Play, Trash2, ExternalLink } from 'lucide-react'
-import { sharedAssetApi, getAssetUrl, SHARED_AUTH_URL } from '../../services/api'
+import { sharedAssetApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../../services/api'
 
 /**
  * Reusable Video Upload Modal Component
@@ -47,7 +47,7 @@ const VideoUploadModal = ({
           setVideoUrl(currentVideo)
         } else {
           setUploadType('file')
-          setFilePreview(getAssetUrl(currentVideo))
+          setFilePreview(getSharedAssetUrl(currentVideo))
         }
       } else {
         setVideoUrl('')

@@ -139,7 +139,10 @@ const Profile = () => {
         setAvatarPreview(getSharedAssetUrl(avatarUrl))
       }
       if (user.introVideo) {
-        setVideoPreview(getAssetUrl(user.introVideo))
+        // Check if it's an external URL or uploaded file
+        const externalPatterns = ['youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'instagram.com']
+        const isExternal = externalPatterns.some(pattern => user.introVideo.includes(pattern))
+        setVideoPreview(isExternal ? user.introVideo : getSharedAssetUrl(user.introVideo))
       }
     }
   }, [user])
@@ -241,7 +244,7 @@ const Profile = () => {
       if (type === 'url') {
         setVideoPreview(url) // External URL
       } else {
-        setVideoPreview(getAssetUrl(url)) // Local file
+        setVideoPreview(getSharedAssetUrl(url)) // Uploaded file
       }
     } catch (error) {
       console.error('Video save error:', error)
@@ -558,7 +561,7 @@ const Profile = () => {
                       )
                     ) : (
                       <video
-                        src={videoPreview || getAssetUrl(user?.introVideo)}
+                        src={videoPreview || getSharedAssetUrl(user?.introVideo)}
                         controls
                         className="w-full h-40 rounded-lg object-cover bg-black"
                       />

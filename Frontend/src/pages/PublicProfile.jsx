@@ -400,7 +400,7 @@ const PublicProfile = () => {
                   )
                 ) : (
                   <video
-                    src={getAssetUrl(profile.introVideo)}
+                    src={getSharedAssetUrl(profile.introVideo)}
                     controls
                     className="w-full h-full object-cover"
                   />
