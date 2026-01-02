@@ -572,16 +572,16 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="ml-4">
                                   <div className="font-medium text-gray-900">
-                                    {u.firstName} {u.lastName}
+                                    {u.firstName || ''} {u.lastName || ''}
                                   </div>
-                                  <div className="text-sm text-gray-500">{u.email}</div>
+                                  <div className="text-sm text-gray-500">{u.email || 'No email'}</div>
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(u.role)}`}>
                                 {getRoleIcon(u.role)}
-                                <span className="ml-1 capitalize">{u.role}</span>
+                                <span className="ml-1 capitalize">{u.role || 'User'}</span>
                               </span>
                             </td>
                             <td className="px-6 py-4">
@@ -598,7 +598,7 @@ const AdminDashboard = () => {
                               )}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
-                              {new Date(u.createdAt).toLocaleDateString()}
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-6 py-4 text-right">
                               <button
