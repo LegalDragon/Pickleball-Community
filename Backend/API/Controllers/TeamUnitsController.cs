@@ -48,6 +48,7 @@ public class TeamUnitsController : ControllerBase
                 {
                     Id = u.Id,
                     Name = u.Name,
+                    UnitCode = u.UnitCode,
                     Description = u.Description,
                     MaleCount = u.MaleCount,
                     FemaleCount = u.FemaleCount,
@@ -85,6 +86,7 @@ public class TeamUnitsController : ControllerBase
                 {
                     Id = u.Id,
                     Name = u.Name,
+                    UnitCode = u.UnitCode,
                     Description = u.Description,
                     MaleCount = u.MaleCount,
                     FemaleCount = u.FemaleCount,
@@ -123,6 +125,7 @@ public class TeamUnitsController : ControllerBase
                 {
                     Id = unit.Id,
                     Name = unit.Name,
+                    UnitCode = unit.UnitCode,
                     Description = unit.Description,
                     MaleCount = unit.MaleCount,
                     FemaleCount = unit.FemaleCount,
@@ -155,6 +158,7 @@ public class TeamUnitsController : ControllerBase
             var unit = new TeamUnit
             {
                 Name = dto.Name,
+                UnitCode = dto.UnitCode,
                 Description = dto.Description,
                 MaleCount = dto.MaleCount,
                 FemaleCount = dto.FemaleCount,
@@ -174,6 +178,7 @@ public class TeamUnitsController : ControllerBase
                 {
                     Id = unit.Id,
                     Name = unit.Name,
+                    UnitCode = unit.UnitCode,
                     Description = unit.Description,
                     MaleCount = unit.MaleCount,
                     FemaleCount = unit.FemaleCount,
@@ -209,6 +214,7 @@ public class TeamUnitsController : ControllerBase
                 return NotFound(new ApiResponse<TeamUnitDto> { Success = false, Message = "Team unit not found" });
 
             unit.Name = dto.Name;
+            unit.UnitCode = dto.UnitCode;
             unit.Description = dto.Description;
             unit.MaleCount = dto.MaleCount;
             unit.FemaleCount = dto.FemaleCount;
@@ -228,6 +234,7 @@ public class TeamUnitsController : ControllerBase
                 {
                     Id = unit.Id,
                     Name = unit.Name,
+                    UnitCode = unit.UnitCode,
                     Description = unit.Description,
                     MaleCount = unit.MaleCount,
                     FemaleCount = unit.FemaleCount,

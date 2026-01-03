@@ -18,6 +18,12 @@ public class TeamUnit
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Short code for the unit (e.g., "MD" for Men's Doubles, "WS" for Women's Singles)
+    /// </summary>
+    [MaxLength(20)]
+    public string? UnitCode { get; set; }
+
     [MaxLength(500)]
     public string? Description { get; set; }
 

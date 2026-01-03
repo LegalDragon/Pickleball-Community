@@ -4,6 +4,7 @@ public class TeamUnitDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? UnitCode { get; set; }
     public string? Description { get; set; }
     public int MaleCount { get; set; }
     public int FemaleCount { get; set; }
@@ -18,6 +19,7 @@ public class TeamUnitDto
 public class CreateTeamUnitDto
 {
     public string Name { get; set; } = string.Empty;
+    public string? UnitCode { get; set; }
     public string? Description { get; set; }
     public int MaleCount { get; set; }
     public int FemaleCount { get; set; }

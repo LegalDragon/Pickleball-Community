@@ -14,6 +14,7 @@ export default function TeamUnitsAdmin({ embedded = false }) {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    unitCode: '',
     description: '',
     maleCount: 0,
     femaleCount: 0,
@@ -47,6 +48,7 @@ export default function TeamUnitsAdmin({ embedded = false }) {
     setEditingUnit(null);
     setFormData({
       name: '',
+      unitCode: '',
       description: '',
       maleCount: 0,
       femaleCount: 0,
@@ -62,6 +64,7 @@ export default function TeamUnitsAdmin({ embedded = false }) {
     setEditingUnit(unit);
     setFormData({
       name: unit.name,
+      unitCode: unit.unitCode || '',
       description: unit.description || '',
       maleCount: unit.maleCount || 0,
       femaleCount: unit.femaleCount || 0,
@@ -211,6 +214,9 @@ export default function TeamUnitsAdmin({ embedded = false }) {
                     Team Unit
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Code
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Player Configuration
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -234,6 +240,15 @@ export default function TeamUnitsAdmin({ embedded = false }) {
                           <div className="text-xs text-gray-500">{unit.description}</div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {unit.unitCode ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-gray-100 text-gray-700 text-sm font-mono">
+                          {unit.unitCode}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-gray-600">{getPlayerBreakdown(unit)}</span>
@@ -303,16 +318,29 @@ export default function TeamUnitsAdmin({ embedded = false }) {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Men's Doubles"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                  required
-                />
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Men's Doubles"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit Code</label>
+                  <input
+                    type="text"
+                    value={formData.unitCode}
+                    onChange={(e) => setFormData({ ...formData, unitCode: e.target.value.toUpperCase() })}
+                    placeholder="e.g., MD"
+                    maxLength={20}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500 font-mono uppercase"
+                  />
+                </div>
               </div>
 
               <div>
