@@ -903,7 +903,18 @@ function ClubCard({ club, onViewDetails, showManageButton = false }) {
         )}
 
         <div className="space-y-2 text-sm text-gray-600">
-          {(club.city || club.state) && (
+          {club.homeVenueId && club.homeVenueName ? (
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 flex-shrink-0" />
+              <Link
+                to={`/venues?venueId=${club.homeVenueId}`}
+                onClick={(e) => e.stopPropagation()}
+                className="truncate text-purple-600 hover:text-purple-700 hover:underline"
+              >
+                {club.homeVenueName}
+              </Link>
+            </div>
+          ) : (club.city || club.state) && (
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">
@@ -1428,7 +1439,16 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                   </h3>
                   <div className="bg-gray-50 rounded-lg p-4 text-sm">
                     {club.homeVenueName && (
-                      <p className="font-medium text-purple-700 mb-1">{club.homeVenueName}</p>
+                      club.homeVenueId ? (
+                        <Link
+                          to={`/venues?venueId=${club.homeVenueId}`}
+                          className="font-medium text-purple-600 hover:text-purple-700 hover:underline block mb-1"
+                        >
+                          {club.homeVenueName}
+                        </Link>
+                      ) : (
+                        <p className="font-medium text-purple-700 mb-1">{club.homeVenueName}</p>
+                      )
                     )}
                     {club.address && <p>{club.address}</p>}
                     <p>{club.city}{club.state && `, ${club.state}`} {club.postalCode}</p>

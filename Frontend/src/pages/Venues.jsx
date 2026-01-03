@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MapPin, Search, Filter, Star, Clock, Plus, Phone, Globe, CheckCircle, X, Sun, DollarSign, Layers, ThumbsUp, ThumbsDown, MessageSquare, ChevronLeft, ChevronRight, ExternalLink, Calendar, Navigation, List, Map, ArrowUpDown, SortAsc, SortDesc, Locate, Image, Video, Upload, Trash2, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { venuesApi, venueTypesApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
@@ -20,6 +20,7 @@ const AMENITY_OPTIONS = [
 
 export default function Venues() {
   const { user, isAuthenticated } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [venues, setVenues] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -157,6 +158,26 @@ export default function Venues() {
   useEffect(() => {
     getLocation();
   }, [getLocation]);
+
+  // Handle venueId URL parameter to auto-open venue detail
+  useEffect(() => {
+    const venueId = searchParams.get('venueId');
+    if (venueId) {
+      const loadVenueFromUrl = async () => {
+        try {
+          const response = await venuesApi.getCourt(parseInt(venueId), userLocation?.lat, userLocation?.lng);
+          if (response.success && response.data) {
+            setSelectedCourt(response.data);
+          }
+        } catch (err) {
+          console.error('Error loading venue from URL:', err);
+        }
+      };
+      loadVenueFromUrl();
+      // Clear the URL parameter after loading
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, userLocation]);
 
   // Load countries for full search
   useEffect(() => {

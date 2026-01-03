@@ -151,6 +151,23 @@ export default function TeamUnitsAdmin({ embedded = false }) {
     <>
       {/* Content */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header with Add button for embedded mode */}
+        {embedded && (
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Team Units</h2>
+              <p className="text-sm text-gray-500">Manage division team configurations</p>
+            </div>
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Add Team Unit
+            </button>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="mb-6 flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm text-gray-600">

@@ -1129,7 +1129,17 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
           </div>
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            <span className="truncate">{event.venueName || `${event.city}, ${event.state}`}</span>
+            {event.courtId && event.venueName ? (
+              <Link
+                to={`/venues?venueId=${event.courtId}`}
+                onClick={(e) => e.stopPropagation()}
+                className="truncate text-orange-600 hover:text-orange-700 hover:underline"
+              >
+                {event.venueName}
+              </Link>
+            ) : (
+              <span className="truncate">{event.venueName || `${event.city}, ${event.state}`}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" />
@@ -1785,7 +1795,18 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                   Location
                 </h3>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  {event.venueName && <p className="font-medium">{event.venueName}</p>}
+                  {event.venueName && (
+                    event.courtId ? (
+                      <Link
+                        to={`/venues?venueId=${event.courtId}`}
+                        className="font-medium text-orange-600 hover:text-orange-700 hover:underline"
+                      >
+                        {event.venueName}
+                      </Link>
+                    ) : (
+                      <p className="font-medium">{event.venueName}</p>
+                    )
+                  )}
                   {event.address && <p className="text-sm text-gray-600">{event.address}</p>}
                   <p className="text-sm text-gray-600">
                     {event.city}{event.state && `, ${event.state}`}{event.country && `, ${event.country}`}
