@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play, Link2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
@@ -1200,6 +1200,29 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const [unitsLookingForPartners, setUnitsLookingForPartners] = useState([]);
   const [loadingUnits, setLoadingUnits] = useState(false);
 
+  // Share link state
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Copy event invite link to clipboard
+  const copyEventLink = async () => {
+    const eventUrl = `${window.location.origin}/events?id=${event.id}`;
+    try {
+      await navigator.clipboard.writeText(eventUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = eventUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
+
   // Auto-generate division name when team unit or skill level changes
   const generateDivisionName = (teamUnitId, skillLevelId) => {
     const teamUnit = teamUnits.find(t => t.id === teamUnitId);
@@ -1661,12 +1684,28 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <button
-                onClick={onClose}
-                className="absolute top-4 right-4 p-2 bg-white/80 rounded-full hover:bg-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                <button
+                  onClick={copyEventLink}
+                  className="p-2 bg-white/80 rounded-full hover:bg-white flex items-center gap-1"
+                  title="Copy invite link"
+                >
+                  {linkCopied ? (
+                    <>
+                      <Check className="w-5 h-5 text-green-600" />
+                      <span className="text-xs text-green-600 pr-1">Copied!</span>
+                    </>
+                  ) : (
+                    <Link2 className="w-5 h-5" />
+                  )}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-2 bg-white/80 rounded-full hover:bg-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               <div className="absolute bottom-4 left-6 text-white">
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`px-2 py-1 text-xs font-medium rounded-full bg-${status.color}-500`}>
@@ -1711,9 +1750,25 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                 </div>
                 <h2 className="text-xl font-semibold text-gray-900">{event.name}</h2>
               </div>
-              <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={copyEventLink}
+                  className="p-2 text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                  title="Copy invite link"
+                >
+                  {linkCopied ? (
+                    <>
+                      <Check className="w-5 h-5 text-green-600" />
+                      <span className="text-xs text-green-600">Copied!</span>
+                    </>
+                  ) : (
+                    <Link2 className="w-5 h-5" />
+                  )}
+                </button>
+                <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           )}
         </div>
