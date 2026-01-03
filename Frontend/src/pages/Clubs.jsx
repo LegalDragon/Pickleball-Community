@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog, FileText, Download, File, Video, Table, Presentation, Eye, EyeOff, Lock, GripVertical } from 'lucide-react';
 
 // Icon mapping for role icons
 const ROLE_ICON_MAP = {
@@ -980,6 +980,16 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [venueResults, setVenueResults] = useState([]);
   const [searchingVenues, setSearchingVenues] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(null);
+
+  // Documents state
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [showAddDocument, setShowAddDocument] = useState(false);
+  const [newDocument, setNewDocument] = useState({ title: '', description: '', visibility: 'Member', fileUrl: '', fileName: '', mimeType: '', fileSizeBytes: 0 });
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [editingDocument, setEditingDocument] = useState(null);
+  const documentInputRef = useRef(null);
+
   const logoInputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -994,6 +1004,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     if (activeTab === 'members') loadMembers();
     if (activeTab === 'requests' && canManage) loadJoinRequests();
     if (activeTab === 'notifications') loadNotifications();
+    if (activeTab === 'documents') loadDocuments();
   }, [activeTab]);
 
   const loadMembers = async () => {
@@ -1036,6 +1047,120 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadDocuments = async () => {
+    setDocumentsLoading(true);
+    try {
+      const response = await clubsApi.getDocuments(club.id);
+      if (response.success) {
+        setDocuments(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading documents:', err);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const handleDocumentUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDocument(true);
+    try {
+      const response = await sharedAssetApi.upload(file);
+      if (response.url) {
+        setNewDocument({
+          ...newDocument,
+          fileUrl: response.url,
+          fileName: file.name,
+          mimeType: file.type,
+          fileSizeBytes: file.size
+        });
+      }
+    } catch (err) {
+      console.error('Error uploading document:', err);
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleCreateDocument = async () => {
+    if (!newDocument.title.trim() || !newDocument.fileUrl) return;
+
+    try {
+      const response = await clubsApi.createDocument(club.id, {
+        title: newDocument.title,
+        description: newDocument.description,
+        fileUrl: newDocument.fileUrl,
+        fileName: newDocument.fileName,
+        mimeType: newDocument.mimeType,
+        fileSizeBytes: newDocument.fileSizeBytes,
+        visibility: newDocument.visibility,
+        sortOrder: documents.length
+      });
+      if (response.success) {
+        setDocuments([...documents, response.data]);
+        setNewDocument({ title: '', description: '', visibility: 'Member', fileUrl: '', fileName: '', mimeType: '', fileSizeBytes: 0 });
+        setShowAddDocument(false);
+      }
+    } catch (err) {
+      console.error('Error creating document:', err);
+    }
+  };
+
+  const handleUpdateDocument = async (documentId, updates) => {
+    try {
+      const response = await clubsApi.updateDocument(club.id, documentId, updates);
+      if (response.success) {
+        setDocuments(documents.map(d => d.id === documentId ? response.data : d));
+        setEditingDocument(null);
+      }
+    } catch (err) {
+      console.error('Error updating document:', err);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+
+    try {
+      const response = await clubsApi.deleteDocument(club.id, documentId);
+      if (response.success) {
+        setDocuments(documents.filter(d => d.id !== documentId));
+      }
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  };
+
+  const getFileTypeIcon = (fileType) => {
+    switch (fileType) {
+      case 'Image': return Image;
+      case 'Video': return Video;
+      case 'PDF': return FileText;
+      case 'Document': return File;
+      case 'Spreadsheet': return Table;
+      case 'Presentation': return Presentation;
+      default: return File;
+    }
+  };
+
+  const getVisibilityIcon = (visibility) => {
+    switch (visibility) {
+      case 'Public': return Globe;
+      case 'Member': return Users;
+      case 'Admin': return Lock;
+      default: return Eye;
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleToggleChat = async () => {
@@ -1366,6 +1491,16 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
               }`}
             >
               Notifications
+            </button>
+            <button
+              onClick={() => setActiveTab('documents')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === 'documents'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Documents
             </button>
             {canManage && (
               <button
@@ -1728,6 +1863,267 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                 </div>
               ) : (
                 <p className="text-center text-gray-500 py-8">No notifications yet</p>
+              )}
+            </div>
+          )}
+
+          {/* Documents Tab */}
+          {activeTab === 'documents' && (
+            <div>
+              {/* Add Document Button (Admin only) */}
+              {isAdmin && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => setShowAddDocument(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Document
+                  </button>
+                </div>
+              )}
+
+              {/* Add Document Form */}
+              {showAddDocument && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+                  <h3 className="font-medium text-gray-900 mb-4">Add New Document</h3>
+                  <div className="space-y-4">
+                    {/* File Upload */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
+                      <input
+                        type="file"
+                        ref={documentInputRef}
+                        onChange={handleDocumentUpload}
+                        className="hidden"
+                      />
+                      {newDocument.fileUrl ? (
+                        <div className="flex items-center gap-3 p-3 bg-white rounded border">
+                          {(() => {
+                            const FileIcon = getFileTypeIcon(newDocument.mimeType?.startsWith('image') ? 'Image' :
+                              newDocument.mimeType?.startsWith('video') ? 'Video' :
+                              newDocument.mimeType === 'application/pdf' ? 'PDF' : 'Document');
+                            return <FileIcon className="w-8 h-8 text-purple-600" />;
+                          })()}
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{newDocument.fileName}</p>
+                            <p className="text-xs text-gray-500">{formatFileSize(newDocument.fileSizeBytes)}</p>
+                          </div>
+                          <button
+                            onClick={() => setNewDocument({ ...newDocument, fileUrl: '', fileName: '', mimeType: '', fileSizeBytes: 0 })}
+                            className="p-1 text-gray-400 hover:text-red-500"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => documentInputRef.current?.click()}
+                          disabled={uploadingDocument}
+                          className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-purple-400 hover:bg-purple-50 transition-colors"
+                        >
+                          {uploadingDocument ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                              <span className="text-gray-600">Uploading...</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-2">
+                              <Upload className="w-8 h-8 text-gray-400" />
+                              <span className="text-sm text-gray-600">Click to upload a file</span>
+                              <span className="text-xs text-gray-400">Images, PDFs, Documents, Videos</span>
+                            </div>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                      <input
+                        type="text"
+                        value={newDocument.title}
+                        onChange={(e) => setNewDocument({ ...newDocument, title: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                        placeholder="Document title"
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                      <textarea
+                        value={newDocument.description}
+                        onChange={(e) => setNewDocument({ ...newDocument, description: e.target.value })}
+                        rows={2}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                        placeholder="Brief description of the document"
+                      />
+                    </div>
+
+                    {/* Visibility */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Who can view this?</label>
+                      <select
+                        value={newDocument.visibility}
+                        onChange={(e) => setNewDocument({ ...newDocument, visibility: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      >
+                        <option value="Public">Public - Anyone can view</option>
+                        <option value="Member">Members Only</option>
+                        <option value="Admin">Admins Only</option>
+                      </select>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          setShowAddDocument(false);
+                          setNewDocument({ title: '', description: '', visibility: 'Member', fileUrl: '', fileName: '', mimeType: '', fileSizeBytes: 0 });
+                        }}
+                        className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleCreateDocument}
+                        disabled={!newDocument.title.trim() || !newDocument.fileUrl}
+                        className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                      >
+                        Add Document
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Documents List */}
+              {documentsLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
+                </div>
+              ) : documents.length > 0 ? (
+                <div className="space-y-3">
+                  {documents.map(doc => {
+                    const FileIcon = getFileTypeIcon(doc.fileType);
+                    const VisibilityIcon = getVisibilityIcon(doc.visibility);
+                    const isEditing = editingDocument === doc.id;
+
+                    return (
+                      <div key={doc.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+                        {/* File Icon */}
+                        <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
+                          <FileIcon className="w-6 h-6 text-purple-600" />
+                        </div>
+
+                        {/* Document Info */}
+                        <div className="flex-1 min-w-0">
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                defaultValue={doc.title}
+                                className="w-full border border-gray-300 rounded p-1 text-sm"
+                                id={`edit-title-${doc.id}`}
+                              />
+                              <textarea
+                                defaultValue={doc.description || ''}
+                                className="w-full border border-gray-300 rounded p-1 text-sm"
+                                rows={2}
+                                id={`edit-desc-${doc.id}`}
+                              />
+                              <select
+                                defaultValue={doc.visibility}
+                                className="border border-gray-300 rounded p-1 text-sm"
+                                id={`edit-visibility-${doc.id}`}
+                              >
+                                <option value="Public">Public</option>
+                                <option value="Member">Members</option>
+                                <option value="Admin">Admins</option>
+                              </select>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    handleUpdateDocument(doc.id, {
+                                      title: document.getElementById(`edit-title-${doc.id}`).value,
+                                      description: document.getElementById(`edit-desc-${doc.id}`).value,
+                                      visibility: document.getElementById(`edit-visibility-${doc.id}`).value
+                                    });
+                                  }}
+                                  className="px-3 py-1 bg-purple-600 text-white rounded text-sm"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingDocument(null)}
+                                  className="px-3 py-1 border border-gray-300 rounded text-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <h4 className="font-medium text-gray-900 truncate">{doc.title}</h4>
+                              {doc.description && (
+                                <p className="text-sm text-gray-600 mt-1">{doc.description}</p>
+                              )}
+                              <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <VisibilityIcon className="w-3 h-3" />
+                                  {doc.visibility}
+                                </span>
+                                {doc.fileName && (
+                                  <span>{doc.fileName}</span>
+                                )}
+                                {doc.fileSizeBytes && (
+                                  <span>{formatFileSize(doc.fileSizeBytes)}</span>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex-shrink-0 flex items-center gap-2">
+                          <a
+                            href={getSharedAssetUrl(doc.fileUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
+                            title="Download/View"
+                          >
+                            <Download className="w-5 h-5" />
+                          </a>
+                          {isAdmin && !isEditing && (
+                            <>
+                              <button
+                                onClick={() => setEditingDocument(doc.id)}
+                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
+                                title="Edit"
+                              >
+                                <Edit3 className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">
+                  {isAdmin ? 'No documents yet. Click "Add Document" to upload one.' : 'No documents available.'}
+                </p>
               )}
             </div>
           )}

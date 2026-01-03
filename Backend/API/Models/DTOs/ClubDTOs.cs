@@ -237,3 +237,52 @@ public class UpdateClubMemberRoleDto
     public bool? CanPostAnnouncements { get; set; }
     public bool? IsActive { get; set; }
 }
+
+// Club Document DTO
+public class ClubDocumentDto
+{
+    public int Id { get; set; }
+    public int ClubId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string FileUrl { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public string FileType { get; set; } = "Other"; // Image, PDF, Document, Video, Spreadsheet, Presentation, Other
+    public string? MimeType { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public string Visibility { get; set; } = "Member"; // Public, Member, Admin
+    public int SortOrder { get; set; }
+    public int UploadedByUserId { get; set; }
+    public string UploadedByUserName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+// Create Club Document
+public class CreateClubDocumentDto
+{
+    public string Title { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string FileUrl { get; set; } = string.Empty;
+    public string? FileName { get; set; }
+    public string? MimeType { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public string Visibility { get; set; } = "Member"; // Public, Member, Admin
+    public int SortOrder { get; set; } = 0;
+}
+
+// Update Club Document
+public class UpdateClubDocumentDto
+{
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string? Visibility { get; set; }
+    public int? SortOrder { get; set; }
+}
+
+// Document order for reordering
+public class DocumentOrderDto
+{
+    public int DocumentId { get; set; }
+    public int SortOrder { get; set; }
+}

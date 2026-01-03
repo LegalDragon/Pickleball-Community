@@ -895,7 +895,14 @@ export const clubsApi = {
   // Club chat
   enableChat: (id) => api.post(`/clubs/${id}/chat/enable`),
   disableChat: (id) => api.post(`/clubs/${id}/chat/disable`),
-  getChat: (id) => api.get(`/clubs/${id}/chat`)
+  getChat: (id) => api.get(`/clubs/${id}/chat`),
+
+  // Club documents
+  getDocuments: (clubId) => api.get(`/clubs/${clubId}/documents`),
+  createDocument: (clubId, data) => api.post(`/clubs/${clubId}/documents`, data),
+  updateDocument: (clubId, documentId, data) => api.put(`/clubs/${clubId}/documents/${documentId}`, data),
+  deleteDocument: (clubId, documentId) => api.delete(`/clubs/${clubId}/documents/${documentId}`),
+  reorderDocuments: (clubId, orders) => api.put(`/clubs/${clubId}/documents/reorder`, orders)
 }
 
 // Club Member Roles API

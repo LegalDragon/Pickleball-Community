@@ -1388,6 +1388,315 @@ public class ClubsController : ControllerBase
         }
     }
 
+    // ===== CLUB DOCUMENTS =====
+
+    // GET: /clubs/{id}/documents - Get club documents
+    [HttpGet("{id}/documents")]
+    public async Task<ActionResult<ApiResponse<List<ClubDocumentDto>>>> GetDocuments(int id)
+    {
+        try
+        {
+            var club = await _context.Clubs.FindAsync(id);
+            if (club == null || !club.IsActive)
+                return NotFound(new ApiResponse<List<ClubDocumentDto>> { Success = false, Message = "Club not found" });
+
+            var userId = GetCurrentUserId();
+
+            // Determine user's access level
+            string accessLevel = "Public";
+            if (userId.HasValue)
+            {
+                var membership = await _context.ClubMembers
+                    .FirstOrDefaultAsync(m => m.ClubId == id && m.UserId == userId.Value && m.IsActive);
+
+                if (membership != null)
+                {
+                    accessLevel = membership.Role == "Admin" ? "Admin" : "Member";
+                }
+            }
+
+            // Build visibility filter based on access level
+            var visibilities = new List<string> { "Public" };
+            if (accessLevel == "Member" || accessLevel == "Admin")
+                visibilities.Add("Member");
+            if (accessLevel == "Admin")
+                visibilities.Add("Admin");
+
+            var documents = await _context.ClubDocuments
+                .Include(d => d.UploadedBy)
+                .Where(d => d.ClubId == id && d.IsActive && visibilities.Contains(d.Visibility))
+                .OrderBy(d => d.SortOrder)
+                .ThenByDescending(d => d.CreatedAt)
+                .Select(d => new ClubDocumentDto
+                {
+                    Id = d.Id,
+                    ClubId = d.ClubId,
+                    Title = d.Title,
+                    Description = d.Description,
+                    FileUrl = d.FileUrl,
+                    FileName = d.FileName,
+                    FileType = d.FileType,
+                    MimeType = d.MimeType,
+                    FileSizeBytes = d.FileSizeBytes,
+                    Visibility = d.Visibility,
+                    SortOrder = d.SortOrder,
+                    UploadedByUserId = d.UploadedByUserId,
+                    UploadedByUserName = d.UploadedBy != null ? (d.UploadedBy.FirstName + " " + d.UploadedBy.LastName).Trim() : "",
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<ClubDocumentDto>> { Success = true, Data = documents });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching club documents for {ClubId}", id);
+            return StatusCode(500, new ApiResponse<List<ClubDocumentDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /clubs/{id}/documents - Upload a new document (Admin only)
+    [HttpPost("{id}/documents")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<ClubDocumentDto>>> CreateDocument(int id, [FromBody] CreateClubDocumentDto dto)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<ClubDocumentDto> { Success = false, Message = "User not authenticated" });
+
+            var club = await _context.Clubs.FindAsync(id);
+            if (club == null || !club.IsActive)
+                return NotFound(new ApiResponse<ClubDocumentDto> { Success = false, Message = "Club not found" });
+
+            // Check if user is admin
+            var isAdmin = await _context.ClubMembers
+                .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value && m.Role == "Admin" && m.IsActive);
+
+            if (!isAdmin)
+                return Forbid();
+
+            // Validate visibility
+            var validVisibilities = new[] { "Public", "Member", "Admin" };
+            if (!validVisibilities.Contains(dto.Visibility))
+                return BadRequest(new ApiResponse<ClubDocumentDto> { Success = false, Message = "Invalid visibility value" });
+
+            // Determine file type from mime type or extension
+            var fileType = DetermineFileType(dto.MimeType, dto.FileName);
+
+            var document = new ClubDocument
+            {
+                ClubId = id,
+                Title = dto.Title,
+                Description = dto.Description,
+                FileUrl = dto.FileUrl,
+                FileName = dto.FileName,
+                FileType = fileType,
+                MimeType = dto.MimeType,
+                FileSizeBytes = dto.FileSizeBytes,
+                Visibility = dto.Visibility,
+                SortOrder = dto.SortOrder,
+                UploadedByUserId = userId.Value
+            };
+
+            _context.ClubDocuments.Add(document);
+            await _context.SaveChangesAsync();
+
+            var user = await _context.Users.FindAsync(userId.Value);
+
+            return Ok(new ApiResponse<ClubDocumentDto>
+            {
+                Success = true,
+                Data = new ClubDocumentDto
+                {
+                    Id = document.Id,
+                    ClubId = document.ClubId,
+                    Title = document.Title,
+                    Description = document.Description,
+                    FileUrl = document.FileUrl,
+                    FileName = document.FileName,
+                    FileType = document.FileType,
+                    MimeType = document.MimeType,
+                    FileSizeBytes = document.FileSizeBytes,
+                    Visibility = document.Visibility,
+                    SortOrder = document.SortOrder,
+                    UploadedByUserId = document.UploadedByUserId,
+                    UploadedByUserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                    CreatedAt = document.CreatedAt,
+                    UpdatedAt = document.UpdatedAt
+                },
+                Message = "Document uploaded successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating club document for {ClubId}", id);
+            return StatusCode(500, new ApiResponse<ClubDocumentDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /clubs/{id}/documents/{documentId} - Update document (Admin only)
+    [HttpPut("{id}/documents/{documentId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<ClubDocumentDto>>> UpdateDocument(int id, int documentId, [FromBody] UpdateClubDocumentDto dto)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<ClubDocumentDto> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is admin
+            var isAdmin = await _context.ClubMembers
+                .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value && m.Role == "Admin" && m.IsActive);
+
+            if (!isAdmin)
+                return Forbid();
+
+            var document = await _context.ClubDocuments
+                .Include(d => d.UploadedBy)
+                .FirstOrDefaultAsync(d => d.Id == documentId && d.ClubId == id && d.IsActive);
+
+            if (document == null)
+                return NotFound(new ApiResponse<ClubDocumentDto> { Success = false, Message = "Document not found" });
+
+            // Validate visibility if provided
+            if (!string.IsNullOrEmpty(dto.Visibility))
+            {
+                var validVisibilities = new[] { "Public", "Member", "Admin" };
+                if (!validVisibilities.Contains(dto.Visibility))
+                    return BadRequest(new ApiResponse<ClubDocumentDto> { Success = false, Message = "Invalid visibility value" });
+                document.Visibility = dto.Visibility;
+            }
+
+            if (!string.IsNullOrEmpty(dto.Title))
+                document.Title = dto.Title;
+
+            if (dto.Description != null)
+                document.Description = dto.Description;
+
+            if (dto.SortOrder.HasValue)
+                document.SortOrder = dto.SortOrder.Value;
+
+            document.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<ClubDocumentDto>
+            {
+                Success = true,
+                Data = new ClubDocumentDto
+                {
+                    Id = document.Id,
+                    ClubId = document.ClubId,
+                    Title = document.Title,
+                    Description = document.Description,
+                    FileUrl = document.FileUrl,
+                    FileName = document.FileName,
+                    FileType = document.FileType,
+                    MimeType = document.MimeType,
+                    FileSizeBytes = document.FileSizeBytes,
+                    Visibility = document.Visibility,
+                    SortOrder = document.SortOrder,
+                    UploadedByUserId = document.UploadedByUserId,
+                    UploadedByUserName = document.UploadedBy != null ? $"{document.UploadedBy.FirstName} {document.UploadedBy.LastName}".Trim() : "",
+                    CreatedAt = document.CreatedAt,
+                    UpdatedAt = document.UpdatedAt
+                },
+                Message = "Document updated successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating club document {DocumentId}", documentId);
+            return StatusCode(500, new ApiResponse<ClubDocumentDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // DELETE: /clubs/{id}/documents/{documentId} - Delete document (Admin only)
+    [HttpDelete("{id}/documents/{documentId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteDocument(int id, int documentId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is admin
+            var isAdmin = await _context.ClubMembers
+                .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value && m.Role == "Admin" && m.IsActive);
+
+            if (!isAdmin)
+                return Forbid();
+
+            var document = await _context.ClubDocuments
+                .FirstOrDefaultAsync(d => d.Id == documentId && d.ClubId == id && d.IsActive);
+
+            if (document == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Document not found" });
+
+            document.IsActive = false;
+            document.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Document deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting club document {DocumentId}", documentId);
+            return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /clubs/{id}/documents/reorder - Reorder documents (Admin only)
+    [HttpPut("{id}/documents/reorder")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> ReorderDocuments(int id, [FromBody] List<DocumentOrderDto> orders)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is admin
+            var isAdmin = await _context.ClubMembers
+                .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value && m.Role == "Admin" && m.IsActive);
+
+            if (!isAdmin)
+                return Forbid();
+
+            var documentIds = orders.Select(o => o.DocumentId).ToList();
+            var documents = await _context.ClubDocuments
+                .Where(d => d.ClubId == id && documentIds.Contains(d.Id) && d.IsActive)
+                .ToListAsync();
+
+            foreach (var order in orders)
+            {
+                var doc = documents.FirstOrDefault(d => d.Id == order.DocumentId);
+                if (doc != null)
+                {
+                    doc.SortOrder = order.SortOrder;
+                    doc.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Documents reordered" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reordering club documents for {ClubId}", id);
+            return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // Helper methods
     private static string GenerateInviteCode()
     {
@@ -1456,5 +1765,43 @@ public class ClubsController : ControllerBase
         });
 
         await _context.SaveChangesAsync();
+    }
+
+    private static string DetermineFileType(string? mimeType, string? fileName)
+    {
+        // Check by MIME type first
+        if (!string.IsNullOrEmpty(mimeType))
+        {
+            if (mimeType.StartsWith("image/"))
+                return "Image";
+            if (mimeType.StartsWith("video/"))
+                return "Video";
+            if (mimeType == "application/pdf")
+                return "PDF";
+            if (mimeType.Contains("word") || mimeType.Contains("document") || mimeType.Contains("msword"))
+                return "Document";
+            if (mimeType.Contains("sheet") || mimeType.Contains("excel"))
+                return "Spreadsheet";
+            if (mimeType.Contains("presentation") || mimeType.Contains("powerpoint"))
+                return "Presentation";
+        }
+
+        // Fall back to file extension
+        if (!string.IsNullOrEmpty(fileName))
+        {
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            return ext switch
+            {
+                ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".svg" or ".bmp" => "Image",
+                ".mp4" or ".avi" or ".mov" or ".wmv" or ".webm" or ".mkv" => "Video",
+                ".pdf" => "PDF",
+                ".doc" or ".docx" or ".odt" or ".rtf" => "Document",
+                ".xls" or ".xlsx" or ".ods" or ".csv" => "Spreadsheet",
+                ".ppt" or ".pptx" or ".odp" => "Presentation",
+                _ => "Other"
+            };
+        }
+
+        return "Other";
     }
 }

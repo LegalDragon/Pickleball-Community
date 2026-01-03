@@ -76,6 +76,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ClubJoinRequest> ClubJoinRequests { get; set; }
     public DbSet<ClubNotification> ClubNotifications { get; set; }
     public DbSet<ClubMemberRole> ClubMemberRoles { get; set; }
+    public DbSet<ClubDocument> ClubDocuments { get; set; }
 
     // Blog
     public DbSet<BlogCategory> BlogCategories { get; set; }
