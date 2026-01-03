@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   MessageCircle, ArrowLeft, Send, MoreVertical, Search, Users, User,
   Check, CheckCheck, Reply, Trash2, Edit3, X, Bell, BellOff, Plus,
-  Image, Smile, ChevronLeft, ChevronRight, Wifi, WifiOff, UserPlus, PanelLeftClose, PanelLeft, Info
+  Image, Smile, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Wifi, WifiOff, UserPlus, PanelLeftClose, PanelLeft, Info
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { messagingApi, friendsApi, getSharedAssetUrl } from '../services/api';
