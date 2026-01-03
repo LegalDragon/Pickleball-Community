@@ -163,31 +163,9 @@ const Navigation = () => {
     setIsOpen(false);
   }, [location.pathname]);
 
-  // Minimal navbar for home page when not authenticated
+  // No navbar for home page when not authenticated - hero section handles CTAs
   if (isHomePage && !isAuthenticated) {
-    return (
-      <nav className="absolute top-0 left-0 right-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-end items-center h-16">
-            {/* Sign In / Enroll Now buttons only */}
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => redirectToLogin()}
-                className="text-white hover:text-white/80 px-4 py-2 font-medium transition-colors"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => redirectToRegister()}
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow"
-              >
-                Enroll Now
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-    );
+    return null;
   }
 
   return (
