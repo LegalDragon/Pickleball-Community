@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
@@ -1941,20 +1941,38 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
           {/* Manage Tab */}
           {activeTab === 'manage' && isOrganizer && (
             <div className="space-y-6">
-              {/* Tournament Dashboard Link */}
-              <Link
-                to={`/tournament/${event.id}/manage`}
-                className="w-full flex items-center justify-between p-4 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 hover:bg-orange-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Trophy className="w-5 h-5" />
-                  <div>
-                    <div className="font-medium">Tournament Dashboard</div>
-                    <div className="text-sm text-orange-600">Manage matches, courts, check-ins, and scores</div>
+              {/* Management Dashboard Links */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* Tournament Dashboard */}
+                <Link
+                  to={`/tournament/${event.id}/manage`}
+                  className="flex items-center justify-between p-4 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 hover:bg-orange-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Trophy className="w-5 h-5" />
+                    <div>
+                      <div className="font-medium">Tournament Dashboard</div>
+                      <div className="text-sm text-orange-600">Brackets, pools, and tournament play</div>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </Link>
+                  <ChevronRight className="w-5 h-5" />
+                </Link>
+
+                {/* Game Day Dashboard */}
+                <Link
+                  to={`/gameday/${event.id}/manage`}
+                  className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Play className="w-5 h-5" />
+                    <div>
+                      <div className="font-medium">Game Day Manager</div>
+                      <div className="text-sm text-blue-600">Quick games, courts, and scoring</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5" />
+                </Link>
+              </div>
 
               {isEditing ? (
                 // Edit Form - Single Page
