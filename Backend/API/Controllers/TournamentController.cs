@@ -446,23 +446,27 @@ public class TournamentController : ControllerBase
             .Select(m => m.Unit!.Id)
             .ToList();
 
-        var pendingJoinRequests = await _context.EventUnitJoinRequests
-            .Include(r => r.Unit)
-            .Include(r => r.User)
-            .Where(r => captainUnits.Contains(r.UnitId) && r.Status == "Pending")
-            .Select(r => new UnitJoinRequestDto
-            {
-                Id = r.Id,
-                UnitId = r.UnitId,
-                UnitName = r.Unit!.Name,
-                UserId = r.UserId,
-                UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : null,
-                ProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
-                Message = r.Message,
-                Status = r.Status,
-                CreatedAt = r.CreatedAt
-            })
-            .ToListAsync();
+        // Use a subquery approach to avoid OPENJSON issue with list.Contains
+        var pendingJoinRequests = captainUnits.Count > 0
+            ? await _context.EventUnitJoinRequests
+                .Include(r => r.Unit)
+                .Include(r => r.User)
+                .Where(r => r.Status == "Pending" && _context.EventUnits
+                    .Any(u => u.Id == r.UnitId && u.CaptainUserId == userId.Value))
+                .Select(r => new UnitJoinRequestDto
+                {
+                    Id = r.Id,
+                    UnitId = r.UnitId,
+                    UnitName = r.Unit!.Name,
+                    UserId = r.UserId,
+                    UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : null,
+                    ProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
+                    Message = r.Message,
+                    Status = r.Status,
+                    CreatedAt = r.CreatedAt
+                })
+                .ToListAsync()
+            : new List<UnitJoinRequestDto>();
 
         // Get active units (accepted membership)
         var activeUnits = myUnits
