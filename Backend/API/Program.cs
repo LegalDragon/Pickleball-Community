@@ -9,6 +9,7 @@ using Pickleball.Community.Services;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.Configuration;
 using Pickleball.Community.Hubs;
+using Pickleball.Community.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -161,6 +162,7 @@ app.UseSwaggerUI();
 app.UseCors("AllowConfiguredOrigins");
 app.UseStaticFiles(); // Enable serving static files from wwwroot
 app.UseAuthentication();
+app.UseUserAutoSync(); // Auto-create local user from shared auth token if not exists
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
