@@ -591,14 +591,15 @@ public class EventsController : ControllerBase
                     .Select(d => d.Id!.Value)
                     .ToList();
 
-                // Remove divisions that are no longer in the list
+                // Soft delete divisions that are no longer in the list
+                // (Hard delete would fail due to FK constraints from registrations, units, etc.)
                 var divisionsToRemove = evt.Divisions
-                    .Where(d => !incomingDivisionIds.Contains(d.Id))
+                    .Where(d => d.IsActive && !incomingDivisionIds.Contains(d.Id))
                     .ToList();
 
                 foreach (var div in divisionsToRemove)
                 {
-                    _context.EventDivisions.Remove(div);
+                    div.IsActive = false;
                 }
 
                 // Update existing and add new divisions
@@ -606,8 +607,8 @@ public class EventsController : ControllerBase
                 {
                     if (divDto.Id.HasValue)
                     {
-                        // Update existing division
-                        var existingDiv = evt.Divisions.FirstOrDefault(d => d.Id == divDto.Id.Value);
+                        // Update existing active division
+                        var existingDiv = evt.Divisions.FirstOrDefault(d => d.Id == divDto.Id.Value && d.IsActive);
                         if (existingDiv != null)
                         {
                             existingDiv.Name = divDto.Name;
