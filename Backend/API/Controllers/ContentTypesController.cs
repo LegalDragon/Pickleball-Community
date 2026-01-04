@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Database;
-using Pickleball.College.Models.DTOs;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]

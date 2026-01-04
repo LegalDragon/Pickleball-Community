@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useForm } from 'react-hook-form'
 import { useAuth } from '../contexts/AuthContext'
-import { userApi, assetApi, getAssetUrl } from '../services/api'
+import { useForm } from 'react-hook-form'
+import { userApi, assetApi, sharedUserApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
+import PublicProfileModal from '../components/ui/PublicProfileModal'
 import {
   User, Camera, Video, MapPin, Phone, Calendar,
   Edit2, Save, Upload, X, Play, Award, Target,
-  Zap, Heart, Activity, TrendingUp, ChevronRight
+  Zap, Heart, Activity, TrendingUp, ChevronRight,
+  MessageCircle, Shield, Eye
 } from 'lucide-react'
 
 const Profile = () => {
@@ -26,11 +28,19 @@ const Profile = () => {
 
   // Bio modal state
   const [isBioModalOpen, setIsBioModalOpen] = useState(false)
+
+  // Public profile modal state
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [tempBio, setTempBio] = useState('')
   const [savingBio, setSavingBio] = useState(false)
 
   // Video modal state
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false)
+
+  // Messaging settings state
+  const [allowDirectMessages, setAllowDirectMessages] = useState(true)
+  const [allowClubMessages, setAllowClubMessages] = useState(true)
+  const [savingMessagingSettings, setSavingMessagingSettings] = useState(false)
 
   // Separate forms for each section
   const basicInfoForm = useForm({
@@ -123,13 +133,20 @@ const Profile = () => {
       setHandedness(user.handedness || '')
       setTempBio(user.bio || '')
 
-      // Set avatar preview from either avatar or profileImageUrl
+      // Set messaging settings
+      setAllowDirectMessages(user.allowDirectMessages !== false) // default true
+      setAllowClubMessages(user.allowClubMessages !== false) // default true
+
+      // Set avatar preview from either avatar or profileImageUrl (from Funtime-Shared)
       const avatarUrl = user.avatar || user.profileImageUrl
       if (avatarUrl) {
-        setAvatarPreview(getAssetUrl(avatarUrl))
+        setAvatarPreview(getSharedAssetUrl(avatarUrl))
       }
       if (user.introVideo) {
-        setVideoPreview(getAssetUrl(user.introVideo))
+        // Check if it's an external URL or uploaded file
+        const externalPatterns = ['youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'instagram.com']
+        const isExternal = externalPatterns.some(pattern => user.introVideo.includes(pattern))
+        setVideoPreview(isExternal ? user.introVideo : getSharedAssetUrl(user.introVideo))
       }
     }
   }, [user])
@@ -150,23 +167,43 @@ const Profile = () => {
       }
       reader.readAsDataURL(file)
 
-      // Upload to server using user avatar API (links asset to user)
+      // Upload to Funtime-Shared service
       setAvatarUploading(true)
       try {
-        const response = await userApi.uploadAvatar(file)
-        if (response.success && response.data) {
-          // Update local user with new avatar URL
-          const newAvatarUrl = response.data.avatarUrl
-          updateUser({ ...user, avatar: newAvatarUrl, profileImageUrl: newAvatarUrl })
-          setAvatarPreview(getAssetUrl(newAvatarUrl))
+        const response = await sharedUserApi.uploadAvatar(file)
+        console.log('Avatar upload response:', response)
+        console.log('Avatar upload response type:', typeof response)
+        console.log('Avatar upload response keys:', response ? Object.keys(response) : 'null')
+
+        // Handle Funtime-Shared response format
+        // Response: { data: { success: true, url: "/asset/11", ... } }
+        // Use response.data.url directly - it already contains the relative path
+        let assetPath = null
+
+        if (response?.data?.url) {
+          assetPath = response.data.url
+        } else if (response?.url) {
+          assetPath = response.url
+        }
+
+        if (assetPath) {
+          console.log('New avatar path:', assetPath)
+          // Update local user with new avatar path
+          updateUser({ ...user, avatar: assetPath, profileImageUrl: assetPath })
+          // Display using full URL
+          setAvatarPreview(`${SHARED_AUTH_URL}${assetPath}`)
+
+          // Save relative path to local backend
+          await userApi.updateProfile({ profileImageUrl: assetPath })
         } else {
-          throw new Error(response.message || 'Upload failed')
+          console.error('Could not find asset URL in response:', JSON.stringify(response, null, 2))
+          throw new Error('Upload failed - no asset URL returned. Check console for response format.')
         }
       } catch (error) {
         console.error('Avatar upload error:', error)
-        alert('Failed to upload avatar: ' + (error.message || 'Unknown error'))
+        alert('Failed to upload avatar: ' + (error.response?.data?.message || error.message || 'Unknown error'))
         // Revert preview on error
-        setAvatarPreview(getAssetUrl(user?.avatar || user?.profileImageUrl) || null)
+        setAvatarPreview(getSharedAssetUrl(user?.avatar || user?.profileImageUrl) || null)
       } finally {
         setAvatarUploading(false)
       }
@@ -211,7 +248,7 @@ const Profile = () => {
       if (type === 'url') {
         setVideoPreview(url) // External URL
       } else {
-        setVideoPreview(getAssetUrl(url)) // Local file
+        setVideoPreview(getSharedAssetUrl(url)) // Uploaded file
       }
     } catch (error) {
       console.error('Video save error:', error)
@@ -253,6 +290,33 @@ const Profile = () => {
       updateUser({ ...user, introVideo: null })
     } catch (error) {
       console.error('Error removing video:', error)
+    }
+  }
+
+  // Handle messaging setting toggle
+  const handleMessagingSettingChange = async (setting, value) => {
+    setSavingMessagingSettings(true)
+    try {
+      const updateData = { [setting]: value }
+      await userApi.updateProfile(updateData)
+      updateUser({ ...user, ...updateData })
+
+      if (setting === 'allowDirectMessages') {
+        setAllowDirectMessages(value)
+      } else if (setting === 'allowClubMessages') {
+        setAllowClubMessages(value)
+      }
+    } catch (error) {
+      console.error('Error updating messaging settings:', error)
+      alert('Failed to update setting')
+      // Revert the toggle on error
+      if (setting === 'allowDirectMessages') {
+        setAllowDirectMessages(!value)
+      } else if (setting === 'allowClubMessages') {
+        setAllowClubMessages(!value)
+      }
+    } finally {
+      setSavingMessagingSettings(false)
     }
   }
 
@@ -365,10 +429,29 @@ const Profile = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-2xl px-6 py-8">
-          <h1 className="text-3xl font-bold text-white">My Profile</h1>
-          <p className="text-blue-100 mt-2">
-            Complete your profile to enhance your pickleball experience
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">My Profile</h1>
+              <p className="text-blue-100 mt-2">
+                Complete your profile to enhance your pickleball experience
+              </p>
+            </div>
+            {user?.id && (
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                View Public Profile
+              </button>
+            )}
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded-lg">
+            <p className="text-white/90 text-sm">
+              This is your shared profile across all Funtime Pickleball sites including pickleball.community, pickleball.date, pickleball.college, and more.
+              Each site may have additional profile fields specific to its features, but your basic information stays consistent everywhere.
+            </p>
+          </div>
         </div>
 
         <div className="bg-white rounded-b-2xl shadow-xl">
@@ -501,7 +584,7 @@ const Profile = () => {
                       )
                     ) : (
                       <video
-                        src={videoPreview || getAssetUrl(user?.introVideo)}
+                        src={videoPreview || getSharedAssetUrl(user?.introVideo)}
                         controls
                         className="w-full h-40 rounded-lg object-cover bg-black"
                       />
@@ -840,6 +923,77 @@ const Profile = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Privacy & Messaging Settings Section */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-green-500" />
+                    Privacy & Messaging
+                  </h3>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Allow Direct Messages */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-blue-500" />
+                        <span className="font-medium text-gray-900">Direct Messages from Friends</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 ml-7">
+                        Allow your friends to send you direct messages
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleMessagingSettingChange('allowDirectMessages', !allowDirectMessages)}
+                      disabled={savingMessagingSettings}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+                        allowDirectMessages ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          allowDirectMessages ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Allow Club Messages */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-purple-500" />
+                        <span className="font-medium text-gray-900">Club Chat Auto-Join</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 ml-7">
+                        Automatically join club chat when you join a club
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleMessagingSettingChange('allowClubMessages', !allowClubMessages)}
+                      disabled={savingMessagingSettings}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+                        allowClubMessages ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          allowClubMessages ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {savingMessagingSettings && (
+                    <div className="flex items-center justify-center text-sm text-gray-500 pt-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Saving...
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -923,6 +1077,14 @@ const Profile = () => {
         title="Add Intro Video"
         maxSizeMB={100}
       />
+
+      {/* Public Profile Modal */}
+      {showProfileModal && user && (
+        <PublicProfileModal
+          userId={user.id}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </div>
   )
 }

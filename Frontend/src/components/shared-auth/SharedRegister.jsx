@@ -10,11 +10,11 @@ import { Eye, EyeOff, UserPlus, Phone, Mail, CheckCircle } from 'lucide-react'
  * @param {Function} props.onSuccess - Callback with { token, user } on successful registration
  * @param {Function} props.onError - Callback with error message on failure
  * @param {Function} props.onSwitchToLogin - Callback to switch to login view
- * @param {string} props.siteName - Name of the site (e.g., "Pickleball College")
+ * @param {string} props.siteName - Name of the site (e.g., "Pickleball Community")
  * @param {string} props.primaryColor - Primary brand color (default: blue)
  * @param {boolean} props.showRoleSelection - Whether to show role selection (default: false)
  * @param {Array} props.roles - Available roles [{value, label, description, icon}]
- * @param {string} props.site - Site code for cross-site auth (e.g., "college")
+ * @param {string} props.site - Site code for cross-site auth (e.g., "Community")
  * @param {React.ReactNode} props.logo - Custom logo component to display
  */
 const SharedRegister = ({

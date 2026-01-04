@@ -1,0 +1,1076 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+
+namespace Pickleball.Community.API.Controllers;
+
+[ApiController]
+[Route("[controller]")]
+public class LeaguesController : ControllerBase
+{
+    private readonly ApplicationDbContext _context;
+    private readonly ILogger<LeaguesController> _logger;
+
+    public LeaguesController(ApplicationDbContext context, ILogger<LeaguesController> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
+    private async Task<bool> IsAdminAsync()
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue) return false;
+        var user = await _context.Users.FindAsync(userId.Value);
+        return user?.Role == "Admin";
+    }
+
+    private async Task<bool> CanManageLeagueAsync(int leagueId)
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue) return false;
+
+        // Check if admin
+        if (await IsAdminAsync()) return true;
+
+        // Check if user is a manager of this league
+        return await _context.LeagueManagers
+            .AnyAsync(m => m.LeagueId == leagueId && m.UserId == userId.Value && m.IsActive);
+    }
+
+    private bool IsLocalRequest()
+    {
+        var connection = HttpContext.Connection;
+        var remoteIp = connection.RemoteIpAddress;
+
+        if (remoteIp == null) return false;
+
+        // Check for localhost (IPv4 and IPv6)
+        if (System.Net.IPAddress.IsLoopback(remoteIp)) return true;
+
+        // Check for local network (same as local IP)
+        var localIp = connection.LocalIpAddress;
+        if (localIp != null && remoteIp.Equals(localIp)) return true;
+
+        return false;
+    }
+
+    // GET: /leagues - Search/list leagues
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<PagedResult<LeagueDto>>>> GetLeagues([FromQuery] LeagueSearchRequest request)
+    {
+        try
+        {
+            var query = _context.Leagues
+                .Include(l => l.ParentLeague)
+                .Where(l => l.IsActive)
+                .AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(request.Query))
+            {
+                var searchPattern = $"%{request.Query}%";
+                query = query.Where(l =>
+                    EF.Functions.Like(l.Name, searchPattern) ||
+                    (l.Description != null && EF.Functions.Like(l.Description, searchPattern)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Scope))
+                query = query.Where(l => l.Scope == request.Scope);
+
+            if (!string.IsNullOrWhiteSpace(request.State))
+                query = query.Where(l => l.State == request.State);
+
+            if (!string.IsNullOrWhiteSpace(request.Region))
+                query = query.Where(l => l.Region == request.Region);
+
+            if (!string.IsNullOrWhiteSpace(request.Country))
+                query = query.Where(l => l.Country == request.Country);
+
+            if (request.ParentLeagueId.HasValue)
+                query = query.Where(l => l.ParentLeagueId == request.ParentLeagueId.Value);
+
+            if (request.RootOnly == true)
+                query = query.Where(l => l.ParentLeagueId == null);
+
+            // Get total count
+            var totalCount = await query.CountAsync();
+
+            // Get paginated results with counts
+            var leagues = await query
+                .OrderBy(l => l.SortOrder)
+                .ThenBy(l => l.Name)
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .Select(l => new LeagueDto
+                {
+                    Id = l.Id,
+                    Name = l.Name,
+                    Description = l.Description,
+                    Scope = l.Scope,
+                    AvatarUrl = l.AvatarUrl,
+                    State = l.State,
+                    Region = l.Region,
+                    Country = l.Country,
+                    ParentLeagueId = l.ParentLeagueId,
+                    ParentLeagueName = l.ParentLeague != null ? l.ParentLeague.Name : null,
+                    ChildLeagueCount = l.ChildLeagues.Count(c => c.IsActive),
+                    ClubCount = l.Clubs.Count(c => c.Status == "Active"),
+                    ManagerCount = l.Managers.Count(m => m.IsActive),
+                    CreatedAt = l.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<PagedResult<LeagueDto>>
+            {
+                Success = true,
+                Data = new PagedResult<LeagueDto>
+                {
+                    Items = leagues,
+                    TotalCount = totalCount,
+                    Page = request.Page,
+                    PageSize = request.PageSize
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting leagues");
+            return StatusCode(500, new ApiResponse<PagedResult<LeagueDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // GET: /leagues/{id} - Get league details
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ApiResponse<LeagueDetailDto>>> GetLeague(int id)
+    {
+        try
+        {
+            var league = await _context.Leagues
+                .Include(l => l.ParentLeague)
+                .Include(l => l.ChildLeagues.Where(c => c.IsActive))
+                .Include(l => l.Managers.Where(m => m.IsActive))
+                    .ThenInclude(m => m.User)
+                .Include(l => l.Clubs.Where(c => c.Status == "Active"))
+                    .ThenInclude(c => c.Club)
+                .Include(l => l.ClubRequests.Where(r => r.Status == "Pending"))
+                    .ThenInclude(r => r.Club)
+                .Include(l => l.ClubRequests.Where(r => r.Status == "Pending"))
+                    .ThenInclude(r => r.RequestedBy)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (league == null)
+                return NotFound(new ApiResponse<LeagueDetailDto> { Success = false, Message = "League not found" });
+
+            var userId = GetCurrentUserId();
+            var canManage = await CanManageLeagueAsync(id);
+
+            // Build breadcrumb path
+            var breadcrumbs = await BuildBreadcrumbsAsync(league);
+
+            var dto = new LeagueDetailDto
+            {
+                Id = league.Id,
+                Name = league.Name,
+                Description = league.Description,
+                Scope = league.Scope,
+                AvatarUrl = league.AvatarUrl,
+                BannerUrl = league.BannerUrl,
+                Website = league.Website,
+                ContactEmail = league.ContactEmail,
+                State = league.State,
+                Region = league.Region,
+                Country = league.Country,
+                ParentLeagueId = league.ParentLeagueId,
+                ParentLeagueName = league.ParentLeague?.Name,
+                SortOrder = league.SortOrder,
+                IsActive = league.IsActive,
+                ChildLeagueCount = league.ChildLeagues.Count,
+                ClubCount = league.Clubs.Count,
+                ManagerCount = league.Managers.Count,
+                CreatedAt = league.CreatedAt,
+                Breadcrumbs = breadcrumbs,
+                CanManage = canManage,
+                ChildLeagues = league.ChildLeagues.OrderBy(c => c.SortOrder).Select(c => new LeagueDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Description = c.Description,
+                    Scope = c.Scope,
+                    AvatarUrl = c.AvatarUrl,
+                    State = c.State,
+                    Region = c.Region,
+                    Country = c.Country,
+                    ParentLeagueId = c.ParentLeagueId,
+                    CreatedAt = c.CreatedAt
+                }).ToList(),
+                Managers = league.Managers.Select(m => new LeagueManagerDto
+                {
+                    Id = m.Id,
+                    LeagueId = m.LeagueId,
+                    UserId = m.UserId,
+                    UserName = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                    UserProfileImageUrl = m.User?.ProfileImageUrl,
+                    Role = m.Role,
+                    Title = m.Title,
+                    IsActive = m.IsActive,
+                    CreatedAt = m.CreatedAt
+                }).ToList(),
+                Clubs = league.Clubs.Select(c => new LeagueClubDto
+                {
+                    Id = c.Id,
+                    LeagueId = c.LeagueId,
+                    ClubId = c.ClubId,
+                    ClubName = c.Club?.Name ?? "Unknown",
+                    ClubLogoUrl = c.Club?.LogoUrl,
+                    ClubCity = c.Club?.City,
+                    ClubState = c.Club?.State,
+                    ClubMemberCount = c.Club?.Members.Count(m => m.IsActive) ?? 0,
+                    Status = c.Status,
+                    JoinedAt = c.JoinedAt,
+                    ExpiresAt = c.ExpiresAt,
+                    Notes = c.Notes
+                }).ToList()
+            };
+
+            // Only include pending requests if user can manage
+            if (canManage)
+            {
+                dto.PendingRequests = league.ClubRequests.Select(r => new LeagueClubRequestDto
+                {
+                    Id = r.Id,
+                    LeagueId = r.LeagueId,
+                    LeagueName = league.Name,
+                    ClubId = r.ClubId,
+                    ClubName = r.Club?.Name ?? "Unknown",
+                    ClubLogoUrl = r.Club?.LogoUrl,
+                    ClubCity = r.Club?.City,
+                    ClubState = r.Club?.State,
+                    RequestedByUserId = r.RequestedByUserId,
+                    RequestedByName = $"{r.RequestedBy?.FirstName} {r.RequestedBy?.LastName}".Trim(),
+                    Status = r.Status,
+                    Message = r.Message,
+                    CreatedAt = r.CreatedAt
+                }).ToList();
+
+                // Get current user's role if they are a manager
+                if (userId.HasValue)
+                {
+                    var userManager = league.Managers.FirstOrDefault(m => m.UserId == userId.Value);
+                    dto.CurrentUserRole = userManager?.Role;
+                }
+            }
+
+            return Ok(new ApiResponse<LeagueDetailDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting league {LeagueId}", id);
+            return StatusCode(500, new ApiResponse<LeagueDetailDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // GET: /leagues/tree - Get hierarchy tree
+    [HttpGet("tree")]
+    public async Task<ActionResult<ApiResponse<List<LeagueTreeNodeDto>>>> GetLeagueTree([FromQuery] string? scope = null)
+    {
+        try
+        {
+            // Get all active leagues
+            var leagues = await _context.Leagues
+                .Where(l => l.IsActive)
+                .Select(l => new LeagueFlatNode
+                {
+                    Id = l.Id,
+                    Name = l.Name,
+                    Scope = l.Scope,
+                    AvatarUrl = l.AvatarUrl,
+                    ParentLeagueId = l.ParentLeagueId,
+                    SortOrder = l.SortOrder,
+                    ClubCount = l.Clubs.Count(c => c.Status == "Active")
+                })
+                .ToListAsync();
+
+            // Build tree starting from root nodes
+            var rootNodes = leagues
+                .Where(l => l.ParentLeagueId == null)
+                .OrderBy(l => l.SortOrder)
+                .ThenBy(l => l.Name)
+                .Select(l => BuildTreeNode(l, leagues))
+                .ToList();
+
+            return Ok(new ApiResponse<List<LeagueTreeNodeDto>> { Success = true, Data = rootNodes });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting league tree");
+            return StatusCode(500, new ApiResponse<List<LeagueTreeNodeDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // Helper class for building tree
+    private class LeagueFlatNode
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public string? AvatarUrl { get; set; }
+        public int? ParentLeagueId { get; set; }
+        public int SortOrder { get; set; }
+        public int ClubCount { get; set; }
+    }
+
+    private LeagueTreeNodeDto BuildTreeNode(LeagueFlatNode node, List<LeagueFlatNode> allLeagues)
+    {
+        var children = allLeagues
+            .Where(l => l.ParentLeagueId == node.Id)
+            .OrderBy(l => l.SortOrder)
+            .ThenBy(l => l.Name)
+            .Select(l => BuildTreeNode(l, allLeagues))
+            .ToList();
+
+        return new LeagueTreeNodeDto
+        {
+            Id = node.Id,
+            Name = node.Name,
+            Scope = node.Scope,
+            AvatarUrl = node.AvatarUrl,
+            ClubCount = node.ClubCount,
+            Children = children
+        };
+    }
+
+    // POST: /leagues - Create league (admin only, local server only)
+    [HttpPost]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueDto>>> CreateLeague([FromBody] CreateLeagueDto request)
+    {
+        try
+        {
+            // League creation is restricted to local server only
+            if (!IsLocalRequest())
+                return StatusCode(403, new ApiResponse<LeagueDto> { Success = false, Message = "League creation is only available from the local server" });
+
+            if (!await IsAdminAsync())
+                return Forbid();
+
+            // Validate parent league if specified
+            if (request.ParentLeagueId.HasValue)
+            {
+                var parentExists = await _context.Leagues.AnyAsync(l => l.Id == request.ParentLeagueId.Value && l.IsActive);
+                if (!parentExists)
+                    return BadRequest(new ApiResponse<LeagueDto> { Success = false, Message = "Parent league not found" });
+            }
+
+            var league = new League
+            {
+                Name = request.Name,
+                Description = request.Description,
+                Scope = request.Scope,
+                AvatarUrl = request.AvatarUrl,
+                BannerUrl = request.BannerUrl,
+                Website = request.Website,
+                ContactEmail = request.ContactEmail,
+                ParentLeagueId = request.ParentLeagueId,
+                State = request.State,
+                Region = request.Region,
+                Country = request.Country ?? "USA",
+                SortOrder = request.SortOrder,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Leagues.Add(league);
+            await _context.SaveChangesAsync();
+
+            // Add current user as admin manager
+            var userId = GetCurrentUserId();
+            if (userId.HasValue)
+            {
+                var manager = new LeagueManager
+                {
+                    LeagueId = league.Id,
+                    UserId = userId.Value,
+                    Role = "Admin",
+                    Title = "Administrator",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.LeagueManagers.Add(manager);
+                await _context.SaveChangesAsync();
+            }
+
+            var dto = new LeagueDto
+            {
+                Id = league.Id,
+                Name = league.Name,
+                Description = league.Description,
+                Scope = league.Scope,
+                AvatarUrl = league.AvatarUrl,
+                State = league.State,
+                Region = league.Region,
+                Country = league.Country,
+                ParentLeagueId = league.ParentLeagueId,
+                CreatedAt = league.CreatedAt
+            };
+
+            return CreatedAtAction(nameof(GetLeague), new { id = league.Id },
+                new ApiResponse<LeagueDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating league");
+            return StatusCode(500, new ApiResponse<LeagueDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /leagues/{id} - Update league
+    [HttpPut("{id}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueDto>>> UpdateLeague(int id, [FromBody] UpdateLeagueDto request)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var league = await _context.Leagues.FindAsync(id);
+            if (league == null)
+                return NotFound(new ApiResponse<LeagueDto> { Success = false, Message = "League not found" });
+
+            // Validate parent league if changing
+            if (request.ParentLeagueId.HasValue && request.ParentLeagueId != league.ParentLeagueId)
+            {
+                // Prevent setting self as parent
+                if (request.ParentLeagueId == id)
+                    return BadRequest(new ApiResponse<LeagueDto> { Success = false, Message = "League cannot be its own parent" });
+
+                // Check parent exists
+                var parentExists = await _context.Leagues.AnyAsync(l => l.Id == request.ParentLeagueId.Value && l.IsActive);
+                if (!parentExists)
+                    return BadRequest(new ApiResponse<LeagueDto> { Success = false, Message = "Parent league not found" });
+
+                // Prevent circular reference
+                if (await WouldCreateCircularReferenceAsync(id, request.ParentLeagueId.Value))
+                    return BadRequest(new ApiResponse<LeagueDto> { Success = false, Message = "This would create a circular reference" });
+            }
+
+            league.Name = request.Name;
+            league.Description = request.Description;
+            league.Scope = request.Scope;
+            league.AvatarUrl = request.AvatarUrl;
+            league.BannerUrl = request.BannerUrl;
+            league.Website = request.Website;
+            league.ContactEmail = request.ContactEmail;
+            league.ParentLeagueId = request.ParentLeagueId;
+            league.State = request.State;
+            league.Region = request.Region;
+            league.Country = request.Country ?? "USA";
+            league.SortOrder = request.SortOrder;
+            league.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var dto = new LeagueDto
+            {
+                Id = league.Id,
+                Name = league.Name,
+                Description = league.Description,
+                Scope = league.Scope,
+                AvatarUrl = league.AvatarUrl,
+                State = league.State,
+                Region = league.Region,
+                Country = league.Country,
+                ParentLeagueId = league.ParentLeagueId,
+                CreatedAt = league.CreatedAt
+            };
+
+            return Ok(new ApiResponse<LeagueDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating league {LeagueId}", id);
+            return StatusCode(500, new ApiResponse<LeagueDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // DELETE: /leagues/{id} - Deactivate league (admin only)
+    [HttpDelete("{id}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteLeague(int id)
+    {
+        try
+        {
+            if (!await IsAdminAsync())
+                return Forbid();
+
+            var league = await _context.Leagues
+                .Include(l => l.ChildLeagues)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (league == null)
+                return NotFound(new ApiResponse<object> { Success = false, Message = "League not found" });
+
+            // Check if there are active child leagues
+            if (league.ChildLeagues.Any(c => c.IsActive))
+                return BadRequest(new ApiResponse<object> { Success = false, Message = "Cannot delete league with active child leagues" });
+
+            // Soft delete
+            league.IsActive = false;
+            league.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<object> { Success = true, Message = "League deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting league {LeagueId}", id);
+            return StatusCode(500, new ApiResponse<object> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /leagues/{id}/managers - Add manager
+    [HttpPost("{id}/managers")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueManagerDto>>> AddManager(int id, [FromBody] ManageLeagueManagerDto request)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var league = await _context.Leagues.FindAsync(id);
+            if (league == null)
+                return NotFound(new ApiResponse<LeagueManagerDto> { Success = false, Message = "League not found" });
+
+            // Check user exists
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (user == null)
+                return BadRequest(new ApiResponse<LeagueManagerDto> { Success = false, Message = "User not found" });
+
+            // Check if already a manager
+            var existing = await _context.LeagueManagers
+                .FirstOrDefaultAsync(m => m.LeagueId == id && m.UserId == request.UserId);
+
+            if (existing != null)
+            {
+                // Reactivate if inactive
+                if (!existing.IsActive)
+                {
+                    existing.IsActive = true;
+                    existing.Role = request.Role;
+                    existing.Title = request.Title;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+                else
+                {
+                    return BadRequest(new ApiResponse<LeagueManagerDto> { Success = false, Message = "User is already a manager" });
+                }
+
+                var existingDto = new LeagueManagerDto
+                {
+                    Id = existing.Id,
+                    LeagueId = existing.LeagueId,
+                    UserId = existing.UserId,
+                    UserName = $"{user.FirstName} {user.LastName}".Trim(),
+                    UserProfileImageUrl = user.ProfileImageUrl,
+                    Role = existing.Role,
+                    Title = existing.Title,
+                    IsActive = existing.IsActive,
+                    CreatedAt = existing.CreatedAt
+                };
+
+                return Ok(new ApiResponse<LeagueManagerDto> { Success = true, Data = existingDto });
+            }
+
+            var manager = new LeagueManager
+            {
+                LeagueId = id,
+                UserId = request.UserId,
+                Role = request.Role,
+                Title = request.Title,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.LeagueManagers.Add(manager);
+            await _context.SaveChangesAsync();
+
+            var dto = new LeagueManagerDto
+            {
+                Id = manager.Id,
+                LeagueId = manager.LeagueId,
+                UserId = manager.UserId,
+                UserName = $"{user.FirstName} {user.LastName}".Trim(),
+                UserProfileImageUrl = user.ProfileImageUrl,
+                Role = manager.Role,
+                Title = manager.Title,
+                IsActive = manager.IsActive,
+                CreatedAt = manager.CreatedAt
+            };
+
+            return Ok(new ApiResponse<LeagueManagerDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding manager to league {LeagueId}", id);
+            return StatusCode(500, new ApiResponse<LeagueManagerDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /leagues/{id}/managers/{managerId} - Update manager role
+    [HttpPut("{id}/managers/{managerId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueManagerDto>>> UpdateManager(int id, int managerId, [FromBody] ManageLeagueManagerDto request)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var manager = await _context.LeagueManagers
+                .Include(m => m.User)
+                .FirstOrDefaultAsync(m => m.Id == managerId && m.LeagueId == id);
+
+            if (manager == null)
+                return NotFound(new ApiResponse<LeagueManagerDto> { Success = false, Message = "Manager not found" });
+
+            manager.Role = request.Role;
+            manager.Title = request.Title;
+            manager.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var dto = new LeagueManagerDto
+            {
+                Id = manager.Id,
+                LeagueId = manager.LeagueId,
+                UserId = manager.UserId,
+                UserName = $"{manager.User?.FirstName} {manager.User?.LastName}".Trim(),
+                UserProfileImageUrl = manager.User?.ProfileImageUrl,
+                Role = manager.Role,
+                Title = manager.Title,
+                IsActive = manager.IsActive,
+                CreatedAt = manager.CreatedAt
+            };
+
+            return Ok(new ApiResponse<LeagueManagerDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating manager {ManagerId} in league {LeagueId}", managerId, id);
+            return StatusCode(500, new ApiResponse<LeagueManagerDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // DELETE: /leagues/{id}/managers/{managerId} - Remove manager
+    [HttpDelete("{id}/managers/{managerId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> RemoveManager(int id, int managerId)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var manager = await _context.LeagueManagers
+                .FirstOrDefaultAsync(m => m.Id == managerId && m.LeagueId == id);
+
+            if (manager == null)
+                return NotFound(new ApiResponse<object> { Success = false, Message = "Manager not found" });
+
+            // Prevent removing yourself if you're the last admin
+            var userId = GetCurrentUserId();
+            if (manager.UserId == userId)
+            {
+                var otherAdmins = await _context.LeagueManagers
+                    .CountAsync(m => m.LeagueId == id && m.UserId != userId && m.IsActive);
+
+                if (otherAdmins == 0)
+                    return BadRequest(new ApiResponse<object> { Success = false, Message = "Cannot remove yourself as the last manager" });
+            }
+
+            // Soft delete
+            manager.IsActive = false;
+            manager.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<object> { Success = true, Message = "Manager removed" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing manager {ManagerId} from league {LeagueId}", managerId, id);
+            return StatusCode(500, new ApiResponse<object> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /leagues/{id}/clubs/request - Club requests to join (from club admin)
+    [HttpPost("{id}/clubs/request")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueClubRequestDto>>> RequestJoinLeague(int id, [FromBody] RequestJoinLeagueDto request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "Not authenticated" });
+
+            var league = await _context.Leagues.FindAsync(id);
+            if (league == null || !league.IsActive)
+                return NotFound(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "League not found" });
+
+            // Use clubId from request body (RequestJoinLeagueDto should include ClubId)
+            // For now, we'll need to pass the club ID - let me check if we need to add it
+            var clubId = request.LeagueId; // This is a bit confusing - the DTO has LeagueId but we're in context of a club requesting
+            // Actually let's look at the DTO again - RequestJoinLeagueDto has LeagueId and Message
+            // We need the clubId to be passed. Let me check if there's a query param option
+
+            // Actually, looking at the request route and typical use case:
+            // The club admin would be requesting for their club to join
+            // We should get the club ID from a query param or we should check which clubs the user can manage
+
+            return BadRequest(new ApiResponse<LeagueClubRequestDto>
+            {
+                Success = false,
+                Message = "Please use /clubs/{clubId}/leagues/request endpoint instead"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error requesting to join league {LeagueId}", id);
+            return StatusCode(500, new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /clubs/{clubId}/leagues/{leagueId}/request - Club requests to join
+    [HttpPost("/clubs/{clubId}/leagues/{leagueId}/request")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueClubRequestDto>>> ClubRequestJoinLeague(int clubId, int leagueId, [FromBody] RequestJoinLeagueDto request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "Not authenticated" });
+
+            // Check club exists and user is admin
+            var clubMember = await _context.ClubMembers
+                .Include(m => m.Club)
+                .FirstOrDefaultAsync(m => m.ClubId == clubId && m.UserId == userId.Value && m.IsActive);
+
+            if (clubMember == null || clubMember.Role != "Admin")
+                return Forbid();
+
+            var league = await _context.Leagues.FindAsync(leagueId);
+            if (league == null || !league.IsActive)
+                return NotFound(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "League not found" });
+
+            // Check if already a member
+            var existingMembership = await _context.LeagueClubs
+                .AnyAsync(lc => lc.LeagueId == leagueId && lc.ClubId == clubId && lc.Status == "Active");
+
+            if (existingMembership)
+                return BadRequest(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "Club is already a member of this league" });
+
+            // Check if there's a pending request
+            var existingRequest = await _context.LeagueClubRequests
+                .FirstOrDefaultAsync(r => r.LeagueId == leagueId && r.ClubId == clubId && r.Status == "Pending");
+
+            if (existingRequest != null)
+                return BadRequest(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "A request is already pending" });
+
+            var clubRequest = new LeagueClubRequest
+            {
+                LeagueId = leagueId,
+                ClubId = clubId,
+                RequestedByUserId = userId.Value,
+                Status = "Pending",
+                Message = request.Message,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.LeagueClubRequests.Add(clubRequest);
+            await _context.SaveChangesAsync();
+
+            var dto = new LeagueClubRequestDto
+            {
+                Id = clubRequest.Id,
+                LeagueId = leagueId,
+                LeagueName = league.Name,
+                ClubId = clubId,
+                ClubName = clubMember.Club?.Name ?? "Unknown",
+                ClubLogoUrl = clubMember.Club?.LogoUrl,
+                ClubCity = clubMember.Club?.City,
+                ClubState = clubMember.Club?.State,
+                RequestedByUserId = userId.Value,
+                Status = clubRequest.Status,
+                Message = clubRequest.Message,
+                CreatedAt = clubRequest.CreatedAt
+            };
+
+            return Ok(new ApiResponse<LeagueClubRequestDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error requesting to join league {LeagueId} from club {ClubId}", leagueId, clubId);
+            return StatusCode(500, new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: /leagues/{id}/requests/{requestId}/process - Process join request
+    [HttpPost("{id}/requests/{requestId}/process")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueClubDto>>> ProcessJoinRequest(int id, int requestId, [FromBody] ProcessClubRequestDto request)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var clubRequest = await _context.LeagueClubRequests
+                .Include(r => r.Club)
+                .FirstOrDefaultAsync(r => r.Id == requestId && r.LeagueId == id && r.Status == "Pending");
+
+            if (clubRequest == null)
+                return NotFound(new ApiResponse<LeagueClubDto> { Success = false, Message = "Request not found or already processed" });
+
+            var userId = GetCurrentUserId();
+
+            clubRequest.Status = request.Approve ? "Approved" : "Rejected";
+            clubRequest.ResponseMessage = request.ResponseMessage;
+            clubRequest.ProcessedByUserId = userId;
+            clubRequest.ProcessedAt = DateTime.UtcNow;
+
+            LeagueClubDto? resultDto = null;
+
+            if (request.Approve)
+            {
+                // Add club to league
+                var leagueClub = new LeagueClub
+                {
+                    LeagueId = id,
+                    ClubId = clubRequest.ClubId,
+                    Status = "Active",
+                    JoinedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                _context.LeagueClubs.Add(leagueClub);
+                await _context.SaveChangesAsync();
+
+                resultDto = new LeagueClubDto
+                {
+                    Id = leagueClub.Id,
+                    LeagueId = leagueClub.LeagueId,
+                    ClubId = leagueClub.ClubId,
+                    ClubName = clubRequest.Club?.Name ?? "Unknown",
+                    ClubLogoUrl = clubRequest.Club?.LogoUrl,
+                    ClubCity = clubRequest.Club?.City,
+                    ClubState = clubRequest.Club?.State,
+                    Status = leagueClub.Status,
+                    JoinedAt = leagueClub.JoinedAt
+                };
+            }
+            else
+            {
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new ApiResponse<LeagueClubDto>
+            {
+                Success = true,
+                Data = resultDto,
+                Message = request.Approve ? "Club approved" : "Request rejected"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing request {RequestId} for league {LeagueId}", requestId, id);
+            return StatusCode(500, new ApiResponse<LeagueClubDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // PUT: /leagues/{id}/clubs/{clubMembershipId} - Update club membership
+    [HttpPut("{id}/clubs/{clubMembershipId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<LeagueClubDto>>> UpdateClubMembership(int id, int clubMembershipId, [FromBody] UpdateLeagueClubDto request)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var leagueClub = await _context.LeagueClubs
+                .Include(lc => lc.Club)
+                .FirstOrDefaultAsync(lc => lc.Id == clubMembershipId && lc.LeagueId == id);
+
+            if (leagueClub == null)
+                return NotFound(new ApiResponse<LeagueClubDto> { Success = false, Message = "Club membership not found" });
+
+            leagueClub.Status = request.Status;
+            leagueClub.ExpiresAt = request.ExpiresAt;
+            leagueClub.Notes = request.Notes;
+            leagueClub.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var dto = new LeagueClubDto
+            {
+                Id = leagueClub.Id,
+                LeagueId = leagueClub.LeagueId,
+                ClubId = leagueClub.ClubId,
+                ClubName = leagueClub.Club?.Name ?? "Unknown",
+                ClubLogoUrl = leagueClub.Club?.LogoUrl,
+                ClubCity = leagueClub.Club?.City,
+                ClubState = leagueClub.Club?.State,
+                Status = leagueClub.Status,
+                JoinedAt = leagueClub.JoinedAt,
+                ExpiresAt = leagueClub.ExpiresAt,
+                Notes = leagueClub.Notes
+            };
+
+            return Ok(new ApiResponse<LeagueClubDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating club membership {MembershipId} in league {LeagueId}", clubMembershipId, id);
+            return StatusCode(500, new ApiResponse<LeagueClubDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // DELETE: /leagues/{id}/clubs/{clubMembershipId} - Remove club from league
+    [HttpDelete("{id}/clubs/{clubMembershipId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> RemoveClub(int id, int clubMembershipId)
+    {
+        try
+        {
+            if (!await CanManageLeagueAsync(id))
+                return Forbid();
+
+            var leagueClub = await _context.LeagueClubs
+                .FirstOrDefaultAsync(lc => lc.Id == clubMembershipId && lc.LeagueId == id);
+
+            if (leagueClub == null)
+                return NotFound(new ApiResponse<object> { Success = false, Message = "Club membership not found" });
+
+            // Set to inactive rather than delete
+            leagueClub.Status = "Inactive";
+            leagueClub.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<object> { Success = true, Message = "Club removed from league" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing club membership {MembershipId} from league {LeagueId}", clubMembershipId, id);
+            return StatusCode(500, new ApiResponse<object> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // GET: /clubs/{clubId}/leagues - Get leagues a club belongs to
+    [HttpGet("/clubs/{clubId}/leagues")]
+    public async Task<ActionResult<ApiResponse<List<LeagueDto>>>> GetClubLeagues(int clubId)
+    {
+        try
+        {
+            var leagues = await _context.LeagueClubs
+                .Include(lc => lc.League)
+                    .ThenInclude(l => l!.ParentLeague)
+                .Where(lc => lc.ClubId == clubId && lc.Status == "Active" && lc.League!.IsActive)
+                .Select(lc => new LeagueDto
+                {
+                    Id = lc.League!.Id,
+                    Name = lc.League.Name,
+                    Description = lc.League.Description,
+                    Scope = lc.League.Scope,
+                    AvatarUrl = lc.League.AvatarUrl,
+                    State = lc.League.State,
+                    Region = lc.League.Region,
+                    Country = lc.League.Country,
+                    ParentLeagueId = lc.League.ParentLeagueId,
+                    ParentLeagueName = lc.League.ParentLeague != null ? lc.League.ParentLeague.Name : null,
+                    CreatedAt = lc.League.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<LeagueDto>> { Success = true, Data = leagues });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting leagues for club {ClubId}", clubId);
+            return StatusCode(500, new ApiResponse<List<LeagueDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // Helper method to build breadcrumbs
+    private async Task<List<LeagueBreadcrumbDto>> BuildBreadcrumbsAsync(League league)
+    {
+        var breadcrumbs = new List<LeagueBreadcrumbDto>();
+        var current = league;
+
+        // Build path from current to root
+        while (current != null)
+        {
+            breadcrumbs.Insert(0, new LeagueBreadcrumbDto
+            {
+                Id = current.Id,
+                Name = current.Name,
+                Scope = current.Scope
+            });
+
+            if (current.ParentLeagueId.HasValue && current.ParentLeague == null)
+            {
+                current = await _context.Leagues.FindAsync(current.ParentLeagueId.Value);
+            }
+            else
+            {
+                current = current.ParentLeague;
+            }
+        }
+
+        return breadcrumbs;
+    }
+
+    // Helper to check for circular reference
+    private async Task<bool> WouldCreateCircularReferenceAsync(int leagueId, int proposedParentId)
+    {
+        var currentId = proposedParentId;
+        var visited = new HashSet<int> { leagueId };
+
+        while (currentId != 0)
+        {
+            if (visited.Contains(currentId))
+                return true;
+
+            visited.Add(currentId);
+
+            var parent = await _context.Leagues
+                .Where(l => l.Id == currentId)
+                .Select(l => l.ParentLeagueId)
+                .FirstOrDefaultAsync();
+
+            currentId = parent ?? 0;
+        }
+
+        return false;
+    }
+}

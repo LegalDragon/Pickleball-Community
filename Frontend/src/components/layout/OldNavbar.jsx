@@ -26,7 +26,7 @@ const Navbar = () => {
             </div>
             <div>
               <span className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                Pickleball.College
+                Pickleball.Community
               </span>
               <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-primary-500 to-primary-700 transition-all duration-300 rounded-full"></div>
             </div>

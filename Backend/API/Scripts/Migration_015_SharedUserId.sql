@@ -3,7 +3,7 @@
 -- Description: Removes IDENTITY from Users.Id to allow UserId from shared auth service
 -- The UserId will now come from the Funtime-Shared authentication service
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

@@ -14,8 +14,8 @@ export default defineConfig({
         enabled: false
       },
       manifest: {
-        name: 'Pickleball College',
-        short_name: 'PB College',
+        name: 'Pickleball Community',
+        short_name: 'PB Community',
         theme_color: '#3b82f6',
         background_color: '#ffffff',
         display: 'standalone',

@@ -1,18 +1,42 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, BookOpen, HomeIcon, School2Icon, User, Bell, FileText } from 'lucide-react';
+import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin, Users, MessageCircle, HelpCircle, MessageSquarePlus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAssetUrl } from '../../services/api';
+import { getAssetUrl, getSharedAssetUrl } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
+
+// Shared Auth API URL from environment
+const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
+const SITE_KEY = 'community';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [authKey, setAuthKey] = useState(0); // Add this
+  const [logoHtml, setLogoHtml] = useState(null);
   const location = useLocation();
 
   const { user, logout, isAuthenticated } = useAuth();
   const { redirectToLogin, redirectToRegister } = useSharedAuth();
+
+  // Fetch logo HTML from shared auth
+  useEffect(() => {
+    const fetchLogoHtml = async () => {
+      try {
+        const res = await fetch(`${SHARED_AUTH_URL}/settings/logo-html?site=${SITE_KEY}&size=lg`);
+        if (res.ok) {
+          const html = await res.text();
+          setLogoHtml(html);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch logo HTML:', err);
+      }
+    };
+
+    if (SHARED_AUTH_URL) {
+      fetchLogoHtml();
+    }
+  }, []);
 
   console.log('Navigation useAuth returns:', { user, isAuthenticated });
 
@@ -23,12 +47,17 @@ const Navigation = () => {
   }, [isAuthenticated, user]);
 
   const navigation = [
-    { name: 'Home', href: '/', icon: School2Icon },
-    { name: 'Marketplace', href: '/marketplace', icon: BookOpen },
+    { name: 'Home', href: '/', icon: HomeIcon },
+    { name: 'Events', href: '/events', icon: Calendar },
+    { name: 'Venues', href: '/venues', icon: MapPin },
+    { name: 'Clubs', href: '/clubs', icon: Users },
     { name: 'Blog', href: '/blog', icon: FileText },
+    { name: 'FAQ', href: '/faq', icon: HelpCircle },
+    { name: 'Feedback', href: '/feedback', icon: MessageSquarePlus },
   ];
 
   const isActive = (path) => location.pathname === path;
+  const isHomePage = location.pathname === '/';
 
   const logoPath = '/Logo.png';
 
@@ -45,42 +74,33 @@ const Navigation = () => {
 
   const handleLogout = async () => {
     try {
-      await logout(); // Use the logout function from AuthContext
       setShowUserDropdown(false);
       setIsOpen(false);
-
-      // Force a full page refresh to clear any cached state
-      // window.location.href = '/home';
-      // window.location.reload(); // Force reload
-
-      // OR use navigate with force refresh
-      window.location.replace('/');
-      //   navigate('/', { replace: true });
-      setTimeout(() => window.location.reload(), 100);
+      await logout(); // Use the logout function from AuthContext
+      // ProtectedRoute will redirect to home if on a protected page
+      // For non-protected pages, navigate to home
+      window.location.href = '/';
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
 
-  // Get dashboard path based on role
+  // Get dashboard path - all members go to the same dashboard
   const getDashboardPath = () => {
-    if (!user?.role) return '/';
-
-    switch (user.role.toLowerCase()) {
-      case 'coach':
-        return '/coach/dashboard';
-      case 'student':
-      case 'player':
-        return '/student/dashboard';
-      case 'admin':
-        return '/admin/dashboard';
-      default:
-        return '/';
-    }
+    return user?.role ? '/member/dashboard' : '/';
   };
 
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
   const userMenuItems = [
+    // Admin Dashboard - only shown for admin users
+    ...(isAdmin ? [{
+      name: 'Admin Dashboard',
+      href: '/admin/dashboard',
+      icon: School2Icon,
+      isAdmin: true
+    }] : []),
     {
       name: 'Dashboard',
       href: getDashboardPath(),
@@ -88,6 +108,7 @@ const Navigation = () => {
       isDashboard: true
     },
     { name: 'Profile', href: '/profile', icon: User },
+    { name: 'Messages', href: '/messages', icon: MessageCircle },
     { name: 'Notifications', href: '/notifications', icon: Bell },
     { name: 'Sign Out', action: handleLogout, icon: LogOut, isDestructive: true },
   ];
@@ -119,10 +140,10 @@ const Navigation = () => {
     return user.role?.toLowerCase() || 'user';
   };
 
-  // Get user avatar URL
+  // Get user avatar URL (from Funtime-Shared)
   const getUserAvatarUrl = () => {
     if (!user?.profileImageUrl) return null;
-    return getAssetUrl(user.profileImageUrl);
+    return getSharedAssetUrl(user.profileImageUrl);
   };
 
   // Close dropdown when clicking outside
@@ -142,28 +163,42 @@ const Navigation = () => {
     setIsOpen(false);
   }, [location.pathname]);
 
+  // No navbar for home page when not authenticated - hero section handles CTAs
+  if (isHomePage && !isAuthenticated) {
+    return null;
+  }
+
   return (
     <nav className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3 group">
-            <div style={{ width: "60px", height: "66px" }}
-              className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-              <img
-                src={logoPath}
-                alt="Pickleball.College Logo"
-                className="w-full h-full object-contain p-1"
-                onError={handleImageError}
-                onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+            {logoHtml ? (
+              <div
+                className="flex items-center"
+                dangerouslySetInnerHTML={{ __html: logoHtml }}
               />
-            </div>
-            <div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
-                Pickleball.College
-              </span>
-              <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
-            </div>
+            ) : (
+              <>
+                <div style={{ width: "60px", height: "66px" }}
+                  className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                  <img
+                    src={logoPath}
+                    alt="Pickleball.Community Logo"
+                    className="w-full h-full object-contain p-1"
+                    onError={handleImageError}
+                    onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+                  />
+                </div>
+                <div>
+                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
+                    Pickleball.Community
+                  </span>
+                  <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
+                </div>
+              </>
+            )}
           </Link>
 
           {/* Desktop Navigation */}
@@ -338,17 +373,26 @@ const Navigation = () => {
 
                   {/* Mobile User Menu */}
                   <div className="space-y-2 mt-4">
-                    {/* Dashboard link for mobile */}
+                    {/* Admin Dashboard link for mobile - only for admins */}
+                    {isAdmin && (
+                      <Link
+                        to="/admin/dashboard"
+                        className="flex items-center space-x-2 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors font-medium"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <School2Icon className="w-4 h-4" />
+                        <span>Admin Dashboard</span>
+                      </Link>
+                    )}
+                    {/* Dashboard link for mobile - all members */}
                     {user?.role && (
                       <Link
-                        to={user.role === 'Coach' ? '/coach/dashboard' :
-                          user.role === 'Student' ? '/student/dashboard' :
-                            user.role === 'Admin' ? '/admin/dashboard' : '/'}
+                        to="/member/dashboard"
                         className="flex items-center space-x-2 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-medium"
                         onClick={() => setIsOpen(false)}
                       >
                         <HomeIcon className="w-4 h-4" />
-                        <span>  Dashboard</span>
+                        <span>Dashboard</span>
                       </Link>
                     )}
 
@@ -359,6 +403,14 @@ const Navigation = () => {
                     >
                       <User className="w-4 h-4" />
                       <span>Profile</span>
+                    </Link>
+                    <Link
+                      to="/messages"
+                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Messages</span>
                     </Link>
                     <Link
                       to="/notifications"

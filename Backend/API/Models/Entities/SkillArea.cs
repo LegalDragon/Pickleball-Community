@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// Admin-configurable skill areas to rate (e.g., Forehand Drive, Volley, Dink)

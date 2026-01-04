@@ -5,7 +5,20 @@ const ProtectedRoute = ({ children, role, roles }) => {
   const { user, loading, isAuthenticated } = useAuth()
   const location = useLocation()
 
+  // Debug logging
+  console.log('ProtectedRoute:', {
+    path: location.pathname,
+    loading,
+    isAuthenticated,
+    hasUser: !!user,
+    userRole: user?.role,
+    // Also check localStorage directly
+    hasStoredUser: !!localStorage.getItem('pickleball_user'),
+    hasToken: !!localStorage.getItem('jwtToken')
+  })
+
   if (loading) {
+    console.log('ProtectedRoute: Still loading...')
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -14,8 +27,9 @@ const ProtectedRoute = ({ children, role, roles }) => {
   }
 
   if (!isAuthenticated || !user) {
-    // Redirect to local login page (which uses shared auth components)
-    return <Navigate to="/login" state={{ from: location }} replace />
+    console.log('ProtectedRoute: Not authenticated, redirecting to /')
+    // Redirect to home page - user can sign in from there
+    return <Navigate to="/" state={{ from: location }} replace />
   }
 
   // Handle single role check (backward compatibility)

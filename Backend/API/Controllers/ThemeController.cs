@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -196,6 +196,26 @@ public class ThemeController : ControllerBase
             // Custom CSS
             if (request.CustomCss != null)
                 theme.CustomCss = request.CustomCss;
+
+            // Hero section
+            if (request.HeroVideoUrl != null)
+                theme.HeroVideoUrl = request.HeroVideoUrl;
+            if (request.HeroVideoThumbnailUrl != null)
+                theme.HeroVideoThumbnailUrl = request.HeroVideoThumbnailUrl;
+            if (request.HeroImageUrl != null)
+                theme.HeroImageUrl = request.HeroImageUrl;
+            if (request.HeroTitle != null)
+                theme.HeroTitle = request.HeroTitle;
+            if (request.HeroSubtitle != null)
+                theme.HeroSubtitle = request.HeroSubtitle;
+            if (request.HeroCtaText != null)
+                theme.HeroCtaText = request.HeroCtaText;
+            if (request.HeroCtaLink != null)
+                theme.HeroCtaLink = request.HeroCtaLink;
+            if (request.HeroSecondaryCtaText != null)
+                theme.HeroSecondaryCtaText = request.HeroSecondaryCtaText;
+            if (request.HeroSecondaryCtaLink != null)
+                theme.HeroSecondaryCtaLink = request.HeroSecondaryCtaLink;
 
             theme.UpdatedAt = DateTime.UtcNow;
 
@@ -398,6 +418,239 @@ public class ThemeController : ControllerBase
         }
     }
 
+    // POST: api/Theme/hero-video (Admin only)
+    [Authorize(Roles = "Admin")]
+    [HttpPost("hero-video")]
+    public async Task<ActionResult<ApiResponse<UploadResponse>>> UploadHeroVideo(IFormFile file)
+    {
+        try
+        {
+            // Validate file (allow videos)
+            var allowedExtensions = new[] { ".mp4", ".mov", ".webm", ".avi" };
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(extension))
+            {
+                return BadRequest(new ApiResponse<UploadResponse>
+                {
+                    Success = false,
+                    Message = "Invalid file type. Allowed: MP4, MOV, WebM, AVI"
+                });
+            }
+
+            if (file.Length > 100 * 1024 * 1024) // 100MB limit
+            {
+                return BadRequest(new ApiResponse<UploadResponse>
+                {
+                    Success = false,
+                    Message = "File size exceeds 100MB limit"
+                });
+            }
+
+            // Get current theme
+            var theme = await _context.ThemeSettings
+                .Where(t => t.IsActive)
+                .OrderByDescending(t => t.ThemeId)
+                .FirstOrDefaultAsync();
+
+            // Delete old video if exists
+            if (theme != null && !string.IsNullOrEmpty(theme.HeroVideoUrl))
+            {
+                await _assetService.DeleteFileAsync(theme.HeroVideoUrl);
+            }
+
+            var currentUserId = GetCurrentUserId();
+
+            // Upload new video using asset service
+            var result = await _assetService.UploadFileAsync(file, "hero", currentUserId, "ThemeSettings", theme?.ThemeId);
+            if (!result.Success)
+            {
+                return BadRequest(new ApiResponse<UploadResponse>
+                {
+                    Success = false,
+                    Message = result.ErrorMessage ?? "Upload failed"
+                });
+            }
+
+            // Update theme if exists
+            if (theme != null)
+            {
+                theme.HeroVideoUrl = result.Url;
+                theme.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            // Log activity
+            if (currentUserId.HasValue)
+            {
+                var log = new ActivityLog
+                {
+                    UserId = currentUserId.Value,
+                    ActivityType = "HeroVideoUpdated",
+                    Description = "Updated hero video"
+                };
+                _context.ActivityLogs.Add(log);
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new ApiResponse<UploadResponse>
+            {
+                Success = true,
+                Message = "Hero video uploaded successfully",
+                Data = new UploadResponse { Url = result.Url! }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading hero video");
+            return StatusCode(500, new ApiResponse<UploadResponse>
+            {
+                Success = false,
+                Message = "An error occurred while uploading hero video"
+            });
+        }
+    }
+
+    // DELETE: api/Theme/hero-video (Admin only)
+    [Authorize(Roles = "Admin")]
+    [HttpDelete("hero-video")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteHeroVideo()
+    {
+        try
+        {
+            var theme = await _context.ThemeSettings
+                .Where(t => t.IsActive)
+                .OrderByDescending(t => t.ThemeId)
+                .FirstOrDefaultAsync();
+
+            if (theme != null && !string.IsNullOrEmpty(theme.HeroVideoUrl))
+            {
+                await _assetService.DeleteFileAsync(theme.HeroVideoUrl);
+                theme.HeroVideoUrl = null;
+                theme.HeroVideoThumbnailUrl = null;
+                theme.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Hero video deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting hero video");
+            return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // POST: api/Theme/hero-image (Admin only)
+    [Authorize(Roles = "Admin")]
+    [HttpPost("hero-image")]
+    public async Task<ActionResult<ApiResponse<UploadResponse>>> UploadHeroImage(IFormFile file)
+    {
+        try
+        {
+            // Validate file using asset service
+            var validation = _assetService.ValidateFile(file, "theme");
+            if (!validation.IsValid)
+            {
+                return BadRequest(new ApiResponse<UploadResponse>
+                {
+                    Success = false,
+                    Message = validation.ErrorMessage ?? "Invalid file"
+                });
+            }
+
+            // Get current theme
+            var theme = await _context.ThemeSettings
+                .Where(t => t.IsActive)
+                .OrderByDescending(t => t.ThemeId)
+                .FirstOrDefaultAsync();
+
+            // Delete old image if exists
+            if (theme != null && !string.IsNullOrEmpty(theme.HeroImageUrl))
+            {
+                await _assetService.DeleteFileAsync(theme.HeroImageUrl);
+            }
+
+            var currentUserId = GetCurrentUserId();
+
+            // Upload new image using asset service
+            var result = await _assetService.UploadFileAsync(file, "hero", currentUserId, "ThemeSettings", theme?.ThemeId);
+            if (!result.Success)
+            {
+                return BadRequest(new ApiResponse<UploadResponse>
+                {
+                    Success = false,
+                    Message = result.ErrorMessage ?? "Upload failed"
+                });
+            }
+
+            // Update theme if exists
+            if (theme != null)
+            {
+                theme.HeroImageUrl = result.Url;
+                theme.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            // Log activity
+            if (currentUserId.HasValue)
+            {
+                var log = new ActivityLog
+                {
+                    UserId = currentUserId.Value,
+                    ActivityType = "HeroImageUpdated",
+                    Description = "Updated hero image"
+                };
+                _context.ActivityLogs.Add(log);
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new ApiResponse<UploadResponse>
+            {
+                Success = true,
+                Message = "Hero image uploaded successfully",
+                Data = new UploadResponse { Url = result.Url! }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading hero image");
+            return StatusCode(500, new ApiResponse<UploadResponse>
+            {
+                Success = false,
+                Message = "An error occurred while uploading hero image"
+            });
+        }
+    }
+
+    // DELETE: api/Theme/hero-image (Admin only)
+    [Authorize(Roles = "Admin")]
+    [HttpDelete("hero-image")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteHeroImage()
+    {
+        try
+        {
+            var theme = await _context.ThemeSettings
+                .Where(t => t.IsActive)
+                .OrderByDescending(t => t.ThemeId)
+                .FirstOrDefaultAsync();
+
+            if (theme != null && !string.IsNullOrEmpty(theme.HeroImageUrl))
+            {
+                await _assetService.DeleteFileAsync(theme.HeroImageUrl);
+                theme.HeroImageUrl = null;
+                theme.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Hero image deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting hero image");
+            return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // GET: api/Theme/presets (Admin only)
     [Authorize(Roles = "Admin")]
     [HttpGet("presets")]
@@ -524,7 +777,7 @@ public class ThemeController : ControllerBase
     {
         var defaultTheme = new ThemeSettings
         {
-            OrganizationName = "Pickleball College",
+            OrganizationName = "Pickleball Community",
             PrimaryColor = "#047857",
             PrimaryDarkColor = "#065f46",
             PrimaryLightColor = "#d1fae5",
@@ -583,6 +836,16 @@ public class ThemeController : ControllerBase
             FontFamily = theme.FontFamily,
             HeadingFontFamily = theme.HeadingFontFamily,
             CustomCss = theme.CustomCss,
+            // Hero section
+            HeroVideoUrl = theme.HeroVideoUrl,
+            HeroVideoThumbnailUrl = theme.HeroVideoThumbnailUrl,
+            HeroImageUrl = theme.HeroImageUrl,
+            HeroTitle = theme.HeroTitle,
+            HeroSubtitle = theme.HeroSubtitle,
+            HeroCtaText = theme.HeroCtaText,
+            HeroCtaLink = theme.HeroCtaLink,
+            HeroSecondaryCtaText = theme.HeroSecondaryCtaText,
+            HeroSecondaryCtaLink = theme.HeroSecondaryCtaLink,
             UpdatedAt = theme.UpdatedAt
         };
     }
@@ -591,7 +854,7 @@ public class ThemeController : ControllerBase
     {
         return new ThemeSettingsDto
         {
-            OrganizationName = "Pickleball College",
+            OrganizationName = "Pickleball Community",
             PrimaryColor = "#047857",
             PrimaryDarkColor = "#065f46",
             PrimaryLightColor = "#d1fae5",
@@ -610,7 +873,14 @@ public class ThemeController : ControllerBase
             BorderColor = "#e5e7eb",
             ShadowColor = "#00000026",
             FontFamily = "Inter, system-ui, sans-serif",
-            HeadingFontFamily = "Playfair Display, serif"
+            HeadingFontFamily = "Playfair Display, serif",
+            // Hero defaults
+            HeroTitle = "Your Pickleball Community Awaits",
+            HeroSubtitle = "Connect with players, find courts, join clubs, and get certified. The ultimate platform for pickleball enthusiasts.",
+            HeroCtaText = "Find Courts",
+            HeroCtaLink = "/courts",
+            HeroSecondaryCtaText = "Join a Club",
+            HeroSecondaryCtaLink = "/clubs"
         };
     }
 }

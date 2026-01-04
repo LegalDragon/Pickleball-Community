@@ -1,14 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { userApi, materialApi, themeApi, getAssetUrl } from '../services/api'
+import { userApi, themeApi, sharedAssetApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
-  ChevronLeft, ChevronRight, Filter, MoreVertical, Eye, X,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
-  Palette, Upload, RefreshCw, Image, Layers, Check, Award
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import VideoUploadModal from '../components/ui/VideoUploadModal'
+
+// Import admin components for inline rendering
+import BlogAdmin from './BlogAdmin'
+import FaqAdmin from './FaqAdmin'
+import FeedbackAdmin from './FeedbackAdmin'
+import CertificationAdmin from './CertificationAdmin'
+import EventTypesAdmin from './EventTypesAdmin'
+import VenueTypesAdmin from './VenueTypesAdmin'
+import ClubMemberRolesAdmin from './ClubMemberRolesAdmin'
+import TeamUnitsAdmin from './TeamUnitsAdmin'
+import SkillLevelsAdmin from './SkillLevelsAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -23,10 +34,7 @@ const AdminDashboard = () => {
   const [selectedUser, setSelectedUser] = useState(null)
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [savingUser, setSavingUser] = useState(false)
-
-  // Materials state
-  const [materials, setMaterials] = useState([])
-  const [materialSearch, setMaterialSearch] = useState('')
+  const [usersError, setUsersError] = useState(null)
 
   // Theme state
   const [themeSettings, setThemeSettings] = useState(null)
@@ -35,19 +43,47 @@ const AdminDashboard = () => {
   const [savingTheme, setSavingTheme] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
+  const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
+  const [isHeroVideoModalOpen, setIsHeroVideoModalOpen] = useState(false)
   const logoInputRef = useRef(null)
   const faviconInputRef = useRef(null)
+  const heroImageInputRef = useRef(null)
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
+  // Collapsed groups state (all expanded by default)
+  const [collapsedGroups, setCollapsedGroups] = useState({})
+
+  const toggleGroup = (groupTitle) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [groupTitle]: !prev[groupTitle]
+    }))
+  }
+
+  // Extract YouTube video ID and get thumbnail URL
+  const getYouTubeThumbnail = (url) => {
+    if (!url) return null
+    // Match youtube.com/watch?v=VIDEO_ID or youtu.be/VIDEO_ID
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
+    ]
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`
+      }
+    }
+    return null
+  }
+
   // Fetch data based on active tab
   useEffect(() => {
     if (activeTab === 'users') {
       fetchUsers()
-    } else if (activeTab === 'materials') {
-      fetchMaterials()
     } else if (activeTab === 'theme') {
       fetchTheme()
     }
@@ -55,29 +91,31 @@ const AdminDashboard = () => {
 
   const fetchUsers = async () => {
     setLoading(true)
+    setUsersError(null)
     try {
       const response = await userApi.getAllUsers()
-      if (response.success && response.data) {
-        setUsers(response.data)
+      console.log('fetchUsers response:', response)
+      // Handle both camelCase and PascalCase property names
+      const success = response?.success ?? response?.Success
+      const data = response?.data ?? response?.Data
+      const message = response?.message ?? response?.Message
+
+      if (success && data) {
+        setUsers(data)
+      } else if (success === false) {
+        setUsersError(message || 'Failed to load users')
+      } else if (Array.isArray(response)) {
+        // Handle case where API returns array directly
+        setUsers(response)
+      } else {
+        console.error('Unexpected response format:', response)
+        setUsersError('Unexpected response format from server')
       }
     } catch (error) {
       console.error('Error fetching users:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchMaterials = async () => {
-    setLoading(true)
-    try {
-      const response = await materialApi.getMaterials()
-      if (response.success && response.data) {
-        setMaterials(response.data)
-      } else if (Array.isArray(response)) {
-        setMaterials(response)
-      }
-    } catch (error) {
-      console.error('Error fetching materials:', error)
+      const errorMessage = typeof error === 'string' ? error :
+        error?.message || 'Failed to fetch users. Please check your permissions.'
+      setUsersError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -138,7 +176,7 @@ const AdminDashboard = () => {
 
   // Default theme values
   const getDefaultTheme = () => ({
-    organizationName: 'Pickleball College',
+    organizationName: 'Pickleball Community',
     primaryColor: '#047857',
     primaryDarkColor: '#065f46',
     primaryLightColor: '#d1fae5',
@@ -182,6 +220,19 @@ const AdminDashboard = () => {
     }
   }
 
+  // Helper to get relative asset path from response (for saving to DB)
+  // Response: { data: { success: true, url: "/asset/11", ... } }
+  // Use response.data.url directly - it already contains the relative path
+  const getAssetPathFromResponse = (response) => {
+    if (response?.data?.url) {
+      return response.data.url
+    }
+    if (response?.url) {
+      return response.url
+    }
+    return null
+  }
+
   // Handle logo upload
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -189,10 +240,16 @@ const AdminDashboard = () => {
 
     setUploadingLogo(true)
     try {
-      const response = await themeApi.uploadLogo(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, logoUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      // Save only relative path to DB
+      const logoUrl = getAssetPathFromResponse(response)
+      if (logoUrl) {
+        setThemeSettings(prev => ({ ...prev, logoUrl }))
+        await themeApi.update({ ...themeSettings, logoUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset path')
       }
     } catch (error) {
       console.error('Error uploading logo:', error)
@@ -209,16 +266,90 @@ const AdminDashboard = () => {
 
     setUploadingFavicon(true)
     try {
-      const response = await themeApi.uploadFavicon(file)
-      if (response.success && response.data) {
-        setThemeSettings(prev => ({ ...prev, faviconUrl: response.data.url }))
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      // Save only relative path to DB
+      const faviconUrl = getAssetPathFromResponse(response)
+      if (faviconUrl) {
+        setThemeSettings(prev => ({ ...prev, faviconUrl }))
+        await themeApi.update({ ...themeSettings, faviconUrl })
         await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset path')
       }
     } catch (error) {
       console.error('Error uploading favicon:', error)
       alert('Failed to upload favicon')
     } finally {
       setUploadingFavicon(false)
+    }
+  }
+
+  // Handle hero video save from modal (supports both URL and file upload)
+  const handleHeroVideoSave = async ({ url, type }) => {
+    try {
+      // url is either an external URL or a relative asset path from file upload
+      const heroVideoUrl = url
+      setThemeSettings(prev => ({ ...prev, heroVideoUrl }))
+      await themeApi.update({ ...themeSettings, heroVideoUrl })
+      await refreshTheme()
+    } catch (error) {
+      console.error('Error saving hero video:', error)
+      alert('Failed to save hero video')
+    }
+  }
+
+  // Handle hero image upload
+  const handleHeroImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingHeroImage(true)
+    try {
+      // Upload to Funtime-Shared asset service
+      const response = await sharedAssetApi.upload(file, 'image', 'theme')
+      // Save only relative path to DB
+      const heroImageUrl = getAssetPathFromResponse(response)
+      if (heroImageUrl) {
+        setThemeSettings(prev => ({ ...prev, heroImageUrl }))
+        await themeApi.update({ ...themeSettings, heroImageUrl })
+        await refreshTheme()
+      } else {
+        throw new Error('Failed to get asset path')
+      }
+    } catch (error) {
+      console.error('Error uploading hero image:', error)
+      alert('Failed to upload hero image')
+    } finally {
+      setUploadingHeroImage(false)
+    }
+  }
+
+  // Delete hero video
+  const handleDeleteHeroVideo = async () => {
+    if (!confirm('Are you sure you want to delete the hero video?')) return
+    try {
+      // Update theme settings to remove video URL
+      const updatedSettings = { ...themeSettings, heroVideoUrl: null }
+      await themeApi.update(updatedSettings)
+      setThemeSettings(prev => ({ ...prev, heroVideoUrl: null }))
+      await refreshTheme()
+    } catch (error) {
+      console.error('Error deleting hero video:', error)
+    }
+  }
+
+  // Delete hero image
+  const handleDeleteHeroImage = async () => {
+    if (!confirm('Are you sure you want to delete the hero image?')) return
+    try {
+      // Update theme settings to remove image URL
+      const updatedSettings = { ...themeSettings, heroImageUrl: null }
+      await themeApi.update(updatedSettings)
+      setThemeSettings(prev => ({ ...prev, heroImageUrl: null }))
+      await refreshTheme()
+    } catch (error) {
+      console.error('Error deleting hero image:', error)
     }
   }
 
@@ -230,12 +361,6 @@ const AdminDashboard = () => {
       (u.email?.toLowerCase() || '').includes(userSearch.toLowerCase())
     const matchesRole = userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter.toLowerCase()
     return matchesSearch && matchesRole
-  })
-
-  // Filter materials
-  const filteredMaterials = materials.filter(m => {
-    return (m.title?.toLowerCase() || '').includes(materialSearch.toLowerCase()) ||
-           (m.description?.toLowerCase() || '').includes(materialSearch.toLowerCase())
   })
 
   // Pagination logic
@@ -293,14 +418,41 @@ const AdminDashboard = () => {
     }
   }
 
-  // Sidebar navigation items
-  const navItems = [
-    { id: 'users', label: 'Users', icon: Users, count: users.length },
-    { id: 'materials', label: 'Materials', icon: BookOpen, count: materials.length },
-    { id: 'theme', label: 'Theme', icon: Palette },
-    { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' },
-    { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
-    { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
+  // Sidebar navigation items - all render inline now
+  const navGroups = [
+    {
+      title: 'Core',
+      items: [
+        { id: 'users', label: 'Users', icon: Users, count: users.length },
+        { id: 'theme', label: 'Theme', icon: Palette }
+      ]
+    },
+    {
+      title: 'Content',
+      items: [
+        { id: 'blog', label: 'Blog', icon: BookOpen },
+        { id: 'faq', label: 'FAQ', icon: HelpCircle },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+        { id: 'certification', label: 'Certification', icon: Award }
+      ]
+    },
+    {
+      title: 'Configuration',
+      items: [
+        { id: 'eventTypes', label: 'Event Types', icon: Tags },
+        { id: 'venueTypes', label: 'Venue Types', icon: Building2 },
+        { id: 'clubRoles', label: 'Club Roles', icon: UserCog },
+        { id: 'teamUnits', label: 'Team Units', icon: Users },
+        { id: 'skillLevels', label: 'Skill Levels', icon: Award }
+      ]
+    },
+    {
+      title: 'Coming Soon',
+      items: [
+        { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
+        { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
+      ]
+    }
   ]
 
   return (
@@ -313,48 +465,57 @@ const AdminDashboard = () => {
             <p className="text-sm text-gray-500 mt-1">System Management</p>
           </div>
           <nav className="p-4 space-y-2">
-            {navItems.map(item => (
-              item.link ? (
-                <Link
-                  key={item.id}
-                  to={item.link}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg transition text-gray-600 hover:bg-gray-50"
-                >
-                  <div className="flex items-center">
-                    <item.icon className="w-5 h-5 mr-3" />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                </Link>
-              ) : (
-                <button
-                  key={item.id}
-                  onClick={() => !item.disabled && setActiveTab(item.id)}
-                  disabled={item.disabled}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${
-                    activeTab === item.id
-                      ? 'bg-blue-50 text-blue-700'
-                      : item.disabled
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <item.icon className="w-5 h-5 mr-3" />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  {item.count > 0 && (
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {item.count}
-                    </span>
+            {navGroups.map(group => {
+              const isCollapsed = collapsedGroups[group.title]
+              return (
+                <div key={group.title}>
+                  <button
+                    onClick={() => toggleGroup(group.title)}
+                    className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-lg transition"
+                  >
+                    <span>{group.title}</span>
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                  {!isCollapsed && (
+                    <div className="space-y-1 mt-1">
+                      {group.items.map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => !item.disabled && setActiveTab(item.id)}
+                          disabled={item.disabled}
+                          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition ${
+                            activeTab === item.id
+                              ? 'bg-blue-50 text-blue-700'
+                              : item.disabled
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <item.icon className="w-5 h-5 mr-3" />
+                            <span className="font-medium text-sm">{item.label}</span>
+                          </div>
+                          {item.count > 0 && (
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              activeTab === item.id ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                          {item.disabled && (
+                            <span className="text-xs text-gray-400">Soon</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                  {item.disabled && (
-                    <span className="text-xs text-gray-400">Soon</span>
-                  )}
-                </button>
+                </div>
               )
-            ))}
+            })}
           </nav>
         </div>
 
@@ -410,6 +571,7 @@ const AdminDashboard = () => {
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
                           <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -423,7 +585,7 @@ const AdminDashboard = () => {
                                 <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                                   {u.profileImageUrl ? (
                                     <img
-                                      src={getAssetUrl(u.profileImageUrl)}
+                                      src={getSharedAssetUrl(u.profileImageUrl)}
                                       alt={`${u.firstName} ${u.lastName}`}
                                       className="w-full h-full object-cover"
                                     />
@@ -435,17 +597,27 @@ const AdminDashboard = () => {
                                 </div>
                                 <div className="ml-4">
                                   <div className="font-medium text-gray-900">
-                                    {u.firstName} {u.lastName}
+                                    {u.firstName || ''} {u.lastName || ''}
                                   </div>
-                                  <div className="text-sm text-gray-500">{u.email}</div>
+                                  <div className="text-sm text-gray-500">{u.email || 'No email'}</div>
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(u.role)}`}>
                                 {getRoleIcon(u.role)}
-                                <span className="ml-1 capitalize">{u.role}</span>
+                                <span className="ml-1 capitalize">{u.role || 'User'}</span>
                               </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {(u.city || u.state) ? (
+                                <span className="inline-flex items-center">
+                                  <MapPin className="w-3 h-3 mr-1 text-gray-400" />
+                                  {[u.city, u.state].filter(Boolean).join(', ')}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               {u.isActive ? (
@@ -461,7 +633,7 @@ const AdminDashboard = () => {
                               )}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
-                              {new Date(u.createdAt).toLocaleDateString()}
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
                             </td>
                             <td className="px-6 py-4 text-right">
                               <button
@@ -504,112 +676,25 @@ const AdminDashboard = () => {
                       </div>
                     )}
 
-                    {filteredUsers.length === 0 && (
+                    {filteredUsers.length === 0 && !usersError && (
                       <div className="p-12 text-center">
                         <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                         <p className="text-gray-500">No users found</p>
                       </div>
                     )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* Materials Tab */}
-          {activeTab === 'materials' && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Materials Management</h2>
-              </div>
-
-              {/* Search */}
-              <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search materials..."
-                    value={materialSearch}
-                    onChange={(e) => setMaterialSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Materials Grid */}
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                {loading ? (
-                  <div className="p-12 text-center">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Loading materials...</p>
-                  </div>
-                ) : (
-                  <>
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coach</th>
-                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {getPaginatedData(filteredMaterials).map(m => (
-                          <tr key={m.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
-                                <div className="w-16 h-12 rounded bg-gray-200 overflow-hidden flex-shrink-0">
-                                  {m.thumbnailUrl ? (
-                                    <img
-                                      src={getAssetUrl(m.thumbnailUrl)}
-                                      alt={m.title}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                                      <BookOpen className="w-6 h-6 text-gray-400" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="ml-4">
-                                  <div className="font-medium text-gray-900">{m.title}</div>
-                                  <div className="text-sm text-gray-500 truncate max-w-xs">
-                                    {m.description?.substring(0, 50)}...
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {m.contentType}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-500">
-                              {m.coachName || 'Unknown'}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                              ${m.price?.toFixed(2) || '0.00'}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50">
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50 ml-2">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    {filteredMaterials.length === 0 && (
+                    {usersError && (
                       <div className="p-12 text-center">
-                        <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                        <p className="text-gray-500">No materials found</p>
+                        <XCircle className="w-12 h-12 text-red-300 mx-auto mb-4" />
+                        <p className="text-red-600 font-medium mb-2">Error loading users</p>
+                        <p className="text-gray-500 mb-4">{usersError}</p>
+                        <button
+                          onClick={fetchUsers}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Retry
+                        </button>
                       </div>
                     )}
                   </>
@@ -763,6 +848,225 @@ const AdminDashboard = () => {
                             </button>
                             <p className="text-xs text-gray-500 mt-1">ICO, PNG 32x32 or 64x64</p>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hero Section */}
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <Video className="w-5 h-5 mr-2 text-pink-500" />
+                      Hero Section
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Customize the hero section on the landing page. Video takes priority over image.
+                    </p>
+
+                    {/* Hero Video and Image */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hero Video</label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                          {themeSettings.heroVideoUrl ? (
+                            <div className="space-y-3">
+                              {/* Check if it's an external URL (YouTube, etc.) or uploaded file */}
+                              {themeSettings.heroVideoUrl.includes('youtube.com') || themeSettings.heroVideoUrl.includes('youtu.be') ? (
+                                <div className="relative w-full h-32 bg-gray-900 rounded-lg overflow-hidden">
+                                  {getYouTubeThumbnail(themeSettings.heroVideoUrl) ? (
+                                    <img
+                                      src={getYouTubeThumbnail(themeSettings.heroVideoUrl)}
+                                      alt="YouTube video thumbnail"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Video className="w-8 h-8 text-white" />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                    <div className="bg-red-600 rounded-lg px-2 py-1 flex items-center">
+                                      <Video className="w-4 h-4 text-white" />
+                                      <span className="text-white ml-1 text-xs font-medium">YouTube</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : themeSettings.heroVideoUrl.startsWith('http') ? (
+                                <div className="w-full h-32 bg-gray-900 rounded-lg flex items-center justify-center">
+                                  <Video className="w-8 h-8 text-white" />
+                                  <span className="text-white ml-2 text-sm">External Video</span>
+                                </div>
+                              ) : (
+                                <video
+                                  src={getSharedAssetUrl(themeSettings.heroVideoUrl)}
+                                  className="w-full h-32 object-cover rounded-lg"
+                                  muted
+                                  loop
+                                  autoPlay
+                                  playsInline
+                                />
+                              )}
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-500 truncate flex-1">
+                                  {themeSettings.heroVideoUrl.length > 40
+                                    ? themeSettings.heroVideoUrl.substring(0, 40) + '...'
+                                    : themeSettings.heroVideoUrl}
+                                </span>
+                                <div className="flex items-center space-x-1">
+                                  <button
+                                    onClick={() => setIsHeroVideoModalOpen(true)}
+                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={handleDeleteHeroVideo}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4">
+                              <Video className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                              <p className="text-sm text-gray-500 mb-3">No video set</p>
+                              <button
+                                onClick={() => setIsHeroVideoModalOpen(true)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center mx-auto"
+                              >
+                                <Upload className="w-4 h-4 mr-2" />
+                                Add Video
+                              </button>
+                              <p className="text-xs text-gray-400 mt-2">Upload or paste external URL</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hero Image (Fallback)</label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                          {themeSettings.heroImageUrl ? (
+                            <div className="space-y-3">
+                              <img
+                                src={getSharedAssetUrl(themeSettings.heroImageUrl)}
+                                alt="Hero background"
+                                className="w-full h-32 object-cover rounded-lg"
+                              />
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-500 truncate flex-1">
+                                  {themeSettings.heroImageUrl.split('/').pop()}
+                                </span>
+                                <button
+                                  onClick={handleDeleteHeroImage}
+                                  className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4">
+                              <Image className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                              <p className="text-sm text-gray-500 mb-3">No image uploaded</p>
+                              <input
+                                type="file"
+                                ref={heroImageInputRef}
+                                onChange={handleHeroImageUpload}
+                                accept="image/*"
+                                className="hidden"
+                              />
+                              <button
+                                onClick={() => heroImageInputRef.current?.click()}
+                                disabled={uploadingHeroImage}
+                                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center mx-auto disabled:opacity-50"
+                              >
+                                {uploadingHeroImage ? (
+                                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Upload className="w-4 h-4 mr-2" />
+                                )}
+                                {uploadingHeroImage ? 'Uploading...' : 'Upload Image'}
+                              </button>
+                              <p className="text-xs text-gray-400 mt-2">PNG, JPG up to 5MB</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hero Text Content */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hero Title</label>
+                        <input
+                          type="text"
+                          value={themeSettings.heroTitle || ''}
+                          onChange={(e) => handleThemeChange('heroTitle', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Your Pickleball Community Awaits"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hero Subtitle</label>
+                        <textarea
+                          value={themeSettings.heroSubtitle || ''}
+                          onChange={(e) => handleThemeChange('heroSubtitle', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          rows={2}
+                          placeholder="Connect with players, find courts, join clubs, and get certified."
+                        />
+                      </div>
+                    </div>
+
+                    {/* CTA Buttons */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-gray-700">Primary CTA Button</h4>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Button Text</label>
+                          <input
+                            type="text"
+                            value={themeSettings.heroCtaText || ''}
+                            onChange={(e) => handleThemeChange('heroCtaText', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="Find Courts"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Button Link</label>
+                          <input
+                            type="text"
+                            value={themeSettings.heroCtaLink || ''}
+                            onChange={(e) => handleThemeChange('heroCtaLink', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="/courts"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-gray-700">Secondary CTA Button</h4>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Button Text</label>
+                          <input
+                            type="text"
+                            value={themeSettings.heroSecondaryCtaText || ''}
+                            onChange={(e) => handleThemeChange('heroSecondaryCtaText', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="Join a Club"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Button Link</label>
+                          <input
+                            type="text"
+                            value={themeSettings.heroSecondaryCtaLink || ''}
+                            onChange={(e) => handleThemeChange('heroSecondaryCtaLink', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="/clubs"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1203,6 +1507,33 @@ const AdminDashboard = () => {
               <p className="text-gray-500">Coming soon. View and manage all payment transactions.</p>
             </div>
           )}
+
+          {/* Blog Admin */}
+          {activeTab === 'blog' && <BlogAdmin embedded />}
+
+          {/* FAQ Admin */}
+          {activeTab === 'faq' && <FaqAdmin embedded />}
+
+          {/* Feedback Admin */}
+          {activeTab === 'feedback' && <FeedbackAdmin embedded />}
+
+          {/* Certification Admin */}
+          {activeTab === 'certification' && <CertificationAdmin embedded />}
+
+          {/* Event Types Admin */}
+          {activeTab === 'eventTypes' && <EventTypesAdmin embedded />}
+
+          {/* Venue Types Admin */}
+          {activeTab === 'venueTypes' && <VenueTypesAdmin embedded />}
+
+          {/* Club Roles Admin */}
+          {activeTab === 'clubRoles' && <ClubMemberRolesAdmin embedded />}
+
+          {/* Team Units Admin */}
+          {activeTab === 'teamUnits' && <TeamUnitsAdmin embedded />}
+
+          {/* Skill Levels Admin */}
+          {activeTab === 'skillLevels' && <SkillLevelsAdmin embedded />}
         </div>
       </div>
 
@@ -1231,7 +1562,7 @@ const AdminDashboard = () => {
                   <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden">
                     {selectedUser.profileImageUrl ? (
                       <img
-                        src={getAssetUrl(selectedUser.profileImageUrl)}
+                        src={getSharedAssetUrl(selectedUser.profileImageUrl)}
                         alt={`${selectedUser.firstName} ${selectedUser.lastName}`}
                         className="w-full h-full object-cover"
                       />
@@ -1328,6 +1659,17 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Hero Video Upload Modal */}
+      <VideoUploadModal
+        isOpen={isHeroVideoModalOpen}
+        onClose={() => setIsHeroVideoModalOpen(false)}
+        onSave={handleHeroVideoSave}
+        currentVideo={themeSettings?.heroVideoUrl}
+        objectType="theme"
+        title="Hero Video"
+        maxSizeMB={100}
+      />
     </div>
   )
 }

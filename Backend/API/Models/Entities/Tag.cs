@@ -1,4 +1,4 @@
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// Represents a unique tag name in the system

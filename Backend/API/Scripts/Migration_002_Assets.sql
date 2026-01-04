@@ -2,7 +2,7 @@
 -- Date: 2025-12-09
 -- Description: Creates the Assets table for tracking uploaded files with database-backed asset management
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

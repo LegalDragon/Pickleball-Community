@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -51,7 +51,6 @@ public class UsersController : ControllerBase
             }
 
             var user = await _context.Users
-                .Include(u => u.CoachProfile)
                 .FirstOrDefaultAsync(u => u.Id == userId.Value);
 
             if (user == null)
@@ -75,6 +74,113 @@ public class UsersController : ControllerBase
         {
             _logger.LogError(ex, "Error fetching user profile");
             return StatusCode(500, new ApiResponse<UserProfileDto>
+            {
+                Success = false,
+                Message = "An error occurred while fetching profile"
+            });
+        }
+    }
+
+    // GET: api/Users/{id}/public - Get public profile (anyone authenticated can view)
+    [HttpGet("{id}/public")]
+    public async Task<ActionResult<ApiResponse<PublicProfileDto>>> GetPublicProfile(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var user = await _context.Users
+                .Where(u => u.Id == id && u.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<PublicProfileDto>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            var publicProfile = new PublicProfileDto
+            {
+                Id = user.Id,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Bio = user.Bio,
+                ProfileImageUrl = user.ProfileImageUrl,
+                City = user.City,
+                State = user.State,
+                Country = user.Country,
+                Handedness = user.Handedness,
+                ExperienceLevel = user.ExperienceLevel,
+                PlayingStyle = user.PlayingStyle,
+                PaddleBrand = user.PaddleBrand,
+                PaddleModel = user.PaddleModel,
+                YearsPlaying = user.YearsPlaying,
+                TournamentLevel = user.TournamentLevel,
+                FavoriteShot = user.FavoriteShot,
+                IntroVideo = user.IntroVideo,
+                CreatedAt = user.CreatedAt,
+                FriendshipStatus = "none",
+                FriendRequestId = null
+            };
+
+            // Check friendship status if user is logged in and viewing someone else's profile
+            if (currentUserId.HasValue && currentUserId.Value != id)
+            {
+                // Check if they are friends (UserId1 is always smaller, UserId2 is always larger)
+                var smallerId = Math.Min(currentUserId.Value, id);
+                var largerId = Math.Max(currentUserId.Value, id);
+                var friendship = await _context.Friendships
+                    .Where(f => f.UserId1 == smallerId && f.UserId2 == largerId)
+                    .FirstOrDefaultAsync();
+
+                if (friendship != null)
+                {
+                    publicProfile.FriendshipStatus = "friends";
+                }
+                else
+                {
+                    // Check for pending friend requests
+                    var sentRequest = await _context.FriendRequests
+                        .Where(fr => fr.SenderId == currentUserId.Value && fr.RecipientId == id && fr.Status == "Pending")
+                        .FirstOrDefaultAsync();
+
+                    if (sentRequest != null)
+                    {
+                        publicProfile.FriendshipStatus = "pending_sent";
+                        publicProfile.FriendRequestId = sentRequest.Id;
+                    }
+                    else
+                    {
+                        var receivedRequest = await _context.FriendRequests
+                            .Where(fr => fr.SenderId == id && fr.RecipientId == currentUserId.Value && fr.Status == "Pending")
+                            .FirstOrDefaultAsync();
+
+                        if (receivedRequest != null)
+                        {
+                            publicProfile.FriendshipStatus = "pending_received";
+                            publicProfile.FriendRequestId = receivedRequest.Id;
+                        }
+                    }
+                }
+            }
+            else if (currentUserId.HasValue && currentUserId.Value == id)
+            {
+                publicProfile.FriendshipStatus = "self";
+            }
+
+            return Ok(new ApiResponse<PublicProfileDto>
+            {
+                Success = true,
+                Data = publicProfile
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching public profile for user {UserId}", id);
+            return StatusCode(500, new ApiResponse<PublicProfileDto>
             {
                 Success = false,
                 Message = "An error occurred while fetching profile"
@@ -115,6 +221,8 @@ public class UsersController : ControllerBase
                 user.LastName = request.LastName;
             if (request.Bio != null)
                 user.Bio = request.Bio;
+            if (request.ProfileImageUrl != null)
+                user.ProfileImageUrl = request.ProfileImageUrl;
 
             // Update basic info fields
             if (request.Gender != null)
@@ -486,7 +594,7 @@ public class UsersController : ControllerBase
             return StatusCode(500, new ApiResponse<List<UserProfileDto>>
             {
                 Success = false,
-                Message = "An error occurred while fetching users"
+                Message = $"Error fetching users: {ex.Message}"
             });
         }
     }

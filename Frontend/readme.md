@@ -1,6 +1,6 @@
-# Pickleball.College Client
+# Pickleball.Community Client
 
-This is the React frontend for Pickleball.College.
+This is the React frontend for Pickleball.Community.
 
 ## Setup Instructions
 

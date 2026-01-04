@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Configuration;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Configuration;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface IAssetService
 {
