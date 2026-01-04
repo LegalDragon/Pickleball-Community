@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
 import { useAuth } from '../contexts/AuthContext'
+import { useForm } from 'react-hook-form'
 import { userApi, assetApi, sharedUserApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
+import PublicProfileModal from '../components/ui/PublicProfileModal'
 import {
   User, Camera, Video, MapPin, Phone, Calendar,
   Edit2, Save, Upload, X, Play, Award, Target,
@@ -28,6 +28,9 @@ const Profile = () => {
 
   // Bio modal state
   const [isBioModalOpen, setIsBioModalOpen] = useState(false)
+
+  // Public profile modal state
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [tempBio, setTempBio] = useState('')
   const [savingBio, setSavingBio] = useState(false)
 
@@ -434,13 +437,13 @@ const Profile = () => {
               </p>
             </div>
             {user?.id && (
-              <Link
-                to={`/users/${user.id}`}
+              <button
+                onClick={() => setShowProfileModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm font-medium"
               >
                 <Eye className="w-4 h-4" />
-                Preview public profile
-              </Link>
+                View Public Profile
+              </button>
             )}
           </div>
           <div className="mt-4 p-3 bg-white/10 rounded-lg">
@@ -1074,6 +1077,14 @@ const Profile = () => {
         title="Add Intro Video"
         maxSizeMB={100}
       />
+
+      {/* Public Profile Modal */}
+      {showProfileModal && user && (
+        <PublicProfileModal
+          userId={user.id}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </div>
   )
 }
