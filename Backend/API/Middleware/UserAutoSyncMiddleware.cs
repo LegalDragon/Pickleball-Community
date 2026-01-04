@@ -60,7 +60,8 @@ public class UserAutoSyncMiddleware
 
                     var phone = context.User.FindFirst(ClaimTypes.MobilePhone)?.Value
                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone")?.Value
-                        ?? context.User.FindFirst("phone")?.Value;
+                        ?? context.User.FindFirst("phone")?.Value
+                        ?? context.User.FindFirst("phone_number")?.Value;
 
                     // Create new local user record with defaults for required fields
                     var newUser = new User
