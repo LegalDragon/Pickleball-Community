@@ -124,23 +124,42 @@ public class ClubsController : ControllerBase
                 .Take(request.PageSize)
                 .ToList();
 
-            var clubDtos = pagedClubs.Select(x => new ClubDto
-            {
-                Id = x.club.Id,
-                Name = x.club.Name,
-                Description = x.club.Description,
-                LogoUrl = x.club.LogoUrl,
-                City = x.club.HomeVenue?.City ?? x.club.City,
-                State = x.club.HomeVenue?.State ?? x.club.State,
-                Country = x.club.HomeVenue?.Country ?? x.club.Country,
-                IsPublic = x.club.IsPublic,
-                HasMembershipFee = x.club.HasMembershipFee,
-                MembershipFeeAmount = x.club.MembershipFeeAmount,
-                MemberCount = x.memberCount,
-                Distance = x.distance,
-                CreatedAt = x.club.CreatedAt,
-                HomeVenueId = x.club.HomeVenueId,
-                HomeVenueName = x.club.HomeVenue?.Name
+            var clubDtos = pagedClubs.Select(x => {
+                // Get GPS coordinates from home venue
+                double? latitude = null;
+                double? longitude = null;
+                if (x.club.HomeVenue != null &&
+                    !string.IsNullOrEmpty(x.club.HomeVenue.GpsLat) &&
+                    !string.IsNullOrEmpty(x.club.HomeVenue.GpsLng))
+                {
+                    if (double.TryParse(x.club.HomeVenue.GpsLat, out var lat) &&
+                        double.TryParse(x.club.HomeVenue.GpsLng, out var lng))
+                    {
+                        latitude = lat;
+                        longitude = lng;
+                    }
+                }
+
+                return new ClubDto
+                {
+                    Id = x.club.Id,
+                    Name = x.club.Name,
+                    Description = x.club.Description,
+                    LogoUrl = x.club.LogoUrl,
+                    City = x.club.HomeVenue?.City ?? x.club.City,
+                    State = x.club.HomeVenue?.State ?? x.club.State,
+                    Country = x.club.HomeVenue?.Country ?? x.club.Country,
+                    Latitude = latitude,
+                    Longitude = longitude,
+                    IsPublic = x.club.IsPublic,
+                    HasMembershipFee = x.club.HasMembershipFee,
+                    MembershipFeeAmount = x.club.MembershipFeeAmount,
+                    MemberCount = x.memberCount,
+                    Distance = x.distance,
+                    CreatedAt = x.club.CreatedAt,
+                    HomeVenueId = x.club.HomeVenueId,
+                    HomeVenueName = x.club.HomeVenue?.Name
+                };
             }).ToList();
 
             return Ok(new ApiResponse<PagedResult<ClubDto>>
