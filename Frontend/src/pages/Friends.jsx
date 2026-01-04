@@ -19,7 +19,9 @@ export default function Friends() {
     firstName: '',
     lastName: '',
     city: '',
-    state: ''
+    state: '',
+    email: '',
+    phone: ''
   });
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -85,7 +87,7 @@ export default function Friends() {
   };
 
   const clearSearch = () => {
-    setSearchFilters({ firstName: '', lastName: '', city: '', state: '' });
+    setSearchFilters({ firstName: '', lastName: '', city: '', state: '', email: '', phone: '' });
     setSearchResults([]);
     setHasSearched(false);
   };
@@ -446,7 +448,7 @@ export default function Friends() {
             <div className="p-6">
               {/* Search Form */}
               <form onSubmit={handleSearch} className="mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                     <input
@@ -484,6 +486,26 @@ export default function Friends() {
                       placeholder="Enter state..."
                       value={searchFilters.state}
                       onChange={(e) => handleFilterChange('state', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      placeholder="Enter exact email..."
+                      value={searchFilters.email}
+                      onChange={(e) => handleFilterChange('email', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      placeholder="Enter phone number..."
+                      value={searchFilters.phone}
+                      onChange={(e) => handleFilterChange('phone', e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>

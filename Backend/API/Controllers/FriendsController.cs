@@ -118,13 +118,15 @@ public class FriendsController : ControllerBase
         return results;
     }
 
-    // GET: /friends/search - Search for players by first name, last name, city, state
+    // GET: /friends/search - Search for players by first name, last name, city, state, email, or phone
     [HttpGet("search")]
     public async Task<ActionResult<ApiResponse<List<PlayerSearchResultDto>>>> SearchPlayers(
         [FromQuery] string? firstName,
         [FromQuery] string? lastName,
         [FromQuery] string? city,
-        [FromQuery] string? state)
+        [FromQuery] string? state,
+        [FromQuery] string? email,
+        [FromQuery] string? phone)
     {
         try
         {
@@ -134,19 +136,9 @@ public class FriendsController : ControllerBase
 
             // Check if at least one search parameter is provided
             if (string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName) &&
-                string.IsNullOrWhiteSpace(city) && string.IsNullOrWhiteSpace(state))
+                string.IsNullOrWhiteSpace(city) && string.IsNullOrWhiteSpace(state) &&
+                string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(phone))
                 return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = new List<PlayerSearchResultDto>() });
-
-            // Try stored procedure first
-            try
-            {
-                var users = await SearchPlayersWithStoredProcedure(userId.Value, firstName, lastName, city, state);
-                return Ok(new ApiResponse<List<PlayerSearchResultDto>> { Success = true, Data = users });
-            }
-            catch (Exception spEx)
-            {
-                _logger.LogWarning(spEx, "Stored procedure sp_SearchUsersForFriends not available, falling back to LINQ");
-            }
 
             // Get existing friend user IDs
             var friendUserIds = await _context.Friendships
@@ -160,9 +152,21 @@ public class FriendsController : ControllerBase
                 .Select(fr => fr.SenderId == userId.Value ? fr.RecipientId : fr.SenderId)
                 .ToListAsync();
 
-            // Fallback to LINQ with EF.Functions.Like for SQL Server compatibility
+            // Build query
             var query = _context.Users.Where(u => u.Id != userId.Value && u.IsActive);
 
+            // Email and phone use exact match for privacy
+            if (!string.IsNullOrWhiteSpace(email))
+                query = query.Where(u => u.Email != null && u.Email.ToLower() == email.ToLower().Trim());
+
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                // Normalize phone by removing non-digits for comparison
+                var normalizedPhone = new string(phone.Where(char.IsDigit).ToArray());
+                query = query.Where(u => u.Phone != null && u.Phone.Replace("-", "").Replace(" ", "").Replace("(", "").Replace(")", "").Replace("+", "") == normalizedPhone);
+            }
+
+            // Name and location use partial match
             if (!string.IsNullOrWhiteSpace(firstName))
                 query = query.Where(u => EF.Functions.Like(u.FirstName ?? "", $"%{firstName}%"));
 

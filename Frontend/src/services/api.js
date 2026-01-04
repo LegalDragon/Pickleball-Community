@@ -1025,6 +1025,8 @@ export const friendsApi = {
     if (filters.lastName) params.append('lastName', filters.lastName);
     if (filters.city) params.append('city', filters.city);
     if (filters.state) params.append('state', filters.state);
+    if (filters.email) params.append('email', filters.email);
+    if (filters.phone) params.append('phone', filters.phone);
     return api.get(`/friends/search?${params.toString()}`);
   },
 
