@@ -46,15 +46,23 @@ const Navigation = () => {
     setAuthKey(prev => prev + 1); // Force re-render
   }, [isAuthenticated, user]);
 
-  const navigation = [
+  // Primary navigation - most used
+  const primaryNav = [
     { name: 'Home', href: '/', icon: HomeIcon },
     { name: 'Events', href: '/events', icon: Calendar },
     { name: 'Venues', href: '/venues', icon: MapPin },
     { name: 'Clubs', href: '/clubs', icon: Users },
+  ];
+
+  // Secondary navigation - less frequently used
+  const secondaryNav = [
     { name: 'Blog', href: '/blog', icon: FileText },
     { name: 'FAQ', href: '/faq', icon: HelpCircle },
     { name: 'Feedback', href: '/feedback', icon: MessageSquarePlus },
   ];
+
+  // Combined for desktop
+  const navigation = [...primaryNav, ...secondaryNav];
 
   const isActive = (path) => location.pathname === path;
   const isHomePage = location.pathname === '/';
@@ -327,27 +335,13 @@ const Navigation = () => {
 
       {/* Mobile menu */}
       {isOpen && (
-        <div className="md:hidden absolute top-16 inset-x-0 bg-white/95 backdrop-blur-lg border-b border-gray-200 shadow-xl">
-          <div className="px-4 py-6 space-y-4">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-lg font-medium transition-colors ${isActive(item.href)
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-                  }`}
-                onClick={() => setIsOpen(false)}
-              >
-                {item.icon && <item.icon className="w-5 h-5" />}
-                <span>{item.name}</span>
-              </Link>
-            ))}
-
+        <div className="md:hidden absolute top-16 inset-x-0 bg-white/95 backdrop-blur-lg border-b border-gray-200 shadow-xl max-h-[calc(100vh-4rem)] overflow-y-auto">
+          <div className="px-4 py-4">
             {isAuthenticated && user ? (
               <>
-                <div className="px-4 py-3 border-t border-gray-200">
-                  <div className="flex items-center space-x-3 mb-4">
+                {/* User section at top for logged-in users */}
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
+                  <div className="flex items-center space-x-3">
                     {getUserAvatarUrl() ? (
                       <img
                         src={getUserAvatarUrl()}
@@ -365,87 +359,120 @@ const Navigation = () => {
                       {getUserInitials()}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900">{getUserDisplayName()}</div>
-                      <div className="text-sm text-gray-500 capitalize">{getUserRole()}</div>
+                      <div className="font-semibold text-gray-900 text-sm">{getUserDisplayName()}</div>
+                      <div className="text-xs text-gray-500 capitalize">{getUserRole()}</div>
                     </div>
                   </div>
-
-
-                  {/* Mobile User Menu */}
-                  <div className="space-y-2 mt-4">
-                    {/* Admin Dashboard link for mobile - only for admins */}
-                    {isAdmin && (
-                      <Link
-                        to="/admin/dashboard"
-                        className="flex items-center space-x-2 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors font-medium"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <School2Icon className="w-4 h-4" />
-                        <span>Admin Dashboard</span>
-                      </Link>
-                    )}
-                    {/* Dashboard link for mobile - all members */}
-                    {user?.role && (
-                      <Link
-                        to="/member/dashboard"
-                        className="flex items-center space-x-2 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-medium"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <HomeIcon className="w-4 h-4" />
-                        <span>Dashboard</span>
-                      </Link>
-                    )}
-
-                    <Link
-                      to="/profile"
-                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Profile</span>
-                    </Link>
-                    <Link
-                      to="/messages"
-                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>Messages</span>
-                    </Link>
-                    <Link
-                      to="/notifications"
-                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <Bell className="w-4 h-4" />
-                      <span>Notifications</span>
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center justify-center space-x-2 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl font-medium transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-1 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors text-sm"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
                 </div>
+
+                {/* Quick user actions */}
+                <div className="grid grid-cols-4 gap-2 pb-3 mb-3 border-b border-gray-200">
+                  <Link
+                    to="/member/dashboard"
+                    className="flex flex-col items-center p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <HomeIcon className="w-5 h-5" />
+                    <span className="text-xs mt-1">Dashboard</span>
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <User className="w-5 h-5" />
+                    <span className="text-xs mt-1">Profile</span>
+                  </Link>
+                  <Link
+                    to="/messages"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="text-xs mt-1">Messages</span>
+                  </Link>
+                  <Link
+                    to="/notifications"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Bell className="w-5 h-5" />
+                    <span className="text-xs mt-1">Alerts</span>
+                  </Link>
+                </div>
+
+                {/* Admin link if admin */}
+                {isAdmin && (
+                  <Link
+                    to="/admin/dashboard"
+                    className="flex items-center space-x-2 px-3 py-2 mb-3 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors font-medium text-sm"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <School2Icon className="w-4 h-4" />
+                    <span>Admin Dashboard</span>
+                  </Link>
+                )}
               </>
             ) : (
-              <div className="px-4 pt-4 border-t border-gray-200 space-y-3">
+              /* Auth buttons for non-logged in users */
+              <div className="flex space-x-2 pb-3 mb-3 border-b border-gray-200">
                 <button
                   onClick={() => { setIsOpen(false); redirectToLogin(); }}
-                  className="block w-full text-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="flex-1 text-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors text-sm"
                 >
                   Sign In
                 </button>
                 <button
                   onClick={() => { setIsOpen(false); redirectToRegister(); }}
-                  className="block w-full text-center px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow"
+                  className="flex-1 text-center px-3 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow text-sm"
                 >
                   Enroll
                 </button>
               </div>
             )}
+
+            {/* Primary Navigation */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {primaryNav.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`flex items-center space-x-2 px-3 py-3 rounded-lg font-medium transition-colors ${isActive(item.href)
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                    }`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item.icon && <item.icon className="w-5 h-5" />}
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Secondary Navigation - smaller */}
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+              {secondaryNav.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-sm transition-colors ${isActive(item.href)
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'
+                    }`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item.icon && <item.icon className="w-4 h-4" />}
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       )}
