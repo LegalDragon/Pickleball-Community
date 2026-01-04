@@ -37,6 +37,12 @@ public class UserAutoSyncMiddleware
 
                 if (!userExists)
                 {
+                    _logger.LogInformation("User {UserId} authenticated but not in local DB - creating...", userId);
+
+                    // Log all claims for debugging
+                    var allClaims = context.User.Claims.Select(c => $"{c.Type}={c.Value}").ToList();
+                    _logger.LogDebug("JWT Claims: {Claims}", string.Join(", ", allClaims));
+
                     // Extract user info from claims
                     var email = context.User.FindFirst(ClaimTypes.Email)?.Value
                         ?? context.User.FindFirst("email")?.Value
@@ -44,23 +50,25 @@ public class UserAutoSyncMiddleware
 
                     var firstName = context.User.FindFirst(ClaimTypes.GivenName)?.Value
                         ?? context.User.FindFirst("firstName")?.Value
-                        ?? context.User.FindFirst("FirstName")?.Value;
+                        ?? context.User.FindFirst("FirstName")?.Value
+                        ?? context.User.FindFirst("given_name")?.Value;
 
                     var lastName = context.User.FindFirst(ClaimTypes.Surname)?.Value
                         ?? context.User.FindFirst("lastName")?.Value
-                        ?? context.User.FindFirst("LastName")?.Value;
+                        ?? context.User.FindFirst("LastName")?.Value
+                        ?? context.User.FindFirst("family_name")?.Value;
 
                     var phone = context.User.FindFirst(ClaimTypes.MobilePhone)?.Value
                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone")?.Value
                         ?? context.User.FindFirst("phone")?.Value;
 
-                    // Create new local user record
+                    // Create new local user record with defaults for required fields
                     var newUser = new User
                     {
                         Id = userId,
-                        Email = email,
-                        FirstName = firstName,
-                        LastName = lastName,
+                        Email = !string.IsNullOrEmpty(email) ? email : $"user{userId}@placeholder.local",
+                        FirstName = !string.IsNullOrEmpty(firstName) ? firstName : "New",
+                        LastName = !string.IsNullOrEmpty(lastName) ? lastName : "User",
                         Phone = phone,
                         Role = "Student",  // Default role
                         PasswordHash = null,  // No local password - auth via shared service
@@ -73,14 +81,22 @@ public class UserAutoSyncMiddleware
                     {
                         dbContext.Users.Add(newUser);
                         await dbContext.SaveChangesAsync();
-                        _logger.LogInformation("Auto-created local user {UserId} ({Email}) from shared auth token", userId, email);
+                        _logger.LogInformation("Successfully created local user {UserId} ({Email})", userId, newUser.Email);
                     }
                     catch (DbUpdateException ex)
                     {
                         // User might have been created by another concurrent request
-                        _logger.LogWarning(ex, "Could not auto-create user {UserId} - may already exist", userId);
+                        _logger.LogWarning(ex, "Could not create user {UserId} - may already exist or DB error: {Message}", userId, ex.InnerException?.Message ?? ex.Message);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unexpected error creating user {UserId}: {Message}", userId, ex.Message);
                     }
                 }
+            }
+            else
+            {
+                _logger.LogWarning("Authenticated user but could not parse userId from claim: {Claim}", userIdClaim);
             }
         }
 
