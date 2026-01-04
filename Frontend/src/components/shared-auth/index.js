@@ -52,5 +52,6 @@
 export { default as SharedLogin } from './SharedLogin'
 export { default as SharedRegister } from './SharedRegister'
 export { default as SharedForgotPassword } from './SharedForgotPassword'
+export { default as SharedChangeCredential } from './SharedChangeCredential'
 export { default as SharedAuthModal } from './SharedAuthModal'
 export { default as SiteLogoOverlay, SiteLogoPreview } from './SiteLogoOverlay'

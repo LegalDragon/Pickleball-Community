@@ -342,25 +342,10 @@ export const authApi = {
 
   verifyResetToken: (token) => {
     return api.get(`/auth/verify-reset-token/${token}`)
-  },
-
-  // Credential change endpoints (email/phone via shared auth)
-  requestEmailChange: async (newEmail) => {
-    return sharedAuthApi.post('/auth/change-email/request', { newEmail })
-  },
-
-  verifyEmailChange: async (newEmail, code) => {
-    return sharedAuthApi.post('/auth/change-email/verify', { newEmail, code })
-  },
-
-  requestPhoneChange: async (newPhone) => {
-    return sharedAuthApi.post('/auth/change-phone/request', { newPhoneNumber: newPhone })
-  },
-
-  verifyPhoneChange: async (newPhone, code) => {
-    return sharedAuthApi.post('/auth/change-phone/verify', { newPhoneNumber: newPhone, code })
   }
 
+  // Note: Email/phone change is handled by SharedChangeCredential component
+  // which calls shared auth endpoints directly via fetch
 }
 
 // Theme Management API
