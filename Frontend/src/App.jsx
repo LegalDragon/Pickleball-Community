@@ -25,6 +25,7 @@ import Venues from './pages/Venues'
 import Clubs from './pages/Clubs'
 import Leagues from './pages/Leagues'
 import LeagueDetail from './pages/LeagueDetail'
+import LeagueStructure from './pages/LeagueStructure'
 import LeagueAdmin from './pages/LeagueAdmin'
 import Blog from './pages/Blog'
 import BlogAdmin from './pages/BlogAdmin'
@@ -69,6 +70,7 @@ function App() {
       <Route path="/courts" element={<Navigate to="/venues" replace />} />
       <Route path="/clubs" element={<Clubs />} />
       <Route path="/leagues" element={<Leagues />} />
+      <Route path="/leagues/structure" element={<LeagueStructure />} />
       <Route path="/leagues/:id" element={<LeagueDetail />} />
       <Route path="/blog" element={<Blog />} />
       <Route path="/faq" element={<Faq />} />
