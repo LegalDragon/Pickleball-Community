@@ -558,7 +558,9 @@ public class TournamentController : ControllerBase
         {
             Id = unit.Id,
             EventId = unit.EventId,
+            EventName = unit.Event?.Name,
             DivisionId = unit.DivisionId,
+            DivisionName = unit.Division?.Name,
             Name = unit.Name,
             UnitNumber = unit.UnitNumber,
             PoolNumber = unit.PoolNumber,

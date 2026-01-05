@@ -62,7 +62,9 @@ public class EventUnitDto
 {
     public int Id { get; set; }
     public int EventId { get; set; }
+    public string? EventName { get; set; }
     public int DivisionId { get; set; }
+    public string? DivisionName { get; set; }
     public string Name { get; set; } = string.Empty;
     public int? UnitNumber { get; set; }
     public int? PoolNumber { get; set; }

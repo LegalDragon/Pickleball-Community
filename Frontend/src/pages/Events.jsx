@@ -857,6 +857,11 @@ export default function Events() {
                           )}
                           <div>
                             <h3 className="font-medium text-gray-900">{unit.name}</h3>
+                            {(unit.eventName || unit.divisionName) && (
+                              <p className="text-xs text-blue-600">
+                                {unit.eventName}{unit.divisionName && ` - ${unit.divisionName}`}
+                              </p>
+                            )}
                             <p className="text-sm text-gray-500">
                               Captain: {unit.captainName || 'Unknown'}
                             </p>
@@ -953,6 +958,11 @@ export default function Events() {
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <h3 className="font-medium text-gray-900">{unit.name}</h3>
+                          {(unit.eventName || unit.divisionName) && (
+                            <p className="text-xs text-blue-600 mb-1">
+                              {unit.eventName}{unit.divisionName && ` - ${unit.divisionName}`}
+                            </p>
+                          )}
                           <p className="text-sm text-gray-500">
                             {unit.isComplete ? 'Team Complete' : `${unit.members?.length || 0} / ${unit.requiredPlayers} players`}
                           </p>
