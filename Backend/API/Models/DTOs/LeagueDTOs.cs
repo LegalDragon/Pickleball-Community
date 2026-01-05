@@ -13,6 +13,10 @@ public class LeagueDto
     public string? Country { get; set; }
     public int? ParentLeagueId { get; set; }
     public string? ParentLeagueName { get; set; }
+    // Root (top-level) league info for hierarchy display
+    public int? RootLeagueId { get; set; }
+    public string? RootLeagueName { get; set; }
+    public string? RootLeagueAvatarUrl { get; set; }
     public int ChildLeagueCount { get; set; }
     public int ClubCount { get; set; }
     public int ManagerCount { get; set; }

@@ -1669,18 +1669,28 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
           </div>
           <div className="flex items-center gap-3">
             {/* League Badge */}
-            {clubLeagues.filter(l => l.status === 'Active').length > 0 && (
-              <Link
-                to={`/leagues/${clubLeagues.find(l => l.status === 'Active')?.leagueId}`}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
-                title={clubLeagues.find(l => l.status === 'Active')?.leagueName}
-              >
-                <Building2 className="w-4 h-4" />
-                <span className="text-sm font-medium max-w-[120px] truncate">
-                  {clubLeagues.find(l => l.status === 'Active')?.leagueName}
-                </span>
-              </Link>
-            )}
+            {clubLeagues.filter(l => l.status === 'Active' || !l.status).length > 0 && (() => {
+              const activeLeague = clubLeagues.find(l => l.status === 'Active' || !l.status);
+              const logoUrl = activeLeague?.rootLeagueAvatarUrl || activeLeague?.avatarUrl;
+              const leagueId = activeLeague?.id || activeLeague?.leagueId;
+              const leagueName = activeLeague?.name || activeLeague?.leagueName;
+              return (
+                <Link
+                  to={`/leagues/${leagueId}`}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors"
+                  title={leagueName}
+                >
+                  {logoUrl ? (
+                    <img src={getSharedAssetUrl(logoUrl)} alt="" className="w-5 h-5 rounded object-cover" />
+                  ) : (
+                    <Building2 className="w-4 h-4" />
+                  )}
+                  <span className="text-sm font-medium max-w-[120px] truncate">
+                    {leagueName}
+                  </span>
+                </Link>
+              );
+            })()}
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
               <X className="w-5 h-5" />
             </button>
@@ -1755,32 +1765,37 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
           {activeTab === 'about' && (
             <div className="space-y-6">
               {/* League Affiliation - Top Right */}
-              {clubLeagues.filter(l => l.status === 'Active' || !l.status).length > 0 && (
-                <div className="flex justify-end">
-                  <Link
-                    to={`/leagues/${clubLeagues.find(l => l.status === 'Active' || !l.status)?.id}`}
-                    className="flex items-center gap-3 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
-                  >
-                    {clubLeagues.find(l => l.status === 'Active' || !l.status)?.avatarUrl ? (
-                      <img
-                        src={getSharedAssetUrl(clubLeagues.find(l => l.status === 'Active' || !l.status)?.avatarUrl)}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-indigo-200 flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-indigo-600" />
+              {clubLeagues.filter(l => l.status === 'Active' || !l.status).length > 0 && (() => {
+                const activeLeague = clubLeagues.find(l => l.status === 'Active' || !l.status);
+                // Use root league logo if available, otherwise use the league's own logo
+                const logoUrl = activeLeague?.rootLeagueAvatarUrl || activeLeague?.avatarUrl;
+                return (
+                  <div className="flex justify-end">
+                    <Link
+                      to={`/leagues/${activeLeague?.id}`}
+                      className="flex items-center gap-3 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
+                    >
+                      {logoUrl ? (
+                        <img
+                          src={getSharedAssetUrl(logoUrl)}
+                          alt=""
+                          className="w-10 h-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-indigo-200 flex items-center justify-center">
+                          <Building2 className="w-5 h-5 text-indigo-600" />
+                        </div>
+                      )}
+                      <div className="text-left">
+                        <p className="text-xs text-indigo-600 font-medium">Member of</p>
+                        <p className="text-sm font-semibold text-indigo-900">
+                          {activeLeague?.name}
+                        </p>
                       </div>
-                    )}
-                    <div className="text-left">
-                      <p className="text-xs text-indigo-600 font-medium">Member of</p>
-                      <p className="text-sm font-semibold text-indigo-900">
-                        {clubLeagues.find(l => l.status === 'Active' || !l.status)?.name}
-                      </p>
-                    </div>
-                  </Link>
-                </div>
-              )}
+                    </Link>
+                  </div>
+                );
+              })()}
 
               {/* Join/Leave Button */}
               {!isMember && !club.hasPendingRequest && (

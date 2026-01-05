@@ -1014,25 +1014,39 @@ public class LeaguesController : ControllerBase
     {
         try
         {
-            var leagues = await _context.LeagueClubs
+            var leagueClubs = await _context.LeagueClubs
                 .Include(lc => lc.League)
                     .ThenInclude(l => l!.ParentLeague)
                 .Where(lc => lc.ClubId == clubId && lc.Status == "Active" && lc.League!.IsActive)
-                .Select(lc => new LeagueDto
-                {
-                    Id = lc.League!.Id,
-                    Name = lc.League.Name,
-                    Description = lc.League.Description,
-                    Scope = lc.League.Scope,
-                    AvatarUrl = lc.League.AvatarUrl,
-                    State = lc.League.State,
-                    Region = lc.League.Region,
-                    Country = lc.League.Country,
-                    ParentLeagueId = lc.League.ParentLeagueId,
-                    ParentLeagueName = lc.League.ParentLeague != null ? lc.League.ParentLeague.Name : null,
-                    CreatedAt = lc.League.CreatedAt
-                })
                 .ToListAsync();
+
+            var leagues = new List<LeagueDto>();
+
+            foreach (var lc in leagueClubs)
+            {
+                var league = lc.League!;
+
+                // Find root league by traversing up the hierarchy
+                var rootLeague = await FindRootLeagueAsync(league);
+
+                leagues.Add(new LeagueDto
+                {
+                    Id = league.Id,
+                    Name = league.Name,
+                    Description = league.Description,
+                    Scope = league.Scope,
+                    AvatarUrl = league.AvatarUrl,
+                    State = league.State,
+                    Region = league.Region,
+                    Country = league.Country,
+                    ParentLeagueId = league.ParentLeagueId,
+                    ParentLeagueName = league.ParentLeague?.Name,
+                    RootLeagueId = rootLeague?.Id,
+                    RootLeagueName = rootLeague?.Name,
+                    RootLeagueAvatarUrl = rootLeague?.AvatarUrl,
+                    CreatedAt = league.CreatedAt
+                });
+            }
 
             return Ok(new ApiResponse<List<LeagueDto>> { Success = true, Data = leagues });
         }
@@ -1041,6 +1055,19 @@ public class LeaguesController : ControllerBase
             _logger.LogError(ex, "Error getting leagues for club {ClubId}", clubId);
             return StatusCode(500, new ApiResponse<List<LeagueDto>> { Success = false, Message = "An error occurred" });
         }
+    }
+
+    // Helper to find the root (top-level) league in hierarchy
+    private async Task<League?> FindRootLeagueAsync(League league)
+    {
+        var current = league;
+        while (current.ParentLeagueId.HasValue)
+        {
+            current = await _context.Leagues.FindAsync(current.ParentLeagueId.Value);
+            if (current == null) break;
+        }
+        // Return null if this league itself is the root (no hierarchy display needed)
+        return current?.Id != league.Id ? current : null;
     }
 
     // Helper method to build breadcrumbs
