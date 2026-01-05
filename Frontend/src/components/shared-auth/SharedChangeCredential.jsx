@@ -2,6 +2,91 @@ import { useState } from 'react'
 import { Mail, Phone, ArrowLeft, CheckCircle, X } from 'lucide-react'
 
 /**
+ * Normalize phone number to E.164 format
+ * - Strips all non-digit characters except leading +
+ * - Adds +1 for US numbers if no country code present
+ * - Returns the normalized number for API calls
+ */
+const normalizePhoneNumber = (input) => {
+  if (!input) return ''
+
+  // Remove all non-digit characters except leading +
+  let cleaned = input.replace(/[^\d+]/g, '')
+
+  // If starts with +, keep it and clean the rest
+  if (cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned.slice(1).replace(/\D/g, '')
+  } else {
+    // Remove any remaining non-digits
+    cleaned = cleaned.replace(/\D/g, '')
+  }
+
+  // If it's a 10-digit US number without country code, add +1
+  if (cleaned.length === 10 && !cleaned.startsWith('+')) {
+    cleaned = '+1' + cleaned
+  }
+  // If it's 11 digits starting with 1 (US), add +
+  else if (cleaned.length === 11 && cleaned.startsWith('1') && !cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned
+  }
+
+  return cleaned
+}
+
+/**
+ * Format phone number for display while typing
+ * Shows: +1 (234) 567-8901 for US numbers
+ */
+const formatPhoneDisplay = (input) => {
+  if (!input) return ''
+
+  // Get only digits and leading +
+  let digits = input.replace(/[^\d+]/g, '')
+  if (digits.startsWith('+')) {
+    digits = '+' + digits.slice(1).replace(/\D/g, '')
+  } else {
+    digits = digits.replace(/\D/g, '')
+  }
+
+  // For US numbers (+1 or starting with 1 or 10 digits)
+  let countryCode = ''
+  let nationalNumber = digits
+
+  if (digits.startsWith('+1')) {
+    countryCode = '+1'
+    nationalNumber = digits.slice(2)
+  } else if (digits.startsWith('+')) {
+    // Other country codes - just return cleaned
+    return digits
+  } else if (digits.startsWith('1') && digits.length > 10) {
+    countryCode = '+1'
+    nationalNumber = digits.slice(1)
+  } else if (digits.length <= 10) {
+    countryCode = digits.length > 0 ? '+1' : ''
+    nationalNumber = digits
+  } else {
+    return '+' + digits
+  }
+
+  // Format US number: (XXX) XXX-XXXX
+  let formatted = countryCode
+  if (nationalNumber.length > 0) {
+    formatted += ' ('
+    formatted += nationalNumber.slice(0, 3)
+    if (nationalNumber.length > 3) {
+      formatted += ') '
+      formatted += nationalNumber.slice(3, 6)
+      if (nationalNumber.length > 6) {
+        formatted += '-'
+        formatted += nationalNumber.slice(6, 10)
+      }
+    }
+  }
+
+  return formatted
+}
+
+/**
  * Shared Change Credential Component for Funtime Auth
  * Use across all sites for consistent email/phone change experience with OTP verification
  *
@@ -57,8 +142,10 @@ const SharedChangeCredential = ({
       return
     }
 
-    if (!isEmail && newValue.length < 10) {
-      setError('Please enter a valid phone number')
+    // For phone, normalize and validate
+    const normalizedPhone = !isEmail ? normalizePhoneNumber(newValue) : null
+    if (!isEmail && normalizedPhone.length < 11) {
+      setError('Please enter a valid phone number with country code')
       return
     }
 
@@ -72,7 +159,7 @@ const SharedChangeCredential = ({
 
       const body = isEmail
         ? { newEmail: newValue }
-        : { newPhoneNumber: newValue }
+        : { newPhoneNumber: normalizedPhone }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -112,9 +199,10 @@ const SharedChangeCredential = ({
         ? `${authApiUrl}/auth/change-email/verify`
         : `${authApiUrl}/auth/change-phone/verify`
 
+      const normalizedPhone = !isEmail ? normalizePhoneNumber(newValue) : null
       const body = isEmail
         ? { newEmail: newValue, code: otp }
-        : { newPhoneNumber: newValue, code: otp }
+        : { newPhoneNumber: normalizedPhone, code: otp }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -130,10 +218,10 @@ const SharedChangeCredential = ({
 
       setStep('success')
 
-      // Call success callback with new value and token
+      // Call success callback with new value (normalized for phone) and token
       setTimeout(() => {
         onSuccess?.({
-          newValue,
+          newValue: isEmail ? newValue : normalizedPhone,
           token: data.token,
           user: data.user
         })
@@ -156,9 +244,10 @@ const SharedChangeCredential = ({
         ? `${authApiUrl}/auth/change-email/request`
         : `${authApiUrl}/auth/change-phone/request`
 
+      const normalizedPhone = !isEmail ? normalizePhoneNumber(newValue) : null
       const body = isEmail
         ? { newEmail: newValue }
-        : { newPhoneNumber: newValue }
+        : { newPhoneNumber: normalizedPhone }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -200,7 +289,7 @@ const SharedChangeCredential = ({
         <p className="text-gray-600 mb-2">
           Your {label.toLowerCase()} has been successfully changed to:
         </p>
-        <p className="font-medium text-gray-900 mb-6">{newValue}</p>
+        <p className="font-medium text-gray-900 mb-6">{isEmail ? newValue : formatPhoneDisplay(newValue)}</p>
       </div>
     )
   }
@@ -218,7 +307,7 @@ const SharedChangeCredential = ({
         </h2>
         <p className="mt-1 text-sm text-gray-600">
           {step === 'input' && `Enter your new ${label.toLowerCase()} to receive a verification code`}
-          {step === 'verify' && `Enter the code sent to ${newValue}`}
+          {step === 'verify' && `Enter the code sent to ${isEmail ? newValue : formatPhoneDisplay(newValue)}`}
         </p>
       </div>
 
@@ -260,11 +349,19 @@ const SharedChangeCredential = ({
             <input
               id="newValue"
               type={isEmail ? 'email' : 'tel'}
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
+              value={isEmail ? newValue : formatPhoneDisplay(newValue)}
+              onChange={(e) => {
+                if (isEmail) {
+                  setNewValue(e.target.value)
+                } else {
+                  // For phone, store the raw input but display formatted
+                  const rawInput = e.target.value.replace(/[^\d+]/g, '')
+                  setNewValue(rawInput)
+                }
+              }}
               required
               className={inputClass()}
-              placeholder={placeholder}
+              placeholder={isEmail ? placeholder : '+1 (234) 567-8901'}
             />
           </div>
           <p className="text-xs text-gray-500">
