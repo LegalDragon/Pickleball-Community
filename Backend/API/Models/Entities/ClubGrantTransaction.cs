@@ -77,9 +77,17 @@ public class ClubGrantTransaction
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
+    [ForeignKey("AccountId")]
     public ClubGrantAccount? Account { get; set; }
+
+    [ForeignKey("ProcessedByUserId")]
     public User? ProcessedBy { get; set; }
+
+    [ForeignKey("ApprovedByUserId")]
     public User? ApprovedBy { get; set; }
+
+    [ForeignKey("VoidedByUserId")]
     public User? VoidedBy { get; set; }
+
     public ICollection<GrantTransactionAttachment> Attachments { get; set; } = new List<GrantTransactionAttachment>();
 }

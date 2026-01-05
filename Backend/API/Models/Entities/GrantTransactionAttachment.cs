@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Pickleball.Community.Models.Entities;
 
@@ -31,6 +32,9 @@ public class GrantTransactionAttachment
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
+    [ForeignKey("TransactionId")]
     public ClubGrantTransaction? Transaction { get; set; }
+
+    [ForeignKey("UploadedByUserId")]
     public User? UploadedBy { get; set; }
 }

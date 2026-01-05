@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Pickleball.Community.Models.Entities;
 
@@ -30,7 +31,11 @@ public class GrantManager
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
+    [ForeignKey("UserId")]
     public User? User { get; set; }
+
     public League? League { get; set; }
+
+    [ForeignKey("CreatedByUserId")]
     public User? CreatedBy { get; set; }
 }
