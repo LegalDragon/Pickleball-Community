@@ -65,17 +65,18 @@ public class ClubsController : ControllerBase
                 query = query.Where(c => c.City != null && EF.Functions.Like(c.City, cityPattern));
             }
 
-            // Get clubs with member count
+            // Get clubs with member count and home venue data
             var clubsWithCount = await query
                 .Select(c => new
                 {
                     Club = c,
+                    HomeVenue = c.HomeVenue,
                     MemberCount = c.Members.Count(m => m.IsActive)
                 })
                 .ToListAsync();
 
             // Apply distance filter if coordinates provided
-            List<(Club club, int memberCount, double? distance)> clubsWithDistance;
+            List<(Club club, Venue? homeVenue, int memberCount, double? distance)> clubsWithDistance;
             if (request.Latitude.HasValue && request.Longitude.HasValue)
             {
                 clubsWithDistance = clubsWithCount
@@ -86,9 +87,9 @@ public class ClubsController : ControllerBase
                         double? clubLat = null;
                         double? clubLng = null;
 
-                        if (x.Club.HomeVenue != null && !string.IsNullOrEmpty(x.Club.HomeVenue.GpsLat) && !string.IsNullOrEmpty(x.Club.HomeVenue.GpsLng))
+                        if (x.HomeVenue != null && !string.IsNullOrEmpty(x.HomeVenue.GpsLat) && !string.IsNullOrEmpty(x.HomeVenue.GpsLng))
                         {
-                            if (double.TryParse(x.Club.HomeVenue.GpsLat, out var venueLat) && double.TryParse(x.Club.HomeVenue.GpsLng, out var venueLng))
+                            if (double.TryParse(x.HomeVenue.GpsLat, out var venueLat) && double.TryParse(x.HomeVenue.GpsLng, out var venueLng))
                             {
                                 clubLat = venueLat;
                                 clubLng = venueLng;
@@ -104,7 +105,7 @@ public class ClubsController : ControllerBase
 
                         if (clubLat.HasValue && clubLng.HasValue)
                             distance = CalculateDistance(request.Latitude.Value, request.Longitude.Value, clubLat.Value, clubLng.Value);
-                        return (club: x.Club, memberCount: x.MemberCount, distance);
+                        return (club: x.Club, homeVenue: x.HomeVenue, memberCount: x.MemberCount, distance);
                     })
                     .Where(x => !request.RadiusMiles.HasValue || x.distance == null || x.distance <= request.RadiusMiles.Value)
                     .OrderBy(x => x.distance ?? double.MaxValue)
@@ -113,7 +114,7 @@ public class ClubsController : ControllerBase
             else
             {
                 clubsWithDistance = clubsWithCount
-                    .Select(x => (club: x.Club, memberCount: x.MemberCount, distance: (double?)null))
+                    .Select(x => (club: x.Club, homeVenue: x.HomeVenue, memberCount: x.MemberCount, distance: (double?)null))
                     .OrderByDescending(x => x.memberCount)
                     .ToList();
             }
@@ -128,12 +129,12 @@ public class ClubsController : ControllerBase
                 // Get GPS coordinates from home venue
                 double? latitude = null;
                 double? longitude = null;
-                if (x.club.HomeVenue != null &&
-                    !string.IsNullOrEmpty(x.club.HomeVenue.GpsLat) &&
-                    !string.IsNullOrEmpty(x.club.HomeVenue.GpsLng))
+                if (x.homeVenue != null &&
+                    !string.IsNullOrEmpty(x.homeVenue.GpsLat) &&
+                    !string.IsNullOrEmpty(x.homeVenue.GpsLng))
                 {
-                    if (double.TryParse(x.club.HomeVenue.GpsLat, out var lat) &&
-                        double.TryParse(x.club.HomeVenue.GpsLng, out var lng))
+                    if (double.TryParse(x.homeVenue.GpsLat, out var lat) &&
+                        double.TryParse(x.homeVenue.GpsLng, out var lng))
                     {
                         latitude = lat;
                         longitude = lng;
@@ -146,9 +147,9 @@ public class ClubsController : ControllerBase
                     Name = x.club.Name,
                     Description = x.club.Description,
                     LogoUrl = x.club.LogoUrl,
-                    City = x.club.HomeVenue?.City ?? x.club.City,
-                    State = x.club.HomeVenue?.State ?? x.club.State,
-                    Country = x.club.HomeVenue?.Country ?? x.club.Country,
+                    City = x.homeVenue?.City ?? x.club.City,
+                    State = x.homeVenue?.State ?? x.club.State,
+                    Country = x.homeVenue?.Country ?? x.club.Country,
                     Latitude = latitude,
                     Longitude = longitude,
                     IsPublic = x.club.IsPublic,
@@ -158,7 +159,7 @@ public class ClubsController : ControllerBase
                     Distance = x.distance,
                     CreatedAt = x.club.CreatedAt,
                     HomeVenueId = x.club.HomeVenueId,
-                    HomeVenueName = x.club.HomeVenue?.Name
+                    HomeVenueName = x.homeVenue?.Name
                 };
             }).ToList();
 
