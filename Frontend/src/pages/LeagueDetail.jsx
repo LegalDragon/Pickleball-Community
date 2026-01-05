@@ -6,7 +6,7 @@ import {
   Check, X, UserPlus, Building, Clock, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { leaguesApi, getAssetUrl, getSharedAssetUrl } from '../services/api';
+import { leaguesApi, getSharedAssetUrl } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 // Scope icons and colors
@@ -235,7 +235,7 @@ export default function LeagueDetail() {
         {league.bannerUrl && (
           <div className="h-48 bg-gradient-to-r from-blue-600 to-purple-600 overflow-hidden">
             <img
-              src={getAssetUrl(league.bannerUrl)}
+              src={getSharedAssetUrl(league.bannerUrl)}
               alt=""
               className="w-full h-full object-cover opacity-80"
             />
@@ -265,7 +265,7 @@ export default function LeagueDetail() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             {league.avatarUrl ? (
               <img
-                src={getAssetUrl(league.avatarUrl)}
+                src={getSharedAssetUrl(league.avatarUrl)}
                 alt={league.name}
                 className="w-20 h-20 rounded-xl object-cover shadow-md"
               />
@@ -479,7 +479,7 @@ export default function LeagueDetail() {
                     >
                       {child.avatarUrl ? (
                         <img
-                          src={getAssetUrl(child.avatarUrl)}
+                          src={getSharedAssetUrl(child.avatarUrl)}
                           alt={child.name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
@@ -522,7 +522,7 @@ export default function LeagueDetail() {
                   >
                     {club.clubLogoUrl ? (
                       <img
-                        src={getAssetUrl(club.clubLogoUrl)}
+                        src={getSharedAssetUrl(club.clubLogoUrl)}
                         alt={club.clubName}
                         className="w-12 h-12 rounded-lg object-cover"
                       />
@@ -641,7 +641,7 @@ export default function LeagueDetail() {
                     <div className="flex items-start gap-4">
                       {request.clubLogoUrl ? (
                         <img
-                          src={getAssetUrl(request.clubLogoUrl)}
+                          src={getSharedAssetUrl(request.clubLogoUrl)}
                           alt={request.clubName}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
