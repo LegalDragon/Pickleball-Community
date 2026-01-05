@@ -16,6 +16,17 @@ const SCOPE_CONFIG = {
   Local: { icon: MapPin, color: 'text-gray-600', bg: 'bg-gray-100', border: 'border-gray-200' }
 };
 
+// Helper to calculate total clubs including all sub-leagues
+const calculateTotalClubs = (node) => {
+  let total = node.clubCount || 0;
+  if (node.children && node.children.length > 0) {
+    node.children.forEach(child => {
+      total += calculateTotalClubs(child);
+    });
+  }
+  return total;
+};
+
 // Tree node component
 function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNodes, toggleNode, leagueDetails, loadingDetails }) {
   const config = SCOPE_CONFIG[node.scope] || SCOPE_CONFIG.Local;
@@ -24,6 +35,10 @@ function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNode
   const hasChildren = node.children && node.children.length > 0;
   const details = leagueDetails[node.id];
   const isLoadingDetails = loadingDetails.has(node.id);
+
+  // Calculate total clubs including sub-leagues
+  const totalClubs = calculateTotalClubs(node);
+  const directClubs = node.clubCount || 0;
 
   // Calculate indentation based on level
   const indentPx = level * 24;
@@ -70,7 +85,10 @@ function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNode
             <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
               <span className="flex items-center gap-1">
                 <Building2 className="w-3.5 h-3.5" />
-                {node.clubCount || 0} clubs
+                {totalClubs} clubs
+                {hasChildren && directClubs !== totalClubs && (
+                  <span className="text-gray-400">({directClubs} direct)</span>
+                )}
               </span>
               {hasChildren && (
                 <span className="flex items-center gap-1">
