@@ -111,6 +111,12 @@ public class ApplicationDbContext : DbContext
     public DbSet<LeagueClubRequest> LeagueClubRequests { get; set; }
     public DbSet<LeagueDocument> LeagueDocuments { get; set; }
 
+    // Grant Management
+    public DbSet<ClubGrantAccount> ClubGrantAccounts { get; set; }
+    public DbSet<ClubGrantTransaction> ClubGrantTransactions { get; set; }
+    public DbSet<GrantManager> GrantManagers { get; set; }
+    public DbSet<GrantTransactionAttachment> GrantTransactionAttachments { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>

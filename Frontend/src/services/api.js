@@ -1390,4 +1390,58 @@ export const notificationsApi = {
   deleteAll: () => api.delete('/notifications/all')
 }
 
+// Grants API (club grant account management)
+export const grantsApi = {
+  // Get current user's grant permissions
+  getMyPermissions: () => api.get('/grants/my-permissions'),
+
+  // Accounts
+  getAccounts: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.leagueId) queryParams.append('leagueId', params.leagueId);
+    if (params.clubId) queryParams.append('clubId', params.clubId);
+    const queryString = queryParams.toString();
+    return api.get(`/grants/accounts${queryString ? `?${queryString}` : ''}`);
+  },
+  getAccountSummary: (leagueId = null) => {
+    const params = leagueId ? `?leagueId=${leagueId}` : '';
+    return api.get(`/grants/accounts/summary${params}`);
+  },
+
+  // Transactions
+  getTransactions: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.leagueId) queryParams.append('leagueId', params.leagueId);
+    if (params.clubId) queryParams.append('clubId', params.clubId);
+    if (params.transactionType) queryParams.append('transactionType', params.transactionType);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params.donorName) queryParams.append('donorName', params.donorName);
+    if (params.includeVoided) queryParams.append('includeVoided', params.includeVoided);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const queryString = queryParams.toString();
+    return api.get(`/grants/transactions${queryString ? `?${queryString}` : ''}`);
+  },
+  getTransaction: (id) => api.get(`/grants/transactions/${id}`),
+  createTransaction: (data) => api.post('/grants/transactions', data),
+  voidTransaction: (id, reason) => api.post(`/grants/transactions/${id}/void`, { reason }),
+
+  // Attachments
+  addAttachment: (transactionId, data) =>
+    api.post(`/grants/transactions/${transactionId}/attachments`, data),
+  deleteAttachment: (transactionId, attachmentId) =>
+    api.delete(`/grants/transactions/${transactionId}/attachments/${attachmentId}`),
+
+  // Grant Managers
+  getManagers: (leagueId = null) => {
+    const params = leagueId ? `?leagueId=${leagueId}` : '';
+    return api.get(`/grants/managers${params}`);
+  },
+  createManager: (data) => api.post('/grants/managers', data),
+  updateManager: (id, data) => api.put(`/grants/managers/${id}`, data),
+  deleteManager: (id) => api.delete(`/grants/managers/${id}`)
+}
+
 export default api
