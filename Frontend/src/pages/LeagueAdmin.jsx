@@ -617,7 +617,6 @@ export default function LeagueAdmin({ embedded = false }) {
             )}
           </div>
         </div>
-      </div>
 
       {/* Add Manager Modal */}
       {showAddManager && (
