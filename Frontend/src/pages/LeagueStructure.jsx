@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import {
   Building2, ChevronRight, ChevronDown, Users, MapPin, Globe, Network,
   Building, Loader2, ToggleLeft, ToggleRight, Shield, UserCircle,
-  BarChart3, ArrowLeft
+  BarChart3, ArrowLeft, ExternalLink
 } from 'lucide-react';
 import { leaguesApi, getSharedAssetUrl } from '../services/api';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 // Scope config for styling
 const SCOPE_CONFIG = {
@@ -28,7 +29,7 @@ const calculateTotalClubs = (node) => {
 };
 
 // Tree node component
-function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNodes, toggleNode, leagueDetails, loadingDetails }) {
+function LeagueTreeNode({ node, level = 0, showManagers, showStats, showClubs, expandedNodes, toggleNode, leagueDetails, loadingDetails, onViewProfile }) {
   const config = SCOPE_CONFIG[node.scope] || SCOPE_CONFIG.Local;
   const Icon = config.icon;
   const isExpanded = expandedNodes.has(node.id);
@@ -110,9 +111,13 @@ function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNode
               ) : details?.managers && details.managers.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {details.managers.map(manager => (
-                    <div
+                    <button
                       key={manager.id}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded-full text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewProfile(manager.userId);
+                      }}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-full text-xs transition-colors"
                     >
                       {manager.userProfileImageUrl ? (
                         <img
@@ -125,11 +130,51 @@ function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNode
                       )}
                       <span className="text-gray-700">{manager.userName}</span>
                       <span className="text-indigo-600 font-medium">{manager.role}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : details ? (
                 <span className="text-xs text-gray-400">No managers assigned</span>
+              ) : null}
+            </div>
+          )}
+
+          {/* Clubs section */}
+          {showClubs && isExpanded && (
+            <div className="mt-2">
+              {isLoadingDetails ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading clubs...
+                </div>
+              ) : details?.clubs && details.clubs.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {details.clubs.map(club => (
+                    <Link
+                      key={club.id}
+                      to={`/clubs?club=${club.clubId}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-green-50 hover:bg-green-100 rounded-full text-xs transition-colors"
+                    >
+                      {club.clubLogoUrl ? (
+                        <img
+                          src={getSharedAssetUrl(club.clubLogoUrl)}
+                          alt=""
+                          className="w-4 h-4 rounded-full object-cover"
+                        />
+                      ) : (
+                        <Building2 className="w-4 h-4 text-green-500" />
+                      )}
+                      <span className="text-gray-700">{club.clubName}</span>
+                      {club.clubCity && (
+                        <span className="text-gray-400">{club.clubCity}</span>
+                      )}
+                      <ExternalLink className="w-3 h-3 text-green-500" />
+                    </Link>
+                  ))}
+                </div>
+              ) : details ? (
+                <span className="text-xs text-gray-400">No clubs in this league</span>
               ) : null}
             </div>
           )}
@@ -146,10 +191,12 @@ function LeagueTreeNode({ node, level = 0, showManagers, showStats, expandedNode
               level={level + 1}
               showManagers={showManagers}
               showStats={showStats}
+              showClubs={showClubs}
               expandedNodes={expandedNodes}
               toggleNode={toggleNode}
               leagueDetails={leagueDetails}
               loadingDetails={loadingDetails}
+              onViewProfile={onViewProfile}
             />
           ))}
         </div>
@@ -166,13 +213,17 @@ export default function LeagueStructure() {
   // Toggle states
   const [showManagers, setShowManagers] = useState(false);
   const [showStats, setShowStats] = useState(true);
+  const [showClubs, setShowClubs] = useState(false);
 
   // Expanded nodes tracking
   const [expandedNodes, setExpandedNodes] = useState(new Set());
 
-  // Cached league details for manager info
+  // Cached league details for manager and club info
   const [leagueDetails, setLeagueDetails] = useState({});
   const [loadingDetails, setLoadingDetails] = useState(new Set());
+
+  // Profile modal
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
 
   useEffect(() => {
     loadTree();
@@ -206,8 +257,8 @@ export default function LeagueStructure() {
         next.delete(nodeId);
       } else {
         next.add(nodeId);
-        // Load details if managers are shown and we don't have them yet
-        if (showManagers && !leagueDetails[nodeId]) {
+        // Load details if managers or clubs are shown and we don't have them yet
+        if ((showManagers || showClubs) && !leagueDetails[nodeId]) {
           loadLeagueDetails(nodeId);
         }
       }
@@ -238,16 +289,16 @@ export default function LeagueStructure() {
     }
   };
 
-  // When managers toggle is turned on, load details for all expanded nodes
+  // When managers or clubs toggle is turned on, load details for all expanded nodes
   useEffect(() => {
-    if (showManagers) {
+    if (showManagers || showClubs) {
       expandedNodes.forEach(nodeId => {
         if (!leagueDetails[nodeId]) {
           loadLeagueDetails(nodeId);
         }
       });
     }
-  }, [showManagers]);
+  }, [showManagers, showClubs]);
 
   // Calculate total stats
   const calculateTotals = (nodes) => {
@@ -320,6 +371,22 @@ export default function LeagueStructure() {
               </span>
             </button>
 
+            {/* Show Clubs Toggle */}
+            <button
+              onClick={() => setShowClubs(!showClubs)}
+              className="flex items-center gap-2 text-sm"
+            >
+              {showClubs ? (
+                <ToggleRight className="w-8 h-5 text-indigo-600" />
+              ) : (
+                <ToggleLeft className="w-8 h-5 text-gray-400" />
+              )}
+              <Building2 className="w-4 h-4 text-gray-600" />
+              <span className={showClubs ? 'text-gray-900 font-medium' : 'text-gray-600'}>
+                Show Clubs
+              </span>
+            </button>
+
             {/* Summary stats */}
             {!loading && tree.length > 0 && (
               <div className="ml-auto flex items-center gap-4 text-sm text-gray-500">
@@ -389,16 +456,26 @@ export default function LeagueStructure() {
                   level={0}
                   showManagers={showManagers}
                   showStats={showStats}
+                  showClubs={showClubs}
                   expandedNodes={expandedNodes}
                   toggleNode={toggleNode}
                   leagueDetails={leagueDetails}
                   loadingDetails={loadingDetails}
+                  onViewProfile={setProfileModalUserId}
                 />
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
+        />
+      )}
     </div>
   );
 }
