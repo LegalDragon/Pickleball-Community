@@ -1682,7 +1682,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const status = registrationStatus();
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1000] overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white z-10">
@@ -2476,7 +2476,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
 
       {/* Venue Picker Modal */}
       {showCourtPicker && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Select Venue</h3>
@@ -2539,7 +2539,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
 
       {/* Team Registration Modal */}
       {showTeamRegistration && selectedDivisionForRegistration && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <div>
@@ -2897,7 +2897,7 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
   const totalSteps = 5;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1000] overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
           <div>

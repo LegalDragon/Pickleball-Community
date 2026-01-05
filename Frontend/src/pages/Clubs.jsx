@@ -1647,7 +1647,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1000] overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
@@ -2969,7 +2969,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
 
         {/* Join League Modal - Tree View */}
         {showJoinLeagueModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
               <div className="flex items-center justify-between p-4 border-b">
                 <h3 className="text-lg font-semibold text-gray-900">Request to Join League</h3>
@@ -3051,7 +3051,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
 
         {/* Edit Member Modal */}
         {editingMember && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Edit Member Details</h3>
@@ -3349,7 +3349,7 @@ function CreateClubModal({ onClose, onCreate }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1000] overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-gray-900">Create New Club</h2>
