@@ -777,9 +777,15 @@ export default function Venues() {
                                       {court.distance.toFixed(1)} mi
                                     </span>
                                   )}
-                                  {(court.indoorNum > 0 || court.outdoorNum > 0) && (
+                                  {(court.indoorNum > 0 || court.outdoorNum > 0 || court.aggregatedInfo?.mostConfirmedIndoorCount > 0 || court.aggregatedInfo?.mostConfirmedOutdoorCount > 0) && (
                                     <span className="text-xs text-gray-400">
-                                      {(court.indoorNum || 0) + (court.outdoorNum || 0) + (court.coveredNum || 0)} courts
+                                      {(() => {
+                                        const agg = court.aggregatedInfo || {};
+                                        const indoor = agg.mostConfirmedIndoorCount ?? court.indoorNum ?? 0;
+                                        const outdoor = agg.mostConfirmedOutdoorCount ?? court.outdoorNum ?? 0;
+                                        const covered = court.coveredNum || 0;
+                                        return indoor + outdoor + covered;
+                                      })()} courts
                                     </span>
                                   )}
                                 </div>
@@ -894,21 +900,24 @@ export default function Venues() {
 }
 
 function CourtCard({ court, onViewDetails }) {
-  const totalCourts = (court.indoorNum || 0) + (court.outdoorNum || 0) + (court.coveredNum || 0);
+  const agg = court.aggregatedInfo || {};
+  const indoorCount = agg.mostConfirmedIndoorCount ?? court.indoorNum ?? 0;
+  const outdoorCount = agg.mostConfirmedOutdoorCount ?? court.outdoorNum ?? 0;
+  const totalCourts = indoorCount + outdoorCount + (court.coveredNum || 0);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       <div className="p-5">
         <div className="flex items-start justify-between mb-2">
           <div className="flex gap-2 flex-wrap">
-            {court.indoorNum > 0 && (
+            {indoorCount > 0 && (
               <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                Indoor ({court.indoorNum})
+                Indoor ({indoorCount})
               </span>
             )}
-            {court.outdoorNum > 0 && (
+            {outdoorCount > 0 && (
               <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
-                Outdoor ({court.outdoorNum})
+                Outdoor ({outdoorCount})
               </span>
             )}
             {court.hasLights && (
