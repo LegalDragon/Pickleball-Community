@@ -1195,7 +1195,8 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
       }
     } catch (err) {
       console.error('Error requesting to join league:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to submit request. Please try again.';
+      // API interceptor returns error.response.data directly, so err.message contains the API message
+      const errorMessage = err?.message || 'Failed to submit request. Please try again.';
       alert(errorMessage);
     } finally {
       setRequestingLeague(false);
