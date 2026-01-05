@@ -60,7 +60,7 @@ const AuthCallback = () => {
       setMessage('Syncing user data...')
 
       // Determine role: isSiteAdmin takes precedence, then siteRole, then default
-      const effectiveRole = isSiteAdmin ? 'Admin' : (siteRole || 'Student')
+      const effectiveRole = isSiteAdmin ? 'Admin' : (siteRole || 'Player')
       console.log('Effective role for sync:', effectiveRole)
 
       // Sync user to local database - this returns a NEW local JWT with site-specific role

@@ -1623,12 +1623,12 @@ const AdminDashboard = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                   <select
-                    value={selectedUser.role || 'Student'}
+                    value={selectedUser.role || 'Player'}
                     onChange={(e) => setSelectedUser({ ...selectedUser, role: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="Student">Student</option>
-                    <option value="Coach">Coach</option>
+                    <option value="Player">Player</option>
+                    <option value="Manager">Manager</option>
                     <option value="Admin">Admin</option>
                   </select>
                 </div>

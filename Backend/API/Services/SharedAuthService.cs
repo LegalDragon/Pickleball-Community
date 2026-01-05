@@ -157,7 +157,7 @@ public class SharedAuthService : ISharedAuthService
                 LastName = sharedUser.LastName,
                 Phone = sharedUser.Phone,
                 ProfileImageUrl = sharedUser.ProfileImageUrl,
-                Role = "Student",  // Default role for new users
+                Role = "Player",  // Default role for new users
                 PasswordHash = null,  // No local password - auth handled by shared service
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
@@ -212,7 +212,7 @@ public class SharedAuthService : ISharedAuthService
             Email = email,
             FirstName = firstName,
             LastName = lastName,
-            Role = "Student",
+            Role = "Player",
             PasswordHash = null,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,

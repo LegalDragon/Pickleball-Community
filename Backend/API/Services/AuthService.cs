@@ -164,7 +164,7 @@ public class AuthService : IAuthService
         }
 
         // Validate role
-        var validRoles = new[] { "Student", "Coach", "Admin" };
+        var validRoles = new[] { "Player", "Manager", "Admin" };
         if (!validRoles.Contains(role))
         {
             throw new ArgumentException($"Invalid role. Must be one of: {string.Join(", ", validRoles)}");

@@ -71,7 +71,7 @@ public class UserAutoSyncMiddleware
                         FirstName = !string.IsNullOrEmpty(firstName) ? firstName : "New",
                         LastName = !string.IsNullOrEmpty(lastName) ? lastName : "User",
                         Phone = phone,
-                        Role = "Student",  // Default role
+                        Role = "Player",  // Default role
                         PasswordHash = null,  // No local password - auth via shared service
                         Bio = string.Empty,
                         ProfileImageUrl = string.Empty,

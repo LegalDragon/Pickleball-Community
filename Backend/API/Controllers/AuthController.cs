@@ -55,7 +55,7 @@ public class AuthController : ControllerBase
             // Update role if provided from shared auth (isSiteAdmin or siteRole)
             if (!string.IsNullOrEmpty(request.Role))
             {
-                var validRoles = new[] { "Student", "Coach", "Admin" };
+                var validRoles = new[] { "Player", "Manager", "Admin" };
                 if (validRoles.Contains(request.Role) && localUser.Role != request.Role)
                 {
                     localUser = await _authService.UpdateRoleAsync(localUser.Id, request.Role);
@@ -218,5 +218,5 @@ public class SyncUserRequest
 public class UpdateRoleRequest
 {
     public int UserId { get; set; }
-    public string Role { get; set; } = "Student";
+    public string Role { get; set; } = "Player";
 }

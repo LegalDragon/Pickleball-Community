@@ -209,7 +209,7 @@ export const AuthProvider = ({ children }) => {
           email: userDataFromResponse.email || userData.email,
           firstName: userDataFromResponse.firstName || userDataFromResponse.first_name || userData.firstName,
           lastName: userDataFromResponse.lastName || userDataFromResponse.last_name || userData.lastName,
-          role: userDataFromResponse.role || userData.role || 'Student',
+          role: userDataFromResponse.role || userData.role || 'Player',
           profileImageUrl: userDataFromResponse.profileImageUrl || userDataFromResponse.ProfileImageUrl || null
         }
 

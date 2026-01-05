@@ -38,7 +38,7 @@ const SharedRegister = ({
     lastName: '',
     phone: '',
     otp: '',
-    role: roles.length > 0 ? roles[0].value : 'Student',
+    role: roles.length > 0 ? roles[0].value : 'Player',
     terms: false
   })
   const [showPassword, setShowPassword] = useState(false)

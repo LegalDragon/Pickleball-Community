@@ -14,7 +14,7 @@ public class User
     public string? PasswordHash { get; set; }
 
     [Required]
-    public string? Role { get; set; } = "Student";
+    public string? Role { get; set; } = "Player";
 
     [Required]
     public string? FirstName { get; set; } = string.Empty;

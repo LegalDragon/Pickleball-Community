@@ -51,20 +51,20 @@ const Navbar = () => {
             {user ? (
               <>
                 {/* Dashboard Links */}
-                {user.role === 'Coach' && (
+                {user.role === 'Manager' && (
                   <Link
-                    to="/coach/dashboard"
+                    to="/manager/dashboard"
                     className="btn-primary text-sm px-4 py-2"
                   >
-                    Coach Dashboard
+                    Manager Dashboard
                   </Link>
                 )}
-                {user.role === 'Student' && (
+                {user.role === 'Player' && (
                   <Link
-                    to="/student/dashboard"
+                    to="/player/dashboard"
                     className="btn-primary text-sm px-4 py-2"
                   >
-                    Student Dashboard
+                    Player Dashboard
                   </Link>
                 )}
 
@@ -147,22 +147,22 @@ const Navbar = () => {
                       <div className="text-sm text-gray-500 capitalize">{user.role}</div>
                     </div>
                   </div>
-                  {user.role === 'Coach' && (
+                  {user.role === 'Manager' && (
                     <Link
-                      to="/coach/dashboard"
+                      to="/manager/dashboard"
                       className="block w-full text-center btn-primary mb-3"
                       onClick={() => setIsOpen(false)}
                     >
-                      Coach Dashboard
+                      Manager Dashboard
                     </Link>
                   )}
-                  {user.role === 'Student' && (
+                  {user.role === 'Player' && (
                     <Link
-                      to="/student/dashboard"
+                      to="/player/dashboard"
                       className="block w-full text-center btn-primary mb-3"
                       onClick={() => setIsOpen(false)}
                     >
-                      Student Dashboard
+                      Player Dashboard
                     </Link>
                   )}
                   <button

@@ -455,8 +455,8 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var coaches = await _context.Users
-                .Where(u => u.Role == "Coach" && u.IsActive)
+            var managers = await _context.Users
+                .Where(u => u.Role == "Manager" && u.IsActive)
                 .Select(u => new UserProfileDto
                 {
                     Id = u.Id,
@@ -477,7 +477,7 @@ public class UsersController : ControllerBase
             return Ok(new ApiResponse<List<UserProfileDto>>
             {
                 Success = true,
-                Data = coaches
+                Data = managers
             });
         }
         catch (Exception ex)
@@ -498,8 +498,8 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var coach = await _context.Users
-                .Where(u => u.Id == id && u.Role == "Coach" && u.IsActive)
+            var manager = await _context.Users
+                .Where(u => u.Id == id && u.Role == "Manager" && u.IsActive)
                 .Select(u => new UserProfileDto
                 {
                     Id = u.Id,
@@ -518,19 +518,19 @@ public class UsersController : ControllerBase
                 })
                 .FirstOrDefaultAsync();
 
-            if (coach == null)
+            if (manager == null)
             {
                 return NotFound(new ApiResponse<UserProfileDto>
                 {
                     Success = false,
-                    Message = "Coach not found"
+                    Message = "Manager not found"
                 });
             }
 
             return Ok(new ApiResponse<UserProfileDto>
             {
                 Success = true,
-                Data = coach
+                Data = manager
             });
         }
         catch (Exception ex)
