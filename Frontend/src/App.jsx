@@ -23,6 +23,8 @@ import TournamentManage from './pages/TournamentManage'
 import GameDayManage from './pages/GameDayManage'
 import Venues from './pages/Venues'
 import Clubs from './pages/Clubs'
+import Leagues from './pages/Leagues'
+import LeagueDetail from './pages/LeagueDetail'
 import Blog from './pages/Blog'
 import BlogAdmin from './pages/BlogAdmin'
 import MyBlog from './pages/MyBlog'
@@ -65,6 +67,8 @@ function App() {
       <Route path="/venues" element={<Venues />} />
       <Route path="/courts" element={<Navigate to="/venues" replace />} />
       <Route path="/clubs" element={<Clubs />} />
+      <Route path="/leagues" element={<Leagues />} />
+      <Route path="/leagues/:id" element={<LeagueDetail />} />
       <Route path="/blog" element={<Blog />} />
       <Route path="/faq" element={<Faq />} />
       <Route path="/feedback" element={<Feedback />} />

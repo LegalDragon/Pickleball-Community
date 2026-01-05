@@ -1259,6 +1259,68 @@ export const messagingApi = {
   updateSettings: (settings) => api.put('/messaging/settings', settings)
 }
 
+// Leagues API (hierarchical organization structure)
+export const leaguesApi = {
+  // Search/list leagues with filters
+  search: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.query) queryParams.append('query', params.query);
+    if (params.scope) queryParams.append('scope', params.scope);
+    if (params.state) queryParams.append('state', params.state);
+    if (params.region) queryParams.append('region', params.region);
+    if (params.country) queryParams.append('country', params.country);
+    if (params.parentLeagueId) queryParams.append('parentLeagueId', params.parentLeagueId);
+    if (params.rootOnly) queryParams.append('rootOnly', params.rootOnly);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    return api.get(`/leagues?${queryParams.toString()}`);
+  },
+
+  // Get league details with managers, clubs, and child leagues
+  getLeague: (id) => api.get(`/leagues/${id}`),
+
+  // Get hierarchy tree for navigation
+  getTree: (scope = null) => {
+    const params = scope ? `?scope=${scope}` : '';
+    return api.get(`/leagues/tree${params}`);
+  },
+
+  // Create league (admin only, local server only)
+  create: (data) => api.post('/leagues', data),
+
+  // Update league
+  update: (id, data) => api.put(`/leagues/${id}`, data),
+
+  // Delete/deactivate league (admin only)
+  delete: (id) => api.delete(`/leagues/${id}`),
+
+  // Manager management
+  addManager: (leagueId, data) => api.post(`/leagues/${leagueId}/managers`, data),
+  updateManager: (leagueId, managerId, data) =>
+    api.put(`/leagues/${leagueId}/managers/${managerId}`, data),
+  removeManager: (leagueId, managerId) =>
+    api.delete(`/leagues/${leagueId}/managers/${managerId}`),
+
+  // Club join request (from club's perspective)
+  requestToJoin: (clubId, leagueId, message = null) =>
+    api.post(`/clubs/${clubId}/leagues/${leagueId}/request`, { leagueId, message }),
+
+  // Process club join request (league manager)
+  processRequest: (leagueId, requestId, approve, responseMessage = null) =>
+    api.post(`/leagues/${leagueId}/requests/${requestId}/process`, { approve, responseMessage }),
+
+  // Update club membership in league
+  updateClubMembership: (leagueId, membershipId, data) =>
+    api.put(`/leagues/${leagueId}/clubs/${membershipId}`, data),
+
+  // Remove club from league
+  removeClub: (leagueId, membershipId) =>
+    api.delete(`/leagues/${leagueId}/clubs/${membershipId}`),
+
+  // Get leagues a club belongs to
+  getClubLeagues: (clubId) => api.get(`/clubs/${clubId}/leagues`)
+}
+
 // Notifications API
 export const notificationsApi = {
   // Get notifications with optional filters

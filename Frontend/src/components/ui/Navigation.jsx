@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin, Users, MessageCircle, HelpCircle, MessageSquarePlus } from 'lucide-react';
+import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin, Users, MessageCircle, HelpCircle, MessageSquarePlus, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAssetUrl, getSharedAssetUrl } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
@@ -52,6 +52,7 @@ const Navigation = () => {
     { name: 'Events', href: '/events', icon: Calendar },
     { name: 'Venues', href: '/venues', icon: MapPin },
     { name: 'Clubs', href: '/clubs', icon: Users },
+    { name: 'Leagues', href: '/leagues', icon: Building2 },
   ];
 
   // Secondary navigation - less frequently used
