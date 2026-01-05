@@ -1138,6 +1138,21 @@ export const feedbackApi = {
   deleteEntry: (id) => api.delete(`/feedback/entries/${id}`)
 }
 
+// Site Content API
+export const siteContentApi = {
+  // Public - Get content by key
+  getContent: (key) => api.get(`/sitecontent/${key}`),
+
+  // Admin - Get all content pages
+  getAll: () => api.get('/sitecontent'),
+
+  // Admin - Update content
+  updateContent: (key, data) => api.put(`/sitecontent/${key}`, data),
+
+  // Admin - Create new content page
+  createContent: (data) => api.post('/sitecontent', data)
+}
+
 // Skill Levels API (for event divisions)
 export const skillLevelsApi = {
   // Get all active skill levels

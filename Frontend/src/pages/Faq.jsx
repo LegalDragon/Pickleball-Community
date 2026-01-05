@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Search, HelpCircle, ArrowLeft } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, HelpCircle, ArrowLeft, Sparkles, BookOpen } from 'lucide-react';
 import { faqApi } from '../services/api';
 
 // Icon mapping for categories
@@ -110,6 +110,24 @@ export default function Faq() {
               placeholder="Search for answers..."
               className="w-full pl-12 pr-4 py-3 bg-white rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-300"
             />
+          </div>
+
+          {/* Related links */}
+          <div className="flex flex-wrap gap-3 mt-6">
+            <Link
+              to="/features"
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              Features & Guide
+            </Link>
+            <Link
+              to="/blog"
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
+            >
+              <BookOpen className="w-4 h-4" />
+              Blog
+            </Link>
           </div>
         </div>
       </div>

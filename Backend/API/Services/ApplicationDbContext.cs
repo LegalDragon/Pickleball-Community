@@ -94,6 +94,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<FaqCategory> FaqCategories { get; set; }
     public DbSet<FaqEntry> FaqEntries { get; set; }
 
+    // Site Content
+    public DbSet<SiteContent> SiteContents { get; set; }
+
     // Feedback
     public DbSet<FeedbackCategory> FeedbackCategories { get; set; }
     public DbSet<FeedbackEntry> FeedbackEntries { get; set; }

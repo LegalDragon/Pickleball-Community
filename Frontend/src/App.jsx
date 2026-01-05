@@ -16,6 +16,8 @@ import TeamUnitsAdmin from './pages/TeamUnitsAdmin'
 import SkillLevelsAdmin from './pages/SkillLevelsAdmin'
 import Faq from './pages/Faq'
 import FaqAdmin from './pages/FaqAdmin'
+import Features from './pages/Features'
+import FeaturesAdmin from './pages/FeaturesAdmin'
 import Feedback from './pages/Feedback'
 import FeedbackAdmin from './pages/FeedbackAdmin'
 import Events from './pages/Events'
@@ -74,6 +76,7 @@ function App() {
       <Route path="/leagues/:id" element={<LeagueDetail />} />
       <Route path="/blog" element={<Blog />} />
       <Route path="/faq" element={<Faq />} />
+      <Route path="/features" element={<Features />} />
       <Route path="/feedback" element={<Feedback />} />
 
       {/* My Blog - For writers to manage their posts */}
@@ -174,6 +177,12 @@ function App() {
       <Route path="/admin/faq" element={
         <ProtectedRoute role="Admin">
           <FaqAdmin />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/admin/features" element={
+        <ProtectedRoute role="Admin">
+          <FeaturesAdmin />
         </ProtectedRoute>
       } />
 
