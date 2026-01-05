@@ -25,6 +25,7 @@ import Venues from './pages/Venues'
 import Clubs from './pages/Clubs'
 import Leagues from './pages/Leagues'
 import LeagueDetail from './pages/LeagueDetail'
+import LeagueAdmin from './pages/LeagueAdmin'
 import Blog from './pages/Blog'
 import BlogAdmin from './pages/BlogAdmin'
 import MyBlog from './pages/MyBlog'
@@ -177,6 +178,12 @@ function App() {
       <Route path="/admin/feedback" element={
         <ProtectedRoute role="Admin">
           <FeedbackAdmin />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/admin/leagues" element={
+        <ProtectedRoute role="Admin">
+          <LeagueAdmin />
         </ProtectedRoute>
       } />
 

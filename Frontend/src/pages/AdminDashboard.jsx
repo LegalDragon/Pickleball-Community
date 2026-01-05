@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { userApi, themeApi, sharedAssetApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
@@ -6,7 +7,7 @@ import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
-  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network
 } from 'lucide-react'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
 
@@ -24,6 +25,7 @@ import SkillLevelsAdmin from './SkillLevelsAdmin'
 const AdminDashboard = () => {
   const { user } = useAuth()
   const { theme: currentTheme, refreshTheme } = useTheme()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('users')
   const [loading, setLoading] = useState(false)
 
@@ -437,6 +439,12 @@ const AdminDashboard = () => {
       ]
     },
     {
+      title: 'Organization',
+      items: [
+        { id: 'leagues', label: 'Leagues', icon: Network, href: '/admin/leagues' }
+      ]
+    },
+    {
       title: 'Configuration',
       items: [
         { id: 'eventTypes', label: 'Event Types', icon: Tags },
@@ -485,7 +493,14 @@ const AdminDashboard = () => {
                       {group.items.map(item => (
                         <button
                           key={item.id}
-                          onClick={() => !item.disabled && setActiveTab(item.id)}
+                          onClick={() => {
+                            if (item.disabled) return
+                            if (item.href) {
+                              navigate(item.href)
+                            } else {
+                              setActiveTab(item.id)
+                            }
+                          }}
                           disabled={item.disabled}
                           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition ${
                             activeTab === item.id
