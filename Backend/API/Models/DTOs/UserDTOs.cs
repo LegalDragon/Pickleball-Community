@@ -109,3 +109,15 @@ public class PublicProfileDto
     public string? FriendshipStatus { get; set; } // "friends", "pending_sent", "pending_received", "none"
     public int? FriendRequestId { get; set; }
 }
+
+// Lightweight DTO for recently joined players marquee
+public class RecentPlayerDto
+{
+    public int Id { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public DateTime JoinedAt { get; set; }
+}

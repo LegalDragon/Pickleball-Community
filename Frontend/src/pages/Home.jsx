@@ -1,5 +1,6 @@
 import React from 'react';
 import Header from '../components/landing/Header';
+import RecentPlayers from '../components/landing/RecentPlayers';
 import Stats from '../components/landing/Stats';
 import Features from '../components/landing/Features';
 import FeaturedEvents from '../components/landing/FeaturedEvents';
@@ -10,6 +11,7 @@ const Home = () => {
   return (
     <div className="home-page">
       <Header />
+      <RecentPlayers />
       <FeaturedEvents />
       <Stats />
       <Features />

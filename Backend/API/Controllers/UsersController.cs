@@ -448,6 +448,49 @@ public class UsersController : ControllerBase
         }
     }
 
+    // GET: api/Users/recent - Get recently joined players (public, for home page marquee)
+    [HttpGet("recent")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<List<RecentPlayerDto>>>> GetRecentPlayers([FromQuery] int count = 20)
+    {
+        try
+        {
+            // Limit to reasonable range
+            count = Math.Clamp(count, 5, 50);
+
+            var recentPlayers = await _context.Users
+                .Where(u => u.IsActive && !string.IsNullOrEmpty(u.FirstName))
+                .OrderByDescending(u => u.CreatedAt)
+                .Take(count)
+                .Select(u => new RecentPlayerDto
+                {
+                    Id = u.Id,
+                    FirstName = u.FirstName,
+                    LastName = u.LastName,
+                    ProfileImageUrl = u.ProfileImageUrl,
+                    City = u.City,
+                    State = u.State,
+                    JoinedAt = u.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<RecentPlayerDto>>
+            {
+                Success = true,
+                Data = recentPlayers
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching recent players");
+            return StatusCode(500, new ApiResponse<List<RecentPlayerDto>>
+            {
+                Success = false,
+                Message = "An error occurred while fetching recent players"
+            });
+        }
+    }
+
     // GET: api/Users/coaches (Public - anyone can browse coaches)
     [HttpGet("coaches")]
     [AllowAnonymous]

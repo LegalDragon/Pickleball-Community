@@ -435,7 +435,10 @@ export const userApi = {
   getAllUsers: () => api.get('/users'),
 
   // Update user by ID (admin only)
-  updateUser: (id, data) => api.put(`/users/${id}`, data)
+  updateUser: (id, data) => api.put(`/users/${id}`, data),
+
+  // Get recently joined players (public, for marquee)
+  getRecentPlayers: (count = 20) => api.get(`/users/recent?count=${count}`)
 }
 
 // Content Types API
