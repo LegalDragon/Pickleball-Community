@@ -1043,6 +1043,7 @@ function ClubCard({ club, onViewDetails, showManageButton = false }) {
 function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin, onUpdate, memberRoles }) {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('about');
+  const [financeSubTab, setFinanceSubTab] = useState('internal'); // internal, league
   const [members, setMembers] = useState([]);
   const [joinRequests, setJoinRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -1141,8 +1142,9 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     }
     if (activeTab === 'notifications') loadNotifications();
     if (activeTab === 'documents') loadDocuments();
-    if (activeTab === 'finance' && isMember) loadFinanceData();
-  }, [activeTab]);
+    if (activeTab === 'finances' && isMember && financeSubTab === 'internal') loadFinanceData();
+    if (activeTab === 'finances' && isAdmin && financeSubTab === 'league') loadGrantsData();
+  }, [activeTab, financeSubTab]);
 
   const loadMembers = async () => {
     setLoading(true);
@@ -1330,12 +1332,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     }
   };
 
-  // Load grants when grants tab is opened (club admins only)
-  useEffect(() => {
-    if (activeTab === 'grants' && isAdmin) {
-      loadGrantsData();
-    }
-  }, [activeTab, club.id, isAdmin]);
+  // Grants loading is now handled in the main tab useEffect above
 
   // Load finance data for club members
   const loadFinanceData = async () => {
@@ -1948,16 +1945,6 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
               )}
             </button>
             <button
-              onClick={() => setActiveTab('notifications')}
-              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === 'notifications'
-                  ? 'border-purple-600 text-purple-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Notifications
-            </button>
-            <button
               onClick={() => setActiveTab('documents')}
               className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'documents'
@@ -1969,28 +1956,15 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
             </button>
             {isMember && (
               <button
-                onClick={() => setActiveTab('finance')}
+                onClick={() => setActiveTab('finances')}
                 className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-                  activeTab === 'finance'
+                  activeTab === 'finances'
                     ? 'border-purple-600 text-purple-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <DollarSign className="w-4 h-4" />
-                Finance
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('grants')}
-                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-                  activeTab === 'grants'
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <DollarSign className="w-4 h-4" />
-                Grants
+                Finances
               </button>
             )}
             {canEdit && (
@@ -2389,65 +2363,38 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
               ) : (
                 <p className="text-center text-gray-500 py-8">No members yet</p>
               )}
-            </div>
-          )}
 
-          {/* Notifications Tab */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
               {/* Send Notification Form (for admins/mods) */}
               {canManage && (
-                <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-                  <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                    <Bell className="w-5 h-5 text-purple-600" />
-                    Send Notification to All Members
-                  </h3>
-                  <input
-                    type="text"
-                    placeholder="Title"
-                    value={newNotification.title}
-                    onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                  />
-                  <textarea
-                    placeholder="Message"
-                    value={newNotification.message}
-                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                    rows={3}
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                  />
-                  <button
-                    onClick={handleSendNotification}
-                    disabled={sendingNotification || !newNotification.title || !newNotification.message}
-                    className="w-full py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {sendingNotification ? 'Sending...' : 'Send Notification'}
-                  </button>
+                <div className="mt-6 pt-6 border-t">
+                  <div className="p-4 bg-gray-50 rounded-lg space-y-3">
+                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Bell className="w-5 h-5 text-purple-600" />
+                      Send Notification to All Members
+                    </h3>
+                    <input
+                      type="text"
+                      placeholder="Title"
+                      value={newNotification.title}
+                      onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                    <textarea
+                      placeholder="Message"
+                      value={newNotification.message}
+                      onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                    <button
+                      onClick={handleSendNotification}
+                      disabled={sendingNotification || !newNotification.title || !newNotification.message}
+                      className="w-full py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      {sendingNotification ? 'Sending...' : 'Send Notification'}
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              {/* Notifications List */}
-              {loading ? (
-                <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
-                </div>
-              ) : notifications.length > 0 ? (
-                <div className="space-y-4">
-                  {notifications.map(notification => (
-                    <div key={notification.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-gray-900">{notification.title}</h4>
-                        <span className="text-sm text-gray-500">
-                          {new Date(notification.sentAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-gray-600 text-sm">{notification.message}</p>
-                      <p className="text-xs text-gray-400 mt-2">by {notification.sentByUserName}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-gray-500 py-8">No notifications yet</p>
               )}
             </div>
           )}
@@ -2713,16 +2660,45 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
             </div>
           )}
 
-          {/* Finance Tab */}
-          {activeTab === 'finance' && isMember && (
+          {/* Finances Tab - Combined Internal and League */}
+          {activeTab === 'finances' && isMember && (
             <div className="space-y-6">
-              {financeLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                </div>
-              ) : (
+              {/* Sub-tabs for Internal / League */}
+              <div className="flex gap-2 border-b pb-2">
+                <button
+                  onClick={() => setFinanceSubTab('internal')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg ${
+                    financeSubTab === 'internal'
+                      ? 'bg-purple-100 text-purple-700 border-b-2 border-purple-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Internal
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setFinanceSubTab('league')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg ${
+                      financeSubTab === 'league'
+                        ? 'bg-purple-100 text-purple-700 border-b-2 border-purple-600'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    League
+                  </button>
+                )}
+              </div>
+
+              {/* Internal Finance Sub-tab */}
+              {financeSubTab === 'internal' && (
                 <>
-                  {/* Balance Summary Card */}
+                  {financeLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Balance Summary Card */}
                   {financeSummary && (
                     <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
                       <h3 className="text-lg font-medium mb-4">Club Balance</h3>
@@ -3098,38 +3074,38 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                     )}
                   </div>
 
-                  <p className="text-sm text-gray-500 text-center pt-4">
-                    {financePermissions?.canEdit
-                      ? 'As Admin/Treasurer, you can record income and expenses for this club.'
-                      : 'Only club Admin or Treasurer can record transactions.'}
-                  </p>
+                      <p className="text-sm text-gray-500 text-center pt-4">
+                        {financePermissions?.canEdit
+                          ? 'As Admin/Treasurer, you can record income and expenses for this club.'
+                          : 'Only club Admin or Treasurer can record transactions.'}
+                      </p>
+                    </>
+                  )}
                 </>
               )}
-            </div>
-          )}
 
-          {/* Grants Tab */}
-          {activeTab === 'grants' && isAdmin && (
-            <div className="space-y-6">
-              {grantsLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                </div>
-              ) : grantAccounts.length === 0 ? (
-                <div className="text-center py-12">
-                  <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Grant Accounts</h3>
-                  <p className="text-gray-500">
-                    This club doesn't have any grant accounts with leagues yet.
-                  </p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Grant accounts are created when a league assigns grants or records donations for your club.
-                  </p>
-                </div>
-              ) : (
+              {/* League Grants Sub-tab */}
+              {financeSubTab === 'league' && isAdmin && (
                 <>
-                  {/* Summary Card */}
-                  {grantsSummary && (
+                  {grantsLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                    </div>
+                  ) : grantAccounts.length === 0 ? (
+                    <div className="text-center py-12">
+                      <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Grant Accounts</h3>
+                      <p className="text-gray-500">
+                        This club doesn't have any grant accounts with leagues yet.
+                      </p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        Grant accounts are created when a league assigns grants or records donations for your club.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Summary Card */}
+                      {grantsSummary && (
                     <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
                       <h3 className="text-lg font-medium mb-4">Total Grant Balance</h3>
                       <div className="text-4xl font-bold mb-2">
@@ -3229,9 +3205,11 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                     </div>
                   )}
 
-                  <p className="text-sm text-gray-500 text-center pt-4">
-                    Grant accounts are managed by your league administrators. Contact your league for questions.
-                  </p>
+                      <p className="text-sm text-gray-500 text-center pt-4">
+                        Grant accounts are managed by your league administrators. Contact your league for questions.
+                      </p>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -3240,41 +3218,6 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
           {/* Manage Tab */}
           {activeTab === 'manage' && canEdit && (
             <div className="space-y-6">
-              {/* Invite Link */}
-              <div>
-                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                  <UserPlus className="w-5 h-5 text-purple-600" />
-                  Invite Link
-                </h3>
-                {inviteCode ? (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={`${window.location.origin}/clubs?invite=${inviteCode}`}
-                      className="flex-1 border border-gray-300 rounded-lg p-2 bg-gray-50 text-sm"
-                    />
-                    <button
-                      onClick={copyInviteLink}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2"
-                    >
-                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleGetInviteLink}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg"
-                  >
-                    Generate Invite Link
-                  </button>
-                )}
-                <p className="text-sm text-gray-500 mt-2">
-                  Share this link to invite people to join your club directly
-                </p>
-              </div>
-
               {/* Club Logo */}
               <div>
                 <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
