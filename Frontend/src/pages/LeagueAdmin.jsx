@@ -371,14 +371,23 @@ export default function LeagueAdmin({ embedded = false }) {
                     <h2 className="text-lg font-semibold text-gray-900">
                       {isCreating ? 'Create New League' : 'Edit League'}
                     </h2>
-                    {!isCreating && (
-                      <button
-                        onClick={handleDelete}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                        title="Delete league"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                    {!isCreating && selectedLeague && (
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to={`/leagues/${selectedLeague.id}`}
+                          className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Manage
+                        </Link>
+                        <button
+                          onClick={handleDelete}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                          title="Delete league"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
