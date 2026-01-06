@@ -30,15 +30,18 @@ public class ClubsController : ControllerBase
     // GET: /clubs/recent - Get recently created clubs (public, for home page marquee)
     [HttpGet("recent")]
     [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<List<RecentClubDto>>>> GetRecentClubs([FromQuery] int count = 20)
+    public async Task<ActionResult<ApiResponse<List<RecentClubDto>>>> GetRecentClubs([FromQuery] int count = 20, [FromQuery] int days = 30)
     {
         try
         {
             // Limit to reasonable range
             count = Math.Clamp(count, 5, 50);
+            days = Math.Clamp(days, 1, 365);
+
+            var cutoffDate = DateTime.UtcNow.AddDays(-days);
 
             var recentClubs = await _context.Clubs
-                .Where(c => c.IsActive && c.IsPublic)
+                .Where(c => c.IsActive && c.IsPublic && c.CreatedAt >= cutoffDate)
                 .OrderByDescending(c => c.CreatedAt)
                 .Take(count)
                 .Select(c => new RecentClubDto

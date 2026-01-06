@@ -438,7 +438,7 @@ export const userApi = {
   updateUser: (id, data) => api.put(`/users/${id}`, data),
 
   // Get recently joined players (public, for marquee)
-  getRecentPlayers: (count = 20) => api.get(`/users/recent?count=${count}`)
+  getRecentPlayers: (count = 20, days = 30) => api.get(`/users/recent?count=${count}&days=${days}`)
 }
 
 // Content Types API
@@ -844,7 +844,7 @@ export const clubsApi = {
   },
 
   // Get recently created clubs (public, for marquee)
-  getRecentClubs: (count = 20) => api.get(`/clubs/recent?count=${count}`),
+  getRecentClubs: (count = 20, days = 30) => api.get(`/clubs/recent?count=${count}&days=${days}`),
 
   // Location dropdowns
   getCountries: () => api.get('/clubs/countries'),

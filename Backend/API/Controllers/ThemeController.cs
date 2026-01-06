@@ -217,6 +217,20 @@ public class ThemeController : ControllerBase
             if (request.HeroSecondaryCtaLink != null)
                 theme.HeroSecondaryCtaLink = request.HeroSecondaryCtaLink;
 
+            // Marquee settings
+            if (request.MarqueeShowPlayers.HasValue)
+                theme.MarqueeShowPlayers = request.MarqueeShowPlayers.Value;
+            if (request.MarqueeShowClubs.HasValue)
+                theme.MarqueeShowClubs = request.MarqueeShowClubs.Value;
+            if (request.MarqueeRecentDays.HasValue)
+                theme.MarqueeRecentDays = Math.Clamp(request.MarqueeRecentDays.Value, 1, 365);
+            if (request.MarqueePlayerCount.HasValue)
+                theme.MarqueePlayerCount = Math.Clamp(request.MarqueePlayerCount.Value, 5, 50);
+            if (request.MarqueeClubCount.HasValue)
+                theme.MarqueeClubCount = Math.Clamp(request.MarqueeClubCount.Value, 5, 50);
+            if (request.MarqueeSpeed.HasValue)
+                theme.MarqueeSpeed = Math.Clamp(request.MarqueeSpeed.Value, 10, 120);
+
             theme.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -846,6 +860,13 @@ public class ThemeController : ControllerBase
             HeroCtaLink = theme.HeroCtaLink,
             HeroSecondaryCtaText = theme.HeroSecondaryCtaText,
             HeroSecondaryCtaLink = theme.HeroSecondaryCtaLink,
+            // Marquee settings
+            MarqueeShowPlayers = theme.MarqueeShowPlayers,
+            MarqueeShowClubs = theme.MarqueeShowClubs,
+            MarqueeRecentDays = theme.MarqueeRecentDays,
+            MarqueePlayerCount = theme.MarqueePlayerCount,
+            MarqueeClubCount = theme.MarqueeClubCount,
+            MarqueeSpeed = theme.MarqueeSpeed,
             UpdatedAt = theme.UpdatedAt
         };
     }
@@ -880,7 +901,14 @@ public class ThemeController : ControllerBase
             HeroCtaText = "Find Courts",
             HeroCtaLink = "/courts",
             HeroSecondaryCtaText = "Join a Club",
-            HeroSecondaryCtaLink = "/clubs"
+            HeroSecondaryCtaLink = "/clubs",
+            // Marquee defaults
+            MarqueeShowPlayers = true,
+            MarqueeShowClubs = true,
+            MarqueeRecentDays = 30,
+            MarqueePlayerCount = 20,
+            MarqueeClubCount = 15,
+            MarqueeSpeed = 40
         };
     }
 }

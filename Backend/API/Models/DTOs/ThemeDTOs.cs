@@ -54,6 +54,14 @@ public class ThemeSettingsDto
     public string? HeroSecondaryCtaText { get; set; }
     public string? HeroSecondaryCtaLink { get; set; }
 
+    // Marquee Settings
+    public bool MarqueeShowPlayers { get; set; } = true;
+    public bool MarqueeShowClubs { get; set; } = true;
+    public int MarqueeRecentDays { get; set; } = 30;
+    public int MarqueePlayerCount { get; set; } = 20;
+    public int MarqueeClubCount { get; set; } = 15;
+    public int MarqueeSpeed { get; set; } = 40;
+
     public DateTime? UpdatedAt { get; set; }
 }
 
@@ -109,6 +117,14 @@ public class UpdateThemeRequest
     public string? HeroCtaLink { get; set; }
     public string? HeroSecondaryCtaText { get; set; }
     public string? HeroSecondaryCtaLink { get; set; }
+
+    // Marquee Settings
+    public bool? MarqueeShowPlayers { get; set; }
+    public bool? MarqueeShowClubs { get; set; }
+    public int? MarqueeRecentDays { get; set; }
+    public int? MarqueePlayerCount { get; set; }
+    public int? MarqueeClubCount { get; set; }
+    public int? MarqueeSpeed { get; set; }
 }
 
 public class ThemePresetDto

@@ -451,15 +451,18 @@ public class UsersController : ControllerBase
     // GET: api/Users/recent - Get recently joined players (public, for home page marquee)
     [HttpGet("recent")]
     [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<List<RecentPlayerDto>>>> GetRecentPlayers([FromQuery] int count = 20)
+    public async Task<ActionResult<ApiResponse<List<RecentPlayerDto>>>> GetRecentPlayers([FromQuery] int count = 20, [FromQuery] int days = 30)
     {
         try
         {
             // Limit to reasonable range
             count = Math.Clamp(count, 5, 50);
+            days = Math.Clamp(days, 1, 365);
+
+            var cutoffDate = DateTime.UtcNow.AddDays(-days);
 
             var recentPlayers = await _context.Users
-                .Where(u => u.IsActive && !string.IsNullOrEmpty(u.FirstName))
+                .Where(u => u.IsActive && !string.IsNullOrEmpty(u.FirstName) && u.CreatedAt >= cutoffDate)
                 .OrderByDescending(u => u.CreatedAt)
                 .Take(count)
                 .Select(u => new RecentPlayerDto

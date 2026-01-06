@@ -1,34 +1,73 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { userApi, clubsApi, getSharedAssetUrl } from '../../services/api';
+import { userApi, clubsApi, themeApi, getSharedAssetUrl } from '../../services/api';
 import { Users, MapPin, Building2, Sparkles } from 'lucide-react';
 
 const RecentPlayers = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState({
+    showPlayers: true,
+    showClubs: true,
+    recentDays: 30,
+    playerCount: 20,
+    clubCount: 15,
+    speed: 40
+  });
   const scrollRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Fetch recent players and clubs
+  // Fetch theme settings and data
   const fetchData = async () => {
     try {
-      const [playersRes, clubsRes] = await Promise.all([
-        userApi.getRecentPlayers(20),
-        clubsApi.getRecentClubs(15)
-      ]);
+      // First get theme settings
+      const themeRes = await themeApi.getActive();
+      const theme = themeRes.data?.data;
 
-      console.log('Players API response:', playersRes.data);
-      console.log('Clubs API response:', clubsRes.data);
+      const marqueeSettings = {
+        showPlayers: theme?.marqueeShowPlayers ?? true,
+        showClubs: theme?.marqueeShowClubs ?? true,
+        recentDays: theme?.marqueeRecentDays ?? 30,
+        playerCount: theme?.marqueePlayerCount ?? 20,
+        clubCount: theme?.marqueeClubCount ?? 15,
+        speed: theme?.marqueeSpeed ?? 40
+      };
+      setSettings(marqueeSettings);
 
-      const players = (playersRes.data?.success && playersRes.data.data)
-        ? playersRes.data.data.map(p => ({ ...p, type: 'player' }))
-        : [];
+      // If neither are enabled, don't fetch
+      if (!marqueeSettings.showPlayers && !marqueeSettings.showClubs) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
 
-      const clubs = (clubsRes.data?.success && clubsRes.data.data)
-        ? clubsRes.data.data.map(c => ({ ...c, type: 'club' }))
-        : [];
+      // Fetch based on settings
+      const promises = [];
+      if (marqueeSettings.showPlayers) {
+        promises.push(userApi.getRecentPlayers(marqueeSettings.playerCount, marqueeSettings.recentDays));
+      }
+      if (marqueeSettings.showClubs) {
+        promises.push(clubsApi.getRecentClubs(marqueeSettings.clubCount, marqueeSettings.recentDays));
+      }
 
-      console.log('Parsed players:', players.length, 'clubs:', clubs.length);
+      const results = await Promise.all(promises);
+
+      let players = [];
+      let clubs = [];
+
+      if (marqueeSettings.showPlayers) {
+        const playersRes = results.shift();
+        players = (playersRes?.data?.success && playersRes.data.data)
+          ? playersRes.data.data.map(p => ({ ...p, type: 'player' }))
+          : [];
+      }
+
+      if (marqueeSettings.showClubs) {
+        const clubsRes = results.shift();
+        clubs = (clubsRes?.data?.success && clubsRes.data.data)
+          ? clubsRes.data.data.map(c => ({ ...c, type: 'club' }))
+          : [];
+      }
 
       // Interleave players and clubs for variety
       const mixed = [];
@@ -36,15 +75,9 @@ const RecentPlayers = () => {
       for (let i = 0; i < maxLen; i++) {
         if (i < players.length) mixed.push(players[i]);
         if (i < clubs.length) mixed.push(clubs[i]);
-        // Add another player if available for 2:1 ratio
-        if (i + players.length < players.length * 2 && players.length > clubs.length) {
-          const extraIdx = i + Math.floor(players.length / 2);
-          if (extraIdx < players.length) mixed.push(players[extraIdx]);
-        }
       }
 
-      console.log('Mixed items:', mixed.length);
-      setItems(mixed.length > 0 ? mixed : players);
+      setItems(mixed.length > 0 ? mixed : [...players, ...clubs]);
     } catch (err) {
       console.error('Error fetching recent data:', err);
     } finally {
@@ -60,7 +93,7 @@ const RecentPlayers = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Show loading state or empty state for debugging
+  // Show loading state
   if (loading) {
     return (
       <section className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900 py-4">
@@ -74,7 +107,7 @@ const RecentPlayers = () => {
     );
   }
 
-  // Don't render if no items
+  // Don't render if no items or marquee is disabled
   if (items.length === 0) {
     return null;
   }
@@ -101,9 +134,11 @@ const RecentPlayers = () => {
       >
         <div
           ref={scrollRef}
-          className={`flex gap-4 px-4 ${isPaused ? 'animate-marquee-paused' : 'animate-marquee'}`}
+          className="flex gap-4 px-4"
           style={{
-            width: 'fit-content'
+            width: 'fit-content',
+            animation: `marquee ${settings.speed}s linear infinite`,
+            animationPlayState: isPaused ? 'paused' : 'running'
           }}
         >
           {duplicatedItems.map((item, index) => (
@@ -123,15 +158,6 @@ const RecentPlayers = () => {
           100% {
             transform: translateX(-50%);
           }
-        }
-
-        .animate-marquee {
-          animation: marquee 40s linear infinite;
-        }
-
-        .animate-marquee-paused {
-          animation: marquee 40s linear infinite;
-          animation-play-state: paused;
         }
       `}</style>
     </section>

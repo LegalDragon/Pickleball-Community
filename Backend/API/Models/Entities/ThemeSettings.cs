@@ -112,6 +112,14 @@ public class ThemeSettings
     [MaxLength(200)]
     public string? HeroSecondaryCtaLink { get; set; } = "/clubs";
 
+    // Marquee Settings
+    public bool MarqueeShowPlayers { get; set; } = true;
+    public bool MarqueeShowClubs { get; set; } = true;
+    public int MarqueeRecentDays { get; set; } = 30; // How many days back to consider "recent"
+    public int MarqueePlayerCount { get; set; } = 20; // Max players to show
+    public int MarqueeClubCount { get; set; } = 15; // Max clubs to show
+    public int MarqueeSpeed { get; set; } = 40; // Animation duration in seconds (higher = slower)
+
     // Status
     public bool IsActive { get; set; } = true;
 
