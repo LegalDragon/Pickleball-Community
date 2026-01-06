@@ -7,7 +7,7 @@ import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
-  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown
 } from 'lucide-react'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
 
@@ -51,6 +51,12 @@ const AdminDashboard = () => {
   const logoInputRef = useRef(null)
   const faviconInputRef = useRef(null)
   const heroImageInputRef = useRef(null)
+
+  // Hero Videos state (multiple videos)
+  const [heroVideos, setHeroVideos] = useState([])
+  const [loadingHeroVideos, setLoadingHeroVideos] = useState(false)
+  const [isAddVideoModalOpen, setIsAddVideoModalOpen] = useState(false)
+  const [editingVideo, setEditingVideo] = useState(null)
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -142,8 +148,9 @@ const AdminDashboard = () => {
       setLoading(false)
     }
 
-    // Also fetch presets
+    // Also fetch presets and hero videos
     fetchThemePresets()
+    fetchHeroVideos()
   }
 
   // Fetch theme presets
@@ -161,6 +168,24 @@ const AdminDashboard = () => {
       setThemePresets([])
     } finally {
       setLoadingPresets(false)
+    }
+  }
+
+  // Fetch hero videos
+  const fetchHeroVideos = async () => {
+    setLoadingHeroVideos(true)
+    try {
+      const response = await themeApi.getHeroVideos()
+      if (response.success && response.data) {
+        setHeroVideos(response.data)
+      } else if (Array.isArray(response)) {
+        setHeroVideos(response)
+      }
+    } catch (error) {
+      console.error('Error fetching hero videos:', error)
+      setHeroVideos([])
+    } finally {
+      setLoadingHeroVideos(false)
     }
   }
 
@@ -353,6 +378,75 @@ const AdminDashboard = () => {
       await refreshTheme()
     } catch (error) {
       console.error('Error deleting hero image:', error)
+    }
+  }
+
+  // Hero Video CRUD operations
+  const handleAddHeroVideo = async ({ url, type }) => {
+    try {
+      const videoType = type === 'youtube' ? 'youtube' : (url.startsWith('http') ? 'external' : 'upload')
+      await themeApi.createHeroVideo({
+        videoUrl: url,
+        videoType,
+        title: '',
+        description: ''
+      })
+      await fetchHeroVideos()
+      setIsAddVideoModalOpen(false)
+    } catch (error) {
+      console.error('Error adding hero video:', error)
+      alert('Failed to add hero video')
+    }
+  }
+
+  const handleToggleVideoActive = async (video) => {
+    try {
+      if (video.isActive) {
+        await themeApi.deactivateHeroVideo(video.id)
+      } else {
+        await themeApi.activateHeroVideo(video.id)
+      }
+      await fetchHeroVideos()
+    } catch (error) {
+      console.error('Error toggling video active state:', error)
+      alert('Failed to update video')
+    }
+  }
+
+  const handleDeleteHeroVideoItem = async (videoId) => {
+    if (!confirm('Are you sure you want to delete this video?')) return
+    try {
+      await themeApi.deleteHeroVideo(videoId)
+      await fetchHeroVideos()
+    } catch (error) {
+      console.error('Error deleting hero video:', error)
+      alert('Failed to delete video')
+    }
+  }
+
+  const handleMoveVideoUp = async (index) => {
+    if (index <= 0) return
+    const newOrder = [...heroVideos]
+    ;[newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]]
+    const videoIds = newOrder.map(v => v.id)
+    try {
+      await themeApi.reorderHeroVideos(videoIds)
+      await fetchHeroVideos()
+    } catch (error) {
+      console.error('Error reordering videos:', error)
+    }
+  }
+
+  const handleMoveVideoDown = async (index) => {
+    if (index >= heroVideos.length - 1) return
+    const newOrder = [...heroVideos]
+    ;[newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]]
+    const videoIds = newOrder.map(v => v.id)
+    try {
+      await themeApi.reorderHeroVideos(videoIds)
+      await fetchHeroVideos()
+    } catch (error) {
+      console.error('Error reordering videos:', error)
     }
   }
 
@@ -1090,6 +1184,160 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
+                  {/* Hero Videos Section (Multiple Videos) */}
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <Play className="w-5 h-5 mr-2 text-purple-500" />
+                        Hero Videos
+                      </h3>
+                      <button
+                        onClick={() => setIsAddVideoModalOpen(true)}
+                        className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center text-sm"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add Video
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Manage multiple hero videos. Active videos will be displayed in the hero section. Only one video plays at a time (first active video by sort order).
+                    </p>
+
+                    {loadingHeroVideos ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                        <span className="ml-2 text-gray-500">Loading videos...</span>
+                      </div>
+                    ) : heroVideos.length > 0 ? (
+                      <div className="space-y-3">
+                        {heroVideos.map((video, index) => (
+                          <div
+                            key={video.id}
+                            className={`flex items-center p-4 rounded-lg border-2 transition-all ${
+                              video.isActive
+                                ? 'border-purple-200 bg-purple-50'
+                                : 'border-gray-200 bg-gray-50 opacity-60'
+                            }`}
+                          >
+                            {/* Video Preview */}
+                            <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-900 flex-shrink-0 mr-4">
+                              {video.videoType === 'youtube' || video.videoUrl?.includes('youtube.com') || video.videoUrl?.includes('youtu.be') ? (
+                                getYouTubeThumbnail(video.videoUrl) ? (
+                                  <img
+                                    src={getYouTubeThumbnail(video.videoUrl)}
+                                    alt="Video thumbnail"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Video className="w-6 h-6 text-white" />
+                                  </div>
+                                )
+                              ) : video.thumbnailUrl ? (
+                                <img
+                                  src={getSharedAssetUrl(video.thumbnailUrl)}
+                                  alt="Video thumbnail"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Video className="w-6 h-6 text-white" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Video Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                                  video.videoType === 'youtube' ? 'bg-red-100 text-red-700' :
+                                  video.videoType === 'external' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-green-100 text-green-700'
+                                }`}>
+                                  {video.videoType === 'youtube' ? 'YouTube' :
+                                   video.videoType === 'external' ? 'External' : 'Uploaded'}
+                                </span>
+                                {video.isActive ? (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 truncate">
+                                {video.title || video.videoUrl}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                Order: {video.sortOrder + 1}
+                              </p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 ml-4">
+                              {/* Move Up */}
+                              <button
+                                onClick={() => handleMoveVideoUp(index)}
+                                disabled={index === 0}
+                                className="p-1.5 text-gray-500 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move up"
+                              >
+                                <ArrowUp className="w-4 h-4" />
+                              </button>
+                              {/* Move Down */}
+                              <button
+                                onClick={() => handleMoveVideoDown(index)}
+                                disabled={index === heroVideos.length - 1}
+                                className="p-1.5 text-gray-500 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move down"
+                              >
+                                <ArrowDown className="w-4 h-4" />
+                              </button>
+                              {/* Toggle Active */}
+                              <button
+                                onClick={() => handleToggleVideoActive(video)}
+                                className={`p-1.5 rounded ${
+                                  video.isActive
+                                    ? 'text-purple-600 hover:bg-purple-100'
+                                    : 'text-gray-400 hover:bg-gray-200'
+                                }`}
+                                title={video.isActive ? 'Deactivate' : 'Activate'}
+                              >
+                                {video.isActive ? (
+                                  <CheckCircle className="w-4 h-4" />
+                                ) : (
+                                  <XCircle className="w-4 h-4" />
+                                )}
+                              </button>
+                              {/* Delete */}
+                              <button
+                                onClick={() => handleDeleteHeroVideoItem(video.id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                        <Video className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500 mb-3">No hero videos configured</p>
+                        <button
+                          onClick={() => setIsAddVideoModalOpen(true)}
+                          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center mx-auto"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Your First Video
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Marquee Settings Section */}
                   <div className="bg-white rounded-xl shadow-sm p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -1798,7 +2046,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Hero Video Upload Modal */}
+      {/* Hero Video Upload Modal (Legacy single video) */}
       <VideoUploadModal
         isOpen={isHeroVideoModalOpen}
         onClose={() => setIsHeroVideoModalOpen(false)}
@@ -1806,6 +2054,16 @@ const AdminDashboard = () => {
         currentVideo={themeSettings?.heroVideoUrl}
         objectType="theme"
         title="Hero Video"
+        maxSizeMB={100}
+      />
+
+      {/* Add New Hero Video Modal (Multiple videos) */}
+      <VideoUploadModal
+        isOpen={isAddVideoModalOpen}
+        onClose={() => setIsAddVideoModalOpen(false)}
+        onSave={handleAddHeroVideo}
+        objectType="theme"
+        title="Add Hero Video"
         maxSizeMB={100}
       />
     </div>

@@ -147,6 +147,50 @@ public class ThemePresetDto
     public bool IsDefault { get; set; }
 }
 
+// Hero Video DTOs
+public class HeroVideoDto
+{
+    public int Id { get; set; }
+    public int ThemeId { get; set; }
+    public string VideoUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string VideoType { get; set; } = "upload";
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; }
+    public int? DisplayDuration { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreateHeroVideoRequest
+{
+    public string VideoUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string VideoType { get; set; } = "upload";
+    public int? DisplayDuration { get; set; }
+}
+
+public class UpdateHeroVideoRequest
+{
+    public string? VideoUrl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string? VideoType { get; set; }
+    public int? SortOrder { get; set; }
+    public bool? IsActive { get; set; }
+    public int? DisplayDuration { get; set; }
+}
+
+public class ReorderHeroVideosRequest
+{
+    public List<int> VideoIds { get; set; } = new();
+}
+
 public class UploadResponse
 {
     public string Url { get; set; } = string.Empty;

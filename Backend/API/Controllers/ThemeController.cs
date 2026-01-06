@@ -786,6 +786,373 @@ public class ThemeController : ControllerBase
         }
     }
 
+    // ==================== Hero Videos ====================
+
+    // GET: /theme/hero-videos - Get all hero videos for the active theme
+    [HttpGet("hero-videos")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<List<HeroVideoDto>>>> GetHeroVideos([FromQuery] bool activeOnly = false)
+    {
+        try
+        {
+            var theme = await _context.ThemeSettings.FirstOrDefaultAsync(t => t.IsActive);
+            if (theme == null)
+            {
+                return Ok(new ApiResponse<List<HeroVideoDto>>
+                {
+                    Success = true,
+                    Data = new List<HeroVideoDto>()
+                });
+            }
+
+            var query = _context.HeroVideos.Where(h => h.ThemeId == theme.ThemeId);
+
+            if (activeOnly)
+            {
+                query = query.Where(h => h.IsActive);
+            }
+
+            var videos = await query
+                .OrderBy(h => h.SortOrder)
+                .ThenByDescending(h => h.CreatedAt)
+                .Select(h => MapToHeroVideoDto(h))
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<HeroVideoDto>>
+            {
+                Success = true,
+                Data = videos
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching hero videos");
+            return StatusCode(500, new ApiResponse<List<HeroVideoDto>>
+            {
+                Success = false,
+                Message = "An error occurred while fetching hero videos"
+            });
+        }
+    }
+
+    // POST: /theme/hero-videos - Add a new hero video
+    [HttpPost("hero-videos")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<HeroVideoDto>>> CreateHeroVideo([FromBody] CreateHeroVideoRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var theme = await _context.ThemeSettings.FirstOrDefaultAsync(t => t.IsActive);
+
+            if (theme == null)
+            {
+                return NotFound(new ApiResponse<HeroVideoDto>
+                {
+                    Success = false,
+                    Message = "No active theme found"
+                });
+            }
+
+            // Get the highest sort order
+            var maxSortOrder = await _context.HeroVideos
+                .Where(h => h.ThemeId == theme.ThemeId)
+                .MaxAsync(h => (int?)h.SortOrder) ?? -1;
+
+            var heroVideo = new HeroVideo
+            {
+                ThemeId = theme.ThemeId,
+                VideoUrl = request.VideoUrl,
+                ThumbnailUrl = request.ThumbnailUrl,
+                Title = request.Title,
+                Description = request.Description,
+                VideoType = request.VideoType,
+                DisplayDuration = request.DisplayDuration,
+                SortOrder = maxSortOrder + 1,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                CreatedBy = currentUserId
+            };
+
+            _context.HeroVideos.Add(heroVideo);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero video {Id} created by user {UserId}", heroVideo.Id, currentUserId);
+
+            return Ok(new ApiResponse<HeroVideoDto>
+            {
+                Success = true,
+                Data = MapToHeroVideoDto(heroVideo),
+                Message = "Hero video created successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating hero video");
+            return StatusCode(500, new ApiResponse<HeroVideoDto>
+            {
+                Success = false,
+                Message = "An error occurred while creating hero video"
+            });
+        }
+    }
+
+    // PUT: /theme/hero-videos/{id} - Update a hero video
+    [HttpPut("hero-videos/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<HeroVideoDto>>> UpdateHeroVideo(int id, [FromBody] UpdateHeroVideoRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var heroVideo = await _context.HeroVideos.FindAsync(id);
+
+            if (heroVideo == null)
+            {
+                return NotFound(new ApiResponse<HeroVideoDto>
+                {
+                    Success = false,
+                    Message = "Hero video not found"
+                });
+            }
+
+            if (request.VideoUrl != null) heroVideo.VideoUrl = request.VideoUrl;
+            if (request.ThumbnailUrl != null) heroVideo.ThumbnailUrl = request.ThumbnailUrl;
+            if (request.Title != null) heroVideo.Title = request.Title;
+            if (request.Description != null) heroVideo.Description = request.Description;
+            if (request.VideoType != null) heroVideo.VideoType = request.VideoType;
+            if (request.SortOrder.HasValue) heroVideo.SortOrder = request.SortOrder.Value;
+            if (request.IsActive.HasValue) heroVideo.IsActive = request.IsActive.Value;
+            if (request.DisplayDuration.HasValue) heroVideo.DisplayDuration = request.DisplayDuration.Value;
+
+            heroVideo.UpdatedAt = DateTime.UtcNow;
+            heroVideo.UpdatedBy = currentUserId;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero video {Id} updated by user {UserId}", id, currentUserId);
+
+            return Ok(new ApiResponse<HeroVideoDto>
+            {
+                Success = true,
+                Data = MapToHeroVideoDto(heroVideo),
+                Message = "Hero video updated successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating hero video {Id}", id);
+            return StatusCode(500, new ApiResponse<HeroVideoDto>
+            {
+                Success = false,
+                Message = "An error occurred while updating hero video"
+            });
+        }
+    }
+
+    // DELETE: /theme/hero-videos/{id} - Delete a hero video
+    [HttpDelete("hero-videos/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteHeroVideo(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var heroVideo = await _context.HeroVideos.FindAsync(id);
+
+            if (heroVideo == null)
+            {
+                return NotFound(new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Hero video not found"
+                });
+            }
+
+            _context.HeroVideos.Remove(heroVideo);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero video {Id} deleted by user {UserId}", id, currentUserId);
+
+            return Ok(new ApiResponse<bool>
+            {
+                Success = true,
+                Data = true,
+                Message = "Hero video deleted successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting hero video {Id}", id);
+            return StatusCode(500, new ApiResponse<bool>
+            {
+                Success = false,
+                Message = "An error occurred while deleting hero video"
+            });
+        }
+    }
+
+    // PUT: /theme/hero-videos/{id}/activate - Activate a hero video
+    [HttpPut("hero-videos/{id}/activate")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<HeroVideoDto>>> ActivateHeroVideo(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var heroVideo = await _context.HeroVideos.FindAsync(id);
+
+            if (heroVideo == null)
+            {
+                return NotFound(new ApiResponse<HeroVideoDto>
+                {
+                    Success = false,
+                    Message = "Hero video not found"
+                });
+            }
+
+            heroVideo.IsActive = true;
+            heroVideo.UpdatedAt = DateTime.UtcNow;
+            heroVideo.UpdatedBy = currentUserId;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero video {Id} activated by user {UserId}", id, currentUserId);
+
+            return Ok(new ApiResponse<HeroVideoDto>
+            {
+                Success = true,
+                Data = MapToHeroVideoDto(heroVideo),
+                Message = "Hero video activated"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating hero video {Id}", id);
+            return StatusCode(500, new ApiResponse<HeroVideoDto>
+            {
+                Success = false,
+                Message = "An error occurred while activating hero video"
+            });
+        }
+    }
+
+    // PUT: /theme/hero-videos/{id}/deactivate - Deactivate a hero video
+    [HttpPut("hero-videos/{id}/deactivate")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<HeroVideoDto>>> DeactivateHeroVideo(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var heroVideo = await _context.HeroVideos.FindAsync(id);
+
+            if (heroVideo == null)
+            {
+                return NotFound(new ApiResponse<HeroVideoDto>
+                {
+                    Success = false,
+                    Message = "Hero video not found"
+                });
+            }
+
+            heroVideo.IsActive = false;
+            heroVideo.UpdatedAt = DateTime.UtcNow;
+            heroVideo.UpdatedBy = currentUserId;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero video {Id} deactivated by user {UserId}", id, currentUserId);
+
+            return Ok(new ApiResponse<HeroVideoDto>
+            {
+                Success = true,
+                Data = MapToHeroVideoDto(heroVideo),
+                Message = "Hero video deactivated"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deactivating hero video {Id}", id);
+            return StatusCode(500, new ApiResponse<HeroVideoDto>
+            {
+                Success = false,
+                Message = "An error occurred while deactivating hero video"
+            });
+        }
+    }
+
+    // PUT: /theme/hero-videos/reorder - Reorder hero videos
+    [HttpPut("hero-videos/reorder")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<List<HeroVideoDto>>>> ReorderHeroVideos([FromBody] ReorderHeroVideosRequest request)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var videos = await _context.HeroVideos
+                .Where(h => request.VideoIds.Contains(h.Id))
+                .ToListAsync();
+
+            for (int i = 0; i < request.VideoIds.Count; i++)
+            {
+                var video = videos.FirstOrDefault(v => v.Id == request.VideoIds[i]);
+                if (video != null)
+                {
+                    video.SortOrder = i;
+                    video.UpdatedAt = DateTime.UtcNow;
+                    video.UpdatedBy = currentUserId;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Hero videos reordered by user {UserId}", currentUserId);
+
+            var updatedVideos = await _context.HeroVideos
+                .Where(h => request.VideoIds.Contains(h.Id))
+                .OrderBy(h => h.SortOrder)
+                .Select(h => MapToHeroVideoDto(h))
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<HeroVideoDto>>
+            {
+                Success = true,
+                Data = updatedVideos,
+                Message = "Hero videos reordered successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reordering hero videos");
+            return StatusCode(500, new ApiResponse<List<HeroVideoDto>>
+            {
+                Success = false,
+                Message = "An error occurred while reordering hero videos"
+            });
+        }
+    }
+
+    private static HeroVideoDto MapToHeroVideoDto(HeroVideo video)
+    {
+        return new HeroVideoDto
+        {
+            Id = video.Id,
+            ThemeId = video.ThemeId,
+            VideoUrl = video.VideoUrl,
+            ThumbnailUrl = video.ThumbnailUrl,
+            Title = video.Title,
+            Description = video.Description,
+            VideoType = video.VideoType,
+            SortOrder = video.SortOrder,
+            IsActive = video.IsActive,
+            DisplayDuration = video.DisplayDuration,
+            CreatedAt = video.CreatedAt,
+            UpdatedAt = video.UpdatedAt
+        };
+    }
+
     // Helper methods
     private async Task<ThemeSettings> CreateDefaultThemeAsync()
     {

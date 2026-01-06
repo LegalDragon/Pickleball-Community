@@ -14,6 +14,7 @@ public class ApplicationDbContext : DbContext
     // Theme and Asset Management
     public DbSet<ThemeSettings> ThemeSettings { get; set; }
     public DbSet<ThemePreset> ThemePresets { get; set; }
+    public DbSet<HeroVideo> HeroVideos { get; set; }
     public DbSet<ActivityLog> ActivityLogs { get; set; }
     public DbSet<Asset> Assets { get; set; }
 

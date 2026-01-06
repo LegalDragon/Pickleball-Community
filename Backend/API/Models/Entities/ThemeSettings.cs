@@ -126,4 +126,7 @@ public class ThemeSettings
     // Audit fields
     public int? UpdatedBy { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation properties
+    public virtual ICollection<HeroVideo> HeroVideos { get; set; } = new List<HeroVideo>();
 }

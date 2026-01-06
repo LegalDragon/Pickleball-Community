@@ -405,7 +405,16 @@ export const themeApi = {
   },
 
   // Delete hero image (admin only)
-  deleteHeroImage: () => api.delete('/theme/hero-image')
+  deleteHeroImage: () => api.delete('/theme/hero-image'),
+
+  // Hero Videos (multiple videos with activate/deactivate)
+  getHeroVideos: () => api.get('/theme/hero-videos'),
+  createHeroVideo: (data) => api.post('/theme/hero-videos', data),
+  updateHeroVideo: (id, data) => api.put(`/theme/hero-videos/${id}`, data),
+  deleteHeroVideo: (id) => api.delete(`/theme/hero-videos/${id}`),
+  activateHeroVideo: (id) => api.put(`/theme/hero-videos/${id}/activate`),
+  deactivateHeroVideo: (id) => api.put(`/theme/hero-videos/${id}/deactivate`),
+  reorderHeroVideos: (videoIds) => api.put('/theme/hero-videos/reorder', { videoIds })
 }
 
 // User Profile API

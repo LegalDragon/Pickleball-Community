@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getSharedAssetUrl } from '../../services/api';
+import { getSharedAssetUrl, themeApi } from '../../services/api';
 import { Play, Pause, Volume2, VolumeX, MapPin, Users, Award, Calendar } from 'lucide-react';
 
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
@@ -33,9 +33,35 @@ const Header = () => {
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [logoHtml, setLogoHtml] = useState(null);
+  const [activeHeroVideo, setActiveHeroVideo] = useState(null);
   const videoRef = useRef(null);
 
-  const heroVideoUrl = theme?.heroVideoUrl;
+  // Fetch active hero videos from the HeroVideos table
+  useEffect(() => {
+    const fetchActiveVideo = async () => {
+      try {
+        const response = await themeApi.getHeroVideos();
+        let videos = [];
+        if (response?.success && Array.isArray(response.data)) {
+          videos = response.data;
+        } else if (Array.isArray(response)) {
+          videos = response;
+        }
+        // Find the first active video by sort order
+        const activeVideo = videos.find(v => v.isActive);
+        if (activeVideo) {
+          setActiveHeroVideo(activeVideo);
+        }
+      } catch (error) {
+        console.error('Error fetching hero videos:', error);
+      }
+    };
+    fetchActiveVideo();
+  }, []);
+
+  // Use active video from HeroVideos table, fallback to legacy heroVideoUrl from theme
+  const heroVideoUrl = activeHeroVideo?.videoUrl || theme?.heroVideoUrl;
+  const heroThumbnailUrl = activeHeroVideo?.thumbnailUrl || theme?.heroVideoThumbnailUrl;
   const isExternalVideo = isExternalVideoUrl(heroVideoUrl);
   const youtubeEmbedUrl = getYouTubeEmbedUrl(heroVideoUrl);
   const hasVideo = heroVideoUrl && (isExternalVideo || heroVideoUrl);
@@ -106,7 +132,7 @@ const Header = () => {
               loop
               muted={isMuted}
               playsInline
-              poster={theme?.heroVideoThumbnailUrl}
+              poster={heroThumbnailUrl ? getSharedAssetUrl(heroThumbnailUrl) : undefined}
             >
               <source src={getSharedAssetUrl(heroVideoUrl)} type="video/mp4" />
             </video>
