@@ -116,22 +116,38 @@ public class GrantsController : ControllerBase
             if (!permissions.IsGrantManager)
                 return Forbid();
 
+            // Build the set of allowed league IDs
+            HashSet<int>? allowedLeagueIds = null;
+
+            // If filtering by a specific league, get its descendants
+            if (leagueId.HasValue)
+            {
+                var descendantIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
+                allowedLeagueIds = descendantIds.ToHashSet();
+
+                // If user has limited permissions, intersect with their accessible leagues
+                if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+                {
+                    allowedLeagueIds.IntersectWith(permissions.AccessibleLeagueIds);
+                }
+            }
+            else if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            {
+                // No specific league filter, but user has limited permissions
+                allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
+            }
+
+            // Build query
             var query = _context.ClubGrantAccounts
                 .Include(a => a.Club)
                 .Include(a => a.League)
                 .Where(a => a.IsActive);
 
-            // Filter by accessible leagues
-            if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            // Apply single league filter if needed
+            if (allowedLeagueIds != null)
             {
-                query = query.Where(a => permissions.AccessibleLeagueIds.Contains(a.LeagueId));
-            }
-
-            // Include accounts from all descendant leagues
-            if (leagueId.HasValue)
-            {
-                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
-                query = query.Where(a => descendantLeagueIds.Contains(a.LeagueId));
+                var leagueIdArray = allowedLeagueIds.ToArray();
+                query = query.Where(a => leagueIdArray.Contains(a.LeagueId));
             }
 
             var accounts = await query
@@ -179,18 +195,30 @@ public class GrantsController : ControllerBase
             if (!permissions.IsGrantManager)
                 return Forbid();
 
-            var query = _context.ClubGrantAccounts.AsQueryable();
+            // Build the set of allowed league IDs
+            HashSet<int>? allowedLeagueIds = null;
 
-            if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
-            {
-                query = query.Where(a => permissions.AccessibleLeagueIds.Contains(a.LeagueId));
-            }
-
-            // Include accounts from all descendant leagues
             if (leagueId.HasValue)
             {
-                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
-                query = query.Where(a => descendantLeagueIds.Contains(a.LeagueId));
+                var descendantIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
+                allowedLeagueIds = descendantIds.ToHashSet();
+
+                if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+                {
+                    allowedLeagueIds.IntersectWith(permissions.AccessibleLeagueIds);
+                }
+            }
+            else if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            {
+                allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
+            }
+
+            var query = _context.ClubGrantAccounts.AsQueryable();
+
+            if (allowedLeagueIds != null)
+            {
+                var leagueIdArray = allowedLeagueIds.ToArray();
+                query = query.Where(a => leagueIdArray.Contains(a.LeagueId));
             }
 
             var summary = new ClubGrantAccountSummaryDto
@@ -278,6 +306,24 @@ public class GrantsController : ControllerBase
             if (!permissions.IsGrantManager)
                 return Forbid();
 
+            // Build the set of allowed league IDs
+            HashSet<int>? allowedLeagueIds = null;
+
+            if (request.LeagueId.HasValue)
+            {
+                var descendantIds = await GetDescendantLeagueIdsAsync(request.LeagueId.Value);
+                allowedLeagueIds = descendantIds.ToHashSet();
+
+                if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+                {
+                    allowedLeagueIds.IntersectWith(permissions.AccessibleLeagueIds);
+                }
+            }
+            else if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            {
+                allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
+            }
+
             var query = _context.ClubGrantTransactions
                 .Include(t => t.Account)
                     .ThenInclude(a => a!.Club)
@@ -288,17 +334,11 @@ public class GrantsController : ControllerBase
                 .Include(t => t.VoidedBy)
                 .AsQueryable();
 
-            // Filter by accessible leagues
-            if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            // Apply single league filter if needed
+            if (allowedLeagueIds != null)
             {
-                query = query.Where(t => permissions.AccessibleLeagueIds.Contains(t.Account!.LeagueId));
-            }
-
-            // Apply filters - include transactions from all descendant leagues
-            if (request.LeagueId.HasValue)
-            {
-                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(request.LeagueId.Value);
-                query = query.Where(t => descendantLeagueIds.Contains(t.Account!.LeagueId));
+                var leagueIdArray = allowedLeagueIds.ToArray();
+                query = query.Where(t => leagueIdArray.Contains(t.Account!.LeagueId));
             }
 
             if (request.ClubId.HasValue)
@@ -1044,27 +1084,44 @@ public class GrantsController : ControllerBase
             if (!permissions.IsGrantManager)
                 return Forbid();
 
+            // Build the set of allowed league IDs
+            HashSet<int>? allowedLeagueIds = null;
+
+            if (leagueId.HasValue)
+            {
+                var descendantIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
+                allowedLeagueIds = descendantIds.ToHashSet();
+
+                if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+                {
+                    allowedLeagueIds.IntersectWith(permissions.AccessibleLeagueIds);
+                }
+            }
+            else if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
+            {
+                // For non-site-admins, include descendants of their accessible leagues
+                var allAccessibleLeagueIds = new HashSet<int>();
+                foreach (var accessibleLeagueId in permissions.AccessibleLeagueIds)
+                {
+                    var descendants = await GetDescendantLeagueIdsAsync(accessibleLeagueId);
+                    foreach (var id in descendants)
+                    {
+                        allAccessibleLeagueIds.Add(id);
+                    }
+                }
+                allowedLeagueIds = allAccessibleLeagueIds;
+            }
+
             var query = _context.LeagueClubs
                 .Include(lc => lc.Club)
                 .Include(lc => lc.League)
                 .Where(lc => lc.Status == "Active" && lc.Club!.IsActive && lc.League!.IsActive);
 
-            // If a specific league is specified, get clubs from that league and all its descendants
-            if (leagueId.HasValue)
+            // Apply single league filter if needed
+            if (allowedLeagueIds != null)
             {
-                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
-                query = query.Where(lc => descendantLeagueIds.Contains(lc.LeagueId));
-            }
-            else if (!permissions.IsSiteAdmin && permissions.AccessibleLeagueIds.Any())
-            {
-                // For non-site-admins, also include descendants of their accessible leagues
-                var allAccessibleLeagueIds = new List<int>();
-                foreach (var accessibleLeagueId in permissions.AccessibleLeagueIds)
-                {
-                    allAccessibleLeagueIds.AddRange(await GetDescendantLeagueIdsAsync(accessibleLeagueId));
-                }
-                var distinctLeagueIds = allAccessibleLeagueIds.Distinct().ToList();
-                query = query.Where(lc => distinctLeagueIds.Contains(lc.LeagueId));
+                var leagueIdArray = allowedLeagueIds.ToArray();
+                query = query.Where(lc => leagueIdArray.Contains(lc.LeagueId));
             }
 
             var clubs = await query
