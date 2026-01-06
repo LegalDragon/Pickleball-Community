@@ -22,6 +22,7 @@ const RecentPlayers = () => {
     try {
       // First get theme settings
       const themeRes = await themeApi.getActive();
+      console.log('Theme API response:', themeRes.data);
       const theme = themeRes.data?.data;
 
       const marqueeSettings = {
@@ -32,10 +33,12 @@ const RecentPlayers = () => {
         clubCount: theme?.marqueeClubCount ?? 15,
         speed: theme?.marqueeSpeed ?? 40
       };
+      console.log('Marquee settings:', marqueeSettings);
       setSettings(marqueeSettings);
 
       // If neither are enabled, don't fetch
       if (!marqueeSettings.showPlayers && !marqueeSettings.showClubs) {
+        console.log('Both players and clubs disabled in settings');
         setItems([]);
         setLoading(false);
         return;
@@ -51,23 +54,29 @@ const RecentPlayers = () => {
       }
 
       const results = await Promise.all(promises);
+      console.log('API results:', results);
 
       let players = [];
       let clubs = [];
+      let resultIndex = 0;
 
       if (marqueeSettings.showPlayers) {
-        const playersRes = results.shift();
+        const playersRes = results[resultIndex++];
+        console.log('Players response:', playersRes?.data);
         players = (playersRes?.data?.success && playersRes.data.data)
           ? playersRes.data.data.map(p => ({ ...p, type: 'player' }))
           : [];
       }
 
       if (marqueeSettings.showClubs) {
-        const clubsRes = results.shift();
+        const clubsRes = results[resultIndex++];
+        console.log('Clubs response:', clubsRes?.data);
         clubs = (clubsRes?.data?.success && clubsRes.data.data)
           ? clubsRes.data.data.map(c => ({ ...c, type: 'club' }))
           : [];
       }
+
+      console.log('Parsed - Players:', players.length, 'Clubs:', clubs.length);
 
       // Interleave players and clubs for variety
       const mixed = [];
@@ -77,6 +86,7 @@ const RecentPlayers = () => {
         if (i < clubs.length) mixed.push(clubs[i]);
       }
 
+      console.log('Total mixed items:', mixed.length);
       setItems(mixed.length > 0 ? mixed : [...players, ...clubs]);
     } catch (err) {
       console.error('Error fetching recent data:', err);
