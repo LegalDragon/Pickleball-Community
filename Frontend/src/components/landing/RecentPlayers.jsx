@@ -19,11 +19,14 @@ const RecentPlayers = () => {
 
   // Fetch theme settings and data
   const fetchData = async () => {
+    console.log('RecentPlayers: fetchData starting...');
     try {
       // First get theme settings
+      console.log('RecentPlayers: Fetching theme...');
       const themeRes = await themeApi.getActive();
-      console.log('Theme API response:', themeRes.data);
-      const theme = themeRes.data?.data;
+      console.log('RecentPlayers: Theme API response:', themeRes);
+      console.log('RecentPlayers: Theme data:', themeRes?.data);
+      const theme = themeRes?.data?.data;
 
       const marqueeSettings = {
         showPlayers: theme?.marqueeShowPlayers ?? true,
@@ -62,18 +65,26 @@ const RecentPlayers = () => {
 
       if (marqueeSettings.showPlayers) {
         const playersRes = results[resultIndex++];
-        console.log('Players response:', playersRes?.data);
-        players = (playersRes?.data?.success && playersRes.data.data)
-          ? playersRes.data.data.map(p => ({ ...p, type: 'player' }))
-          : [];
+        const playersData = playersRes?.data;
+        console.log('Players response:', playersData);
+        // Handle both array response and { success, data } response
+        if (Array.isArray(playersData)) {
+          players = playersData.map(p => ({ ...p, type: 'player' }));
+        } else if (playersData?.success && Array.isArray(playersData.data)) {
+          players = playersData.data.map(p => ({ ...p, type: 'player' }));
+        }
       }
 
       if (marqueeSettings.showClubs) {
         const clubsRes = results[resultIndex++];
-        console.log('Clubs response:', clubsRes?.data);
-        clubs = (clubsRes?.data?.success && clubsRes.data.data)
-          ? clubsRes.data.data.map(c => ({ ...c, type: 'club' }))
-          : [];
+        const clubsData = clubsRes?.data;
+        console.log('Clubs response:', clubsData);
+        // Handle both array response and { success, data } response
+        if (Array.isArray(clubsData)) {
+          clubs = clubsData.map(c => ({ ...c, type: 'club' }));
+        } else if (clubsData?.success && Array.isArray(clubsData.data)) {
+          clubs = clubsData.data.map(c => ({ ...c, type: 'club' }));
+        }
       }
 
       console.log('Parsed - Players:', players.length, 'Clubs:', clubs.length);
@@ -86,11 +97,13 @@ const RecentPlayers = () => {
         if (i < clubs.length) mixed.push(clubs[i]);
       }
 
-      console.log('Total mixed items:', mixed.length);
+      console.log('RecentPlayers: Total mixed items:', mixed.length);
       setItems(mixed.length > 0 ? mixed : [...players, ...clubs]);
     } catch (err) {
-      console.error('Error fetching recent data:', err);
+      console.error('RecentPlayers: Error fetching recent data:', err);
+      console.error('RecentPlayers: Error details:', err.message, err.stack);
     } finally {
+      console.log('RecentPlayers: fetchData complete, loading set to false');
       setLoading(false);
     }
   };
@@ -117,9 +130,18 @@ const RecentPlayers = () => {
     );
   }
 
-  // Don't render if no items or marquee is disabled
+  // Show empty state if no items (but still render section for debugging)
   if (items.length === 0) {
-    return null;
+    return (
+      <section className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-900 py-4">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-emerald-400" />
+            <span className="text-white/70 text-sm">No recent players or clubs to show</span>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   // Duplicate items array for seamless infinite scroll
