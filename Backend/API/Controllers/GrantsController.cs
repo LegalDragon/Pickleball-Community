@@ -137,20 +137,11 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
-            // Build query - fetch accounts first without transaction stats
-            IQueryable<ClubGrantAccount> query = _context.ClubGrantAccounts
+            // Fetch ALL accounts and filter in memory to avoid EF Core CTE issues
+            var allAccounts = await _context.ClubGrantAccounts
                 .Include(a => a.Club)
                 .Include(a => a.League)
-                .Where(a => a.IsActive);
-
-            // Apply league filter using a join approach to avoid CTE issues
-            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
-            {
-                query = query.Where(a => allowedLeagueIds.Contains(a.LeagueId));
-            }
-
-            // First get accounts without transaction subqueries
-            var accountsRaw = await query
+                .Where(a => a.IsActive)
                 .Select(a => new
                 {
                     a.Id,
@@ -167,15 +158,19 @@ public class GrantsController : ControllerBase
                     a.CreatedAt,
                     a.UpdatedAt
                 })
-                .OrderBy(a => a.ClubName)
                 .ToListAsync();
 
-            // Get account IDs for transaction stats query
-            var accountIds = accountsRaw.Select(a => a.Id).ToList();
+            // Filter in memory
+            var accountsRaw = allowedLeagueIds != null
+                ? allAccounts.Where(a => allowedLeagueIds.Contains(a.LeagueId)).ToList()
+                : allAccounts;
 
-            // Fetch transaction stats separately
-            var transactionStats = await _context.ClubGrantTransactions
-                .Where(t => accountIds.Contains(t.AccountId) && !t.IsVoided)
+            // Get account IDs for transaction stats
+            var accountIds = accountsRaw.Select(a => a.Id).ToHashSet();
+
+            // Fetch ALL transaction stats and filter in memory
+            var allTransactionStats = await _context.ClubGrantTransactions
+                .Where(t => !t.IsVoided)
                 .GroupBy(t => t.AccountId)
                 .Select(g => new
                 {
@@ -185,7 +180,9 @@ public class GrantsController : ControllerBase
                 })
                 .ToListAsync();
 
-            var statsDict = transactionStats.ToDictionary(s => s.AccountId);
+            var statsDict = allTransactionStats
+                .Where(s => accountIds.Contains(s.AccountId))
+                .ToDictionary(s => s.AccountId);
 
             // Combine results
             var accounts = accountsRaw.Select(a => new ClubGrantAccountDto
@@ -205,7 +202,9 @@ public class GrantsController : ControllerBase
                 UpdatedAt = a.UpdatedAt,
                 TransactionCount = statsDict.TryGetValue(a.Id, out var stat) ? stat.Count : 0,
                 LastTransactionDate = statsDict.TryGetValue(a.Id, out var stat2) ? stat2.LastDate : null
-            }).ToList();
+            })
+            .OrderBy(a => a.ClubName)
+            .ToList();
 
             return Ok(new ApiResponse<List<ClubGrantAccountDto>> { Success = true, Data = accounts });
         }
@@ -248,17 +247,15 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
-            // Fetch all accounts and compute summary in memory to avoid CTE SQL issues
-            IQueryable<ClubGrantAccount> query = _context.ClubGrantAccounts;
-
-            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
-            {
-                query = query.Where(a => allowedLeagueIds.Contains(a.LeagueId));
-            }
-
-            var accounts = await query
-                .Select(a => new { a.IsActive, a.CurrentBalance, a.TotalCredits, a.TotalDebits })
+            // Fetch ALL accounts and filter in memory to avoid EF Core CTE issues
+            var allAccounts = await _context.ClubGrantAccounts
+                .Select(a => new { a.LeagueId, a.IsActive, a.CurrentBalance, a.TotalCredits, a.TotalDebits })
                 .ToListAsync();
+
+            // Filter in memory
+            var accounts = allowedLeagueIds != null
+                ? allAccounts.Where(a => allowedLeagueIds.Contains(a.LeagueId)).ToList()
+                : allAccounts;
 
             var summary = new ClubGrantAccountSummaryDto
             {
@@ -363,17 +360,37 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
-            // First, get account IDs that match the league filter to avoid complex SQL
-            List<int>? allowedAccountIds = null;
+            // Fetch ALL account IDs and filter in memory to avoid EF Core CTE issues
+            var allAccountMappings = await _context.ClubGrantAccounts
+                .Select(a => new { a.Id, a.LeagueId, a.ClubId })
+                .ToListAsync();
+
+            // Build allowed account IDs set by filtering in memory
+            HashSet<int>? allowedAccountIds = null;
             if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
             {
-                allowedAccountIds = await _context.ClubGrantAccounts
+                allowedAccountIds = allAccountMappings
                     .Where(a => allowedLeagueIds.Contains(a.LeagueId))
                     .Select(a => a.Id)
-                    .ToListAsync();
+                    .ToHashSet();
             }
 
-            var query = _context.ClubGrantTransactions
+            // Further filter by club if requested
+            if (request.ClubId.HasValue)
+            {
+                var clubAccountIds = allAccountMappings
+                    .Where(a => a.ClubId == request.ClubId.Value)
+                    .Select(a => a.Id)
+                    .ToHashSet();
+
+                if (allowedAccountIds != null)
+                    allowedAccountIds.IntersectWith(clubAccountIds);
+                else
+                    allowedAccountIds = clubAccountIds;
+            }
+
+            // Fetch ALL transactions and filter in memory
+            var allTransactions = await _context.ClubGrantTransactions
                 .Include(t => t.Account)
                     .ThenInclude(a => a!.Club)
                 .Include(t => t.Account)
@@ -381,38 +398,42 @@ public class GrantsController : ControllerBase
                 .Include(t => t.ProcessedBy)
                 .Include(t => t.ApprovedBy)
                 .Include(t => t.VoidedBy)
-                .AsQueryable();
+                .ToListAsync();
+
+            // Filter in memory
+            var filteredTransactions = allTransactions.AsEnumerable();
 
             // Apply account filter if needed
             if (allowedAccountIds != null)
             {
-                query = query.Where(t => allowedAccountIds.Contains(t.AccountId));
+                filteredTransactions = filteredTransactions.Where(t => allowedAccountIds.Contains(t.AccountId));
             }
 
-            if (request.ClubId.HasValue)
-                query = query.Where(t => t.Account!.ClubId == request.ClubId.Value);
-
+            // Apply remaining filters in memory
             if (!string.IsNullOrEmpty(request.TransactionType))
-                query = query.Where(t => t.TransactionType == request.TransactionType);
+                filteredTransactions = filteredTransactions.Where(t => t.TransactionType == request.TransactionType);
 
             if (!string.IsNullOrEmpty(request.Category))
-                query = query.Where(t => t.Category == request.Category);
+                filteredTransactions = filteredTransactions.Where(t => t.Category == request.Category);
 
             if (request.DateFrom.HasValue)
-                query = query.Where(t => t.CreatedAt >= request.DateFrom.Value);
+                filteredTransactions = filteredTransactions.Where(t => t.CreatedAt >= request.DateFrom.Value);
 
             if (request.DateTo.HasValue)
-                query = query.Where(t => t.CreatedAt <= request.DateTo.Value.AddDays(1));
+                filteredTransactions = filteredTransactions.Where(t => t.CreatedAt <= request.DateTo.Value.AddDays(1));
 
             if (!string.IsNullOrEmpty(request.DonorName))
-                query = query.Where(t => t.DonorName != null && t.DonorName.Contains(request.DonorName));
+                filteredTransactions = filteredTransactions.Where(t => t.DonorName != null && t.DonorName.Contains(request.DonorName));
 
             if (request.IncludeVoided != true)
-                query = query.Where(t => !t.IsVoided);
+                filteredTransactions = filteredTransactions.Where(t => !t.IsVoided);
 
-            var totalCount = await query.CountAsync();
+            // Materialize the filtered list
+            var transactionList = filteredTransactions.ToList();
+            var totalCount = transactionList.Count;
 
-            var transactions = await query
+            // Apply pagination and projection
+            var transactions = transactionList
                 .OrderByDescending(t => t.CreatedAt)
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
@@ -420,10 +441,10 @@ public class GrantsController : ControllerBase
                 {
                     Id = t.Id,
                     AccountId = t.AccountId,
-                    ClubId = t.Account!.ClubId,
-                    ClubName = t.Account.Club != null ? t.Account.Club.Name : "",
-                    LeagueId = t.Account.LeagueId,
-                    LeagueName = t.Account.League != null ? t.Account.League.Name : "",
+                    ClubId = t.Account?.ClubId ?? 0,
+                    ClubName = t.Account?.Club?.Name ?? "",
+                    LeagueId = t.Account?.LeagueId ?? 0,
+                    LeagueName = t.Account?.League?.Name ?? "",
                     TransactionType = t.TransactionType,
                     Category = t.Category,
                     Amount = t.Amount,
@@ -450,7 +471,7 @@ public class GrantsController : ControllerBase
                     CreatedAt = t.CreatedAt,
                     UpdatedAt = t.UpdatedAt
                 })
-                .ToListAsync();
+                .ToList();
 
             var result = new PagedResult<ClubGrantTransactionDto>
             {
@@ -1160,20 +1181,17 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = allAccessibleLeagueIds;
             }
 
-            // Fetch league clubs with a simpler query to avoid CTE issues
-            IQueryable<LeagueClub> query = _context.LeagueClubs
+            // Fetch ALL league clubs and filter in memory to avoid EF Core CTE issues
+            var allLeagueClubs = await _context.LeagueClubs
                 .Include(lc => lc.Club)
                 .Include(lc => lc.League)
-                .Where(lc => lc.Status == "Active");
+                .Where(lc => lc.Status == "Active")
+                .ToListAsync();
 
-            // Apply league filter if needed
-            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
-            {
-                query = query.Where(lc => allowedLeagueIds.Contains(lc.LeagueId));
-            }
-
-            // Fetch and filter in memory to avoid complex SQL
-            var leagueClubs = await query.ToListAsync();
+            // Filter in memory
+            var leagueClubs = allowedLeagueIds != null
+                ? allLeagueClubs.Where(lc => allowedLeagueIds.Contains(lc.LeagueId)).ToList()
+                : allLeagueClubs;
 
             var clubs = leagueClubs
                 .Where(lc => lc.Club != null && lc.Club.IsActive && lc.League != null && lc.League.IsActive)
