@@ -137,40 +137,75 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
-            // Build query
-            var query = _context.ClubGrantAccounts
+            // Build query - fetch accounts first without transaction stats
+            IQueryable<ClubGrantAccount> query = _context.ClubGrantAccounts
                 .Include(a => a.Club)
                 .Include(a => a.League)
                 .Where(a => a.IsActive);
 
-            // Apply single league filter if needed
-            if (allowedLeagueIds != null)
+            // Apply league filter using a join approach to avoid CTE issues
+            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
             {
-                var leagueIdArray = allowedLeagueIds.ToArray();
-                query = query.Where(a => leagueIdArray.Contains(a.LeagueId));
+                query = query.Where(a => allowedLeagueIds.Contains(a.LeagueId));
             }
 
-            var accounts = await query
-                .Select(a => new ClubGrantAccountDto
+            // First get accounts without transaction subqueries
+            var accountsRaw = await query
+                .Select(a => new
                 {
-                    Id = a.Id,
-                    ClubId = a.ClubId,
+                    a.Id,
+                    a.ClubId,
                     ClubName = a.Club != null ? a.Club.Name : "",
                     ClubLogoUrl = a.Club != null ? a.Club.LogoUrl : null,
-                    LeagueId = a.LeagueId,
+                    a.LeagueId,
                     LeagueName = a.League != null ? a.League.Name : "",
-                    CurrentBalance = a.CurrentBalance,
-                    TotalCredits = a.TotalCredits,
-                    TotalDebits = a.TotalDebits,
-                    Notes = a.Notes,
-                    IsActive = a.IsActive,
-                    CreatedAt = a.CreatedAt,
-                    UpdatedAt = a.UpdatedAt,
-                    TransactionCount = a.Transactions.Count(t => !t.IsVoided),
-                    LastTransactionDate = a.Transactions.Where(t => !t.IsVoided).OrderByDescending(t => t.CreatedAt).Select(t => (DateTime?)t.CreatedAt).FirstOrDefault()
+                    a.CurrentBalance,
+                    a.TotalCredits,
+                    a.TotalDebits,
+                    a.Notes,
+                    a.IsActive,
+                    a.CreatedAt,
+                    a.UpdatedAt
                 })
                 .OrderBy(a => a.ClubName)
                 .ToListAsync();
+
+            // Get account IDs for transaction stats query
+            var accountIds = accountsRaw.Select(a => a.Id).ToList();
+
+            // Fetch transaction stats separately
+            var transactionStats = await _context.ClubGrantTransactions
+                .Where(t => accountIds.Contains(t.AccountId) && !t.IsVoided)
+                .GroupBy(t => t.AccountId)
+                .Select(g => new
+                {
+                    AccountId = g.Key,
+                    Count = g.Count(),
+                    LastDate = g.Max(t => t.CreatedAt)
+                })
+                .ToListAsync();
+
+            var statsDict = transactionStats.ToDictionary(s => s.AccountId);
+
+            // Combine results
+            var accounts = accountsRaw.Select(a => new ClubGrantAccountDto
+            {
+                Id = a.Id,
+                ClubId = a.ClubId,
+                ClubName = a.ClubName,
+                ClubLogoUrl = a.ClubLogoUrl,
+                LeagueId = a.LeagueId,
+                LeagueName = a.LeagueName,
+                CurrentBalance = a.CurrentBalance,
+                TotalCredits = a.TotalCredits,
+                TotalDebits = a.TotalDebits,
+                Notes = a.Notes,
+                IsActive = a.IsActive,
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt,
+                TransactionCount = statsDict.TryGetValue(a.Id, out var stat) ? stat.Count : 0,
+                LastTransactionDate = statsDict.TryGetValue(a.Id, out var stat2) ? stat2.LastDate : null
+            }).ToList();
 
             return Ok(new ApiResponse<List<ClubGrantAccountDto>> { Success = true, Data = accounts });
         }
@@ -213,21 +248,25 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
-            var query = _context.ClubGrantAccounts.AsQueryable();
+            // Fetch all accounts and compute summary in memory to avoid CTE SQL issues
+            IQueryable<ClubGrantAccount> query = _context.ClubGrantAccounts;
 
-            if (allowedLeagueIds != null)
+            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
             {
-                var leagueIdArray = allowedLeagueIds.ToArray();
-                query = query.Where(a => leagueIdArray.Contains(a.LeagueId));
+                query = query.Where(a => allowedLeagueIds.Contains(a.LeagueId));
             }
+
+            var accounts = await query
+                .Select(a => new { a.IsActive, a.CurrentBalance, a.TotalCredits, a.TotalDebits })
+                .ToListAsync();
 
             var summary = new ClubGrantAccountSummaryDto
             {
-                TotalAccounts = await query.CountAsync(),
-                ActiveAccountsCount = await query.Where(a => a.IsActive).CountAsync(),
-                TotalBalance = await query.Where(a => a.IsActive).SumAsync(a => a.CurrentBalance),
-                TotalCreditsAllTime = await query.SumAsync(a => a.TotalCredits),
-                TotalDebitsAllTime = await query.SumAsync(a => a.TotalDebits)
+                TotalAccounts = accounts.Count,
+                ActiveAccountsCount = accounts.Count(a => a.IsActive),
+                TotalBalance = accounts.Where(a => a.IsActive).Sum(a => a.CurrentBalance),
+                TotalCreditsAllTime = accounts.Sum(a => a.TotalCredits),
+                TotalDebitsAllTime = accounts.Sum(a => a.TotalDebits)
             };
 
             return Ok(new ApiResponse<ClubGrantAccountSummaryDto> { Success = true, Data = summary });
@@ -324,6 +363,16 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = permissions.AccessibleLeagueIds.ToHashSet();
             }
 
+            // First, get account IDs that match the league filter to avoid complex SQL
+            List<int>? allowedAccountIds = null;
+            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
+            {
+                allowedAccountIds = await _context.ClubGrantAccounts
+                    .Where(a => allowedLeagueIds.Contains(a.LeagueId))
+                    .Select(a => a.Id)
+                    .ToListAsync();
+            }
+
             var query = _context.ClubGrantTransactions
                 .Include(t => t.Account)
                     .ThenInclude(a => a!.Club)
@@ -334,11 +383,10 @@ public class GrantsController : ControllerBase
                 .Include(t => t.VoidedBy)
                 .AsQueryable();
 
-            // Apply single league filter if needed
-            if (allowedLeagueIds != null)
+            // Apply account filter if needed
+            if (allowedAccountIds != null)
             {
-                var leagueIdArray = allowedLeagueIds.ToArray();
-                query = query.Where(t => leagueIdArray.Contains(t.Account!.LeagueId));
+                query = query.Where(t => allowedAccountIds.Contains(t.AccountId));
             }
 
             if (request.ClubId.HasValue)
@@ -1112,19 +1160,23 @@ public class GrantsController : ControllerBase
                 allowedLeagueIds = allAccessibleLeagueIds;
             }
 
-            var query = _context.LeagueClubs
+            // Fetch league clubs with a simpler query to avoid CTE issues
+            IQueryable<LeagueClub> query = _context.LeagueClubs
                 .Include(lc => lc.Club)
                 .Include(lc => lc.League)
-                .Where(lc => lc.Status == "Active" && lc.Club!.IsActive && lc.League!.IsActive);
+                .Where(lc => lc.Status == "Active");
 
-            // Apply single league filter if needed
-            if (allowedLeagueIds != null)
+            // Apply league filter if needed
+            if (allowedLeagueIds != null && allowedLeagueIds.Count > 0)
             {
-                var leagueIdArray = allowedLeagueIds.ToArray();
-                query = query.Where(lc => leagueIdArray.Contains(lc.LeagueId));
+                query = query.Where(lc => allowedLeagueIds.Contains(lc.LeagueId));
             }
 
-            var clubs = await query
+            // Fetch and filter in memory to avoid complex SQL
+            var leagueClubs = await query.ToListAsync();
+
+            var clubs = leagueClubs
+                .Where(lc => lc.Club != null && lc.Club.IsActive && lc.League != null && lc.League.IsActive)
                 .Select(lc => new
                 {
                     ClubId = lc.ClubId,
@@ -1135,7 +1187,7 @@ public class GrantsController : ControllerBase
                 .Distinct()
                 .OrderBy(c => c.LeagueName)
                 .ThenBy(c => c.ClubName)
-                .ToListAsync();
+                .ToList();
 
             return Ok(new ApiResponse<List<object>> { Success = true, Data = clubs.Cast<object>().ToList() });
         }
