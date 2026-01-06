@@ -1090,6 +1090,123 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
+                  {/* Marquee Settings Section */}
+                  <div className="bg-white rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <Users className="w-5 h-5 mr-2 text-emerald-500" />
+                      Marquee Settings
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-6">
+                      Configure the scrolling marquee on the home page that shows recently joined players and clubs.
+                    </p>
+
+                    {/* Show/Hide Toggles */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Show Players</label>
+                          <p className="text-xs text-gray-500">Display recently joined players in marquee</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleThemeChange('marqueeShowPlayers', !themeSettings.marqueeShowPlayers)}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                            themeSettings.marqueeShowPlayers ? 'bg-emerald-600' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              themeSettings.marqueeShowPlayers ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Show Clubs</label>
+                          <p className="text-xs text-gray-500">Display recently created clubs in marquee</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleThemeChange('marqueeShowClubs', !themeSettings.marqueeShowClubs)}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                            themeSettings.marqueeShowClubs ? 'bg-amber-600' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              themeSettings.marqueeShowClubs ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Count and Days Settings */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Recent Days
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="365"
+                          value={themeSettings.marqueeRecentDays || 30}
+                          onChange={(e) => handleThemeChange('marqueeRecentDays', parseInt(e.target.value) || 30)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">How many days back to show (1-365)</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Max Players
+                        </label>
+                        <input
+                          type="number"
+                          min="5"
+                          max="50"
+                          value={themeSettings.marqueePlayerCount || 20}
+                          onChange={(e) => handleThemeChange('marqueePlayerCount', parseInt(e.target.value) || 20)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Maximum players to display (5-50)</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Max Clubs
+                        </label>
+                        <input
+                          type="number"
+                          min="5"
+                          max="50"
+                          value={themeSettings.marqueeClubCount || 15}
+                          onChange={(e) => handleThemeChange('marqueeClubCount', parseInt(e.target.value) || 15)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Maximum clubs to display (5-50)</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Scroll Speed
+                        </label>
+                        <input
+                          type="number"
+                          min="10"
+                          max="120"
+                          value={themeSettings.marqueeSpeed || 40}
+                          onChange={(e) => handleThemeChange('marqueeSpeed', parseInt(e.target.value) || 40)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Seconds for full scroll (10-120, higher = slower)</p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Theme Presets Section */}
                   <div className="bg-white rounded-xl shadow-sm p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
