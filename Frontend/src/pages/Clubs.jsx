@@ -13,7 +13,7 @@ const getRoleIcon = (iconName) => {
 };
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, leaguesApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
+import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, leaguesApi, grantsApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import VenueMap from '../components/ui/VenueMap';
 
@@ -1092,6 +1092,12 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [leagueTreeLoading, setLeagueTreeLoading] = useState(false);
   const [expandedLeagueNodes, setExpandedLeagueNodes] = useState(new Set());
 
+  // Grant balance state (for club admins)
+  const [grantAccounts, setGrantAccounts] = useState([]);
+  const [grantTransactions, setGrantTransactions] = useState([]);
+  const [grantsLoading, setGrantsLoading] = useState(false);
+  const [grantsSummary, setGrantsSummary] = useState(null);
+
   const logoInputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -1267,6 +1273,42 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
       loadLeagueData();
     }
   }, [activeTab, club.id]);
+
+  // Load grant data for club admins
+  const loadGrantsData = async () => {
+    setGrantsLoading(true);
+    try {
+      // Load accounts and summary in parallel
+      const [accountsRes, summaryRes] = await Promise.all([
+        grantsApi.getClubAccounts(club.id),
+        grantsApi.getClubSummary(club.id)
+      ]);
+
+      if (accountsRes.success) {
+        setGrantAccounts(accountsRes.data || []);
+      }
+      if (summaryRes.success) {
+        setGrantsSummary(summaryRes.data);
+      }
+
+      // Load recent transactions
+      const transactionsRes = await grantsApi.getClubTransactions(club.id, { pageSize: 10 });
+      if (transactionsRes.success) {
+        setGrantTransactions(transactionsRes.data?.items || []);
+      }
+    } catch (err) {
+      console.error('Error loading grant data:', err);
+    } finally {
+      setGrantsLoading(false);
+    }
+  };
+
+  // Load grants when grants tab is opened (club admins only)
+  useEffect(() => {
+    if (activeTab === 'grants' && isAdmin) {
+      loadGrantsData();
+    }
+  }, [activeTab, club.id, isAdmin]);
 
   const handleDocumentUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -1745,6 +1787,19 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
             >
               Documents
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('grants')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+                  activeTab === 'grants'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <DollarSign className="w-4 h-4" />
+                Grants
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={() => setActiveTab('manage')}
@@ -2461,6 +2516,135 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                 <p className="text-center text-gray-500 py-8">
                   {isAdmin ? 'No documents yet. Click "Add Document" to upload one.' : 'No documents available.'}
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* Grants Tab */}
+          {activeTab === 'grants' && isAdmin && (
+            <div className="space-y-6">
+              {grantsLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                </div>
+              ) : grantAccounts.length === 0 ? (
+                <div className="text-center py-12">
+                  <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Grant Accounts</h3>
+                  <p className="text-gray-500">
+                    This club doesn't have any grant accounts with leagues yet.
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Grant accounts are created when a league assigns grants or records donations for your club.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Card */}
+                  {grantsSummary && (
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
+                      <h3 className="text-lg font-medium mb-4">Total Grant Balance</h3>
+                      <div className="text-4xl font-bold mb-2">
+                        ${(grantsSummary.totalBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="flex gap-6 mt-4 text-sm opacity-90">
+                        <div>
+                          <span className="opacity-75">Total Credits:</span>{' '}
+                          <span className="font-medium">${(grantsSummary.totalCreditsAllTime || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div>
+                          <span className="opacity-75">Total Debits:</span>{' '}
+                          <span className="font-medium">${(grantsSummary.totalDebitsAllTime || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Accounts by League */}
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-purple-600" />
+                      Accounts by League
+                    </h3>
+                    <div className="space-y-3">
+                      {grantAccounts.map(account => (
+                        <div key={account.id} className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-gray-900">{account.leagueName}</p>
+                              <p className="text-sm text-gray-500">
+                                {account.transactionCount} transaction{account.transactionCount !== 1 ? 's' : ''}
+                                {account.lastTransactionDate && (
+                                  <span> · Last: {new Date(account.lastTransactionDate).toLocaleDateString()}</span>
+                                )}
+                              </p>
+                            </div>
+                            <div className={`text-xl font-bold ${account.currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ${account.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                          <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                            <span>Credits: ${account.totalCredits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span>Debits: ${account.totalDebits.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recent Transactions */}
+                  {grantTransactions.length > 0 && (
+                    <div>
+                      <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-purple-600" />
+                        Recent Transactions
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-gray-50">
+                              <th className="text-left p-3 font-medium text-gray-700">Date</th>
+                              <th className="text-left p-3 font-medium text-gray-700">Type</th>
+                              <th className="text-left p-3 font-medium text-gray-700">Description</th>
+                              <th className="text-right p-3 font-medium text-gray-700">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {grantTransactions.map(tx => (
+                              <tr key={tx.id} className="hover:bg-gray-50">
+                                <td className="p-3 text-gray-600 whitespace-nowrap">
+                                  {new Date(tx.createdAt).toLocaleDateString()}
+                                </td>
+                                <td className="p-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    tx.transactionType === 'Credit'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {tx.category}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-gray-700">
+                                  {tx.description || tx.grantPurpose || tx.feeReason || (tx.donorName ? `Donation from ${tx.donorName}` : '-')}
+                                </td>
+                                <td className={`p-3 text-right font-medium whitespace-nowrap ${
+                                  tx.transactionType === 'Credit' ? 'text-green-600' : 'text-red-600'
+                                }`}>
+                                  {tx.transactionType === 'Credit' ? '+' : '-'}
+                                  ${tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-sm text-gray-500 text-center pt-4">
+                    Grant accounts are managed by your league administrators. Contact your league for questions.
+                  </p>
+                </>
               )}
             </div>
           )}

@@ -1393,7 +1393,35 @@ export const notificationsApi = {
 // Grants API (club grant account management)
 export const grantsApi = {
   // Get current user's grant permissions
-  getMyPermissions: () => api.get('/grants/my-permissions'),
+  getPermissions: () => api.get('/grants/permissions'),
+
+  // ============================================
+  // Club Admin Endpoints (view-only for club admins)
+  // ============================================
+
+  // Get grant accounts for a specific club (club admin or grant manager)
+  getClubAccounts: (clubId) => api.get(`/grants/club/${clubId}/accounts`),
+
+  // Get transactions for a specific club (club admin or grant manager)
+  getClubTransactions: (clubId, params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.leagueId) queryParams.append('leagueId', params.leagueId);
+    if (params.transactionType) queryParams.append('transactionType', params.transactionType);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const queryString = queryParams.toString();
+    return api.get(`/grants/club/${clubId}/transactions${queryString ? `?${queryString}` : ''}`);
+  },
+
+  // Get summary for a specific club (club admin or grant manager)
+  getClubSummary: (clubId) => api.get(`/grants/club/${clubId}/summary`),
+
+  // ============================================
+  // Grant Manager Endpoints (full access)
+  // ============================================
 
   // Accounts
   getAccounts: (params = {}) => {
@@ -1403,6 +1431,7 @@ export const grantsApi = {
     const queryString = queryParams.toString();
     return api.get(`/grants/accounts${queryString ? `?${queryString}` : ''}`);
   },
+  getAccount: (clubId, leagueId) => api.get(`/grants/accounts/${clubId}/${leagueId}`),
   getAccountSummary: (leagueId = null) => {
     const params = leagueId ? `?leagueId=${leagueId}` : '';
     return api.get(`/grants/accounts/summary${params}`);
@@ -1424,15 +1453,8 @@ export const grantsApi = {
     const queryString = queryParams.toString();
     return api.get(`/grants/transactions${queryString ? `?${queryString}` : ''}`);
   },
-  getTransaction: (id) => api.get(`/grants/transactions/${id}`),
   createTransaction: (data) => api.post('/grants/transactions', data),
   voidTransaction: (id, reason) => api.post(`/grants/transactions/${id}/void`, { reason }),
-
-  // Attachments
-  addAttachment: (transactionId, data) =>
-    api.post(`/grants/transactions/${transactionId}/attachments`, data),
-  deleteAttachment: (transactionId, attachmentId) =>
-    api.delete(`/grants/transactions/${transactionId}/attachments/${attachmentId}`),
 
   // Grant Managers
   getManagers: (leagueId = null) => {
@@ -1441,7 +1463,14 @@ export const grantsApi = {
   },
   createManager: (data) => api.post('/grants/managers', data),
   updateManager: (id, data) => api.put(`/grants/managers/${id}`, data),
-  deleteManager: (id) => api.delete(`/grants/managers/${id}`)
+  deleteManager: (id) => api.delete(`/grants/managers/${id}`),
+
+  // Helper endpoints for dropdowns
+  getLeagues: () => api.get('/grants/leagues'),
+  getClubs: (leagueId = null) => {
+    const params = leagueId ? `?leagueId=${leagueId}` : '';
+    return api.get(`/grants/clubs${params}`);
+  }
 }
 
 export default api

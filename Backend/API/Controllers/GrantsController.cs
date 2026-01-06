@@ -780,6 +780,213 @@ public class GrantsController : ControllerBase
         }
     }
 
+    // =============================================
+    // CLUB ADMIN ENDPOINTS (view-only for club admins)
+    // =============================================
+
+    /// <summary>
+    /// Check if current user is an admin of the specified club
+    /// </summary>
+    private async Task<bool> IsClubAdminAsync(int userId, int clubId)
+    {
+        return await _context.ClubMembers
+            .AnyAsync(m => m.ClubId == clubId && m.UserId == userId && m.Role == "Admin" && m.IsActive);
+    }
+
+    // GET: /grants/club/{clubId}/accounts - Get grant accounts for a specific club (for club admins)
+    [HttpGet("club/{clubId}/accounts")]
+    public async Task<ActionResult<ApiResponse<List<ClubGrantAccountDto>>>> GetClubAccounts(int clubId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<List<ClubGrantAccountDto>> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is club admin, grant manager, or site admin
+            var isSiteAdmin = await IsSiteAdminAsync(userId.Value);
+            var isClubAdmin = await IsClubAdminAsync(userId.Value, clubId);
+            var grantManager = await GetGrantManagerAsync(userId.Value);
+
+            if (!isSiteAdmin && !isClubAdmin && grantManager == null)
+                return Forbid();
+
+            var accounts = await _context.ClubGrantAccounts
+                .Include(a => a.Club)
+                .Include(a => a.League)
+                .Where(a => a.ClubId == clubId && a.IsActive)
+                .Select(a => new ClubGrantAccountDto
+                {
+                    Id = a.Id,
+                    ClubId = a.ClubId,
+                    ClubName = a.Club != null ? a.Club.Name : "",
+                    ClubLogoUrl = a.Club != null ? a.Club.LogoUrl : null,
+                    LeagueId = a.LeagueId,
+                    LeagueName = a.League != null ? a.League.Name : "",
+                    CurrentBalance = a.CurrentBalance,
+                    TotalCredits = a.TotalCredits,
+                    TotalDebits = a.TotalDebits,
+                    Notes = a.Notes,
+                    IsActive = a.IsActive,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt,
+                    TransactionCount = a.Transactions.Count(t => !t.IsVoided),
+                    LastTransactionDate = a.Transactions.Where(t => !t.IsVoided).OrderByDescending(t => t.CreatedAt).Select(t => (DateTime?)t.CreatedAt).FirstOrDefault()
+                })
+                .OrderBy(a => a.LeagueName)
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<ClubGrantAccountDto>> { Success = true, Data = accounts });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching club grant accounts");
+            return StatusCode(500, new ApiResponse<List<ClubGrantAccountDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // GET: /grants/club/{clubId}/transactions - Get transactions for a specific club (for club admins)
+    [HttpGet("club/{clubId}/transactions")]
+    public async Task<ActionResult<ApiResponse<PagedResult<ClubGrantTransactionDto>>>> GetClubTransactions(
+        int clubId,
+        [FromQuery] int? leagueId,
+        [FromQuery] string? transactionType,
+        [FromQuery] string? category,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<PagedResult<ClubGrantTransactionDto>> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is club admin, grant manager, or site admin
+            var isSiteAdmin = await IsSiteAdminAsync(userId.Value);
+            var isClubAdmin = await IsClubAdminAsync(userId.Value, clubId);
+            var grantManager = await GetGrantManagerAsync(userId.Value);
+
+            if (!isSiteAdmin && !isClubAdmin && grantManager == null)
+                return Forbid();
+
+            var query = _context.ClubGrantTransactions
+                .Include(t => t.Account)
+                    .ThenInclude(a => a!.Club)
+                .Include(t => t.Account)
+                    .ThenInclude(a => a!.League)
+                .Include(t => t.ProcessedBy)
+                .Where(t => t.Account!.ClubId == clubId && !t.IsVoided);
+
+            // Apply filters
+            if (leagueId.HasValue)
+                query = query.Where(t => t.Account!.LeagueId == leagueId.Value);
+
+            if (!string.IsNullOrEmpty(transactionType))
+                query = query.Where(t => t.TransactionType == transactionType);
+
+            if (!string.IsNullOrEmpty(category))
+                query = query.Where(t => t.Category == category);
+
+            if (dateFrom.HasValue)
+                query = query.Where(t => t.CreatedAt >= dateFrom.Value);
+
+            if (dateTo.HasValue)
+                query = query.Where(t => t.CreatedAt <= dateTo.Value.AddDays(1));
+
+            var totalCount = await query.CountAsync();
+
+            var transactions = await query
+                .OrderByDescending(t => t.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(t => new ClubGrantTransactionDto
+                {
+                    Id = t.Id,
+                    AccountId = t.AccountId,
+                    ClubId = t.Account!.ClubId,
+                    ClubName = t.Account.Club != null ? t.Account.Club.Name : "",
+                    LeagueId = t.Account.LeagueId,
+                    LeagueName = t.Account.League != null ? t.Account.League.Name : "",
+                    TransactionType = t.TransactionType,
+                    Category = t.Category,
+                    Amount = t.Amount,
+                    BalanceAfter = t.BalanceAfter,
+                    Description = t.Description,
+                    DonorName = t.DonorName,
+                    DonationDate = t.DonationDate,
+                    FeeReason = t.FeeReason,
+                    GrantPurpose = t.GrantPurpose,
+                    ReferenceNumber = t.ReferenceNumber,
+                    ProcessedByUserId = t.ProcessedByUserId,
+                    ProcessedByName = t.ProcessedBy != null ? $"{t.ProcessedBy.FirstName} {t.ProcessedBy.LastName}".Trim() : "",
+                    Notes = t.Notes,
+                    IsVoided = t.IsVoided,
+                    CreatedAt = t.CreatedAt,
+                    UpdatedAt = t.UpdatedAt
+                })
+                .ToListAsync();
+
+            var result = new PagedResult<ClubGrantTransactionDto>
+            {
+                Items = transactions,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+
+            return Ok(new ApiResponse<PagedResult<ClubGrantTransactionDto>> { Success = true, Data = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching club transactions");
+            return StatusCode(500, new ApiResponse<PagedResult<ClubGrantTransactionDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // GET: /grants/club/{clubId}/summary - Get summary for a specific club (for club admins)
+    [HttpGet("club/{clubId}/summary")]
+    public async Task<ActionResult<ApiResponse<ClubGrantAccountSummaryDto>>> GetClubSummary(int clubId)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<ClubGrantAccountSummaryDto> { Success = false, Message = "User not authenticated" });
+
+            // Check if user is club admin, grant manager, or site admin
+            var isSiteAdmin = await IsSiteAdminAsync(userId.Value);
+            var isClubAdmin = await IsClubAdminAsync(userId.Value, clubId);
+            var grantManager = await GetGrantManagerAsync(userId.Value);
+
+            if (!isSiteAdmin && !isClubAdmin && grantManager == null)
+                return Forbid();
+
+            var query = _context.ClubGrantAccounts.Where(a => a.ClubId == clubId);
+
+            var summary = new ClubGrantAccountSummaryDto
+            {
+                TotalAccounts = await query.CountAsync(),
+                ActiveAccountsCount = await query.Where(a => a.IsActive).CountAsync(),
+                TotalBalance = await query.Where(a => a.IsActive).SumAsync(a => a.CurrentBalance),
+                TotalCreditsAllTime = await query.SumAsync(a => a.TotalCredits),
+                TotalDebitsAllTime = await query.SumAsync(a => a.TotalDebits)
+            };
+
+            return Ok(new ApiResponse<ClubGrantAccountSummaryDto> { Success = true, Data = summary });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching club grant summary");
+            return StatusCode(500, new ApiResponse<ClubGrantAccountSummaryDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    // =============================================
+    // GRANT MANAGER ENDPOINTS (full access)
+    // =============================================
+
     // GET: /grants/clubs - Get clubs for dropdown (with league filter)
     [HttpGet("clubs")]
     public async Task<ActionResult<ApiResponse<List<object>>>> GetClubs([FromQuery] int? leagueId)
