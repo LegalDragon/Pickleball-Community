@@ -671,6 +671,9 @@ export const venuesApi = {
   // Add a new venue
   addVenue: (data) => api.post('/venues', data),
 
+  // Alias for addVenue (courts are venues)
+  addCourt: (data) => api.post('/venues', data),
+
   // Get top venues for event creation (based on user history and location)
   getTopForEvents: (latitude, longitude, topN = 10) => {
     const params = new URLSearchParams();
