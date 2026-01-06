@@ -1350,7 +1350,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
 
       if (permRes.success) setFinancePermissions(permRes.data);
       if (accountRes.success) setFinanceAccount(accountRes.data);
-      if (transRes.success) setFinanceTransactions(transRes.data || []);
+      if (transRes.success) setFinanceTransactions(transRes.data?.transactions || []);
       if (summaryRes.success) setFinanceSummary(summaryRes.data);
 
       // Load members for dropdown if user can edit

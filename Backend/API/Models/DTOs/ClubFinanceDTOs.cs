@@ -183,3 +183,13 @@ public class MemberPaymentSummaryDto
     public DateTime? PaidThrough { get; set; } // Latest PeriodEnd date
     public int PaymentCount { get; set; }
 }
+
+// Paginated response wrapper
+public class ClubFinanceTransactionPagedResponse
+{
+    public List<ClubFinanceTransactionDto> Transactions { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+}

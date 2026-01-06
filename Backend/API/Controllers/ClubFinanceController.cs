@@ -193,13 +193,13 @@ public class ClubFinanceController : ControllerBase
     // GET: /clubs/{clubId}/finance/transactions
     [HttpGet("transactions")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<List<ClubFinanceTransactionDto>>>> GetTransactions(
+    public async Task<ActionResult<ApiResponse<ClubFinanceTransactionPagedResponse>>> GetTransactions(
         int clubId,
         [FromQuery] ClubFinanceTransactionSearchRequest? request = null)
     {
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<List<ClubFinanceTransactionDto>> { Success = false, Message = "Unauthorized" });
+            return Unauthorized(new ApiResponse<ClubFinanceTransactionPagedResponse> { Success = false, Message = "Unauthorized" });
 
         var (isMember, _, _) = await GetClubPermissions(clubId, userId.Value);
         if (!isMember)
@@ -302,11 +302,16 @@ public class ClubFinanceController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new ApiResponse<List<ClubFinanceTransactionDto>>
+        return Ok(new ApiResponse<ClubFinanceTransactionPagedResponse>
         {
             Success = true,
-            Data = transactions,
-            Metadata = new { TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize }
+            Data = new ClubFinanceTransactionPagedResponse
+            {
+                Transactions = transactions,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize
+            }
         });
     }
 
