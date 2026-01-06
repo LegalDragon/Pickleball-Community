@@ -13,7 +13,7 @@ const getRoleIcon = (iconName) => {
 };
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, leaguesApi, grantsApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
+import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, leaguesApi, grantsApi, clubFinanceApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import VenueMap from '../components/ui/VenueMap';
 
@@ -1098,6 +1098,32 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [grantsLoading, setGrantsLoading] = useState(false);
   const [grantsSummary, setGrantsSummary] = useState(null);
 
+  // Club Finance state (for all members)
+  const [financeAccount, setFinanceAccount] = useState(null);
+  const [financeTransactions, setFinanceTransactions] = useState([]);
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [financePermissions, setFinancePermissions] = useState(null);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeMembers, setFinanceMembers] = useState([]);
+  const [showAddTransaction, setShowAddTransaction] = useState(false);
+  const [newTransaction, setNewTransaction] = useState({
+    transactionType: 'Income',
+    category: 'MembershipDue',
+    amount: '',
+    description: '',
+    memberUserId: '',
+    paymentMethod: '',
+    paymentReference: '',
+    vendor: '',
+    periodStart: '',
+    periodEnd: '',
+    notes: ''
+  });
+  const [savingTransaction, setSavingTransaction] = useState(false);
+  const [expandedTransactionId, setExpandedTransactionId] = useState(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentDescription, setAttachmentDescription] = useState('');
+
   const logoInputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -1115,6 +1141,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     }
     if (activeTab === 'notifications') loadNotifications();
     if (activeTab === 'documents') loadDocuments();
+    if (activeTab === 'finance' && isMember) loadFinanceData();
   }, [activeTab]);
 
   const loadMembers = async () => {
@@ -1309,6 +1336,159 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
       loadGrantsData();
     }
   }, [activeTab, club.id, isAdmin]);
+
+  // Load finance data for club members
+  const loadFinanceData = async () => {
+    setFinanceLoading(true);
+    try {
+      const [permRes, accountRes, transRes, summaryRes] = await Promise.all([
+        clubFinanceApi.getPermissions(club.id),
+        clubFinanceApi.getAccount(club.id),
+        clubFinanceApi.getTransactions(club.id, { pageSize: 50 }),
+        clubFinanceApi.getSummary(club.id)
+      ]);
+
+      if (permRes.success) setFinancePermissions(permRes.data);
+      if (accountRes.success) setFinanceAccount(accountRes.data);
+      if (transRes.success) setFinanceTransactions(transRes.data || []);
+      if (summaryRes.success) setFinanceSummary(summaryRes.data);
+
+      // Load members for dropdown if user can edit
+      if (permRes.data?.canEdit) {
+        const membersRes = await clubFinanceApi.getMembers(club.id);
+        if (membersRes.success) setFinanceMembers(membersRes.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading finance data:', err);
+    } finally {
+      setFinanceLoading(false);
+    }
+  };
+
+  const handleCreateFinanceTransaction = async () => {
+    if (!newTransaction.amount || !newTransaction.description) return;
+
+    setSavingTransaction(true);
+    try {
+      const response = await clubFinanceApi.createTransaction(club.id, {
+        transactionType: newTransaction.transactionType,
+        category: newTransaction.category,
+        amount: parseFloat(newTransaction.amount),
+        description: newTransaction.description,
+        memberUserId: newTransaction.memberUserId ? parseInt(newTransaction.memberUserId) : null,
+        paymentMethod: newTransaction.paymentMethod || null,
+        paymentReference: newTransaction.paymentReference || null,
+        vendor: newTransaction.vendor || null,
+        periodStart: newTransaction.periodStart || null,
+        periodEnd: newTransaction.periodEnd || null,
+        notes: newTransaction.notes || null
+      });
+
+      if (response.success) {
+        setShowAddTransaction(false);
+        setNewTransaction({
+          transactionType: 'Income',
+          category: 'MembershipDue',
+          amount: '',
+          description: '',
+          memberUserId: '',
+          paymentMethod: '',
+          paymentReference: '',
+          vendor: '',
+          periodStart: '',
+          periodEnd: '',
+          notes: ''
+        });
+        loadFinanceData();
+        toast.success('Transaction recorded');
+      } else {
+        toast.error(response.message || 'Failed to create transaction');
+      }
+    } catch (err) {
+      console.error('Error creating transaction:', err);
+      toast.error('Failed to create transaction');
+    } finally {
+      setSavingTransaction(false);
+    }
+  };
+
+  const handleVoidFinanceTransaction = async (transactionId) => {
+    const reason = prompt('Enter reason for voiding this transaction:');
+    if (!reason) return;
+
+    try {
+      const response = await clubFinanceApi.voidTransaction(club.id, transactionId, reason);
+      if (response.success) {
+        loadFinanceData();
+        toast.success('Transaction voided');
+      } else {
+        toast.error(response.message || 'Failed to void transaction');
+      }
+    } catch (err) {
+      console.error('Error voiding transaction:', err);
+      toast.error('Failed to void transaction');
+    }
+  };
+
+  const handleFinanceAttachmentUpload = async (transactionId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAttachment(true);
+    try {
+      const assetType = sharedAssetApi.getAssetType(file);
+      const uploadRes = await sharedAssetApi.upload(file, assetType, 'finance-attachment');
+
+      if (uploadRes.data?.url) {
+        const response = await clubFinanceApi.addAttachment(club.id, transactionId, {
+          fileName: file.name,
+          fileUrl: uploadRes.data.url,
+          fileType: file.type,
+          fileSize: file.size,
+          description: attachmentDescription || null
+        });
+
+        if (response.success) {
+          setAttachmentDescription('');
+          loadFinanceData();
+        } else {
+          toast.error(response.message || 'Failed to add attachment');
+        }
+      }
+    } catch (err) {
+      console.error('Error uploading attachment:', err);
+      toast.error('Failed to upload attachment');
+    } finally {
+      setUploadingAttachment(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteFinanceAttachment = async (transactionId, attachmentId) => {
+    if (!confirm('Delete this attachment?')) return;
+
+    try {
+      const response = await clubFinanceApi.deleteAttachment(club.id, transactionId, attachmentId);
+      if (response.success) {
+        loadFinanceData();
+      } else {
+        toast.error(response.message || 'Failed to delete attachment');
+      }
+    } catch (err) {
+      console.error('Error deleting attachment:', err);
+      toast.error('Failed to delete attachment');
+    }
+  };
+
+  const toggleFinanceTransactionExpand = (transactionId) => {
+    setExpandedTransactionId(prev => prev === transactionId ? null : transactionId);
+    setAttachmentDescription('');
+  };
+
+  // Finance category options
+  const incomeCategories = ['MembershipDue', 'EventFee', 'Sponsorship', 'Donation', 'Other'];
+  const expenseCategories = ['Equipment', 'Venue', 'Supplies', 'Insurance', 'Marketing', 'Prize', 'Refund', 'Other'];
+  const paymentMethods = ['Cash', 'Check', 'Card', 'Venmo', 'Zelle', 'PayPal', 'Other'];
 
   const handleDocumentUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -1787,6 +1967,19 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
             >
               Documents
             </button>
+            {isMember && (
+              <button
+                onClick={() => setActiveTab('finance')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+                  activeTab === 'finance'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <DollarSign className="w-4 h-4" />
+                Finance
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={() => setActiveTab('grants')}
@@ -2516,6 +2709,401 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                 <p className="text-center text-gray-500 py-8">
                   {isAdmin ? 'No documents yet. Click "Add Document" to upload one.' : 'No documents available.'}
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* Finance Tab */}
+          {activeTab === 'finance' && isMember && (
+            <div className="space-y-6">
+              {financeLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                </div>
+              ) : (
+                <>
+                  {/* Balance Summary Card */}
+                  {financeSummary && (
+                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+                      <h3 className="text-lg font-medium mb-4">Club Balance</h3>
+                      <div className="text-4xl font-bold mb-2">
+                        ${(financeSummary.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="flex flex-wrap gap-6 mt-4 text-sm opacity-90">
+                        <div>
+                          <span className="opacity-75">Total Income:</span>{' '}
+                          <span className="font-medium">${(financeSummary.totalIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div>
+                          <span className="opacity-75">Total Expenses:</span>{' '}
+                          <span className="font-medium">${(financeSummary.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                      {(financeSummary.incomeThisMonth > 0 || financeSummary.expensesThisMonth > 0) && (
+                        <div className="flex flex-wrap gap-6 mt-2 text-xs opacity-75">
+                          <div>This Month Income: ${financeSummary.incomeThisMonth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          <div>This Month Expenses: ${financeSummary.expensesThisMonth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Add Transaction Button (Admin/Treasurer only) */}
+                  {financePermissions?.canEdit && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => setShowAddTransaction(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Transaction
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Add Transaction Modal */}
+                  {showAddTransaction && (
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h4 className="font-medium text-gray-900 mb-4">New Transaction</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                          <select
+                            value={newTransaction.transactionType}
+                            onChange={(e) => setNewTransaction({
+                              ...newTransaction,
+                              transactionType: e.target.value,
+                              category: e.target.value === 'Income' ? 'MembershipDue' : 'Equipment'
+                            })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          >
+                            <option value="Income">Income</option>
+                            <option value="Expense">Expense</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                          <select
+                            value={newTransaction.category}
+                            onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                          >
+                            {(newTransaction.transactionType === 'Income' ? incomeCategories : expenseCategories).map(cat => (
+                              <option key={cat} value={cat}>{cat.replace(/([A-Z])/g, ' $1').trim()}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newTransaction.amount}
+                            onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        {newTransaction.transactionType === 'Income' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Member (optional)</label>
+                            <select
+                              value={newTransaction.memberUserId}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, memberUserId: e.target.value })}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            >
+                              <option value="">-- Select Member --</option>
+                              {financeMembers.map(m => (
+                                <option key={m.userId} value={m.userId}>{m.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {newTransaction.transactionType === 'Income' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                            <select
+                              value={newTransaction.paymentMethod}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, paymentMethod: e.target.value })}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            >
+                              <option value="">-- Select Method --</option>
+                              {paymentMethods.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {newTransaction.transactionType === 'Expense' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor</label>
+                            <input
+                              type="text"
+                              value={newTransaction.vendor}
+                              onChange={(e) => setNewTransaction({ ...newTransaction, vendor: e.target.value })}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                              placeholder="Vendor name"
+                            />
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                          <input
+                            type="text"
+                            value={newTransaction.description}
+                            onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            placeholder="Description"
+                          />
+                        </div>
+                        {newTransaction.category === 'MembershipDue' && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Period Start</label>
+                              <input
+                                type="date"
+                                value={newTransaction.periodStart}
+                                onChange={(e) => setNewTransaction({ ...newTransaction, periodStart: e.target.value })}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Period End</label>
+                              <input
+                                type="date"
+                                value={newTransaction.periodEnd}
+                                onChange={(e) => setNewTransaction({ ...newTransaction, periodEnd: e.target.value })}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                              />
+                            </div>
+                          </>
+                        )}
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                          <textarea
+                            value={newTransaction.notes}
+                            onChange={(e) => setNewTransaction({ ...newTransaction, notes: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-4">
+                        <button
+                          onClick={() => setShowAddTransaction(false)}
+                          className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleCreateFinanceTransaction}
+                          disabled={savingTransaction || !newTransaction.amount || !newTransaction.description}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                        >
+                          {savingTransaction ? 'Saving...' : 'Save Transaction'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Transactions List */}
+                  <div>
+                    <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-purple-600" />
+                      Transactions
+                    </h3>
+                    {financeTransactions.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-gray-50">
+                              <th className="w-8"></th>
+                              <th className="text-left p-3 font-medium text-gray-700">Date</th>
+                              <th className="text-left p-3 font-medium text-gray-700">Type</th>
+                              <th className="text-left p-3 font-medium text-gray-700">Description</th>
+                              <th className="text-center p-3 font-medium text-gray-700">
+                                <FileText className="w-4 h-4 mx-auto" />
+                              </th>
+                              <th className="text-right p-3 font-medium text-gray-700">Amount</th>
+                              {financePermissions?.canVoid && (
+                                <th className="w-10"></th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {financeTransactions.map(tx => (
+                              <>
+                                <tr key={tx.id} className={`hover:bg-gray-50 ${tx.isVoided ? 'opacity-50 bg-red-50' : ''}`}>
+                                  <td className="p-2">
+                                    <button
+                                      onClick={() => toggleFinanceTransactionExpand(tx.id)}
+                                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                                    >
+                                      {expandedTransactionId === tx.id ? (
+                                        <ChevronDown className="w-4 h-4 rotate-180" />
+                                      ) : (
+                                        <ChevronDown className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  </td>
+                                  <td className="p-3 text-gray-600 whitespace-nowrap">
+                                    {new Date(tx.createdAt).toLocaleDateString()}
+                                  </td>
+                                  <td className="p-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                      tx.transactionType === 'Income'
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-red-100 text-red-800'
+                                    }`}>
+                                      {tx.category.replace(/([A-Z])/g, ' $1').trim()}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-gray-700 max-w-xs">
+                                    <div className="truncate">{tx.description}</div>
+                                    {tx.memberName && <div className="text-xs text-gray-500">From: {tx.memberName}</div>}
+                                    {tx.vendor && <div className="text-xs text-gray-500">Vendor: {tx.vendor}</div>}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    {tx.attachments?.length > 0 && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                                        <FileText className="w-3 h-3" />
+                                        {tx.attachments.length}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className={`p-3 text-right font-medium whitespace-nowrap ${
+                                    tx.transactionType === 'Income' ? 'text-green-600' : 'text-red-600'
+                                  }`}>
+                                    {tx.transactionType === 'Income' ? '+' : '-'}
+                                    ${tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  {financePermissions?.canVoid && (
+                                    <td className="p-3">
+                                      {!tx.isVoided && (
+                                        <button
+                                          onClick={() => handleVoidFinanceTransaction(tx.id)}
+                                          className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                          title="Void Transaction"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </td>
+                                  )}
+                                </tr>
+                                {/* Expanded row for attachments */}
+                                {expandedTransactionId === tx.id && (
+                                  <tr key={`${tx.id}-expand`}>
+                                    <td colSpan={financePermissions?.canVoid ? 7 : 6} className="bg-gray-50 p-4">
+                                      <div className="space-y-3">
+                                        <div className="text-sm text-gray-600">
+                                          <p><strong>Recorded by:</strong> {tx.recordedByName}</p>
+                                          {tx.paymentMethod && <p><strong>Payment:</strong> {tx.paymentMethod} {tx.paymentReference && `(${tx.paymentReference})`}</p>}
+                                          {tx.periodStart && tx.periodEnd && <p><strong>Period:</strong> {new Date(tx.periodStart).toLocaleDateString()} - {new Date(tx.periodEnd).toLocaleDateString()}</p>}
+                                          {tx.notes && <p><strong>Notes:</strong> {tx.notes}</p>}
+                                          {tx.isVoided && <p className="text-red-600"><strong>Voided:</strong> {tx.voidReason} by {tx.voidedByName}</p>}
+                                        </div>
+
+                                        <h5 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                          <FileText className="w-4 h-4" />
+                                          Attachments
+                                        </h5>
+
+                                        {tx.attachments?.length > 0 ? (
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {tx.attachments.map(att => (
+                                              <div key={att.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                                                <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                                  {att.fileType?.startsWith('image/') ? (
+                                                    <Image className="w-5 h-5 text-blue-600" />
+                                                  ) : (
+                                                    <FileText className="w-5 h-5 text-blue-600" />
+                                                  )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-medium text-gray-900 truncate">{att.fileName}</p>
+                                                  <p className="text-xs text-gray-500">{att.uploadedByName}</p>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  <a
+                                                    href={getSharedAssetUrl(att.fileUrl)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+                                                    title="Download"
+                                                  >
+                                                    <Download className="w-4 h-4" />
+                                                  </a>
+                                                  {financePermissions?.canEdit && (
+                                                    <button
+                                                      onClick={() => handleDeleteFinanceAttachment(tx.id, att.id)}
+                                                      className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                                      title="Delete"
+                                                    >
+                                                      <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="text-sm text-gray-500">No attachments</p>
+                                        )}
+
+                                        {financePermissions?.canEdit && !tx.isVoided && (
+                                          <div className="pt-2 border-t border-gray-200">
+                                            <p className="text-xs font-medium text-gray-600 mb-2">Add Attachment</p>
+                                            <div className="flex items-center gap-2">
+                                              <input
+                                                type="text"
+                                                placeholder="Description (optional)"
+                                                value={attachmentDescription}
+                                                onChange={(e) => setAttachmentDescription(e.target.value)}
+                                                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+                                              />
+                                              <label className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer ${uploadingAttachment ? 'opacity-50' : ''}`}>
+                                                {uploadingAttachment ? (
+                                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                  <Upload className="w-4 h-4" />
+                                                )}
+                                                {uploadingAttachment ? 'Uploading...' : 'Upload'}
+                                                <input
+                                                  type="file"
+                                                  onChange={(e) => handleFinanceAttachmentUpload(tx.id, e)}
+                                                  className="hidden"
+                                                  disabled={uploadingAttachment}
+                                                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                                                />
+                                              </label>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <DollarSign className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500">No transactions recorded yet</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-sm text-gray-500 text-center pt-4">
+                    {financePermissions?.canEdit
+                      ? 'As Admin/Treasurer, you can record income and expenses for this club.'
+                      : 'Only club Admin or Treasurer can record transactions.'}
+                  </p>
+                </>
               )}
             </div>
           )}

@@ -117,6 +117,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<GrantManager> GrantManagers { get; set; }
     public DbSet<GrantTransactionAttachment> GrantTransactionAttachments { get; set; }
 
+    // Club Finance (internal club accounting)
+    public DbSet<ClubFinanceAccount> ClubFinanceAccounts { get; set; }
+    public DbSet<ClubFinanceTransaction> ClubFinanceTransactions { get; set; }
+    public DbSet<ClubFinanceTransactionAttachment> ClubFinanceTransactionAttachments { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
@@ -1058,6 +1063,78 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(r => r.ProcessedBy)
                   .WithMany()
                   .HasForeignKey(r => r.ProcessedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Club Finance Account configuration
+        modelBuilder.Entity<ClubFinanceAccount>(entity =>
+        {
+            entity.HasIndex(a => a.ClubId).IsUnique();
+
+            entity.HasOne(a => a.Club)
+                  .WithMany()
+                  .HasForeignKey(a => a.ClubId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Club Finance Transaction configuration
+        modelBuilder.Entity<ClubFinanceTransaction>(entity =>
+        {
+            entity.Property(t => t.TransactionType).IsRequired().HasMaxLength(20);
+            entity.Property(t => t.Category).IsRequired().HasMaxLength(50);
+            entity.Property(t => t.Description).IsRequired().HasMaxLength(500);
+            entity.HasIndex(t => t.AccountId);
+            entity.HasIndex(t => t.TransactionType);
+            entity.HasIndex(t => t.Category);
+            entity.HasIndex(t => t.MemberId);
+            entity.HasIndex(t => t.CreatedAt);
+
+            entity.HasOne(t => t.Account)
+                  .WithMany(a => a.Transactions)
+                  .HasForeignKey(t => t.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(t => t.Member)
+                  .WithMany()
+                  .HasForeignKey(t => t.MemberId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(t => t.MemberUser)
+                  .WithMany()
+                  .HasForeignKey(t => t.MemberUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(t => t.RecordedBy)
+                  .WithMany()
+                  .HasForeignKey(t => t.RecordedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(t => t.ApprovedBy)
+                  .WithMany()
+                  .HasForeignKey(t => t.ApprovedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(t => t.VoidedBy)
+                  .WithMany()
+                  .HasForeignKey(t => t.VoidedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Club Finance Transaction Attachment configuration
+        modelBuilder.Entity<ClubFinanceTransactionAttachment>(entity =>
+        {
+            entity.Property(a => a.FileName).IsRequired().HasMaxLength(255);
+            entity.Property(a => a.FileUrl).IsRequired().HasMaxLength(500);
+            entity.HasIndex(a => a.TransactionId);
+
+            entity.HasOne(a => a.Transaction)
+                  .WithMany(t => t.Attachments)
+                  .HasForeignKey(a => a.TransactionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.UploadedBy)
+                  .WithMany()
+                  .HasForeignKey(a => a.UploadedByUserId)
                   .OnDelete(DeleteBehavior.NoAction);
         });
     }

@@ -1484,4 +1484,40 @@ export const grantsApi = {
     api.delete(`/grants/transactions/${transactionId}/attachments/${attachmentId}`)
 }
 
+// Club Finance API (internal club accounting)
+export const clubFinanceApi = {
+  // Permissions
+  getPermissions: (clubId) => api.get(`/clubs/${clubId}/finance/permissions`),
+
+  // Account
+  getAccount: (clubId) => api.get(`/clubs/${clubId}/finance/account`),
+  getSummary: (clubId) => api.get(`/clubs/${clubId}/finance/summary`),
+
+  // Transactions
+  getTransactions: (clubId, params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.transactionType) queryParams.append('transactionType', params.transactionType);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.memberUserId) queryParams.append('memberUserId', params.memberUserId);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params.includeVoided) queryParams.append('includeVoided', params.includeVoided);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const queryString = queryParams.toString();
+    return api.get(`/clubs/${clubId}/finance/transactions${queryString ? `?${queryString}` : ''}`);
+  },
+  createTransaction: (clubId, data) => api.post(`/clubs/${clubId}/finance/transactions`, data),
+  updateTransaction: (clubId, transactionId, data) => api.put(`/clubs/${clubId}/finance/transactions/${transactionId}`, data),
+  voidTransaction: (clubId, transactionId, reason) => api.post(`/clubs/${clubId}/finance/transactions/${transactionId}/void`, { reason }),
+
+  // Attachments
+  addAttachment: (clubId, transactionId, data) => api.post(`/clubs/${clubId}/finance/transactions/${transactionId}/attachments`, data),
+  deleteAttachment: (clubId, transactionId, attachmentId) => api.delete(`/clubs/${clubId}/finance/transactions/${transactionId}/attachments/${attachmentId}`),
+
+  // Member payments
+  getMemberPayments: (clubId) => api.get(`/clubs/${clubId}/finance/member-payments`),
+  getMembers: (clubId) => api.get(`/clubs/${clubId}/finance/members`)
+}
+
 export default api
