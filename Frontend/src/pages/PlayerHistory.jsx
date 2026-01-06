@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../contexts/AuthContext'
 import { playerHistoryApi, getSharedAssetUrl } from '../services/api'
 import {
   Trophy,
