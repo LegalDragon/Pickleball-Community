@@ -127,9 +127,11 @@ public class GrantsController : ControllerBase
                 query = query.Where(a => permissions.AccessibleLeagueIds.Contains(a.LeagueId));
             }
 
+            // Include accounts from all descendant leagues
             if (leagueId.HasValue)
             {
-                query = query.Where(a => a.LeagueId == leagueId.Value);
+                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
+                query = query.Where(a => descendantLeagueIds.Contains(a.LeagueId));
             }
 
             var accounts = await query
@@ -184,9 +186,11 @@ public class GrantsController : ControllerBase
                 query = query.Where(a => permissions.AccessibleLeagueIds.Contains(a.LeagueId));
             }
 
+            // Include accounts from all descendant leagues
             if (leagueId.HasValue)
             {
-                query = query.Where(a => a.LeagueId == leagueId.Value);
+                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(leagueId.Value);
+                query = query.Where(a => descendantLeagueIds.Contains(a.LeagueId));
             }
 
             var summary = new ClubGrantAccountSummaryDto
@@ -290,9 +294,12 @@ public class GrantsController : ControllerBase
                 query = query.Where(t => permissions.AccessibleLeagueIds.Contains(t.Account!.LeagueId));
             }
 
-            // Apply filters
+            // Apply filters - include transactions from all descendant leagues
             if (request.LeagueId.HasValue)
-                query = query.Where(t => t.Account!.LeagueId == request.LeagueId.Value);
+            {
+                var descendantLeagueIds = await GetDescendantLeagueIdsAsync(request.LeagueId.Value);
+                query = query.Where(t => descendantLeagueIds.Contains(t.Account!.LeagueId));
+            }
 
             if (request.ClubId.HasValue)
                 query = query.Where(t => t.Account!.ClubId == request.ClubId.Value);
