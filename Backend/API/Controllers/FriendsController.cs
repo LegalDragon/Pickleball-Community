@@ -7,6 +7,7 @@ using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -17,11 +18,16 @@ public class FriendsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<FriendsController> _logger;
+    private readonly INotificationService _notificationService;
 
-    public FriendsController(ApplicationDbContext context, ILogger<FriendsController> logger)
+    public FriendsController(
+        ApplicationDbContext context,
+        ILogger<FriendsController> logger,
+        INotificationService notificationService)
     {
         _context = context;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     private int? GetCurrentUserId()
@@ -473,6 +479,21 @@ public class FriendsController : ControllerBase
             _context.FriendRequests.Add(request);
             await _context.SaveChangesAsync();
 
+            // Get sender's name for notification
+            var sender = await _context.Users.FindAsync(userId.Value);
+            var senderName = sender != null ? $"{sender.FirstName} {sender.LastName}".Trim() : "Someone";
+
+            // Send notification to recipient
+            await _notificationService.CreateAndSendAsync(
+                dto.RecipientId,
+                "FriendRequest",
+                "New Friend Request",
+                $"{senderName} wants to be your friend",
+                "/friends",
+                "FriendRequest",
+                request.Id
+            );
+
             return Ok(new ApiResponse<FriendRequestDto>
             {
                 Success = true,
@@ -520,6 +541,21 @@ public class FriendsController : ControllerBase
 
             _context.Friendships.Add(friendship);
             await _context.SaveChangesAsync();
+
+            // Get acceptor's name for notification
+            var acceptor = await _context.Users.FindAsync(userId.Value);
+            var acceptorName = acceptor != null ? $"{acceptor.FirstName} {acceptor.LastName}".Trim() : "Someone";
+
+            // Send notification to original sender that their request was accepted
+            await _notificationService.CreateAndSendAsync(
+                request.SenderId,
+                "FriendRequestAccepted",
+                "Friend Request Accepted",
+                $"{acceptorName} accepted your friend request",
+                $"/users/{userId.Value}",
+                "User",
+                userId.Value
+            );
 
             return Ok(new ApiResponse<object> { Success = true, Message = "Friend request accepted" });
         }

@@ -56,10 +56,12 @@ public interface IPlayerCertificationService
 public class PlayerCertificationService : IPlayerCertificationService
 {
     private readonly ApplicationDbContext _context;
+    private readonly INotificationService _notificationService;
 
-    public PlayerCertificationService(ApplicationDbContext context)
+    public PlayerCertificationService(ApplicationDbContext context, INotificationService notificationService)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     #region Knowledge Levels
@@ -525,12 +527,13 @@ public class PlayerCertificationService : IPlayerCertificationService
     {
         var request = await _context.PlayerCertificationRequests
             .Include(r => r.Invitations)
+            .Include(r => r.Student)
             .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == studentId);
 
         if (request == null) return 0;
 
         var existingInvitedIds = request.Invitations.Select(i => i.InvitedUserId).ToHashSet();
-        var newInvitations = 0;
+        var newInvitedUserIds = new List<int>();
 
         foreach (var userId in dto.UserIds)
         {
@@ -543,11 +546,30 @@ public class PlayerCertificationService : IPlayerCertificationService
                 InvitedUserId = userId,
                 InvitedAt = DateTime.UtcNow
             });
-            newInvitations++;
+            newInvitedUserIds.Add(userId);
         }
 
         await _context.SaveChangesAsync();
-        return newInvitations;
+
+        // Send notifications to newly invited users
+        if (newInvitedUserIds.Count > 0)
+        {
+            var studentName = request.Student != null
+                ? $"{request.Student.FirstName} {request.Student.LastName}".Trim()
+                : "A player";
+
+            await _notificationService.CreateAndSendToUsersAsync(
+                newInvitedUserIds,
+                "PeerReviewRequest",
+                "Skill Review Request",
+                $"{studentName} is asking you to review their pickleball skills",
+                $"/review/{request.Token}",
+                "CertificationRequest",
+                requestId
+            );
+        }
+
+        return newInvitedUserIds.Count;
     }
 
     #endregion
@@ -822,6 +844,25 @@ public class PlayerCertificationService : IPlayerCertificationService
         }
 
         await _context.SaveChangesAsync();
+
+        // Notify student about the new review (unless it's a self-review)
+        if (!dto.IsSelfReview)
+        {
+            var reviewerDisplayName = dto.IsAnonymous
+                ? "A peer"
+                : (string.IsNullOrEmpty(dto.ReviewerName) ? "Someone" : dto.ReviewerName);
+
+            await _notificationService.CreateAndSendAsync(
+                request.StudentId,
+                "PeerReviewCompleted",
+                "New Skill Review Received",
+                $"{reviewerDisplayName} has reviewed your pickleball skills",
+                "/member/certification",
+                "CertificationReview",
+                review.Id
+            );
+        }
+
         return true;
     }
 

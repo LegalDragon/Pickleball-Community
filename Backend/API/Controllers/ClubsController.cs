@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -14,11 +15,16 @@ public class ClubsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ClubsController> _logger;
+    private readonly INotificationService _notificationService;
 
-    public ClubsController(ApplicationDbContext context, ILogger<ClubsController> logger)
+    public ClubsController(
+        ApplicationDbContext context,
+        ILogger<ClubsController> logger,
+        INotificationService notificationService)
     {
         _context = context;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     private int? GetCurrentUserId()
@@ -637,6 +643,28 @@ public class ClubsController : ControllerBase
             _context.ClubJoinRequests.Add(request);
             await _context.SaveChangesAsync();
 
+            // Notify club admins about the new join request
+            var requester = await _context.Users.FindAsync(userId.Value);
+            var requesterName = requester != null ? $"{requester.FirstName} {requester.LastName}".Trim() : "Someone";
+
+            var clubAdmins = await _context.ClubMembers
+                .Where(m => m.ClubId == id && m.Role == "Admin" && m.IsActive)
+                .Select(m => m.UserId)
+                .ToListAsync();
+
+            if (clubAdmins.Count > 0)
+            {
+                await _notificationService.CreateAndSendToUsersAsync(
+                    clubAdmins,
+                    "ClubJoinRequest",
+                    "New Club Join Request",
+                    $"{requesterName} wants to join {club.Name}",
+                    $"/clubs?id={id}&tab=manage",
+                    "ClubJoinRequest",
+                    request.Id
+                );
+            }
+
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Join request submitted" });
         }
         catch (Exception ex)
@@ -1028,6 +1056,36 @@ public class ClubsController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
+
+            // Get club name for notification
+            var club = await _context.Clubs.FindAsync(id);
+            var clubName = club?.Name ?? "the club";
+
+            // Notify user about the decision
+            if (dto.Approve)
+            {
+                await _notificationService.CreateAndSendAsync(
+                    request.UserId,
+                    "ClubJoinApproved",
+                    "Welcome to the Club!",
+                    $"Your request to join {clubName} has been approved",
+                    $"/clubs?id={id}",
+                    "Club",
+                    id
+                );
+            }
+            else
+            {
+                await _notificationService.CreateAndSendAsync(
+                    request.UserId,
+                    "ClubJoinRejected",
+                    "Club Request Update",
+                    $"Your request to join {clubName} was not approved",
+                    "/clubs",
+                    "Club",
+                    id
+                );
+            }
 
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = dto.Approve ? "Request approved" : "Request rejected" });
         }

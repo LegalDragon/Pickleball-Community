@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -14,11 +15,16 @@ public class EventsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<EventsController> _logger;
+    private readonly INotificationService _notificationService;
 
-    public EventsController(ApplicationDbContext context, ILogger<EventsController> logger)
+    public EventsController(
+        ApplicationDbContext context,
+        ILogger<EventsController> logger,
+        INotificationService notificationService)
     {
         _context = context;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     private int? GetCurrentUserId()
@@ -787,6 +793,21 @@ public class EventsController : ControllerBase
             await _context.SaveChangesAsync();
 
             var user = await _context.Users.FindAsync(userId.Value);
+            var userName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "Someone";
+
+            // Notify event organizer about new registration
+            if (evt.OrganizedByUserId.HasValue && evt.OrganizedByUserId.Value != userId.Value)
+            {
+                await _notificationService.CreateAndSendAsync(
+                    evt.OrganizedByUserId.Value,
+                    "EventRegistration",
+                    "New Event Registration",
+                    $"{userName} registered for {evt.Name} ({division.Name})",
+                    $"/events?id={id}",
+                    "EventRegistration",
+                    registration.Id
+                );
+            }
 
             return Ok(new ApiResponse<EventRegistrationDto>
             {
@@ -797,7 +818,7 @@ public class EventsController : ControllerBase
                     EventId = registration.EventId,
                     DivisionId = registration.DivisionId,
                     UserId = registration.UserId,
-                    UserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                    UserName = userName,
                     TeamName = registration.TeamName,
                     PaymentStatus = registration.PaymentStatus,
                     AmountPaid = registration.AmountPaid,
