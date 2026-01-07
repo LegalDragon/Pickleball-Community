@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin, Users, MessageCircle, HelpCircle, MessageSquarePlus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAssetUrl, getSharedAssetUrl } from '../../services/api';
+import { getAssetUrl, getSharedAssetUrl, notificationsApi } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
+import { useNotifications } from '../../hooks/useNotifications';
 
 // Shared Auth API URL from environment
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
@@ -14,10 +15,45 @@ const Navigation = () => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [authKey, setAuthKey] = useState(0); // Add this
   const [logoHtml, setLogoHtml] = useState(null);
+  const [newNotification, setNewNotification] = useState(null);
   const location = useLocation();
 
   const { user, logout, isAuthenticated } = useAuth();
   const { redirectToLogin, redirectToRegister } = useSharedAuth();
+  const {
+    unreadCount,
+    connect: connectNotifications,
+    disconnect: disconnectNotifications,
+    addListener,
+    setInitialUnreadCount,
+    isConnected: notificationsConnected
+  } = useNotifications();
+
+  // Connect to notification hub when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      connectNotifications();
+      // Fetch initial unread count from API
+      notificationsApi.getUnreadCount()
+        .then(res => {
+          const count = res?.data?.count ?? res?.count ?? 0;
+          setInitialUnreadCount(count);
+        })
+        .catch(err => console.error('Failed to get unread count:', err));
+    } else {
+      disconnectNotifications();
+    }
+  }, [isAuthenticated, user]);
+
+  // Show toast for new notifications
+  useEffect(() => {
+    const removeListener = addListener((notification) => {
+      setNewNotification(notification);
+      // Auto-hide after 5 seconds
+      setTimeout(() => setNewNotification(null), 5000);
+    });
+    return removeListener;
+  }, [addListener]);
 
   // Fetch logo HTML from shared auth
   useEffect(() => {
@@ -291,8 +327,20 @@ const Navigation = () => {
                               className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                               onClick={() => setShowUserDropdown(false)}
                             >
-                              <item.icon className="w-4 h-4 mr-3" />
+                              <div className="relative mr-3">
+                                <item.icon className="w-4 h-4" />
+                                {item.name === 'Notifications' && unreadCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-medium text-[10px]">
+                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                  </span>
+                                )}
+                              </div>
                               {item.name}
+                              {item.name === 'Notifications' && unreadCount > 0 && (
+                                <span className="ml-auto bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">
+                                  {unreadCount} new
+                                </span>
+                              )}
                             </Link>
                           )
                         ))}
@@ -400,10 +448,17 @@ const Navigation = () => {
                   </Link>
                   <Link
                     to="/notifications"
-                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors relative"
                     onClick={() => setIsOpen(false)}
                   >
-                    <Bell className="w-5 h-5" />
+                    <div className="relative">
+                      <Bell className="w-5 h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs mt-1">Alerts</span>
                   </Link>
                 </div>
@@ -473,6 +528,40 @@ const Navigation = () => {
                 </Link>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification for new notifications */}
+      {newNotification && (
+        <div className="fixed top-20 right-4 z-50 transition-all duration-300 transform translate-x-0">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-w-sm ring-2 ring-blue-500 ring-opacity-50">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Bell className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {newNotification.title}
+                </p>
+                <p className="text-sm text-gray-600 line-clamp-2">
+                  {newNotification.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setNewNotification(null)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <Link
+              to="/notifications"
+              className="mt-3 block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+              onClick={() => setNewNotification(null)}
+            >
+              View all notifications
+            </Link>
           </div>
         </div>
       )}
