@@ -29,8 +29,10 @@ public class ActivityAwardService : IActivityAwardService
     private const string TitleTenFriends = "Life of the Party";
     private const string TitleTwentyFiveFriends = "Community Connector";
     private const string TitleFiftyFriends = "Networking Pro";
+    private const string TitleFirstClub = "First Club";
     private const string TitleJoinedClub = "Club Member";
     private const string TitleCreatedClub = "Club Founder";
+    private const string TitleFirstEvent = "First Event";
     private const string TitleJoinedEvent = "Event Participant";
     private const string TitleCreatedEvent = "Event Organizer";
 
@@ -146,6 +148,9 @@ public class ActivityAwardService : IActivityAwardService
     {
         try
         {
+            // First, check and grant "First Club" achievement if this is user's first club
+            await GrantFirstClubIfNotExistsAsync(userId, clubName);
+
             // Check if user already has an award for joining this specific club
             var hasAward = await _context.PlayerAwards
                 .AnyAsync(a => a.UserId == userId && a.Title == TitleJoinedClub && a.ClubId == clubId);
@@ -175,6 +180,31 @@ public class ActivityAwardService : IActivityAwardService
         }
     }
 
+    private async Task GrantFirstClubIfNotExistsAsync(int userId, string clubName)
+    {
+        // Check if user already has the "First Club" award
+        var hasAward = await _context.PlayerAwards
+            .AnyAsync(a => a.UserId == userId && a.Title == TitleFirstClub);
+
+        if (hasAward) return;
+
+        var award = new PlayerAward
+        {
+            UserId = userId,
+            AwardType = AwardTypeAchievement,
+            Title = TitleFirstClub,
+            Description = $"Joined your first club: {clubName}",
+            IconUrl = "/images/awards/first-club.png",
+            BadgeColor = "green",
+            AwardedBySystem = true
+        };
+
+        _context.PlayerAwards.Add(award);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Granted '{Award}' award to user {UserId}", TitleFirstClub, userId);
+    }
+
     /// <summary>
     /// Grant award when user creates a club
     /// </summary>
@@ -182,6 +212,9 @@ public class ActivityAwardService : IActivityAwardService
     {
         try
         {
+            // First, check and grant "First Club" achievement (creator is also a member)
+            await GrantFirstClubIfNotExistsAsync(userId, clubName);
+
             // Check if user already has an award for creating this specific club
             var hasAward = await _context.PlayerAwards
                 .AnyAsync(a => a.UserId == userId && a.Title == TitleCreatedClub && a.ClubId == clubId);
@@ -219,6 +252,9 @@ public class ActivityAwardService : IActivityAwardService
     {
         try
         {
+            // First, check and grant "First Event" achievement if this is user's first event
+            await GrantFirstEventIfNotExistsAsync(userId, eventName);
+
             // Check if user already has an award for joining this specific event
             var hasAward = await _context.PlayerAwards
                 .AnyAsync(a => a.UserId == userId && a.Title == TitleJoinedEvent && a.EventId == eventId);
@@ -248,6 +284,31 @@ public class ActivityAwardService : IActivityAwardService
         }
     }
 
+    private async Task GrantFirstEventIfNotExistsAsync(int userId, string eventName)
+    {
+        // Check if user already has the "First Event" award
+        var hasAward = await _context.PlayerAwards
+            .AnyAsync(a => a.UserId == userId && a.Title == TitleFirstEvent);
+
+        if (hasAward) return;
+
+        var award = new PlayerAward
+        {
+            UserId = userId,
+            AwardType = AwardTypeAchievement,
+            Title = TitleFirstEvent,
+            Description = $"Joined your first event: {eventName}",
+            IconUrl = "/images/awards/first-event.png",
+            BadgeColor = "green",
+            AwardedBySystem = true
+        };
+
+        _context.PlayerAwards.Add(award);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Granted '{Award}' award to user {UserId}", TitleFirstEvent, userId);
+    }
+
     /// <summary>
     /// Grant award when user creates an event
     /// </summary>
@@ -255,6 +316,9 @@ public class ActivityAwardService : IActivityAwardService
     {
         try
         {
+            // First, check and grant "First Event" achievement (organizer participates too)
+            await GrantFirstEventIfNotExistsAsync(userId, eventName);
+
             // Check if user already has an award for creating this specific event
             var hasAward = await _context.PlayerAwards
                 .AnyAsync(a => a.UserId == userId && a.Title == TitleCreatedEvent && a.EventId == eventId);
