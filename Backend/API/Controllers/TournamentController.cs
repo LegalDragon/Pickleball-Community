@@ -191,6 +191,28 @@ public class TournamentController : ControllerBase
 
         var createdUnits = new List<EventUnit>();
 
+        // Check if event allows multiple divisions
+        if (!evt.AllowMultipleDivisions && request.DivisionIds.Count > 1)
+        {
+            return BadRequest(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "This event only allows registration for one division" });
+        }
+
+        // If event doesn't allow multiple divisions, check if user is already registered for another division
+        if (!evt.AllowMultipleDivisions)
+        {
+            var existingRegistration = await _context.EventUnitMembers
+                .Include(m => m.Unit)
+                .AnyAsync(m => m.UserId == userId.Value &&
+                    m.Unit!.EventId == eventId &&
+                    m.Unit.Status != "Cancelled" &&
+                    m.InviteStatus == "Accepted");
+
+            if (existingRegistration)
+            {
+                return BadRequest(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "This event only allows registration for one division. You are already registered." });
+            }
+        }
+
         foreach (var divisionId in request.DivisionIds)
         {
             var division = evt.Divisions.FirstOrDefault(d => d.Id == divisionId);

@@ -2183,16 +2183,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                             )}
                                           </div>
                                           <div className="ml-6 space-y-1">
-                                            {unit.members?.map((member, mIdx) => (
+                                            {unit.members?.filter(m => m.inviteStatus === 'Accepted').map((member, mIdx) => (
                                               <div key={mIdx} className="text-sm text-gray-600 flex items-center gap-2">
                                                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                                                {member.userName || member.name || 'Player'}
+                                                {member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : member.firstName || 'Player'}
                                               </div>
                                             ))}
-                                            {unit.members?.length < requiredPlayers && (
+                                            {(unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) < requiredPlayers && (
                                               <div className="text-sm text-gray-400 italic flex items-center gap-2">
                                                 <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                                {requiredPlayers - (unit.members?.length || 0)} spot{requiredPlayers - (unit.members?.length || 0) !== 1 ? 's' : ''} available
+                                                {requiredPlayers - (unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0)} spot{requiredPlayers - (unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) !== 1 ? 's' : ''} available
                                               </div>
                                             )}
                                           </div>
@@ -2201,12 +2201,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                         // Doubles display
                                         <div className="flex items-center gap-3">
                                           <div className="flex -space-x-2">
-                                            {unit.members?.slice(0, 2).map((member, mIdx) => (
+                                            {unit.members?.filter(m => m.inviteStatus === 'Accepted').slice(0, 2).map((member, mIdx) => (
                                               <div key={mIdx} className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-xs font-medium border-2 border-white">
-                                                {(member.userName || member.name || 'P')[0].toUpperCase()}
+                                                {(member.firstName || 'P')[0].toUpperCase()}
                                               </div>
                                             ))}
-                                            {(!unit.members || unit.members.length < 2) && (
+                                            {(unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) < 2 && (
                                               <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 text-xs border-2 border-white">
                                                 ?
                                               </div>
@@ -2214,7 +2214,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                           </div>
                                           <div className="flex-1">
                                             <div className="text-sm text-gray-900">
-                                              {unit.members?.map(m => m.userName || m.name || 'Player').join(' & ') || 'Looking for partner'}
+                                              {unit.members?.filter(m => m.inviteStatus === 'Accepted').map(m => m.firstName && m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName || 'Player').join(' & ') || 'Looking for partner'}
                                             </div>
                                             {!unit.isComplete && (
                                               <span className="text-xs text-yellow-600">Looking for partner</span>
@@ -2225,10 +2225,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                         // Singles display
                                         <div className="flex items-center gap-3">
                                           <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-sm font-medium">
-                                            {(unit.members?.[0]?.userName || unit.members?.[0]?.name || 'P')[0].toUpperCase()}
+                                            {(unit.members?.find(m => m.inviteStatus === 'Accepted')?.firstName || 'P')[0].toUpperCase()}
                                           </div>
                                           <span className="text-sm text-gray-900">
-                                            {unit.members?.[0]?.userName || unit.members?.[0]?.name || 'Player'}
+                                            {(() => {
+                                              const m = unit.members?.find(m => m.inviteStatus === 'Accepted');
+                                              return m?.firstName && m?.lastName ? `${m.firstName} ${m.lastName}` : m?.firstName || 'Player';
+                                            })()}
                                           </span>
                                         </div>
                                       )}
