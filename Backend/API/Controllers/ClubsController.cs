@@ -976,8 +976,9 @@ public class ClubsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<ClubJoinRequestDto>> { Success = false, Message = "User not authenticated" });
 
-            // Check if user is admin or moderator
-            var isAdminOrMod = await _context.ClubMembers
+            // Check if user is site admin, club admin, or moderator
+            var isSiteAdmin = await IsSiteAdminAsync();
+            var isAdminOrMod = isSiteAdmin || await _context.ClubMembers
                 .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value &&
                     (m.Role == "Admin" || m.Role == "Moderator") && m.IsActive);
 
@@ -1025,8 +1026,9 @@ public class ClubsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
-            // Check if user is admin or moderator
-            var isAdminOrMod = await _context.ClubMembers
+            // Check if user is site admin, club admin, or moderator
+            var isSiteAdmin = await IsSiteAdminAsync();
+            var isAdminOrMod = isSiteAdmin || await _context.ClubMembers
                 .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value &&
                     (m.Role == "Admin" || m.Role == "Moderator") && m.IsActive);
 
@@ -1119,8 +1121,9 @@ public class ClubsController : ControllerBase
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<ClubNotificationDto> { Success = false, Message = "User not authenticated" });
 
-            // Check if user is admin or moderator
-            var isAdminOrMod = await _context.ClubMembers
+            // Check if user is site admin, club admin, or moderator
+            var isSiteAdmin = await IsSiteAdminAsync();
+            var isAdminOrMod = isSiteAdmin || await _context.ClubMembers
                 .AnyAsync(m => m.ClubId == id && m.UserId == userId.Value &&
                     (m.Role == "Admin" || m.Role == "Moderator") && m.IsActive);
 
