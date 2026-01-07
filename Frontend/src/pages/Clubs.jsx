@@ -1092,6 +1092,9 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [leagueTree, setLeagueTree] = useState([]);
   const [leagueTreeLoading, setLeagueTreeLoading] = useState(false);
   const [expandedLeagueNodes, setExpandedLeagueNodes] = useState(new Set());
+  const [leagueDropdownOpen, setLeagueDropdownOpen] = useState(true);
+  const [selectedLeagueDetails, setSelectedLeagueDetails] = useState(null);
+  const [loadingLeagueDetails, setLoadingLeagueDetails] = useState(false);
 
   // Grant balance state (for club admins)
   const [grantAccounts, setGrantAccounts] = useState([]);
@@ -1273,6 +1276,8 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     setShowJoinLeagueModal(true);
     setSelectedLeagueId('');
     setLeagueJoinMessage('');
+    setLeagueDropdownOpen(true);
+    setSelectedLeagueDetails(null);
     if (leagueTree.length === 0) {
       loadLeagueTree();
     }
@@ -1294,6 +1299,42 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   // Check if a league is already joined or pending
   const isLeagueUnavailable = (leagueId) => {
     return clubLeagues.some(cl => cl.leagueId === leagueId);
+  };
+
+  // Handle selecting a league - fetch details and collapse dropdown
+  const handleLeagueSelect = async (leagueId, hasChildren) => {
+    // Only allow selecting end-node leagues (no children)
+    if (hasChildren) {
+      return;
+    }
+
+    setSelectedLeagueId(leagueId);
+    setLeagueDropdownOpen(false);
+
+    // Fetch league details to show documents
+    setLoadingLeagueDetails(true);
+    try {
+      const response = await leaguesApi.getLeague(parseInt(leagueId));
+      if (response.success) {
+        setSelectedLeagueDetails(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching league details:', err);
+    } finally {
+      setLoadingLeagueDetails(false);
+    }
+  };
+
+  // Find league name from tree by ID
+  const findLeagueName = (nodes, id) => {
+    for (const node of nodes) {
+      if (String(node.id) === String(id)) return node.name;
+      if (node.children?.length) {
+        const found = findLeagueName(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
   };
 
   // Load league data when about or manage tab is opened
@@ -3682,7 +3723,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
           )}
         </div>
 
-        {/* Join League Modal - Tree View */}
+        {/* Join League Modal - Collapsible Tree Dropdown */}
         {showJoinLeagueModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
@@ -3696,29 +3737,87 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
               <div className="flex-1 overflow-y-auto p-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select a League</label>
 
-                {leagueTreeLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                {/* Collapsible dropdown trigger */}
+                <button
+                  onClick={() => setLeagueDropdownOpen(!leagueDropdownOpen)}
+                  className="w-full flex items-center justify-between p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                >
+                  <span className={selectedLeagueId ? 'text-gray-900' : 'text-gray-500'}>
+                    {selectedLeagueId ? findLeagueName(leagueTree, selectedLeagueId) : 'Select a league...'}
+                  </span>
+                  {leagueDropdownOpen ? (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+
+                {/* Tree dropdown content */}
+                {leagueDropdownOpen && (
+                  <div className="mt-2 border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                    {leagueTreeLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                      </div>
+                    ) : leagueTree.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Network className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p>No leagues available</p>
+                      </div>
+                    ) : (
+                      leagueTree.map(node => (
+                        <LeagueTreeSelectNode
+                          key={node.id}
+                          node={node}
+                          level={0}
+                          selectedId={selectedLeagueId}
+                          onSelect={handleLeagueSelect}
+                          expandedNodes={expandedLeagueNodes}
+                          toggleNode={toggleLeagueNode}
+                          isUnavailable={isLeagueUnavailable}
+                        />
+                      ))
+                    )}
                   </div>
-                ) : leagueTree.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Network className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                    <p>No leagues available</p>
-                  </div>
-                ) : (
-                  <div className="border rounded-lg overflow-hidden">
-                    {leagueTree.map(node => (
-                      <LeagueTreeSelectNode
-                        key={node.id}
-                        node={node}
-                        level={0}
-                        selectedId={selectedLeagueId}
-                        onSelect={setSelectedLeagueId}
-                        expandedNodes={expandedLeagueNodes}
-                        toggleNode={toggleLeagueNode}
-                        isUnavailable={isLeagueUnavailable}
-                      />
-                    ))}
+                )}
+
+                {/* League Documents Section */}
+                {selectedLeagueId && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      League Documents
+                    </h4>
+                    {loadingLeagueDetails ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                      </div>
+                    ) : selectedLeagueDetails?.documents?.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {selectedLeagueDetails.documents.filter(d => d.isPublic).map(doc => (
+                          <a
+                            key={doc.id}
+                            href={doc.fileUrl?.startsWith('http') ? doc.fileUrl : getSharedAssetUrl(doc.fileUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="p-1.5 bg-blue-50 rounded">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{doc.title}</p>
+                              {doc.leagueName && doc.leagueId !== parseInt(selectedLeagueId) && (
+                                <p className="text-xs text-gray-500">From: {doc.leagueName}</p>
+                              )}
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 py-2">No public documents available</p>
+                    )}
                   </div>
                 )}
 
@@ -3859,19 +3958,25 @@ function LeagueTreeSelectNode({ node, level, selectedId, onSelect, expandedNodes
   const hasChildren = node.children && node.children.length > 0;
   const isSelected = selectedId === String(node.id);
   const unavailable = isUnavailable(node.id);
+  const isEndNode = !hasChildren;
+  const canSelect = isEndNode && !unavailable;
 
   const indentPx = level * 20;
 
   return (
     <div>
       <div
-        className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 cursor-pointer transition-colors ${
-          isSelected ? 'bg-indigo-50' : unavailable ? 'bg-gray-50' : 'hover:bg-gray-50'
+        className={`flex items-center gap-2 py-2.5 px-3 border-b border-gray-100 transition-colors ${
+          canSelect ? 'cursor-pointer hover:bg-indigo-50' : 'cursor-default'
+        } ${isSelected ? 'bg-indigo-100 border-l-2 border-l-indigo-600' : ''} ${
+          !isEndNode ? 'bg-gray-50' : ''
         }`}
         style={{ paddingLeft: `${12 + indentPx}px` }}
         onClick={() => {
-          if (!unavailable) {
-            onSelect(String(node.id));
+          if (hasChildren) {
+            toggleNode(node.id);
+          } else if (!unavailable) {
+            onSelect(String(node.id), hasChildren);
           }
         }}
       >
@@ -3894,13 +3999,6 @@ function LeagueTreeSelectNode({ node, level, selectedId, onSelect, expandedNodes
           <div className="w-5 h-5 flex-shrink-0" />
         )}
 
-        {/* Selection radio */}
-        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-          isSelected ? 'border-indigo-600 bg-indigo-600' : unavailable ? 'border-gray-300 bg-gray-100' : 'border-gray-300'
-        }`}>
-          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-        </div>
-
         {/* Scope icon */}
         <div className={`p-1 rounded ${config.bg} flex-shrink-0`}>
           <ScopeIcon className={`w-3.5 h-3.5 ${config.color}`} />
@@ -3908,7 +4006,9 @@ function LeagueTreeSelectNode({ node, level, selectedId, onSelect, expandedNodes
 
         {/* League name */}
         <div className="flex-1 min-w-0">
-          <span className={`text-sm font-medium ${unavailable ? 'text-gray-400' : 'text-gray-900'}`}>
+          <span className={`text-sm font-medium ${
+            isSelected ? 'text-indigo-700' : unavailable ? 'text-gray-400' : !isEndNode ? 'text-gray-500' : 'text-gray-900'
+          }`}>
             {node.name}
           </span>
           <span className={`ml-2 text-xs ${config.color}`}>
@@ -3917,7 +4017,15 @@ function LeagueTreeSelectNode({ node, level, selectedId, onSelect, expandedNodes
           {unavailable && (
             <span className="ml-2 text-xs text-gray-400">(already joined)</span>
           )}
+          {hasChildren && (
+            <span className="ml-2 text-xs text-gray-400">(expand to select)</span>
+          )}
         </div>
+
+        {/* Selected checkmark */}
+        {isSelected && (
+          <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+        )}
       </div>
 
       {/* Children */}
