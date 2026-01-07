@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  Settings, Loader2, Users, Calendar, Building2, Trophy,
-  Bell, ChevronDown, ChevronUp, Eye, UserPlus, Info, CheckCircle, AlertTriangle
+  Settings, Loader2, Users, Calendar, Building2, Trophy, Eye, UserPlus
 } from 'lucide-react'
 import { userApi } from '../services/api'
 import PublicProfileModal from '../components/ui/PublicProfileModal'
@@ -13,35 +12,6 @@ const MemberDashboard = () => {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [expandedNotifications, setExpandedNotifications] = useState({})
-
-  // Sample system notifications - in a real app, these would come from an API
-  const [notifications] = useState([
-    {
-      id: 1,
-      type: 'info',
-      title: 'Welcome to Pickleball Community!',
-      message: 'Complete your profile to connect with other players in your area. Add your playing style, experience level, and equipment preferences.',
-      date: new Date().toISOString(),
-      icon: Info
-    },
-    {
-      id: 2,
-      type: 'success',
-      title: 'Profile Setup Complete',
-      message: 'Your profile is now visible to other players. Start connecting with friends and join local clubs!',
-      date: new Date(Date.now() - 86400000).toISOString(),
-      icon: CheckCircle
-    },
-    {
-      id: 3,
-      type: 'warning',
-      title: 'Get Peer Certified',
-      message: 'Request skill reviews from players who know you to get your official certification badge. Share your review link with friends!',
-      date: new Date(Date.now() - 172800000).toISOString(),
-      icon: AlertTriangle
-    }
-  ])
 
   useEffect(() => {
     loadProfile()
@@ -57,50 +27,6 @@ const MemberDashboard = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  const toggleNotification = (id) => {
-    setExpandedNotifications(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }))
-  }
-
-  const getNotificationStyles = (type) => {
-    switch (type) {
-      case 'success':
-        return 'border-l-green-500 bg-green-50'
-      case 'warning':
-        return 'border-l-yellow-500 bg-yellow-50'
-      case 'error':
-        return 'border-l-red-500 bg-red-50'
-      default:
-        return 'border-l-blue-500 bg-blue-50'
-    }
-  }
-
-  const getIconColor = (type) => {
-    switch (type) {
-      case 'success':
-        return 'text-green-600'
-      case 'warning':
-        return 'text-yellow-600'
-      case 'error':
-        return 'text-red-600'
-      default:
-        return 'text-blue-600'
-    }
-  }
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    return date.toLocaleDateString()
   }
 
   if (loading) {
@@ -183,59 +109,6 @@ const MemberDashboard = () => {
             <Eye className="w-4 h-4" />
             View Public Profile
           </button>
-        </div>
-
-        {/* System Notifications - Accordion Style */}
-        <div className="bg-white rounded-lg shadow mb-6">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
-            <Bell className="w-5 h-5 text-gray-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
-            <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
-              {notifications.length}
-            </span>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {notifications.length === 0 ? (
-              <div className="px-6 py-8 text-center text-gray-500">
-                No notifications at this time
-              </div>
-            ) : (
-              notifications.map((notification) => {
-                const IconComponent = notification.icon
-                const isExpanded = expandedNotifications[notification.id]
-
-                return (
-                  <div
-                    key={notification.id}
-                    className={`border-l-4 ${getNotificationStyles(notification.type)}`}
-                  >
-                    <button
-                      onClick={() => toggleNotification(notification.id)}
-                      className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-opacity-75 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <IconComponent className={`w-5 h-5 flex-shrink-0 ${getIconColor(notification.type)}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{notification.title}</p>
-                          <p className="text-xs text-gray-500">{formatDate(notification.date)}</p>
-                        </div>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                      )}
-                    </button>
-                    {isExpanded && (
-                      <div className="px-6 pb-4 pl-14">
-                        <p className="text-gray-600 text-sm">{notification.message}</p>
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </div>
         </div>
 
         {/* Dashboard Cards */}
