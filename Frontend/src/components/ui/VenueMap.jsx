@@ -2,6 +2,45 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import L from 'leaflet';
 
+// Detect if user is likely in China based on timezone
+const isLikelyInChina = () => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return tz === 'Asia/Shanghai' || tz === 'Asia/Chongqing' || tz === 'Asia/Harbin' || tz === 'Asia/Urumqi';
+  } catch {
+    return false;
+  }
+};
+
+// Tile providers that work in different regions
+const TILE_PROVIDERS = {
+  // Default: OpenStreetMap (works most places)
+  osm: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  },
+  // CartoDB (good worldwide availability, cleaner style)
+  cartodb: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+  },
+  // OSM China-friendly mirror
+  osmChina: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }
+};
+
+// Get directions URL based on region
+const getDirectionsUrl = (lat, lng, inChina) => {
+  if (inChina) {
+    // Amap/Gaode Maps for China
+    return `https://uri.amap.com/marker?position=${lng},${lat}&callnative=0`;
+  }
+  // Google Maps for everywhere else
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+};
+
 export default function VenueMap({
   venues,
   courts, // Backward compatibility alias for venues
@@ -25,6 +64,7 @@ export default function VenueMap({
   const markersRef = useRef([]);
   const [isClient, setIsClient] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [inChina] = useState(() => isLikelyInChina());
 
   // Filter venues with valid coordinates
   const venuesWithCoords = useMemo(() => {
@@ -62,21 +102,26 @@ export default function VenueMap({
     if (!isClient || !mapRef.current) return;
     if (mapInstanceRef.current) return; // Already initialized
 
-    // Fix default icon paths
+    // Fix default icon paths - use local assets that work in all regions
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      iconUrl: '/markers/marker-icon.svg',
+      iconRetinaUrl: '/markers/marker-icon.svg',
+      shadowUrl: null, // SVG doesn't need shadow
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34]
     });
 
     // Create map
     const map = L.map(mapRef.current).setView(center || defaultCenter, zoom);
     mapInstanceRef.current = map;
 
-    // Add tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    // Select tile provider based on region (CartoDB works well globally including China)
+    const tileProvider = inChina ? TILE_PROVIDERS.cartodb : TILE_PROVIDERS.osm;
+    L.tileLayer(tileProvider.url, {
+      attribution: tileProvider.attribution,
+      maxZoom: 19
     }).addTo(map);
 
     // Mark map as ready so markers can be added
@@ -89,7 +134,7 @@ export default function VenueMap({
         setMapReady(false);
       }
     };
-  }, [isClient]);
+  }, [isClient, inChina]);
 
   // Create numbered marker icon
   const createNumberedIcon = (number, isSelected) => {
@@ -142,15 +187,14 @@ export default function VenueMap({
         marker = L.marker([court.lat, court.lng], { icon })
           .addTo(map);
       } else {
-        // Default marker
+        // Default marker - use local SVG icons
         const courtIcon = L.icon({
-          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+          iconUrl: '/markers/marker-icon.svg',
+          iconRetinaUrl: '/markers/marker-icon.svg',
+          shadowUrl: null,
           iconSize: [25, 41],
           iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
+          popupAnchor: [1, -34]
         });
         marker = L.marker([court.lat, court.lng], { icon: courtIcon })
           .addTo(map);
@@ -241,7 +285,9 @@ export default function VenueMap({
       </div>`;
     }
 
-    let actions = `<a href="https://www.google.com/maps/search/?api=1&query=${court.lat},${court.lng}" target="_blank" rel="noopener" style="color: #2563eb; font-size: 11px; text-decoration: none; margin-right: 8px;">📍 Directions</a>`;
+    // Use region-appropriate map service for directions (Amap for China, Google Maps elsewhere)
+    const directionsUrl = getDirectionsUrl(court.lat, court.lng, inChina);
+    let actions = `<a href="${directionsUrl}" target="_blank" rel="noopener" style="color: #2563eb; font-size: 11px; text-decoration: none; margin-right: 8px;">📍 Directions</a>`;
     if (court.phone) {
       actions += `<a href="tel:${court.phone}" style="color: #16a34a; font-size: 11px; text-decoration: none; margin-right: 8px;">📞 Call</a>`;
     }
