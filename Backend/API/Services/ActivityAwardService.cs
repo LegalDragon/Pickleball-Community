@@ -77,7 +77,8 @@ public class ActivityAwardService : IActivityAwardService
             Description = "Made your first friend in the community!",
             IconUrl = "/images/awards/first-friend.png",
             BadgeColor = "green",
-            AwardedBySystem = true
+            AwardedBySystem = true,
+            IsActive = true
         };
 
         _context.PlayerAwards.Add(award);
@@ -132,7 +133,8 @@ public class ActivityAwardService : IActivityAwardService
             IconUrl = $"/images/awards/{title.ToLower().Replace(" ", "-")}.png",
             BadgeColor = badgeColor,
             PointsValue = pointsValue,
-            AwardedBySystem = true
+            AwardedBySystem = true,
+            IsActive = true
         };
 
         _context.PlayerAwards.Add(award);
@@ -166,7 +168,8 @@ public class ActivityAwardService : IActivityAwardService
                 IconUrl = "/images/awards/club-member.png",
                 BadgeColor = "blue",
                 ClubId = clubId,
-                AwardedBySystem = true
+                AwardedBySystem = true,
+                IsActive = true
             };
 
             _context.PlayerAwards.Add(award);
@@ -196,7 +199,8 @@ public class ActivityAwardService : IActivityAwardService
             Description = $"Joined your first club: {clubName}",
             IconUrl = "/images/awards/first-club.png",
             BadgeColor = "green",
-            AwardedBySystem = true
+            AwardedBySystem = true,
+            IsActive = true
         };
 
         _context.PlayerAwards.Add(award);
@@ -231,7 +235,8 @@ public class ActivityAwardService : IActivityAwardService
                 BadgeColor = "gold",
                 ClubId = clubId,
                 PointsValue = 10,
-                AwardedBySystem = true
+                AwardedBySystem = true,
+                IsActive = true
             };
 
             _context.PlayerAwards.Add(award);
@@ -270,7 +275,8 @@ public class ActivityAwardService : IActivityAwardService
                 IconUrl = "/images/awards/event-participant.png",
                 BadgeColor = "green",
                 EventId = eventId,
-                AwardedBySystem = true
+                AwardedBySystem = true,
+                IsActive = true
             };
 
             _context.PlayerAwards.Add(award);
@@ -300,7 +306,8 @@ public class ActivityAwardService : IActivityAwardService
             Description = $"Joined your first event: {eventName}",
             IconUrl = "/images/awards/first-event.png",
             BadgeColor = "green",
-            AwardedBySystem = true
+            AwardedBySystem = true,
+            IsActive = true
         };
 
         _context.PlayerAwards.Add(award);
@@ -335,7 +342,8 @@ public class ActivityAwardService : IActivityAwardService
                 BadgeColor = "purple",
                 EventId = eventId,
                 PointsValue = 10,
-                AwardedBySystem = true
+                AwardedBySystem = true,
+                IsActive = true
             };
 
             _context.PlayerAwards.Add(award);
