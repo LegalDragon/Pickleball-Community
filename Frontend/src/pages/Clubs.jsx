@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog, FileText, Download, File, Video, Table, Presentation, Eye, EyeOff, Lock, GripVertical, Building2, Building, AlertCircle, Send, Network, ExternalLink } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog, FileText, Download, File, Video, Table, Presentation, Eye, EyeOff, Lock, GripVertical, Building2, Building, AlertCircle, Send, Network, ExternalLink, QrCode } from 'lucide-react';
 
 // Icon mapping for role icons
 const ROLE_ICON_MAP = {
@@ -16,6 +16,7 @@ import { useToast } from '../contexts/ToastContext';
 import { clubsApi, sharedAssetApi, clubMemberRolesApi, venuesApi, leaguesApi, grantsApi, clubFinanceApi, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import VenueMap from '../components/ui/VenueMap';
+import ShareLink from '../components/ui/ShareLink';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -2059,21 +2060,11 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                     Invite Others
                   </h3>
                   {inviteCode ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={`${window.location.origin}/clubs?invite=${inviteCode}`}
-                        className="flex-1 border border-gray-300 rounded-lg p-2 bg-white text-sm"
-                      />
-                      <button
-                        onClick={copyInviteLink}
-                        className="px-3 py-2 bg-purple-600 text-white rounded-lg flex items-center gap-2 text-sm"
-                      >
-                        {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        {copied ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
+                    <ShareLink
+                      url={`${window.location.origin}/clubs?invite=${inviteCode}`}
+                      title={`Invite to ${club.name}`}
+                      buttonColor="bg-purple-600 hover:bg-purple-700"
+                    />
                   ) : (
                     <button
                       onClick={handleGetInviteLink}
@@ -2083,7 +2074,7 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                     </button>
                   )}
                   <p className="text-xs text-gray-500 mt-2">
-                    Share this link to invite friends to join the club
+                    Share this link or QR code to invite friends to join the club
                   </p>
                 </div>
               )}
