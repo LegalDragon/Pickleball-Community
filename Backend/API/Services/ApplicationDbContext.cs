@@ -1192,6 +1192,7 @@ public class ApplicationDbContext : DbContext
         // Player Rating History configuration
         modelBuilder.Entity<PlayerRatingHistory>(entity =>
         {
+            entity.ToTable("PlayerRatingHistory"); // Map to singular table name
             entity.Property(r => r.RatingType).IsRequired().HasMaxLength(50);
             entity.HasIndex(r => r.UserId);
             entity.HasIndex(r => r.RatingType);
