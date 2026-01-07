@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../services/api'
 import axios from 'axios'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import PushNotificationPrompt, { shouldShowPushPrompt } from '../components/ui/PushNotificationPrompt'
 
 /**
  * AuthCallback - Handles the redirect from shared auth UI
@@ -18,9 +19,11 @@ import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
 const AuthCallback = () => {
   const [status, setStatus] = useState('processing') // 'processing', 'success', 'error'
   const [message, setMessage] = useState('Processing authentication...')
+  const [showPushPrompt, setShowPushPrompt] = useState(false)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { updateUser } = useAuth()
+  const redirectPathRef = useRef('/member/dashboard')
 
   useEffect(() => {
     handleCallback()
@@ -126,14 +129,22 @@ const AuthCallback = () => {
 
       // Determine redirect path - all users go to member dashboard
       const returnTo = searchParams.get('returnTo')
-      let redirectPath = (!returnTo || returnTo === '/')
+      redirectPathRef.current = (!returnTo || returnTo === '/')
         ? '/member/dashboard'
         : decodeURIComponent(returnTo)
 
-      // Redirect after short delay to show success message
-      setTimeout(() => {
-        navigate(redirectPath, { replace: true })
-      }, 1000)
+      // Check if we should show push notification prompt
+      if (shouldShowPushPrompt()) {
+        // Show prompt after a short delay
+        setTimeout(() => {
+          setShowPushPrompt(true)
+        }, 1200)
+      } else {
+        // No prompt needed, redirect directly
+        setTimeout(() => {
+          navigate(redirectPathRef.current, { replace: true })
+        }, 1000)
+      }
 
     } catch (error) {
       console.error('Auth callback error:', error)
@@ -142,8 +153,21 @@ const AuthCallback = () => {
     }
   }
 
+  // Handle push prompt completion - redirect to dashboard
+  const handlePushPromptComplete = () => {
+    setShowPushPrompt(false)
+    navigate(redirectPathRef.current, { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col items-center justify-center">
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt
+        isOpen={showPushPrompt}
+        onClose={handlePushPromptComplete}
+        onComplete={handlePushPromptComplete}
+      />
+
       <div className="text-center bg-white p-8 rounded-2xl shadow-xl max-w-md">
         {status === 'processing' && (
           <>
