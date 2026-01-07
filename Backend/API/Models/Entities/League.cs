@@ -296,3 +296,39 @@ public class LeagueDocument
     [ForeignKey("UploadedByUserId")]
     public User? UploadedBy { get; set; }
 }
+
+/// <summary>
+/// Configurable roles for league managers
+/// </summary>
+public class LeagueRole
+{
+    public int Id { get; set; }
+
+    [Required]
+    [MaxLength(50)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(200)]
+    public string? Description { get; set; }
+
+    [MaxLength(20)]
+    public string? Color { get; set; }
+
+    [MaxLength(50)]
+    public string? Icon { get; set; } // Lucide icon name (e.g., "Crown", "Shield")
+
+    public int SortOrder { get; set; } = 0;
+
+    public bool IsSystemRole { get; set; } = false; // System roles cannot be deleted
+
+    // Permissions
+    public bool CanManageLeague { get; set; } = false;
+    public bool CanManageMembers { get; set; } = false;
+    public bool CanManageClubs { get; set; } = false;
+    public bool CanManageDocuments { get; set; } = false;
+    public bool CanApproveRequests { get; set; } = false;
+
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

@@ -230,3 +230,53 @@ public class UpdateDocumentOrderDto
 {
     public List<int> DocumentIds { get; set; } = new();
 }
+
+// League Role DTO
+public class LeagueRoleDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Color { get; set; }
+    public string? Icon { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsSystemRole { get; set; }
+    public bool CanManageLeague { get; set; }
+    public bool CanManageMembers { get; set; }
+    public bool CanManageClubs { get; set; }
+    public bool CanManageDocuments { get; set; }
+    public bool CanApproveRequests { get; set; }
+    public bool IsActive { get; set; }
+}
+
+// Create League Role
+public class CreateLeagueRoleDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Color { get; set; }
+    public string? Icon { get; set; }
+    public int SortOrder { get; set; } = 50;
+    public bool CanManageLeague { get; set; } = false;
+    public bool CanManageMembers { get; set; } = false;
+    public bool CanManageClubs { get; set; } = false;
+    public bool CanManageDocuments { get; set; } = false;
+    public bool CanApproveRequests { get; set; } = false;
+    public bool IsActive { get; set; } = true;
+}
+
+// Update League Role
+public class UpdateLeagueRoleDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Color { get; set; }
+    public string? Icon { get; set; }
+    public int SortOrder { get; set; }
+    public bool CanManageLeague { get; set; }
+    public bool CanManageMembers { get; set; }
+    public bool CanManageClubs { get; set; }
+    public bool CanManageDocuments { get; set; }
+    public bool CanApproveRequests { get; set; }
+    public bool IsActive { get; set; }
+}

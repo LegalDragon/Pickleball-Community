@@ -958,6 +958,31 @@ export const clubMemberRolesApi = {
   reorder: (orderedIds) => api.put('/clubmemberroles/reorder', orderedIds)
 }
 
+// League Roles API (Admin-configurable league manager roles)
+export const leagueRolesApi = {
+  // Get all roles
+  getAll: (includeInactive = false) =>
+    api.get(`/leagueroles${includeInactive ? '?includeInactive=true' : ''}`),
+
+  // Get single role
+  getById: (id) => api.get(`/leagueroles/${id}`),
+
+  // Create new role (Admin only)
+  create: (data) => api.post('/leagueroles', data),
+
+  // Update role (Admin only)
+  update: (id, data) => api.put(`/leagueroles/${id}`, data),
+
+  // Delete role (Admin only)
+  delete: (id) => api.delete(`/leagueroles/${id}`),
+
+  // Restore role (Admin only)
+  restore: (id) => api.post(`/leagueroles/${id}/restore`),
+
+  // Reorder roles (Admin only)
+  reorder: (orderedIds) => api.put('/leagueroles/reorder', orderedIds)
+}
+
 // Score Methods API (Admin-configurable scoring types)
 export const scoreMethodsApi = {
   // Get all score methods (public for active, admin for all)

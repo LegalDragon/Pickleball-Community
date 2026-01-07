@@ -22,6 +22,7 @@ import ClubMemberRolesAdmin from './ClubMemberRolesAdmin'
 import TeamUnitsAdmin from './TeamUnitsAdmin'
 import SkillLevelsAdmin from './SkillLevelsAdmin'
 import LeagueAdmin from './LeagueAdmin'
+import LeagueRolesAdmin from './LeagueRolesAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -568,7 +569,8 @@ const AdminDashboard = () => {
     {
       title: 'Organization',
       items: [
-        { id: 'leagues', label: 'Leagues', icon: Network }
+        { id: 'leagues', label: 'Leagues', icon: Network },
+        { id: 'leagueRoles', label: 'League Roles', icon: Shield }
       ]
     },
     {
@@ -1963,6 +1965,9 @@ const AdminDashboard = () => {
 
           {/* League Admin */}
           {activeTab === 'leagues' && <LeagueAdmin embedded />}
+
+          {/* League Roles Admin */}
+          {activeTab === 'leagueRoles' && <LeagueRolesAdmin embedded />}
 
           {/* Notification Testing */}
           {activeTab === 'notifications' && (

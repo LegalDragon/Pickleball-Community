@@ -111,6 +111,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<LeagueClub> LeagueClubs { get; set; }
     public DbSet<LeagueClubRequest> LeagueClubRequests { get; set; }
     public DbSet<LeagueDocument> LeagueDocuments { get; set; }
+    public DbSet<LeagueRole> LeagueRoles { get; set; }
 
     // Grant Management
     public DbSet<ClubGrantAccount> ClubGrantAccounts { get; set; }
