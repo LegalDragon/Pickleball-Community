@@ -235,10 +235,14 @@ public class PushNotificationService : IPushNotificationService
                 successCount++;
             }
             catch (WebPushException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone ||
-                                               ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                                               ex.StatusCode == System.Net.HttpStatusCode.NotFound ||
+                                               ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 // Subscription is no longer valid - mark as inactive
-                _logger.LogInformation("Push subscription {Id} is no longer valid, marking inactive", subscription.Id);
+                // 410 Gone / 404 NotFound = subscription expired
+                // 403 Forbidden = VAPID key mismatch (subscription created with different keys)
+                _logger.LogInformation("Push subscription {Id} is no longer valid (status: {Status}), marking inactive",
+                    subscription.Id, ex.StatusCode);
                 subscription.IsActive = false;
                 failedSubscriptions.Add(subscription);
             }
