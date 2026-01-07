@@ -9,14 +9,9 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
-      // Use injectManifest to include custom push notification handling
-      strategies: 'injectManifest',
-      srcDir: 'src',
-      filename: 'sw.js',
       // Enable service worker in development for push notification testing
       devOptions: {
-        enabled: true,
-        type: 'module'
+        enabled: true
       },
       manifest: {
         name: 'Pickleball Community',
@@ -37,8 +32,27 @@ export default defineConfig({
           }
         ]
       },
-      injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}']
+      workbox: {
+        // Import push notification handlers into the service worker
+        importScripts: ['/push-handler.js'],
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        navigateFallback: null,
+        navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/asset/],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.(js|css)$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'static-resources',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24
+              }
+            }
+          }
+        ]
       }
     }),
     react(),
@@ -50,7 +64,7 @@ export default defineConfig({
     },
   },
   publicDir: "public",
-  envDir: "./src", // Look for .env files in src directory
+  envDir: "./src",
   server: {
     port: 3000,
   },
