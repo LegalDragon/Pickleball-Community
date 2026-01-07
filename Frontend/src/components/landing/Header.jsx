@@ -202,27 +202,7 @@ const Header = () => {
                 <ChevronRight className="w-6 h-6" />
               </button>
 
-              {/* Dot Indicators */}
-              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-                {activeVideos.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setIsTransitioning(true);
-                      setTimeout(() => {
-                        setCurrentVideoIndex(index);
-                        setIsTransitioning(false);
-                      }, 300);
-                    }}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
-                      index === currentVideoIndex
-                        ? 'bg-white w-6'
-                        : 'bg-white/50 hover:bg-white/70'
-                    }`}
-                    aria-label={`Go to video ${index + 1}`}
-                  />
-                ))}
-              </div>
+              {/* Dot Indicators - hidden for cleaner look */}
             </>
           )}
 
