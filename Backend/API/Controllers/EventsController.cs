@@ -51,6 +51,8 @@ public class EventsController : ControllerBase
     {
         try
         {
+            var userId = GetCurrentUserId();
+
             var query = _context.Events
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
@@ -59,6 +61,15 @@ public class EventsController : ControllerBase
                 .Include(e => e.Registrations)
                 .Include(e => e.Venue) // Include venue for GPS-based distance calculation
                 .Where(e => e.IsActive && e.IsPublished)
+                // Filter out private events unless user is organizer, registered, or club member
+                .Where(e => !e.IsPrivate ||
+                    (userId.HasValue && (
+                        e.OrganizedByUserId == userId.Value ||
+                        e.Registrations.Any(r => r.UserId == userId.Value) ||
+                        (e.OrganizedByClubId.HasValue && _context.ClubMembers.Any(cm =>
+                            cm.ClubId == e.OrganizedByClubId.Value &&
+                            cm.UserId == userId.Value &&
+                            cm.IsActive)))))
                 .AsQueryable();
 
             // Apply filters
@@ -774,12 +785,24 @@ public class EventsController : ControllerBase
             if (division == null || division.EventId != id || !division.IsActive)
                 return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Division not found" });
 
-            // Check if already registered
+            // Check if already registered for this division
             var existingReg = await _context.EventRegistrations
                 .FirstOrDefaultAsync(r => r.EventId == id && r.DivisionId == dto.DivisionId && r.UserId == userId.Value);
 
             if (existingReg != null && existingReg.Status != "Cancelled")
                 return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Already registered for this division" });
+
+            // Check if event type allows multiple divisions
+            var eventType = await _context.EventTypes.FindAsync(evt.EventTypeId);
+            if (eventType != null && !eventType.AllowMultipleDivisions)
+            {
+                // Check if user is already registered for any other division in this event
+                var hasOtherRegistration = await _context.EventRegistrations
+                    .AnyAsync(r => r.EventId == id && r.UserId == userId.Value && r.Status != "Cancelled");
+
+                if (hasOtherRegistration)
+                    return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "This event only allows registration for one division" });
+            }
 
             // Calculate fee
             var fee = evt.RegistrationFee + (division.DivisionFee ?? evt.PerDivisionFee);

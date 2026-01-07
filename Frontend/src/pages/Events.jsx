@@ -1211,6 +1211,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const [unitsLookingForPartners, setUnitsLookingForPartners] = useState([]);
   const [loadingUnits, setLoadingUnits] = useState(false);
 
+  // Registration viewer state
+  const [showRegistrationViewer, setShowRegistrationViewer] = useState(false);
+  const [selectedDivisionForViewing, setSelectedDivisionForViewing] = useState(null);
+  const [divisionRegistrations, setDivisionRegistrations] = useState([]);
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+
   // Share link state
   const [linkCopied, setLinkCopied] = useState(false);
   const [showEventQrModal, setShowEventQrModal] = useState(false);
@@ -1640,6 +1646,29 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
     }
   };
 
+  // Load all registrations for a division to view
+  const loadDivisionRegistrations = async (division) => {
+    setSelectedDivisionForViewing(division);
+    setShowRegistrationViewer(true);
+    setLoadingRegistrations(true);
+    try {
+      const response = await tournamentApi.getEventUnits(event.id, division.id);
+      if (response.success) {
+        // Sort: complete units first, then incomplete units
+        const sorted = (response.data || []).sort((a, b) => {
+          if (a.isComplete && !b.isComplete) return -1;
+          if (!a.isComplete && b.isComplete) return 1;
+          return 0;
+        });
+        setDivisionRegistrations(sorted);
+      }
+    } catch (err) {
+      console.error('Error loading registrations:', err);
+    } finally {
+      setLoadingRegistrations(false);
+    }
+  };
+
   const handleJoinUnit = async (unitId) => {
     try {
       const response = await tournamentApi.requestToJoinUnit(unitId, 'I would like to join your team');
@@ -2021,6 +2050,20 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                         <span className="flex items-center gap-2">
                           <UserPlus className="w-4 h-4" />
                           {division.lookingForPartnerCount} player{division.lookingForPartnerCount !== 1 ? 's' : ''} looking for a partner
+                        </span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* View Registrations Button */}
+                    {division.registeredCount > 0 && (
+                      <button
+                        onClick={() => loadDivisionRegistrations(division)}
+                        className="w-full px-4 py-2 border-t bg-gray-50 flex items-center justify-between gap-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Users className="w-4 h-4" />
+                          View {division.registeredCount} {teamSize > 2 ? 'team' : teamSize === 2 ? 'pair' : 'player'}{division.registeredCount !== 1 ? 's' : ''} registered
                         </span>
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -2658,6 +2701,146 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                 className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-colors"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Registration Viewer Modal */}
+      {showRegistrationViewer && selectedDivisionForViewing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">{selectedDivisionForViewing.name} Registrations</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {divisionRegistrations.length} {
+                    (() => {
+                      const teamSize = divisionRegistrations[0]?.requiredPlayers || selectedDivisionForViewing.teamSize || 1;
+                      return teamSize > 2 ? 'team' : teamSize === 2 ? 'pair' : 'player';
+                    })()
+                  }{divisionRegistrations.length !== 1 ? 's' : ''} registered
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRegistrationViewer(false);
+                  setSelectedDivisionForViewing(null);
+                  setDivisionRegistrations([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingRegistrations ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : divisionRegistrations.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No registrations yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {divisionRegistrations.map((unit, index) => {
+                    const teamSize = unit.requiredPlayers || 1;
+                    const isComplete = unit.isComplete;
+                    const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
+
+                    return (
+                      <div
+                        key={unit.id}
+                        className={`p-3 rounded-lg border ${isComplete ? 'bg-white border-gray-200' : 'bg-yellow-50 border-yellow-200'}`}
+                      >
+                        {/* Singles display */}
+                        {teamSize === 1 && acceptedMembers[0] && (
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
+                            <img
+                              src={acceptedMembers[0].profileImageUrl || '/default-avatar.png'}
+                              alt=""
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {acceptedMembers[0].firstName} {acceptedMembers[0].lastName}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Doubles display */}
+                        {teamSize === 2 && (
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
+                            <div className="flex items-center gap-2">
+                              {acceptedMembers.map((member, mIndex) => (
+                                <div key={member.id} className="flex items-center gap-2">
+                                  {mIndex > 0 && <span className="text-gray-400">&</span>}
+                                  <img
+                                    src={member.profileImageUrl || '/default-avatar.png'}
+                                    alt=""
+                                    className="w-8 h-8 rounded-full object-cover"
+                                  />
+                                  <span className="text-gray-900">
+                                    {member.firstName} {member.lastName}
+                                  </span>
+                                </div>
+                              ))}
+                              {!isComplete && (
+                                <span className="text-yellow-600 text-sm ml-2">(looking for partner)</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Team display (3+ players) */}
+                        {teamSize > 2 && (
+                          <div>
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
+                              <span className="font-medium text-gray-900">{unit.name}</span>
+                              {!isComplete && (
+                                <span className="text-yellow-600 text-sm">
+                                  ({acceptedMembers.length}/{teamSize} players)
+                                </span>
+                              )}
+                            </div>
+                            <div className="ml-9 flex flex-wrap gap-2">
+                              {acceptedMembers.map((member) => (
+                                <div key={member.id} className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1">
+                                  <img
+                                    src={member.profileImageUrl || '/default-avatar.png'}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                  <span className="text-sm text-gray-700">
+                                    {member.firstName} {member.lastName}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowRegistrationViewer(false);
+                  setSelectedDivisionForViewing(null);
+                  setDivisionRegistrations([]);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
