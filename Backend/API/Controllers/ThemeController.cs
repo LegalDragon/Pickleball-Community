@@ -1091,13 +1091,25 @@ public class ThemeController : ControllerBase
         try
         {
             var currentUserId = GetCurrentUserId();
+            var theme = await _context.ThemeSettings.FirstOrDefaultAsync(t => t.IsActive);
 
-            // Convert to array to avoid EF Core Contains() SQL generation issues
-            var videoIdArray = request.VideoIds.ToArray();
+            if (theme == null)
+            {
+                return NotFound(new ApiResponse<List<HeroVideoDto>>
+                {
+                    Success = false,
+                    Message = "No active theme found"
+                });
+            }
 
-            var videos = await _context.HeroVideos
-                .Where(h => videoIdArray.Contains(h.Id))
+            // Fetch all hero videos for this theme and filter in memory
+            // This avoids EF Core Contains() SQL generation issues with OPENJSON
+            var allVideos = await _context.HeroVideos
+                .Where(h => h.ThemeId == theme.ThemeId)
                 .ToListAsync();
+
+            var videoIdSet = request.VideoIds.ToHashSet();
+            var videos = allVideos.Where(v => videoIdSet.Contains(v.Id)).ToList();
 
             for (int i = 0; i < request.VideoIds.Count; i++)
             {
@@ -1114,11 +1126,11 @@ public class ThemeController : ControllerBase
 
             _logger.LogInformation("Hero videos reordered by user {UserId}", currentUserId);
 
-            var updatedVideos = await _context.HeroVideos
-                .Where(h => videoIdArray.Contains(h.Id))
-                .OrderBy(h => h.SortOrder)
-                .Select(h => MapToHeroVideoDto(h))
-                .ToListAsync();
+            var updatedVideos = allVideos
+                .Where(v => videoIdSet.Contains(v.Id))
+                .OrderBy(v => v.SortOrder)
+                .Select(v => MapToHeroVideoDto(v))
+                .ToList();
 
             return Ok(new ApiResponse<List<HeroVideoDto>>
             {
