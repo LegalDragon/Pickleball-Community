@@ -1436,7 +1436,10 @@ export const notificationsApi = {
   deleteRead: () => api.delete('/notifications/read'),
 
   // Delete all notifications
-  deleteAll: () => api.delete('/notifications/all')
+  deleteAll: () => api.delete('/notifications/all'),
+
+  // Send test notification (tests both SignalR and Web Push)
+  test: () => api.post('/notifications/test')
 }
 
 // Push Notifications API (Web Push)

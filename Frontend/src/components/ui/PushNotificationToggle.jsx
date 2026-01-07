@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Bell, BellOff, Smartphone, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Bell, BellOff, Smartphone, Loader2, AlertCircle, CheckCircle, Send } from 'lucide-react';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
+import { notificationsApi } from '../../services/api';
 
 /**
  * Component to enable/disable push notifications
@@ -17,7 +18,9 @@ export function PushNotificationToggle({ className = '' }) {
     sendTest
   } = usePushNotifications();
 
-  const [testSent, setTestSent] = useState(false);
+  const [testPushSent, setTestPushSent] = useState(false);
+  const [testAllSent, setTestAllSent] = useState(false);
+  const [testAllLoading, setTestAllLoading] = useState(false);
 
   const handleToggle = async () => {
     try {
@@ -31,11 +34,28 @@ export function PushNotificationToggle({ className = '' }) {
     }
   };
 
-  const handleSendTest = async () => {
+  // Test Web Push only (doesn't save to DB)
+  const handleTestPush = async () => {
     const success = await sendTest();
     if (success) {
-      setTestSent(true);
-      setTimeout(() => setTestSent(false), 3000);
+      setTestPushSent(true);
+      setTimeout(() => setTestPushSent(false), 3000);
+    }
+  };
+
+  // Test both SignalR and Web Push (creates a real notification in DB)
+  const handleTestAll = async () => {
+    setTestAllLoading(true);
+    try {
+      const response = await notificationsApi.test();
+      if (response?.success) {
+        setTestAllSent(true);
+        setTimeout(() => setTestAllSent(false), 3000);
+      }
+    } catch (err) {
+      console.error('Error sending test notification:', err);
+    } finally {
+      setTestAllLoading(false);
     }
   };
 
@@ -113,25 +133,55 @@ export function PushNotificationToggle({ className = '' }) {
         </div>
       )}
 
+      {/* Test All Notifications button - always visible when authenticated */}
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <Send className="w-4 h-4" />
+            <span>Test notification delivery</span>
+          </div>
+          <button
+            onClick={handleTestAll}
+            disabled={testAllLoading || testAllSent}
+            className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 flex items-center gap-1"
+          >
+            {testAllLoading ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : testAllSent ? (
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle className="w-3 h-3" />
+                Sent!
+              </span>
+            ) : (
+              'Test All'
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">
+          Tests both in-app (SignalR) and push notifications
+        </p>
+      </div>
+
+      {/* Web Push specific test - only shown when subscribed */}
       {isSubscribed && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Smartphone className="w-4 h-4" />
-              <span>This device is receiving notifications</span>
+              <span>This device is receiving push notifications</span>
             </div>
             <button
-              onClick={handleSendTest}
-              disabled={loading || testSent}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+              onClick={handleTestPush}
+              disabled={loading || testPushSent}
+              className="text-xs text-gray-600 hover:text-gray-700 font-medium disabled:opacity-50"
             >
-              {testSent ? (
-                <span className="flex items-center gap-1">
+              {testPushSent ? (
+                <span className="flex items-center gap-1 text-green-600">
                   <CheckCircle className="w-3 h-3" />
                   Sent!
                 </span>
               ) : (
-                'Send Test'
+                'Test Push Only'
               )}
             </button>
           </div>

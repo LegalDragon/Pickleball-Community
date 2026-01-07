@@ -279,6 +279,47 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Send a test notification to yourself (tests both SignalR and Web Push)
+    /// Creates a real notification in the database
+    /// </summary>
+    [HttpPost("test")]
+    public async Task<IActionResult> SendTestNotification()
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "Unauthorized" });
+            }
+
+            // Create and send notification - this uses NotificationService which:
+            // 1. Saves to database
+            // 2. Sends via SignalR (if user is connected)
+            // 3. Sends via Web Push (if user has subscriptions)
+            var notification = await _notificationService.CreateAndSendAsync(
+                userId.Value,
+                "Test",
+                "Test Notification",
+                "This is a test notification sent via both SignalR and Web Push!",
+                "/notifications");
+
+            _logger.LogInformation("Test notification sent to user {UserId}", userId.Value);
+
+            return Ok(new {
+                success = true,
+                message = "Test notification sent via SignalR and Web Push",
+                notificationId = notification.Id
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending test notification");
+            return StatusCode(500, new { success = false, message = "Failed to send test notification" });
+        }
+    }
+
+    /// <summary>
     /// Delete all notifications
     /// </summary>
     [HttpDelete("all")]
