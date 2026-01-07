@@ -52,6 +52,11 @@ export default function LeagueAdmin({ embedded = false }) {
   const [managerData, setManagerData] = useState({ userId: '', role: 'Admin', title: '' });
   const [addingManager, setAddingManager] = useState(false);
 
+  // Edit manager modal
+  const [editingManager, setEditingManager] = useState(null);
+  const [editManagerData, setEditManagerData] = useState({ role: 'Admin', title: '' });
+  const [savingManager, setSavingManager] = useState(false);
+
   // Profile modal
   const [profileModalUserId, setProfileModalUserId] = useState(null);
 
@@ -209,6 +214,36 @@ export default function LeagueAdmin({ embedded = false }) {
       }
     } catch (err) {
       console.error('Error removing manager:', err);
+    }
+  };
+
+  const handleOpenEditManager = (manager) => {
+    setEditingManager(manager);
+    setEditManagerData({
+      role: manager.role,
+      title: manager.title || ''
+    });
+  };
+
+  const handleSaveEditManager = async () => {
+    if (!editingManager) return;
+    setSavingManager(true);
+    try {
+      const response = await leaguesApi.updateManager(selectedLeague.id, editingManager.id, {
+        role: editManagerData.role,
+        title: editManagerData.title || null
+      });
+      if (response.success) {
+        setEditingManager(null);
+        loadLeagueDetail(selectedLeague.id);
+      } else {
+        alert(response.message || 'Failed to update manager');
+      }
+    } catch (err) {
+      console.error('Error updating manager:', err);
+      alert('Failed to update manager');
+    } finally {
+      setSavingManager(false);
     }
   };
 
@@ -578,12 +613,22 @@ export default function LeagueAdmin({ embedded = false }) {
                                 </div>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleRemoveManager(manager.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditManager(manager)}
+                                className="p-1.5 text-gray-600 hover:bg-gray-200 rounded"
+                                title="Edit manager"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveManager(manager.id)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove manager"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -687,6 +732,56 @@ export default function LeagueAdmin({ embedded = false }) {
                   className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {addingManager ? 'Adding...' : 'Add Manager'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Manager Modal */}
+      {editingManager && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-4">Edit Manager</h3>
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <div className="text-sm text-gray-500">User</div>
+                <div className="font-medium text-gray-900">{editingManager.userName}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={editManagerData.role}
+                  onChange={(e) => setEditManagerData({ ...editManagerData, role: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                >
+                  {MANAGER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title (optional)</label>
+                <input
+                  type="text"
+                  value={editManagerData.title}
+                  onChange={(e) => setEditManagerData({ ...editManagerData, title: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  placeholder="e.g., Regional Director"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditingManager(null)}
+                  className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEditManager}
+                  disabled={savingManager}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {savingManager ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
