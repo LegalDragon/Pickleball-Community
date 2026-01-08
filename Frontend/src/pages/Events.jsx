@@ -2159,13 +2159,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               {/* Event info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    status.color === 'green' ? 'bg-green-100 text-green-700' :
-                    status.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    Registration {status.text}
-                  </span>
                   {event.eventTypeName && (() => {
                     const EventTypeIcon = event.eventTypeIcon ? getIconByName(event.eventTypeIcon, Trophy) : Trophy;
                     const colors = getColorValues(event.eventTypeColor);
