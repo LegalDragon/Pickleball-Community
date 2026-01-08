@@ -2295,15 +2295,34 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
               </div>
 
               {/* Register Button */}
-              <div className="flex justify-center">
+              <div className="flex flex-col items-center gap-3">
                 {canRegister() ? (
-                  <button
-                    onClick={() => setActiveTab('divisions')}
-                    className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
-                  >
-                    <UserPlus className="w-5 h-5" />
-                    Register Now
-                  </button>
+                  isAuthenticated ? (
+                    <button
+                      onClick={() => setActiveTab('divisions')}
+                      className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                      Register Now
+                    </button>
+                  ) : (
+                    <div className="text-center">
+                      <button
+                        onClick={() => toast.info('Please create an account or sign in to register for this event')}
+                        className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
+                      >
+                        <UserPlus className="w-5 h-5" />
+                        Register Now
+                      </button>
+                      <p className="mt-2 text-sm text-gray-600">
+                        To register, please <Link to="/login" className="text-orange-600 font-medium hover:underline">sign in</Link> or{' '}
+                        <Link to="/register" className="text-orange-600 font-medium hover:underline">create an account</Link>.
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Make sure to update your name in your profile before registering.
+                      </p>
+                    </div>
+                  )
                 ) : (
                   <div className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
                     status.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
