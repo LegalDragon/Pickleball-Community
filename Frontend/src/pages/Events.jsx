@@ -2357,20 +2357,44 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 <div className="mt-2 flex items-center gap-2">
                                   <span className="text-xs text-gray-500">Partner:</span>
                                   {reg.partners.map(partner => (
-                                    <div key={partner.userId} className="flex items-center gap-1.5">
+                                    <button
+                                      key={partner.userId}
+                                      onClick={() => setSelectedProfileUserId(partner.userId)}
+                                      className="flex items-center gap-1.5 hover:opacity-80"
+                                    >
                                       {partner.profileImageUrl ? (
-                                        <img src={partner.profileImageUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                        <img src={getSharedAssetUrl(partner.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
                                       ) : (
                                         <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
-                                          {partner.name.charAt(0)}
+                                          {partner.name?.charAt(0) || '?'}
                                         </div>
                                       )}
                                       <span className="text-sm text-gray-700">{partner.name}</span>
                                       {partner.inviteStatus === 'Pending' && (
                                         <span className="text-xs text-yellow-600">(pending)</span>
                                       )}
-                                    </div>
+                                    </button>
                                   ))}
+                                </div>
+                              )}
+                              {/* Needs partner warning */}
+                              {reg.needsPartner && (
+                                <div className="mt-2 flex items-center gap-2 text-orange-600">
+                                  <UserPlus className="w-4 h-4" />
+                                  <span className="text-sm">Looking for partner</span>
+                                  <button
+                                    onClick={() => {
+                                      setActiveTab('divisions');
+                                      // Find the division and expand it
+                                      setTimeout(() => {
+                                        const divElement = document.getElementById(`division-${reg.divisionId}`);
+                                        if (divElement) divElement.scrollIntoView({ behavior: 'smooth' });
+                                      }, 100);
+                                    }}
+                                    className="text-xs text-orange-700 underline hover:no-underline"
+                                  >
+                                    Find Partner
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -2378,15 +2402,23 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                               {/* Payment status/button */}
                               {reg.amountDue > 0 && (
                                 <button
-                                  onClick={() => setSelectedPaymentReg(reg)}
+                                  onClick={() => {
+                                    if (reg.needsPartner) {
+                                      toast.info('Payment is only available after your team is complete. Find a partner first!');
+                                    } else {
+                                      setSelectedPaymentReg(reg);
+                                    }
+                                  }}
                                   className={`px-2 py-1 text-sm rounded-lg flex items-center gap-1 ${
                                     reg.paymentStatus === 'Paid'
                                       ? 'bg-green-100 text-green-700'
                                       : reg.paymentStatus === 'Partial' || reg.paymentStatus === 'PendingVerification'
                                       ? 'bg-yellow-100 text-yellow-700'
+                                      : reg.needsPartner
+                                      ? 'bg-gray-100 text-gray-500'
                                       : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                                   }`}
-                                  title={reg.paymentStatus === 'Paid' ? 'Payment complete' : `$${reg.amountDue - reg.amountPaid} remaining`}
+                                  title={reg.paymentStatus === 'Paid' ? 'Payment complete' : reg.needsPartner ? 'Find a partner first' : `$${reg.amountDue - reg.amountPaid} remaining`}
                                 >
                                   <DollarSign className="w-4 h-4" />
                                   {reg.paymentStatus === 'Paid' ? 'Paid' :

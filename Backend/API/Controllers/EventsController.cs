@@ -411,29 +411,37 @@ public class EventsController : ControllerBase
                     ? evt.Divisions
                         .SelectMany(d => d.Units
                             .Where(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))
-                            .Select(u => new UserRegistrationInfoDto
-                            {
-                                UnitId = u.Id,
-                                DivisionId = d.Id,
-                                DivisionName = d.Name,
-                                TeamUnitName = d.TeamUnit?.Name,
-                                SkillLevelName = d.SkillLevel?.Name,
-                                UnitName = u.Name,
-                                Status = u.Status,
-                                PaymentStatus = u.PaymentStatus,
-                                AmountPaid = u.AmountPaid,
-                                AmountDue = evt.RegistrationFee + (d.DivisionFee ?? 0m),
-                                PaymentProofUrl = u.PaymentProofUrl,
-                                Partners = u.Members
-                                    .Where(m => m.UserId != userId.Value)
-                                    .Select(m => new PartnerInfoDto
-                                    {
-                                        UserId = m.UserId,
-                                        Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "Unknown",
-                                        ProfileImageUrl = m.User?.ProfileImageUrl,
-                                        Role = m.Role,
-                                        InviteStatus = m.InviteStatus
-                                    }).ToList()
+                            .Select(u => {
+                                var requiredPlayers = d.TeamUnit?.RequiredPlayers ?? d.TeamSize;
+                                var acceptedMembers = u.Members.Count(m => m.InviteStatus == "Accepted");
+                                var isComplete = acceptedMembers >= requiredPlayers;
+                                return new UserRegistrationInfoDto
+                                {
+                                    UnitId = u.Id,
+                                    DivisionId = d.Id,
+                                    DivisionName = d.Name,
+                                    TeamUnitName = d.TeamUnit?.Name,
+                                    SkillLevelName = d.SkillLevel?.Name,
+                                    UnitName = u.Name,
+                                    Status = u.Status,
+                                    PaymentStatus = u.PaymentStatus,
+                                    AmountPaid = u.AmountPaid,
+                                    AmountDue = evt.RegistrationFee + (d.DivisionFee ?? 0m),
+                                    PaymentProofUrl = u.PaymentProofUrl,
+                                    RequiredPlayers = requiredPlayers,
+                                    IsComplete = isComplete,
+                                    NeedsPartner = !isComplete && requiredPlayers > 1,
+                                    Partners = u.Members
+                                        .Where(m => m.UserId != userId.Value)
+                                        .Select(m => new PartnerInfoDto
+                                        {
+                                            UserId = m.UserId,
+                                            Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "Unknown",
+                                            ProfileImageUrl = m.User?.ProfileImageUrl,
+                                            Role = m.Role,
+                                            InviteStatus = m.InviteStatus
+                                        }).ToList()
+                                };
                             }))
                         .ToList()
                     : new List<UserRegistrationInfoDto>(),

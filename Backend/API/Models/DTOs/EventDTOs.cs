@@ -77,6 +77,9 @@ public class UserRegistrationInfoDto
     public string? PaymentProofUrl { get; set; }
 
     // Partner/team info
+    public int RequiredPlayers { get; set; } = 1;
+    public bool IsComplete { get; set; } = true;
+    public bool NeedsPartner { get; set; } = false;
     public List<PartnerInfoDto> Partners { get; set; } = new();
 }
 
