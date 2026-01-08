@@ -2209,13 +2209,29 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 </div>
               </div>
 
-              {/* Close button */}
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg flex-shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {/* Action buttons */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={copyEventLink}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  title="Copy invite link"
+                >
+                  {linkCopied ? <Check className="w-5 h-5 text-green-600" /> : <Link2 className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={() => setShowEventQrModal(true)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  title="Show QR code"
+                >
+                  <QrCode className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2423,22 +2439,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                   />
                 </div>
               )}
-
-              {/* Share Event Link */}
-              <div>
-                <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                  <Link2 className="w-5 h-5 text-orange-600" />
-                  Share This Event
-                </h3>
-                <ShareLink
-                  url={`${window.location.origin}/events?id=${event.id}`}
-                  title={`Share: ${event.name}`}
-                  buttonColor="bg-orange-600 hover:bg-orange-700"
-                />
-                <p className="text-sm text-gray-500 mt-2">
-                  Share this link or QR code to invite others to view and register for this event
-                </p>
-              </div>
 
               {/* Location */}
               <div>
