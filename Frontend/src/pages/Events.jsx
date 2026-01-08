@@ -2183,16 +2183,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                             )}
                                           </div>
                                           <div className="ml-6 space-y-1">
-                                            {unit.members?.filter(m => m.inviteStatus === 'Accepted').map((member, mIdx) => (
+                                            {unit.members?.map((member, mIdx) => (
                                               <div key={mIdx} className="text-sm text-gray-600 flex items-center gap-2">
                                                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
                                                 {member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : member.firstName || 'Player'}
                                               </div>
                                             ))}
-                                            {(unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) < requiredPlayers && (
+                                            {(unit.members?.length || 0) < requiredPlayers && (
                                               <div className="text-sm text-gray-400 italic flex items-center gap-2">
                                                 <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                                {requiredPlayers - (unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0)} spot{requiredPlayers - (unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) !== 1 ? 's' : ''} available
+                                                {requiredPlayers - (unit.members?.length || 0)} spot{requiredPlayers - (unit.members?.length || 0) !== 1 ? 's' : ''} available
                                               </div>
                                             )}
                                           </div>
@@ -2201,12 +2201,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                         // Doubles display
                                         <div className="flex items-center gap-3">
                                           <div className="flex -space-x-2">
-                                            {unit.members?.filter(m => m.inviteStatus === 'Accepted').slice(0, 2).map((member, mIdx) => (
+                                            {unit.members?.slice(0, 2).map((member, mIdx) => (
                                               <div key={mIdx} className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-xs font-medium border-2 border-white">
                                                 {(member.firstName || 'P')[0].toUpperCase()}
                                               </div>
                                             ))}
-                                            {(unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0) < 2 && (
+                                            {(unit.members?.length || 0) < 2 && (
                                               <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 text-xs border-2 border-white">
                                                 ?
                                               </div>
@@ -2214,8 +2214,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                           </div>
                                           <div className="flex-1">
                                             <div className="text-sm text-gray-900">
-                                              {unit.members?.filter(m => m.inviteStatus === 'Accepted').length > 0
-                                                ? unit.members.filter(m => m.inviteStatus === 'Accepted').map(m => m.firstName && m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName || 'Player').join(' & ')
+                                              {unit.members?.length > 0
+                                                ? unit.members.map(m => m.firstName && m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName || 'Player').join(' & ')
                                                 : unit.name || 'Looking for partner'}
                                             </div>
                                             {!unit.isComplete && (
@@ -2227,16 +2227,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                         // Singles display
                                         <div className="flex items-center gap-3">
                                           <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-sm font-medium">
-                                            {(() => {
-                                              const m = unit.members?.find(m => m.inviteStatus === 'Accepted');
-                                              return (m?.firstName || unit.name || 'P')[0].toUpperCase();
-                                            })()}
+                                            {(unit.members?.[0]?.firstName || unit.name || 'P')[0].toUpperCase()}
                                           </div>
                                           <span className="text-sm text-gray-900">
-                                            {(() => {
-                                              const m = unit.members?.find(m => m.inviteStatus === 'Accepted');
-                                              return m?.firstName && m?.lastName ? `${m.firstName} ${m.lastName}` : m?.firstName || unit.name || 'Player';
-                                            })()}
+                                            {unit.members?.[0]?.firstName && unit.members?.[0]?.lastName
+                                              ? `${unit.members[0].firstName} ${unit.members[0].lastName}`
+                                              : unit.members?.[0]?.firstName || unit.name || 'Player'}
                                           </span>
                                         </div>
                                       )}
