@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, DollarSign, Upload, CheckCircle, AlertCircle, Loader2, Image, ExternalLink } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
-import { tournamentApi, assetsApi } from '../services/api';
+import { tournamentApi, assetApi } from '../services/api';
 
 export default function PaymentModal({ isOpen, onClose, registration, event, onPaymentUpdated }) {
   const toast = useToast();
@@ -45,11 +45,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
 
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('category', 'payment-proof');
-
-      const response = await assetsApi.upload(formData);
+      const response = await assetApi.upload(file, 'payment-proof');
       if (response.success && response.data?.url) {
         setPaymentProofUrl(response.data.url);
         if (file.type.startsWith('image/')) {
