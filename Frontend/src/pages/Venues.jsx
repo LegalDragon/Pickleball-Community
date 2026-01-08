@@ -314,6 +314,22 @@ export default function Venues() {
         if (sortBy === 'match' && debouncedSearch) {
           // Search relevance sorting
           const searchLower = debouncedSearch.toLowerCase();
+
+          // DEBUG: Log before sort
+          console.log('Search term:', searchLower);
+          console.log('BEFORE sort:', items.map(v => ({ name: v.name, address: v.address, city: v.city })));
+
+          // Calculate priority score (lower is better)
+          const getScore = (name, address, city) => {
+            if (name.startsWith(searchLower)) return 1;
+            if (name.includes(searchLower)) return 2;
+            if (address.startsWith(searchLower)) return 3;
+            if (address.includes(searchLower)) return 4;
+            if (city.startsWith(searchLower)) return 5;
+            if (city.includes(searchLower)) return 6;
+            return 7;
+          };
+
           items = [...items].sort((a, b) => {
             const aName = (a.name || '').toLowerCase();
             const bName = (b.name || '').toLowerCase();
@@ -321,17 +337,6 @@ export default function Venues() {
             const bAddress = (b.address || '').toLowerCase();
             const aCity = (a.city || '').toLowerCase();
             const bCity = (b.city || '').toLowerCase();
-
-            // Calculate priority score (lower is better)
-            const getScore = (name, address, city) => {
-              if (name.startsWith(searchLower)) return 1;
-              if (name.includes(searchLower)) return 2;
-              if (address.startsWith(searchLower)) return 3;
-              if (address.includes(searchLower)) return 4;
-              if (city.startsWith(searchLower)) return 5;
-              if (city.includes(searchLower)) return 6;
-              return 7;
-            };
 
             const scoreA = getScore(aName, aAddress, aCity);
             const scoreB = getScore(bName, bAddress, bCity);
@@ -348,6 +353,19 @@ export default function Venues() {
             // Finally: sort alphabetically by name
             return aName.localeCompare(bName);
           });
+
+          // DEBUG: Log after sort with scores
+          console.log('AFTER sort:', items.map(v => {
+            const name = (v.name || '').toLowerCase();
+            const address = (v.address || '').toLowerCase();
+            const city = (v.city || '').toLowerCase();
+            return {
+              name: v.name,
+              score: getScore(name, address, city),
+              address: v.address,
+              city: v.city
+            };
+          }));
         } else if (sortBy === 'name' || (sortBy === 'match' && !debouncedSearch)) {
           // Client-side sorting if needed
           items = [...items].sort((a, b) => {
