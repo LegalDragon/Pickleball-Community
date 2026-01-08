@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Pickleball.Community.Models.Entities;
 
+[Table("SiteContent")]
 public class SiteContent
 {
     public int Id { get; set; }
