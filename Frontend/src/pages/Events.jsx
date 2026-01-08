@@ -1317,13 +1317,43 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   const isRegistered = event.isRegistered;
 
   // Load all registrations when organizer opens manage tab
+  // Uses tournament API (EventUnits) which is the actual registration system
   const loadAllRegistrations = async () => {
     if (!isOrganizer) return;
     setRegistrationsLoading(true);
     try {
-      const response = await eventsApi.getAllRegistrations(event.id);
+      const response = await tournamentApi.getEventUnits(event.id);
       if (response.success) {
-        setAllRegistrations(response.data || []);
+        // Transform units into a flat list of registrations for the manage tab
+        const registrations = [];
+        (response.data || []).forEach(unit => {
+          // Find the division name from event.divisions
+          const division = event.divisions?.find(d => d.id === unit.divisionId);
+          const divisionName = division?.name || unit.divisionName || 'Unknown Division';
+
+          // Add each member as a registration entry
+          unit.members?.forEach(member => {
+            registrations.push({
+              id: `${unit.id}-${member.userId}`,
+              eventId: unit.eventId,
+              divisionId: unit.divisionId,
+              divisionName: divisionName,
+              userId: member.userId,
+              userName: member.firstName && member.lastName
+                ? `${member.firstName} ${member.lastName}`
+                : member.firstName || 'Player',
+              userProfileImageUrl: member.profileImageUrl,
+              unitId: unit.id,
+              teamName: unit.name,
+              status: unit.status,
+              paymentStatus: unit.paymentStatus || 'Pending',
+              role: member.role,
+              isComplete: unit.isComplete,
+              registeredAt: unit.createdAt
+            });
+          });
+        });
+        setAllRegistrations(registrations);
       }
     } catch (err) {
       console.error('Error loading registrations:', err);
