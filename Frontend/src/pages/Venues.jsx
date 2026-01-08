@@ -34,7 +34,7 @@ export default function Venues() {
   const [viewMode, setViewMode] = useState('list');
 
   // Sorting
-  const [sortBy, setSortBy] = useState('distance'); // distance, name, rating
+  const [sortBy, setSortBy] = useState('distance'); // distance, name, rating, match
   const [sortOrder, setSortOrder] = useState('asc');
 
   // Distance search state
@@ -310,8 +310,9 @@ export default function Venues() {
       if (response.success && response.data) {
         let items = response.data.items || [];
 
-        // Smart sorting when there's a search query
-        if (debouncedSearch) {
+        // Sort based on selected sort option
+        if (sortBy === 'match' && debouncedSearch) {
+          // Search relevance sorting
           const searchLower = debouncedSearch.toLowerCase();
           items = [...items].sort((a, b) => {
             const aName = (a.name || '').toLowerCase();
@@ -347,7 +348,7 @@ export default function Venues() {
             // Finally: sort alphabetically by name
             return aName.localeCompare(bName);
           });
-        } else if (sortBy === 'name') {
+        } else if (sortBy === 'name' || (sortBy === 'match' && !debouncedSearch)) {
           // Client-side sorting if needed
           items = [...items].sort((a, b) => {
             const nameA = (a.name || '').toLowerCase();
@@ -388,6 +389,10 @@ export default function Venues() {
   const searchTimeoutRef = useRef(null);
   const handleCourtNameSearch = (value) => {
     setCourtNameSearch(value); // Update input immediately
+    // Auto-switch to 'match' sort when user starts searching
+    if (value.trim() && sortBy !== 'match') {
+      setSortBy('match');
+    }
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearch(value.trim()); // Update debounced value after delay
@@ -713,6 +718,18 @@ export default function Venues() {
             {viewMode === 'list' && (
               <div className="flex items-center gap-2 ml-auto">
                 <span className="text-sm text-gray-500">Sort by:</span>
+                <button
+                  onClick={() => handleSortChange('match')}
+                  disabled={!debouncedSearch}
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-sm transition-colors ${
+                    sortBy === 'match'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  } ${!debouncedSearch ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Search className="w-3 h-3" />
+                  Match
+                </button>
                 <button
                   onClick={() => handleSortChange('distance')}
                   disabled={searchMode !== 'distance' || !userLocation}
