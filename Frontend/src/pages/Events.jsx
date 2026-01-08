@@ -1695,7 +1695,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
       }
     } catch (err) {
       console.error('Error registering:', err);
-      toast.showError(err.response?.data?.message || 'Failed to register. Please try again.');
+      // err is the response data from API interceptor: {success, message, data}
+      toast.showError(err?.message || 'Failed to register. Please try again.');
     } finally {
       setRegisteringDivision(null);
     }
