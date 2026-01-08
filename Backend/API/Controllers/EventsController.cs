@@ -405,6 +405,36 @@ public class EventsController : ControllerBase
                 RegisteredDivisionIds = userId.HasValue
                     ? evt.Divisions.Where(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))).Select(d => d.Id).ToList()
                     : new List<int>(),
+                MyRegistrations = userId.HasValue
+                    ? evt.Divisions
+                        .SelectMany(d => d.Units
+                            .Where(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))
+                            .Select(u => new UserRegistrationInfoDto
+                            {
+                                UnitId = u.Id,
+                                DivisionId = d.Id,
+                                DivisionName = d.Name,
+                                TeamUnitName = d.TeamUnit?.Name,
+                                SkillLevelName = d.SkillLevel?.Name,
+                                UnitName = u.Name,
+                                Status = u.Status,
+                                PaymentStatus = u.PaymentStatus,
+                                AmountPaid = u.AmountPaid,
+                                AmountDue = (evt.RegistrationFee ?? 0) + (d.DivisionFee ?? 0),
+                                PaymentProofUrl = u.PaymentProofUrl,
+                                Partners = u.Members
+                                    .Where(m => m.UserId != userId.Value)
+                                    .Select(m => new PartnerInfoDto
+                                    {
+                                        UserId = m.UserId,
+                                        Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "Unknown",
+                                        ProfileImageUrl = m.User?.ProfileImageUrl,
+                                        Role = m.Role,
+                                        InviteStatus = m.InviteStatus
+                                    }).ToList()
+                            }))
+                        .ToList()
+                    : new List<UserRegistrationInfoDto>(),
                 Divisions = evt.Divisions
                     .Where(d => d.IsActive)
                     .OrderBy(d => d.SortOrder)

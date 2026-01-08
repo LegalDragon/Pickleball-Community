@@ -52,6 +52,30 @@ public class EventUnit
     /// </summary>
     public int CaptainUserId { get; set; }
 
+    // Payment
+    /// <summary>
+    /// Payment status: Pending, Paid, Partial, Waived
+    /// </summary>
+    [MaxLength(20)]
+    public string PaymentStatus { get; set; } = "Pending";
+
+    /// <summary>
+    /// Amount paid for this registration
+    /// </summary>
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal AmountPaid { get; set; } = 0;
+
+    /// <summary>
+    /// URL to payment proof image/document (for manual payment verification)
+    /// </summary>
+    [MaxLength(500)]
+    public string? PaymentProofUrl { get; set; }
+
+    public DateTime? PaidAt { get; set; }
+
+    [MaxLength(100)]
+    public string? PaymentReference { get; set; }
+
     // Stats
     public int MatchesPlayed { get; set; } = 0;
     public int MatchesWon { get; set; } = 0;

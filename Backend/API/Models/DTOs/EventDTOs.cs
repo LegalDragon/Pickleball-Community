@@ -51,8 +51,44 @@ public class EventDetailDto : EventDto
     public bool IsOrganizer { get; set; }
     public bool IsRegistered { get; set; }
     public List<int> RegisteredDivisionIds { get; set; } = new();
+    public List<UserRegistrationInfoDto> MyRegistrations { get; set; } = new();
 
     public List<EventDivisionDto> Divisions { get; set; } = new();
+}
+
+/// <summary>
+/// Detailed info about user's registration in a division
+/// </summary>
+public class UserRegistrationInfoDto
+{
+    public int UnitId { get; set; }
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string? TeamUnitName { get; set; }
+    public string? SkillLevelName { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+
+    // Payment info
+    public string PaymentStatus { get; set; } = "Pending";
+    public decimal AmountPaid { get; set; }
+    public decimal AmountDue { get; set; }
+    public string? PaymentProofUrl { get; set; }
+
+    // Partner/team info
+    public List<PartnerInfoDto> Partners { get; set; } = new();
+}
+
+/// <summary>
+/// Info about a partner/team member
+/// </summary>
+public class PartnerInfoDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? ProfileImageUrl { get; set; }
+    public string Role { get; set; } = "Player"; // Captain or Player
+    public string InviteStatus { get; set; } = "Accepted"; // Pending, Accepted, Declined
 }
 
 // Event division
