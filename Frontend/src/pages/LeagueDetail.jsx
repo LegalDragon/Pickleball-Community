@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Building2, ChevronRight, Users, MapPin, Globe, Mail, ExternalLink,
-  Shield, Crown, Plus, Settings, Edit, Network, Loader2, ArrowLeft,
+  Shield, Crown, Plus, Edit, Network, Loader2, ArrowLeft,
   Check, X, UserPlus, Building, Clock, AlertCircle, FileText, Download,
   Upload, DollarSign, TrendingUp, TrendingDown, RefreshCw, Eye, EyeOff, Trash2,
   Paperclip, ChevronDown, ChevronUp, Image
@@ -613,16 +613,6 @@ export default function LeagueDetail() {
                 )}
               </div>
             </div>
-
-            {canManage && (
-              <button
-                onClick={() => navigate(`/leagues/${id}/edit`)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Settings className="w-4 h-4" />
-                Manage
-              </button>
-            )}
           </div>
 
           {/* Stats */}
