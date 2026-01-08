@@ -1681,7 +1681,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
         partnerUserId: partnerUserId > 0 ? partnerUserId : null
       });
       if (response.success) {
-        toast.showSuccess('Successfully registered for division!');
+        toast.success('Successfully registered for division!');
         onUpdate();
         setShowTeamRegistration(false);
         setSelectedDivisionForRegistration(null);
@@ -1691,12 +1691,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
           Object.assign(event, updated.data);
         }
       } else {
-        toast.showError(response.message || 'Failed to register');
+        toast.error(response.message || 'Failed to register');
       }
     } catch (err) {
       console.error('Error registering:', err);
       // err is the response data from API interceptor: {success, message, data}
-      toast.showError(err?.message || 'Failed to register. Please try again.');
+      toast.error(err?.message || 'Failed to register. Please try again.');
     } finally {
       setRegisteringDivision(null);
     }
