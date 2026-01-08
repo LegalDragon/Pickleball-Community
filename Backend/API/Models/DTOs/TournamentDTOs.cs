@@ -125,6 +125,11 @@ public class JoinUnitRequest
     public string? Message { get; set; }
 }
 
+public class MoveRegistrationRequest
+{
+    public int NewDivisionId { get; set; }
+}
+
 public class RespondToJoinRequest
 {
     public int RequestId { get; set; }

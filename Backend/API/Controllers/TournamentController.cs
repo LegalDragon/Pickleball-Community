@@ -571,6 +571,85 @@ public class TournamentController : ControllerBase
         return Ok(new ApiResponse<bool> { Success = true, Data = true });
     }
 
+    /// <summary>
+    /// Remove a registration (organizer only) - removes member from unit, deletes unit if empty
+    /// </summary>
+    [Authorize]
+    [HttpDelete("events/{eventId}/registrations/{unitId}/members/{userId}")]
+    public async Task<ActionResult<ApiResponse<bool>>> RemoveRegistration(int eventId, int unitId, int userId)
+    {
+        var currentUserId = GetUserId();
+        if (!currentUserId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is organizer
+        var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        if (evt.OrganizedByUserId != currentUserId.Value)
+            return Forbid();
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Members)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+
+        if (unit == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Unit not found" });
+
+        var member = unit.Members.FirstOrDefault(m => m.UserId == userId);
+        if (member == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Member not found in unit" });
+
+        _context.EventUnitMembers.Remove(member);
+
+        // If unit is now empty, delete it
+        if (unit.Members.Count <= 1)
+        {
+            _context.EventUnits.Remove(unit);
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration removed" });
+    }
+
+    /// <summary>
+    /// Move a registration to a different division (organizer only)
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/registrations/{unitId}/move")]
+    public async Task<ActionResult<ApiResponse<bool>>> MoveRegistration(int eventId, int unitId, [FromBody] MoveRegistrationRequest request)
+    {
+        var currentUserId = GetUserId();
+        if (!currentUserId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is organizer
+        var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        if (evt.OrganizedByUserId != currentUserId.Value)
+            return Forbid();
+
+        var unit = await _context.EventUnits.FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+        if (unit == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Unit not found" });
+
+        // Verify target division exists and belongs to this event
+        var targetDivision = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == request.NewDivisionId && d.EventId == eventId && d.IsActive);
+        if (targetDivision == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Target division not found" });
+
+        unit.DivisionId = request.NewDivisionId;
+        unit.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration moved to new division" });
+    }
+
     private EventUnitDto MapToEventUnitDto(EventUnit unit)
     {
         var teamUnit = unit.Division?.TeamUnit;

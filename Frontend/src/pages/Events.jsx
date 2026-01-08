@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play, Link2, QrCode } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
@@ -1633,6 +1633,95 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
     }
   };
 
+  // Change division for a registration
+  const handleChangeDivision = async (registration) => {
+    const divisions = event.divisions?.filter(d => d.id !== registration.divisionId) || [];
+    if (divisions.length === 0) {
+      toast.error('No other divisions available');
+      return;
+    }
+
+    const divisionOptions = divisions.map(d => `${d.id}: ${d.name}`).join('\n');
+    const input = prompt(`Move to which division?\n\n${divisionOptions}\n\nEnter division ID:`);
+    if (!input) return;
+
+    const newDivisionId = parseInt(input.trim());
+    if (isNaN(newDivisionId) || !divisions.find(d => d.id === newDivisionId)) {
+      toast.error('Invalid division ID');
+      return;
+    }
+
+    setUpdatingRegistration(registration.id);
+    try {
+      const response = await tournamentApi.moveRegistration(event.id, registration.unitId, newDivisionId);
+      if (response.success) {
+        const newDivision = event.divisions.find(d => d.id === newDivisionId);
+        setAllRegistrations(prev =>
+          prev.map(r => r.id === registration.id ? { ...r, divisionId: newDivisionId, divisionName: newDivision?.name || 'Unknown' } : r)
+        );
+        toast.success('Registration moved to new division');
+      } else {
+        toast.error(response.message || 'Failed to move registration');
+      }
+    } catch (err) {
+      console.error('Error moving registration:', err);
+      toast.error(err?.message || 'Failed to move registration');
+    } finally {
+      setUpdatingRegistration(null);
+    }
+  };
+
+  // Remove a registration
+  const handleRemoveRegistration = async (registration) => {
+    if (!confirm(`Remove ${registration.userName} from ${registration.divisionName}?`)) return;
+
+    setUpdatingRegistration(registration.id);
+    try {
+      const response = await tournamentApi.removeRegistration(event.id, registration.unitId, registration.userId);
+      if (response.success) {
+        setAllRegistrations(prev => prev.filter(r => r.id !== registration.id));
+        toast.success('Registration removed');
+        onUpdate();
+      } else {
+        toast.error(response.message || 'Failed to remove registration');
+      }
+    } catch (err) {
+      console.error('Error removing registration:', err);
+      toast.error(err?.message || 'Failed to remove registration');
+    } finally {
+      setUpdatingRegistration(null);
+    }
+  };
+
+  // Download registrations as CSV
+  const downloadRegistrationsCSV = () => {
+    if (allRegistrations.length === 0) {
+      toast.error('No registrations to download');
+      return;
+    }
+
+    const headers = ['Name', 'Division', 'Team', 'Status', 'Registered At'];
+    const rows = allRegistrations.map(reg => [
+      reg.userName || '',
+      reg.divisionName || '',
+      reg.teamName || '',
+      reg.paymentStatus || 'Pending',
+      reg.registeredAt ? new Date(reg.registeredAt).toLocaleDateString() : ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${event.name || 'event'}-registrations.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const loadDivisionData = async (divisionId) => {
     setLoading(true);
     try {
@@ -2742,16 +2831,27 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
 
                   {/* Registrations Management */}
                   <div>
-                    <button
-                      onClick={() => setShowRegistrations(!showRegistrations)}
-                      className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Users className="w-5 h-5 text-gray-600" />
-                        <span className="font-medium text-gray-900">Manage Registrations ({allRegistrations.length})</span>
-                      </div>
-                      {showRegistrations ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowRegistrations(!showRegistrations)}
+                        className="flex-1 flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Users className="w-5 h-5 text-gray-600" />
+                          <span className="font-medium text-gray-900">Manage Registrations ({allRegistrations.length})</span>
+                        </div>
+                        {showRegistrations ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+                      </button>
+                      {allRegistrations.length > 0 && (
+                        <button
+                          onClick={downloadRegistrationsCSV}
+                          className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                          title="Download CSV"
+                        >
+                          <Download className="w-5 h-5 text-gray-600" />
+                        </button>
+                      )}
+                    </div>
 
                     {showRegistrations && (
                       <div className="mt-3 border rounded-lg overflow-hidden">
@@ -2783,7 +2883,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                     <div className="text-sm text-blue-600">Team: {reg.teamName}</div>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-1 flex-shrink-0">
                                   <span className={`px-2 py-1 text-xs rounded-full ${reg.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                     {reg.paymentStatus}
                                   </span>
@@ -2798,15 +2898,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                     </button>
                                   )}
                                   <button
-                                    onClick={() => {
-                                      const teamName = prompt('Enter team/unit name:', reg.teamName || '');
-                                      if (teamName !== null) assignTeam(reg, teamName);
-                                    }}
+                                    onClick={() => handleChangeDivision(reg)}
                                     disabled={updatingRegistration === reg.id}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                                    title="Assign to Team/Unit"
+                                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Change Division"
                                   >
-                                    <UserPlus className="w-4 h-4" />
+                                    <ArrowRightLeft className="w-4 h-4" />
                                   </button>
                                   <Link
                                     to={`/messages?userId=${reg.userId}`}
@@ -2815,6 +2912,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                                   >
                                     <MessageCircle className="w-4 h-4" />
                                   </Link>
+                                  <button
+                                    onClick={() => handleRemoveRegistration(reg)}
+                                    disabled={updatingRegistration === reg.id}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Remove Registration"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
                                 </div>
                               </div>
                             ))}

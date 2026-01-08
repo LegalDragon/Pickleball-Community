@@ -1252,6 +1252,12 @@ export const tournamentApi = {
     api.post('/tournament/units/invitation/respond', { unitId, accept }),
   leaveUnit: (unitId) => api.delete(`/tournament/units/${unitId}/leave`),
 
+  // Registration Management (organizer)
+  removeRegistration: (eventId, unitId, userId) =>
+    api.delete(`/tournament/events/${eventId}/registrations/${unitId}/members/${userId}`),
+  moveRegistration: (eventId, unitId, newDivisionId) =>
+    api.post(`/tournament/events/${eventId}/registrations/${unitId}/move`, { newDivisionId }),
+
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),
   createTournamentCourt: (eventId, data) => api.post(`/tournament/events/${eventId}/courts`, data),
