@@ -319,14 +319,14 @@ export default function Venues() {
           console.log('Search term:', searchLower);
           console.log('BEFORE sort:', items.map(v => ({ name: v.name, address: v.address, city: v.city })));
 
-          // Calculate priority score (lower is better)
+          // Calculate priority score (lower is better, null = no match)
           const getScore = (name, address, city) => {
-            if (name.startsWith(searchLower)) return 1;
-            if (name.includes(searchLower)) return 2;
-            if (address.startsWith(searchLower)) return 3;
-            if (address.includes(searchLower)) return 4;
-            if (city.startsWith(searchLower)) return 5;
-            if (city.includes(searchLower)) return 6;
+            if (name && name.startsWith(searchLower)) return 1;
+            if (name && name.includes(searchLower)) return 2;
+            if (address && address.startsWith(searchLower)) return 3;
+            if (address && address.includes(searchLower)) return 4;
+            if (city && city.startsWith(searchLower)) return 5;
+            if (city && city.includes(searchLower)) return 6;
             return 7;
           };
 
