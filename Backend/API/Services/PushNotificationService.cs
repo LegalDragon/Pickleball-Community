@@ -91,7 +91,18 @@ public class PushNotificationService : IPushNotificationService
     /// <inheritdoc />
     public async Task<UserPushSubscription> SubscribeAsync(int userId, string endpoint, string p256dh, string auth, string? userAgent = null, string? deviceName = null)
     {
-        _logger.LogInformation("SubscribeAsync: Creating subscription for userId={UserId}, endpoint={Endpoint}", userId, endpoint?.Substring(0, Math.Min(50, endpoint?.Length ?? 0)));
+        _logger.LogInformation("SubscribeAsync: Creating subscription for userId={UserId}, endpoint length={EndpointLen}, p256dh length={P256dhLen}, auth length={AuthLen}",
+            userId, endpoint?.Length ?? 0, p256dh?.Length ?? 0, auth?.Length ?? 0);
+
+        // Validate keys - p256dh should be ~87 chars, auth should be ~22 chars (base64url encoded)
+        if (string.IsNullOrEmpty(p256dh) || p256dh.Length < 80)
+        {
+            _logger.LogWarning("Invalid p256dh key length: {Length}", p256dh?.Length ?? 0);
+        }
+        if (string.IsNullOrEmpty(auth) || auth.Length < 20)
+        {
+            _logger.LogWarning("Invalid auth key length: {Length}", auth?.Length ?? 0);
+        }
 
         // Check if subscription already exists
         var existing = await _context.PushSubscriptions
@@ -236,10 +247,16 @@ public class PushNotificationService : IPushNotificationService
                     subscription.P256dh,
                     subscription.Auth);
 
+                _logger.LogDebug("Sending push to endpoint: {Endpoint}, payload length: {Length}",
+                    subscription.Endpoint.Substring(0, Math.Min(50, subscription.Endpoint.Length)),
+                    payload.Length);
+
                 await _webPushClient.SendNotificationAsync(pushSubscription, payload, _vapidDetails);
 
                 subscription.LastUsedAt = DateTime.Now;
                 successCount++;
+
+                _logger.LogDebug("Push sent successfully to subscription {Id}", subscription.Id);
             }
             catch (WebPushException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone ||
                                                ex.StatusCode == System.Net.HttpStatusCode.NotFound ||
