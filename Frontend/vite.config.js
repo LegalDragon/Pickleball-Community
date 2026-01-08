@@ -25,6 +25,8 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         navigateFallback: null,
         navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/asset/],
+        // Exclude manifest.webmanifest since we use manifest.json from public folder
+        globPatterns: ['**/*.{js,css,html}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.(js|css)$/,
