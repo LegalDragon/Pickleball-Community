@@ -412,7 +412,7 @@ public class EventsController : ControllerBase
                         .SelectMany(d => d.Units
                             .Where(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))
                             .Select(u => {
-                                var requiredPlayers = d.TeamUnit?.RequiredPlayers ?? d.TeamSize;
+                                var requiredPlayers = d.TeamUnit?.TotalPlayers ?? d.TeamSize;
                                 var acceptedMembers = u.Members.Count(m => m.InviteStatus == "Accepted");
                                 var isComplete = acceptedMembers >= requiredPlayers;
                                 return new UserRegistrationInfoDto
