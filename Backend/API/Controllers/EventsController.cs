@@ -391,6 +391,7 @@ public class EventsController : ControllerBase
                 BannerImageUrl = evt.BannerImageUrl,
                 RegistrationFee = evt.RegistrationFee,
                 PerDivisionFee = evt.PerDivisionFee,
+                ContactName = evt.ContactName,
                 ContactEmail = evt.ContactEmail,
                 ContactPhone = evt.ContactPhone,
                 MaxParticipants = evt.MaxParticipants,
@@ -529,6 +530,7 @@ public class EventsController : ControllerBase
                 BannerImageUrl = dto.BannerImageUrl,
                 RegistrationFee = dto.RegistrationFee,
                 PerDivisionFee = dto.PerDivisionFee,
+                ContactName = dto.ContactName,
                 ContactEmail = dto.ContactEmail,
                 ContactPhone = dto.ContactPhone,
                 OrganizedByUserId = userId.Value,
@@ -648,6 +650,7 @@ public class EventsController : ControllerBase
             evt.BannerImageUrl = dto.BannerImageUrl;
             evt.RegistrationFee = dto.RegistrationFee;
             evt.PerDivisionFee = dto.PerDivisionFee;
+            evt.ContactName = dto.ContactName;
             evt.ContactEmail = dto.ContactEmail;
             evt.ContactPhone = dto.ContactPhone;
             evt.MaxParticipants = dto.MaxParticipants;

@@ -44,6 +44,7 @@ public class EventDetailDto : EventDto
 {
     public string? BannerImageUrl { get; set; }
     public string? CourtName { get; set; }
+    public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
 
@@ -240,6 +241,7 @@ public class CreateEventDto
     public string? BannerImageUrl { get; set; }
     public decimal RegistrationFee { get; set; } = 0;
     public decimal PerDivisionFee { get; set; } = 0;
+    public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
     public int? OrganizedByClubId { get; set; }

@@ -68,6 +68,9 @@ public class Event
 
     // Contact
     [MaxLength(100)]
+    public string? ContactName { get; set; }
+
+    [MaxLength(100)]
     public string? ContactEmail { get; set; }
 
     [MaxLength(20)]

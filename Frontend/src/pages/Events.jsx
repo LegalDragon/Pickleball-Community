@@ -1533,6 +1533,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       country: event.country || 'USA',
       registrationFee: event.registrationFee || 0,
       perDivisionFee: event.perDivisionFee || 0,
+      contactName: event.contactName || '',
       contactEmail: event.contactEmail || '',
       contactPhone: event.contactPhone || '',
       maxParticipants: event.maxParticipants || '',
@@ -1890,14 +1891,49 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       return;
     }
 
-    const headers = ['Name', 'Division', 'Team', 'Status', 'Registered At'];
-    const rows = allRegistrations.map(reg => [
-      reg.userName || '',
-      reg.divisionName || '',
-      reg.teamName || '',
-      reg.paymentStatus || 'Pending',
-      reg.registeredAt ? new Date(reg.registeredAt).toLocaleDateString() : ''
-    ]);
+    // Group registrations by unitId
+    const unitMap = new Map();
+    allRegistrations.forEach(reg => {
+      if (!unitMap.has(reg.unitId)) {
+        unitMap.set(reg.unitId, {
+          unitId: reg.unitId,
+          divisionId: reg.divisionId,
+          divisionName: reg.divisionName,
+          teamName: reg.teamName,
+          paymentStatus: reg.paymentStatus,
+          registeredAt: reg.registeredAt,
+          members: []
+        });
+      }
+      unitMap.get(reg.unitId).members.push(reg);
+    });
+
+    // Convert to array and sort by division name, then by registration date
+    const units = Array.from(unitMap.values()).sort((a, b) => {
+      if (a.divisionName !== b.divisionName) {
+        return (a.divisionName || '').localeCompare(b.divisionName || '');
+      }
+      return new Date(a.registeredAt) - new Date(b.registeredAt);
+    });
+
+    // Track unit number per division
+    const divisionUnitCounts = {};
+
+    const headers = ['Division', 'Unit #', 'Player 1', 'Player 2', 'Status', 'Registered At'];
+    const rows = units.map(unit => {
+      divisionUnitCounts[unit.divisionId] = (divisionUnitCounts[unit.divisionId] || 0) + 1;
+      const unitNumber = divisionUnitCounts[unit.divisionId];
+      const player1 = unit.members[0]?.userName || '';
+      const player2 = unit.members[1]?.userName || '';
+      return [
+        unit.divisionName || '',
+        unitNumber.toString(),
+        player1,
+        player2,
+        unit.paymentStatus || 'Pending',
+        unit.registeredAt ? new Date(unit.registeredAt).toLocaleDateString() : ''
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -2441,12 +2477,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               )}
 
               {/* Location */}
-              <div>
-                <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-orange-600" />
-                  Location
-                </h3>
-                <div className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
                   {event.venueName && (
                     event.courtId ? (
                       <Link
@@ -2456,27 +2489,27 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                         {event.venueName}
                       </Link>
                     ) : (
-                      <p className="font-medium">{event.venueName}</p>
+                      <span className="font-medium">{event.venueName}</span>
                     )
                   )}
-                  {event.address && <p className="text-sm text-gray-600">{event.address}</p>}
-                  <p className="text-sm text-gray-600">
-                    {event.city}{event.state && `, ${event.state}`}{event.country && `, ${event.country}`}
-                  </p>
+                  {event.venueName && (event.address || event.city) && <span className="text-gray-400 mx-1">•</span>}
+                  <span className="text-gray-600">
+                    {event.address && `${event.address}, `}
+                    {event.city}{event.state && `, ${event.state}`}
+                  </span>
                 </div>
               </div>
 
               {/* Contact */}
-              {(event.contactEmail || event.contactPhone) && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Contact</h3>
-                  <div className="space-y-1 text-sm">
-                    {event.contactEmail && (
-                      <p><span className="text-gray-500">Email:</span> {event.contactEmail}</p>
-                    )}
-                    {event.contactPhone && (
-                      <p><span className="text-gray-500">Phone:</span> {event.contactPhone}</p>
-                    )}
+              {(event.contactName || event.contactEmail || event.contactPhone) && (
+                <div className="flex items-start gap-2">
+                  <User className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    {event.contactName && <span className="font-medium">{event.contactName}</span>}
+                    {event.contactName && (event.contactEmail || event.contactPhone) && <span className="text-gray-400 mx-1">•</span>}
+                    {event.contactEmail && <span className="text-gray-600">{event.contactEmail}</span>}
+                    {event.contactEmail && event.contactPhone && <span className="text-gray-400 mx-1">•</span>}
+                    {event.contactPhone && <span className="text-gray-600">{event.contactPhone}</span>}
                   </div>
                 </div>
               )}
@@ -3146,6 +3179,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Name</label>
+                    <input type="text" value={editFormData?.contactName || ''} onChange={(e) => setEditFormData({ ...editFormData, contactName: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" placeholder="Event contact person" />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
@@ -3425,66 +3463,122 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                           <div className="p-8 text-center text-gray-500">No registrations yet</div>
                         ) : (
                           <div className="divide-y">
-                            {allRegistrations.map(reg => (
-                              <div key={reg.id} className="p-4 flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                                  {reg.userProfileImageUrl ? (
-                                    <img src={getSharedAssetUrl(reg.userProfileImageUrl)} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm font-medium">
-                                      {reg.userName?.charAt(0) || '?'}
+                            {/* Group by division, then by unit */}
+                            {(() => {
+                              // Group registrations by unitId
+                              const unitMap = new Map();
+                              allRegistrations.forEach(reg => {
+                                if (!unitMap.has(reg.unitId)) {
+                                  unitMap.set(reg.unitId, {
+                                    unitId: reg.unitId,
+                                    divisionId: reg.divisionId,
+                                    divisionName: reg.divisionName,
+                                    teamName: reg.teamName,
+                                    paymentStatus: reg.paymentStatus,
+                                    registeredAt: reg.registeredAt,
+                                    members: []
+                                  });
+                                }
+                                unitMap.get(reg.unitId).members.push(reg);
+                              });
+
+                              // Convert to array and sort by division name, then by registration date
+                              const units = Array.from(unitMap.values()).sort((a, b) => {
+                                if (a.divisionName !== b.divisionName) {
+                                  return (a.divisionName || '').localeCompare(b.divisionName || '');
+                                }
+                                return new Date(a.registeredAt) - new Date(b.registeredAt);
+                              });
+
+                              // Track unit number per division
+                              const divisionUnitCounts = {};
+
+                              return units.map(unit => {
+                                // Increment unit number for this division
+                                divisionUnitCounts[unit.divisionId] = (divisionUnitCounts[unit.divisionId] || 0) + 1;
+                                const unitNumber = divisionUnitCounts[unit.divisionId];
+                                const firstMember = unit.members[0];
+
+                                return (
+                                  <div key={unit.unitId} className="p-4 bg-gray-50 border-b last:border-b-0">
+                                    {/* Unit header with division and unit number */}
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                                          {unit.divisionName}
+                                        </span>
+                                        <span className="text-xs text-gray-400">
+                                          Unit {unitNumber}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <span className={`px-2 py-0.5 text-xs rounded-full ${unit.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                          {unit.paymentStatus}
+                                        </span>
+                                        {unit.paymentStatus !== 'Paid' && (
+                                          <button
+                                            onClick={() => markAsPaid(firstMember)}
+                                            disabled={updatingRegistration === firstMember?.id}
+                                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                                            title="Mark as Paid"
+                                          >
+                                            <DollarSign className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleChangeDivision(firstMember)}
+                                          disabled={updatingRegistration === firstMember?.id}
+                                          className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors disabled:opacity-50"
+                                          title="Change Division"
+                                        >
+                                          <ArrowRightLeft className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemoveRegistration(firstMember)}
+                                          disabled={updatingRegistration === firstMember?.id}
+                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                                          title="Remove Registration"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
                                     </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-gray-900 truncate">{reg.userName}</div>
-                                  <div className="text-sm text-gray-500">
-                                    {reg.divisionName || 'Division'} • {new Date(reg.registeredAt).toLocaleDateString()}
+
+                                    {/* Members (pair) */}
+                                    <div className="flex items-center gap-4">
+                                      {unit.members.map((member, idx) => (
+                                        <Link
+                                          key={member.id}
+                                          to={`/players/${member.userId}`}
+                                          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                        >
+                                          <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                                            {member.userProfileImageUrl ? (
+                                              <img src={getSharedAssetUrl(member.userProfileImageUrl)} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                              <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm font-medium">
+                                                {member.userName?.charAt(0) || '?'}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <span className="text-sm font-medium text-gray-900">{member.userName}</span>
+                                        </Link>
+                                      ))}
+                                      {unit.members.length === 1 && (
+                                        <div className="flex items-center gap-2 text-gray-400">
+                                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm">?</div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Registration date */}
+                                    <div className="text-xs text-gray-400 mt-2">
+                                      Registered {new Date(unit.registeredAt).toLocaleDateString()}
+                                    </div>
                                   </div>
-                                  {reg.teamName && (
-                                    <div className="text-sm text-blue-600">Team: {reg.teamName}</div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <span className={`px-2 py-1 text-xs rounded-full ${reg.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                    {reg.paymentStatus}
-                                  </span>
-                                  {reg.paymentStatus !== 'Paid' && (
-                                    <button
-                                      onClick={() => markAsPaid(reg)}
-                                      disabled={updatingRegistration === reg.id}
-                                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-                                      title="Mark as Paid"
-                                    >
-                                      <DollarSign className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleChangeDivision(reg)}
-                                    disabled={updatingRegistration === reg.id}
-                                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
-                                    title="Change Division"
-                                  >
-                                    <ArrowRightLeft className="w-4 h-4" />
-                                  </button>
-                                  <Link
-                                    to={`/messages?userId=${reg.userId}`}
-                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                                    title="Send Message"
-                                  >
-                                    <MessageCircle className="w-4 h-4" />
-                                  </Link>
-                                  <button
-                                    onClick={() => handleRemoveRegistration(reg)}
-                                    disabled={updatingRegistration === reg.id}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                                    title="Remove Registration"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </div>
@@ -4063,6 +4157,7 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
     country: 'USA',
     registrationFee: 0,
     perDivisionFee: 0,
+    contactName: '',
     contactEmail: '',
     contactPhone: '',
     posterImageUrl: '',
@@ -4627,6 +4722,17 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
                     className="w-full border border-gray-300 rounded-lg p-2"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Name</label>
+                <input
+                  type="text"
+                  value={formData.contactName}
+                  onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  placeholder="Event contact person"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
