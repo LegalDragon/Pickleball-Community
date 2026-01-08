@@ -2208,28 +2208,31 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={copyEventLink}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  title="Copy invite link"
-                >
-                  {linkCopied ? <Check className="w-5 h-5 text-green-600" /> : <Link2 className="w-5 h-5" />}
-                </button>
-                <button
-                  onClick={() => setShowEventQrModal(true)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  title="Show QR code"
-                >
-                  <QrCode className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className="text-xs text-gray-400 mb-1">Share Event</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={copyEventLink}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                    title="Copy invite link"
+                  >
+                    {linkCopied ? <Check className="w-5 h-5 text-green-600" /> : <Link2 className="w-5 h-5" />}
+                  </button>
+                  <button
+                    onClick={() => setShowEventQrModal(true)}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                    title="Show QR code"
+                  >
+                    <QrCode className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
+              <button
+                onClick={onClose}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
