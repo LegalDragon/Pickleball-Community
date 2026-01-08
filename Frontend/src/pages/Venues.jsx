@@ -314,12 +314,6 @@ export default function Venues() {
         if (debouncedSearch) {
           const searchLower = debouncedSearch.toLowerCase();
           items = [...items].sort((a, b) => {
-            // First: verified venues (with user confirmations) come first
-            const aVerified = (a.aggregatedInfo?.confirmationCount || 0) > 0;
-            const bVerified = (b.aggregatedInfo?.confirmationCount || 0) > 0;
-            if (aVerified && !bVerified) return -1;
-            if (!aVerified && bVerified) return 1;
-
             const aName = (a.name || '').toLowerCase();
             const bName = (b.name || '').toLowerCase();
             const aAddress = (a.address || '').toLowerCase();
@@ -341,8 +335,16 @@ export default function Venues() {
             const scoreA = getScore(aName, aAddress, aCity);
             const scoreB = getScore(bName, bAddress, bCity);
 
+            // First: sort by search relevance
             if (scoreA !== scoreB) return scoreA - scoreB;
-            // Within same priority, sort alphabetically by name
+
+            // Second: within same relevance tier, verified venues first
+            const aVerified = (a.aggregatedInfo?.confirmationCount || 0) > 0;
+            const bVerified = (b.aggregatedInfo?.confirmationCount || 0) > 0;
+            if (aVerified && !bVerified) return -1;
+            if (!aVerified && bVerified) return 1;
+
+            // Finally: sort alphabetically by name
             return aName.localeCompare(bName);
           });
         } else if (sortBy === 'name') {

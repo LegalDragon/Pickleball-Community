@@ -52,43 +52,42 @@ export default function VenuePicker({
         if (response.success) {
           let results = response.data?.items || [];
 
-          // Smart sorting with verification priority
+          // Smart sorting: search relevance first, then verification, then alphabetical
           const searchLower = (search || '').toLowerCase().trim();
           results = [...results].sort((a, b) => {
-            // First: verified venues (with user confirmations) come first
+            const aName = (a.name || '').toLowerCase();
+            const bName = (b.name || '').toLowerCase();
+            const aAddress = (a.address || '').toLowerCase();
+            const bAddress = (b.address || '').toLowerCase();
+            const aCity = (a.city || '').toLowerCase();
+            const bCity = (b.city || '').toLowerCase();
+
+            // Calculate priority score (lower is better)
+            const getScore = (name, address, city) => {
+              if (!searchLower) return 7; // No search term, all equal
+              if (name.startsWith(searchLower)) return 1;
+              if (name.includes(searchLower)) return 2;
+              if (address.startsWith(searchLower)) return 3;
+              if (address.includes(searchLower)) return 4;
+              if (city.startsWith(searchLower)) return 5;
+              if (city.includes(searchLower)) return 6;
+              return 7;
+            };
+
+            const scoreA = getScore(aName, aAddress, aCity);
+            const scoreB = getScore(bName, bAddress, bCity);
+
+            // First: sort by search relevance
+            if (scoreA !== scoreB) return scoreA - scoreB;
+
+            // Second: within same relevance tier, verified venues first
             const aVerified = (a.aggregatedInfo?.confirmationCount || 0) > 0;
             const bVerified = (b.aggregatedInfo?.confirmationCount || 0) > 0;
             if (aVerified && !bVerified) return -1;
             if (!aVerified && bVerified) return 1;
 
-            // Then: apply search relevance sorting if there's a search term
-            if (searchLower) {
-              const aName = (a.name || '').toLowerCase();
-              const bName = (b.name || '').toLowerCase();
-              const aAddress = (a.address || '').toLowerCase();
-              const bAddress = (b.address || '').toLowerCase();
-              const aCity = (a.city || '').toLowerCase();
-              const bCity = (b.city || '').toLowerCase();
-
-              // Calculate priority score (lower is better)
-              const getScore = (name, address, city) => {
-                if (name.startsWith(searchLower)) return 1;
-                if (name.includes(searchLower)) return 2;
-                if (address.startsWith(searchLower)) return 3;
-                if (address.includes(searchLower)) return 4;
-                if (city.startsWith(searchLower)) return 5;
-                if (city.includes(searchLower)) return 6;
-                return 7;
-              };
-
-              const scoreA = getScore(aName, aAddress, aCity);
-              const scoreB = getScore(bName, bAddress, bCity);
-
-              if (scoreA !== scoreB) return scoreA - scoreB;
-            }
-
             // Finally: sort alphabetically by name
-            return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
+            return aName.localeCompare(bName);
           });
 
           setVenues(results);
