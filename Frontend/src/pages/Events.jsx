@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
@@ -582,7 +582,7 @@ export default function Events() {
                         : 'bg-white text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    <Map className="w-4 h-4" />
+                    <MapIcon className="w-4 h-4" />
                     <span className="text-sm">Map</span>
                   </button>
                 </div>
