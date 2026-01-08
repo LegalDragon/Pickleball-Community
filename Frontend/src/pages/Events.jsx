@@ -1654,8 +1654,23 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
     }
   };
 
+  // Check if user can register for another division
+  const canRegisterForDivision = (divisionId) => {
+    // Already registered for this division
+    if (event.registeredDivisionIds?.includes(divisionId)) return false;
+    // If multiple divisions not allowed and already registered for any division
+    if (!event.allowMultipleDivisions && event.registeredDivisionIds?.length > 0) return false;
+    return true;
+  };
+
   const handleRegister = async (divisionId, partnerUserId = null) => {
     if (!isAuthenticated) return;
+
+    // Check upfront if user can register
+    if (!canRegisterForDivision(divisionId)) {
+      toast.error('This event only allows registration for one division. You are already registered.');
+      return;
+    }
 
     // Find the division to check team size
     const division = event.divisions?.find(d => d.id === divisionId);
@@ -1777,15 +1792,26 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
   };
 
   const handleJoinUnit = async (unitId) => {
+    // Check upfront if user can register for this division
+    const divisionId = selectedDivisionForRegistration?.id;
+    if (divisionId && !canRegisterForDivision(divisionId)) {
+      toast.error('This event only allows registration for one division. You are already registered.');
+      return;
+    }
+
     try {
       const response = await tournamentApi.requestToJoinUnit(unitId, 'I would like to join your team');
       if (response.success) {
+        toast.success('Join request sent!');
         setShowTeamRegistration(false);
         setSelectedDivisionForRegistration(null);
         onUpdate();
+      } else {
+        toast.error(response.message || 'Failed to send join request');
       }
     } catch (err) {
       console.error('Error joining unit:', err);
+      toast.error(err?.message || 'Failed to send join request. Please try again.');
     }
   };
 
@@ -2130,8 +2156,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                         ) : (
                           <button
                             onClick={() => handleRegister(division.id)}
-                            disabled={!isAuthenticated || !canRegister() || registeringDivision === division.id}
+                            disabled={!isAuthenticated || !canRegister() || !canRegisterForDivision(division.id) || registeringDivision === division.id}
                             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+                            title={!canRegisterForDivision(division.id) ? 'Already registered for another division' : ''}
                           >
                             {registeringDivision === division.id ? 'Registering...' : (isFull ? 'Join Waitlist' : 'Register')}
                           </button>
@@ -2145,7 +2172,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, formatDate, f
                       </div>
                     )}
 
-                    {teamSize > 1 && division.lookingForPartnerCount > 0 && (
+                    {teamSize > 1 && division.lookingForPartnerCount > 0 && canRegisterForDivision(division.id) && (
                       <button
                         onClick={() => {
                           setSelectedDivisionForRegistration(division);
