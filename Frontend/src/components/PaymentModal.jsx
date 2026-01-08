@@ -117,6 +117,21 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
 
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Important Payment Note - Always visible */}
+          <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <DollarSign className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-blue-800 text-base">Payment is per team/pair, not per person</div>
+                <div className="text-sm text-blue-700 mt-1">
+                  {registration.partners?.length > 0
+                    ? "Only ONE payment is needed for your team. Please coordinate with your partner to avoid paying twice."
+                    : "The registration fee covers your entire team/unit entry."}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Registration Info */}
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="font-medium text-gray-900">{registration.divisionName}</div>
@@ -130,16 +145,6 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
               </div>
             )}
           </div>
-
-          {/* Payment Note */}
-          {registration.partners?.length > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm">
-              <div className="font-medium text-yellow-800">Note: Payment is per team/pair</div>
-              <div className="text-yellow-700">
-                Only one payment is needed for your team. Coordinate with your partner to avoid duplicate payments.
-              </div>
-            </div>
-          )}
 
           {/* Payment Summary */}
           <div className="space-y-2">
