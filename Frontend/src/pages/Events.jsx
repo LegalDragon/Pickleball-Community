@@ -257,6 +257,11 @@ export default function Events() {
       const response = await eventsApi.getMyEvents();
       if (response.success) {
         setMyEvents(response.data);
+        // Auto-switch to search if user has no events
+        const data = response.data;
+        if (data && data.eventsIOrganize?.length === 0 && data.eventsImRegisteredFor?.length === 0) {
+          setActiveTab('search');
+        }
       }
     } catch (err) {
       console.error('Error loading my events:', err);
@@ -2453,7 +2458,10 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               {event.description && (
                 <div>
                   <h3 className="font-medium text-gray-900 mb-2">About This Event</h3>
-                  <p className="text-gray-600">{event.description}</p>
+                  <div
+                    className="text-gray-600 prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: event.description }}
+                  />
                 </div>
               )}
 
@@ -3095,8 +3103,17 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea value={editFormData?.description || ''} onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })} rows={3} className="w-full border border-gray-300 rounded-lg p-2" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                      <span className="text-xs text-gray-500 ml-2">(HTML supported)</span>
+                    </label>
+                    <textarea
+                      value={editFormData?.description || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                      rows={6}
+                      className="w-full border border-gray-300 rounded-lg p-2 font-mono text-sm"
+                      placeholder="Enter description. HTML tags like <b>, <i>, <br>, <ul>, <li>, <a href=''> are supported."
+                    />
                   </div>
 
                   {/* Event Thumbnail */}
@@ -4494,12 +4511,16 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                  <span className="text-xs text-gray-500 ml-2">(HTML supported)</span>
+                </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg p-2"
+                  rows={6}
+                  className="w-full border border-gray-300 rounded-lg p-2 font-mono text-sm"
+                  placeholder="Enter description. HTML tags like <b>, <i>, <br>, <ul>, <li>, <a href=''> are supported."
                 />
               </div>
 
