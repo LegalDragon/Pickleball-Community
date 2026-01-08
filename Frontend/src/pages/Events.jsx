@@ -9,6 +9,7 @@ import ShareLink, { QrCodeModal } from '../components/ui/ShareLink';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
 import PaymentModal from '../components/PaymentModal';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
@@ -1203,6 +1204,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
   // Payment modal state
   const [selectedPaymentReg, setSelectedPaymentReg] = useState(null);
+
+  // Profile modal state
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
 
   // Court selection for editing
   const [topCourts, setTopCourts] = useState([]);
@@ -2755,13 +2759,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                                 </>
                                               );
                                               return playerId ? (
-                                                <Link
+                                                <button
                                                   key={mIdx}
-                                                  to={`/players/${playerId}`}
+                                                  onClick={() => setSelectedProfileUserId(playerId)}
                                                   className="flex flex-col items-center text-center hover:opacity-80"
                                                 >
                                                   {content}
-                                                </Link>
+                                                </button>
                                               ) : (
                                                 <div key={mIdx} className="flex flex-col items-center text-center">
                                                   {content}
@@ -2779,8 +2783,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                         </div>
                                       ) : (
                                         // Singles display - avatar with name below
-                                        <Link
-                                          to={`/players/${unit.members?.[0]?.userId}`}
+                                        <button
+                                          onClick={() => unit.members?.[0]?.userId && setSelectedProfileUserId(unit.members[0].userId)}
                                           className="flex flex-col items-center text-center hover:opacity-80"
                                         >
                                           {unit.members?.[0]?.profileImageUrl ? (
@@ -2793,7 +2797,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                           <span className="text-xs text-gray-700 mt-1">
                                             {unit.members?.[0]?.firstName || unit.name || 'Player'}
                                           </span>
-                                        </Link>
+                                        </button>
                                       )}
                                     </div>
                                   );
@@ -3561,9 +3565,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     {/* Members (pair) */}
                                     <div className="flex items-center gap-4">
                                       {unit.members.map((member, idx) => (
-                                        <Link
+                                        <button
                                           key={member.id}
-                                          to={`/players/${member.userId}`}
+                                          onClick={() => member.userId && setSelectedProfileUserId(member.userId)}
                                           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                                         >
                                           <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
@@ -3576,7 +3580,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             )}
                                           </div>
                                           <span className="text-sm font-medium text-gray-900">{member.userName}</span>
-                                        </Link>
+                                        </button>
                                       ))}
                                       {unit.members.length === 1 && (
                                         <div className="flex items-center gap-2 text-gray-400">
@@ -4140,6 +4144,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
           onUpdate();
         }}
       />
+
+      {/* Public Profile Modal */}
+      {selectedProfileUserId && (
+        <PublicProfileModal
+          userId={selectedProfileUserId}
+          onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
     </div>
   );
 }
