@@ -94,6 +94,8 @@ public class EventUnitDto
     public int RequiredPlayers { get; set; }
     public bool IsComplete { get; set; }
     public bool AllCheckedIn { get; set; }
+
+    public DateTime CreatedAt { get; set; }
 }
 
 public class EventUnitMemberDto

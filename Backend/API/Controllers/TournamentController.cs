@@ -605,6 +605,7 @@ public class TournamentController : ControllerBase
             RequiredPlayers = requiredPlayers,
             IsComplete = unit.Members?.Count(m => m.InviteStatus == "Accepted") >= requiredPlayers,
             AllCheckedIn = unit.Members?.All(m => m.IsCheckedIn) ?? false,
+            CreatedAt = unit.CreatedAt,
             Members = unit.Members?.Select(m => new EventUnitMemberDto
             {
                 Id = m.Id,
@@ -1323,6 +1324,7 @@ public class TournamentController : ControllerBase
             RequiredPlayers = teamSize,
             IsComplete = acceptedMembers.Count >= teamSize,
             AllCheckedIn = acceptedMembers.All(m => m.IsCheckedIn),
+            CreatedAt = u.CreatedAt,
             Members = u.Members.Select(m => new EventUnitMemberDto
             {
                 Id = m.Id,
