@@ -13,25 +13,10 @@ export default defineConfig({
       devOptions: {
         enabled: true
       },
-      manifest: {
-        name: 'Pickleball Community',
-        short_name: 'PB Community',
-        theme_color: '#3b82f6',
-        background_color: '#ffffff',
-        display: 'standalone',
-        icons: [
-          {
-            src: '/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      },
+      // Use existing manifest.json from public folder (more complete)
+      manifest: false,
+      // Ensure service worker is registered even without manifest generation
+      injectRegister: 'auto',
       workbox: {
         // Import push notification handlers into the service worker
         importScripts: ['/push-handler.js'],

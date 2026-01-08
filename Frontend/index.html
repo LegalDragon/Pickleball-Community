@@ -24,28 +24,6 @@
 
 <body>
   <div id="root"></div>
-  <script>
-    // Force clear stale service worker caches (one-time cleanup)
-    if ('serviceWorker' in navigator && 'caches' in window) {
-      const CACHE_VERSION = 'v3'; // Increment this to force cache clear
-      const versionKey = 'pb-cache-version';
-      const storedVersion = localStorage.getItem(versionKey);
-
-      if (storedVersion !== CACHE_VERSION) {
-        // Clear all caches
-        caches.keys().then(names => {
-          names.forEach(name => caches.delete(name));
-        });
-        // Unregister service workers
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          registrations.forEach(reg => reg.unregister());
-        });
-        localStorage.setItem(versionKey, CACHE_VERSION);
-        // Reload to get fresh content
-        if (storedVersion) window.location.reload();
-      }
-    }
-  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
