@@ -14,10 +14,9 @@ import './styles/globals.css'
 import 'leaflet/dist/leaflet.css'
 
 // Register service worker for PWA with cache-busting version
-// The version is set at build time to force browsers to fetch fresh sw.js
-const SW_VERSION = import.meta.env.VITE_BUILD_TIME || Date.now()
-
-if ('serviceWorker' in navigator) {
+// Only in production - dev mode uses VitePWA's dev-sw.js automatically
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  const SW_VERSION = import.meta.env.VITE_BUILD_TIME || Date.now()
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`/sw.js?v=${SW_VERSION}`)
       .then(registration => {
