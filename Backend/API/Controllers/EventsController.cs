@@ -54,6 +54,7 @@ public class EventsController : ControllerBase
             var userId = GetCurrentUserId();
 
             var query = _context.Events
+                .AsSplitQuery() // Use split queries to avoid cartesian explosion with multiple collections
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.OrganizedByClub)
@@ -275,6 +276,7 @@ public class EventsController : ControllerBase
 
             // Upcoming events
             var upcomingEvents = await _context.Events
+                .AsSplitQuery()
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.Divisions)
@@ -286,6 +288,7 @@ public class EventsController : ControllerBase
 
             // Popular events (most registrations via Units)
             var popularEvents = await _context.Events
+                .AsSplitQuery()
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.Divisions)
@@ -297,6 +300,7 @@ public class EventsController : ControllerBase
 
             // Recent past events (events that ended within the past X days)
             var recentPastEvents = await _context.Events
+                .AsSplitQuery()
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.Divisions)
@@ -332,6 +336,7 @@ public class EventsController : ControllerBase
         {
             // Load event with all related data (avoiding filtered includes that can cause SQL Server issues)
             var evt = await _context.Events
+                .AsSplitQuery() // Use split queries to avoid cartesian explosion with multiple collections
                 .Include(e => e.EventType)
                 .Include(e => e.OrganizedBy)
                 .Include(e => e.OrganizedByClub)
@@ -1115,6 +1120,7 @@ public class EventsController : ControllerBase
 
             // Events I organize
             var eventsIOrganize = await _context.Events
+                .AsSplitQuery()
                 .Include(e => e.EventType)
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Units)
@@ -1124,6 +1130,7 @@ public class EventsController : ControllerBase
 
             // Events I'm registered for (via EventUnitMembers)
             var myMemberships = await _context.EventUnitMembers
+                .AsSplitQuery()
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Event)
                         .ThenInclude(e => e!.EventType)
