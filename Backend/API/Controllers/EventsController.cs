@@ -420,7 +420,7 @@ public class EventsController : ControllerBase
                                 Status = u.Status,
                                 PaymentStatus = u.PaymentStatus,
                                 AmountPaid = u.AmountPaid,
-                                AmountDue = (evt.RegistrationFee ?? 0) + (d.DivisionFee ?? 0),
+                                AmountDue = (evt.RegistrationFee ?? 0m) + (d.DivisionFee ?? 0m),
                                 PaymentProofUrl = u.PaymentProofUrl,
                                 Partners = u.Members
                                     .Where(m => m.UserId != userId.Value)
