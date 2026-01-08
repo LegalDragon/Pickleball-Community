@@ -57,6 +57,9 @@ public class VenuesController : ControllerBase
                 command.Parameters.Add(new SqlParameter("@UserLat", SqlDbType.Float) { Value = (object?)request.Latitude ?? DBNull.Value });
                 command.Parameters.Add(new SqlParameter("@UserLng", SqlDbType.Float) { Value = (object?)request.Longitude ?? DBNull.Value });
                 command.Parameters.Add(new SqlParameter("@RadiusMiles", SqlDbType.Float) { Value = (object?)request.RadiusMiles ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@VenueTypeId", SqlDbType.Int) { Value = (object?)request.VenueTypeId ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@SortBy", SqlDbType.NVarChar, 20) { Value = (object?)request.SortBy ?? DBNull.Value });
+                command.Parameters.Add(new SqlParameter("@SortOrder", SqlDbType.NVarChar, 4) { Value = (object?)request.SortOrder ?? "asc" });
                 command.Parameters.Add(new SqlParameter("@Page", SqlDbType.Int) { Value = request.Page });
                 command.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = request.PageSize });
 

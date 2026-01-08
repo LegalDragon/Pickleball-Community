@@ -117,6 +117,8 @@ public class VenueSearchRequest
     public int? VenueTypeId { get; set; }
     public bool? HasLights { get; set; }
     public bool? IsIndoor { get; set; }
+    public string? SortBy { get; set; }  // 'match', 'distance', 'name', 'rating'
+    public string? SortOrder { get; set; } = "asc";  // 'asc' or 'desc'
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
