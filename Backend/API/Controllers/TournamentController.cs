@@ -27,6 +27,15 @@ public class TournamentController : ControllerBase
         return int.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 
+    private async Task<bool> IsAdminAsync()
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return false;
+
+        var user = await _context.Users.FindAsync(userId.Value);
+        return user?.Role == "Admin";
+    }
+
     // ============================================
     // Score Formats
     // ============================================
@@ -758,8 +767,9 @@ public class TournamentController : ControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<PaymentInfoDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer can mark as paid
-        if (unit.Event?.OrganizedByUserId != userId.Value)
+        // Only organizer or site admin can mark as paid
+        var isAdmin = await IsAdminAsync();
+        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
             return Forbid();
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0) + (unit.Division?.DivisionFee ?? 0);
@@ -799,12 +809,13 @@ public class TournamentController : ControllerBase
         if (!currentUserId.HasValue)
             return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
 
-        // Check if user is organizer
+        // Check if user is organizer or site admin
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
 
-        if (evt.OrganizedByUserId != currentUserId.Value)
+        var isAdmin = await IsAdminAsync();
+        if (evt.OrganizedByUserId != currentUserId.Value && !isAdmin)
             return Forbid();
 
         var unit = await _context.EventUnits
@@ -842,12 +853,13 @@ public class TournamentController : ControllerBase
         if (!currentUserId.HasValue)
             return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
 
-        // Check if user is organizer
+        // Check if user is organizer or site admin
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
 
-        if (evt.OrganizedByUserId != currentUserId.Value)
+        var isAdmin = await IsAdminAsync();
+        if (evt.OrganizedByUserId != currentUserId.Value && !isAdmin)
             return Forbid();
 
         var unit = await _context.EventUnits.FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);

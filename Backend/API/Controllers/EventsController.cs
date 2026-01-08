@@ -360,6 +360,7 @@ public class EventsController : ControllerBase
                 return NotFound(new ApiResponse<EventDetailDto> { Success = false, Message = "Event not found" });
 
             var userId = GetCurrentUserId();
+            var isAdmin = await IsAdminAsync();
 
             var dto = new EventDetailDto
             {
@@ -400,7 +401,7 @@ public class EventsController : ControllerBase
                 OrganizedByClubId = evt.OrganizedByClubId,
                 ClubName = evt.OrganizedByClub?.Name,
                 CreatedAt = evt.CreatedAt,
-                IsOrganizer = userId.HasValue && evt.OrganizedByUserId == userId.Value,
+                IsOrganizer = isAdmin || (userId.HasValue && evt.OrganizedByUserId == userId.Value),
                 IsRegistered = userId.HasValue && evt.Divisions.Any(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))),
                 RegisteredDivisionIds = userId.HasValue
                     ? evt.Divisions.Where(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))).Select(d => d.Id).ToList()
