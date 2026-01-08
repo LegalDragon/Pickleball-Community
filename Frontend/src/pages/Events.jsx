@@ -2706,7 +2706,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             {unit.members?.slice(0, 2).map((member, mIdx) => (
                                               <Link
                                                 key={mIdx}
-                                                to={`/players/${member.odataId || member.odataUserId || member.userId}`}
+                                                to={`/players/${member.userId}`}
                                                 className="flex flex-col items-center text-center hover:opacity-80"
                                               >
                                                 {member.profileImageUrl ? (
@@ -2733,7 +2733,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       ) : (
                                         // Singles display - avatar with name below
                                         <Link
-                                          to={`/players/${unit.members?.[0]?.odataId || unit.members?.[0]?.odataUserId || unit.members?.[0]?.userId}`}
+                                          to={`/players/${unit.members?.[0]?.userId}`}
                                           className="flex flex-col items-center text-center hover:opacity-80"
                                         >
                                           {unit.members?.[0]?.profileImageUrl ? (
