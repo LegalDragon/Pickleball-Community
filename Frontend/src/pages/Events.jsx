@@ -2301,42 +2301,91 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 </div>
               </div>
 
-              {/* Register Button */}
+              {/* Registration Status / Register Button */}
               <div className="flex flex-col items-center gap-3">
-                {canRegister() ? (
-                  isAuthenticated ? (
-                    <button
-                      onClick={() => setActiveTab('divisions')}
-                      className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
-                    >
-                      <UserPlus className="w-5 h-5" />
-                      Register Now
-                    </button>
-                  ) : (
-                    <div className="text-center">
+                {/* Show user's current registrations if registered */}
+                {isRegistered && event.registeredDivisionIds?.length > 0 && (
+                  <div className="w-full bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-green-700 font-medium mb-3">
+                      <CheckCircle className="w-5 h-5" />
+                      You are registered for this event
+                    </div>
+                    <div className="space-y-2">
+                      {event.registeredDivisionIds.map(divId => {
+                        const division = event.divisions?.find(d => d.id === divId);
+                        if (!division) return null;
+                        return (
+                          <div key={divId} className="flex items-center justify-between bg-white rounded-lg p-3 border border-green-100">
+                            <div>
+                              <div className="font-medium text-gray-900">{division.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {division.teamUnitName && <span>{division.teamUnitName}</span>}
+                                {division.skillLevelName && <span> • {division.skillLevelName}</span>}
+                              </div>
+                            </div>
+                            {canRegister() && (
+                              <button
+                                onClick={() => handleCancelRegistration(divId)}
+                                className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <X className="w-4 h-4" />
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Option to register for more divisions */}
+                    {canRegister() && !event.singleDivisionOnly && (
                       <button
-                        onClick={() => toast.info('Please create an account or sign in to register for this event')}
+                        onClick={() => setActiveTab('divisions')}
+                        className="mt-3 w-full px-4 py-2 text-orange-600 border border-orange-300 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Register for Another Division
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Show register button if not registered or can register for more */}
+                {!isRegistered && (
+                  canRegister() ? (
+                    isAuthenticated ? (
+                      <button
+                        onClick={() => setActiveTab('divisions')}
                         className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
                       >
                         <UserPlus className="w-5 h-5" />
                         Register Now
                       </button>
-                      <p className="mt-2 text-sm text-gray-600">
-                        To register, please <Link to="/login" className="text-orange-600 font-medium hover:underline">sign in</Link> or{' '}
-                        <Link to="/register" className="text-orange-600 font-medium hover:underline">create an account</Link>.
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Make sure to update your name in your profile before registering.
-                      </p>
+                    ) : (
+                      <div className="text-center">
+                        <button
+                          onClick={() => toast.info('Please create an account or sign in to register for this event')}
+                          className="px-8 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center gap-2"
+                        >
+                          <UserPlus className="w-5 h-5" />
+                          Register Now
+                        </button>
+                        <p className="mt-2 text-sm text-gray-600">
+                          To register, please <Link to="/login" className="text-orange-600 font-medium hover:underline">sign in</Link> or{' '}
+                          <Link to="/register" className="text-orange-600 font-medium hover:underline">create an account</Link>.
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Make sure to update your name in your profile before registering.
+                        </p>
+                      </div>
+                    )
+                  ) : (
+                    <div className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
+                      status.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      <AlertCircle className="w-5 h-5" />
+                      Registration {status.text}
                     </div>
                   )
-                ) : (
-                  <div className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
-                    status.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    <AlertCircle className="w-5 h-5" />
-                    Registration {status.text}
-                  </div>
                 )}
               </div>
 
