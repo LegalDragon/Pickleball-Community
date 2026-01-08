@@ -52,19 +52,34 @@ export default function VenuePicker({
         if (response.success) {
           let results = response.data?.items || [];
 
-          // Sort results: name matches first, then location matches
+          // Smart sorting: name starts with > name contains > address starts with > address contains > city starts with > city contains
           if (search) {
-            const searchLower = search.toLowerCase();
+            const searchLower = search.toLowerCase().trim();
             results = results.sort((a, b) => {
-              const aNameMatch = a.name?.toLowerCase().includes(searchLower);
-              const bNameMatch = b.name?.toLowerCase().includes(searchLower);
+              const aName = (a.name || '').toLowerCase();
+              const bName = (b.name || '').toLowerCase();
+              const aAddress = (a.address || '').toLowerCase();
+              const bAddress = (b.address || '').toLowerCase();
+              const aCity = (a.city || '').toLowerCase();
+              const bCity = (b.city || '').toLowerCase();
 
-              // Name matches come first
-              if (aNameMatch && !bNameMatch) return -1;
-              if (!aNameMatch && bNameMatch) return 1;
+              // Calculate priority score (lower is better)
+              const getScore = (name, address, city) => {
+                if (name.startsWith(searchLower)) return 1;
+                if (name.includes(searchLower)) return 2;
+                if (address.startsWith(searchLower)) return 3;
+                if (address.includes(searchLower)) return 4;
+                if (city.startsWith(searchLower)) return 5;
+                if (city.includes(searchLower)) return 6;
+                return 7;
+              };
 
-              // Within same category, sort alphabetically
-              return (a.name || '').localeCompare(b.name || '');
+              const scoreA = getScore(aName, aAddress, aCity);
+              const scoreB = getScore(bName, bAddress, bCity);
+
+              if (scoreA !== scoreB) return scoreA - scoreB;
+              // Within same priority, sort alphabetically by name
+              return aName.localeCompare(bName);
             });
           }
 

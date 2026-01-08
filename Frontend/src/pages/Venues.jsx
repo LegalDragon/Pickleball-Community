@@ -309,8 +309,37 @@ export default function Venues() {
       if (response.success && response.data) {
         let items = response.data.items || [];
 
-        // Client-side sorting if needed
-        if (sortBy === 'name') {
+        // Smart sorting when there's a search query
+        if (courtNameSearch && courtNameSearch.trim()) {
+          const searchLower = courtNameSearch.toLowerCase().trim();
+          items = [...items].sort((a, b) => {
+            const aName = (a.name || '').toLowerCase();
+            const bName = (b.name || '').toLowerCase();
+            const aAddress = (a.address || '').toLowerCase();
+            const bAddress = (b.address || '').toLowerCase();
+            const aCity = (a.city || '').toLowerCase();
+            const bCity = (b.city || '').toLowerCase();
+
+            // Calculate priority score (lower is better)
+            const getScore = (name, address, city) => {
+              if (name.startsWith(searchLower)) return 1;
+              if (name.includes(searchLower)) return 2;
+              if (address.startsWith(searchLower)) return 3;
+              if (address.includes(searchLower)) return 4;
+              if (city.startsWith(searchLower)) return 5;
+              if (city.includes(searchLower)) return 6;
+              return 7;
+            };
+
+            const scoreA = getScore(aName, aAddress, aCity);
+            const scoreB = getScore(bName, bAddress, bCity);
+
+            if (scoreA !== scoreB) return scoreA - scoreB;
+            // Within same priority, sort alphabetically by name
+            return aName.localeCompare(bName);
+          });
+        } else if (sortBy === 'name') {
+          // Client-side sorting if needed
           items = [...items].sort((a, b) => {
             const nameA = (a.name || '').toLowerCase();
             const nameB = (b.name || '').toLowerCase();
