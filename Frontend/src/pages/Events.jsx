@@ -2337,7 +2337,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                       })}
                     </div>
                     {/* Option to register for more divisions */}
-                    {canRegister() && !event.singleDivisionOnly && (
+                    {canRegister() && event.allowMultipleDivisions && (
                       <button
                         onClick={() => setActiveTab('divisions')}
                         className="mt-3 w-full px-4 py-2 text-orange-600 border border-orange-300 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
