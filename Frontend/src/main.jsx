@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { ToastProvider } from './contexts/ToastContext'
 import Navigation from './components/ui/Navigation' // Import here
+import PWAInstallPrompt from './components/ui/PWAInstallPrompt'
 
 import Footer from './components/landing/Footer'; // Make sure this is imported
 import App from './App'
@@ -45,6 +46,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Navigation /> {/* Navigation now inside AuthProvider */}
               <App /> {/* App doesn't need to have Navigation */}
               <Footer /> {/* Footer added here */}
+              <PWAInstallPrompt />
             </ToastProvider>
           </AuthProvider>
         </ThemeProvider>
