@@ -45,69 +45,19 @@ export default function VenuePicker({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
+        // Use stored procedure for match sorting
         const response = await venuesApi.search({
           query: search || '',
+          sortBy: 'match',
           pageSize: 20
         });
         if (response.success) {
-          let results = response.data?.items || [];
-
-          // Smart sorting: search relevance first, then verification, then alphabetical
-          const searchLower = (search || '').toLowerCase().trim();
-
-          // DEBUG: Log before sort
-          console.log('Search term:', searchLower);
-          console.log('BEFORE sort:', results.map(v => ({ name: v.name, address: v.address, city: v.city })));
-
-          // Calculate score helper (null = no match)
-          const getScore = (name, address, city) => {
-            if (!searchLower) return 7; // No search term, all equal
-            if (name && name.startsWith(searchLower)) return 1;
-            if (name && name.includes(searchLower)) return 2;
-            if (address && address.startsWith(searchLower)) return 3;
-            if (address && address.includes(searchLower)) return 4;
-            if (city && city.startsWith(searchLower)) return 5;
-            if (city && city.includes(searchLower)) return 6;
-            return 7;
-          };
-
-          results = [...results].sort((a, b) => {
-            const aName = (a.name || '').toLowerCase();
-            const bName = (b.name || '').toLowerCase();
-            const aAddress = (a.address || '').toLowerCase();
-            const bAddress = (b.address || '').toLowerCase();
-            const aCity = (a.city || '').toLowerCase();
-            const bCity = (b.city || '').toLowerCase();
-
-            const scoreA = getScore(aName, aAddress, aCity);
-            const scoreB = getScore(bName, bAddress, bCity);
-
-            // First: sort by search relevance
-            if (scoreA !== scoreB) return scoreA - scoreB;
-
-            // Second: within same relevance tier, verified venues first
-            const aVerified = (a.aggregatedInfo?.confirmationCount || 0) > 0;
-            const bVerified = (b.aggregatedInfo?.confirmationCount || 0) > 0;
-            if (aVerified && !bVerified) return -1;
-            if (!aVerified && bVerified) return 1;
-
-            // Finally: sort alphabetically by name
-            return aName.localeCompare(bName);
-          });
-
-          // DEBUG: Log after sort with scores
-          console.log('AFTER sort:', results.map(v => {
-            const name = (v.name || '').toLowerCase();
-            const address = (v.address || '').toLowerCase();
-            const city = (v.city || '').toLowerCase();
-            return {
-              name: v.name,
-              score: getScore(name, address, city),
-              address: v.address,
-              city: v.city
-            };
-          }));
-
+          const results = response.data?.items || [];
+          // DEBUG: Log results from SP
+          if (search) {
+            console.log('VenuePicker search:', search);
+            console.log('Sorted results from SP:', results.map(v => ({ name: v.name, address: v.address, city: v.city })));
+          }
           setVenues(results);
         }
       } catch (err) {
