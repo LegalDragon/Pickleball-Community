@@ -827,6 +827,9 @@ export const eventsApi = {
   addDivision: (eventId, data) =>
     api.post(`/events/${eventId}/divisions`, data),
 
+  updateDivision: (eventId, divisionId, data) =>
+    api.put(`/events/${eventId}/divisions/${divisionId}`, data),
+
   removeDivision: (eventId, divisionId) =>
     api.delete(`/events/${eventId}/divisions/${divisionId}`),
 

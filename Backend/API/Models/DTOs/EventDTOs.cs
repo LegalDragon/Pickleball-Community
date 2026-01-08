@@ -86,9 +86,41 @@ public class EventDivisionDto
     public int SortOrder { get; set; }
     public int RegisteredCount { get; set; }
     public int LookingForPartnerCount { get; set; }
+    public int WaitlistedCount { get; set; }
+
+    // Tournament structure
+    public int? DefaultScoreFormatId { get; set; }
+    public int? PoolCount { get; set; }
+    public int? PoolSize { get; set; }
+    public string? ScheduleType { get; set; }
+    public string ScheduleStatus { get; set; } = "NotGenerated";
+    public string? BracketType { get; set; }
+    public int? PlayoffFromPools { get; set; }
+    public int GamesPerMatch { get; set; } = 1;
 
     // Rewards
     public List<DivisionRewardDto> Rewards { get; set; } = new();
+}
+
+// DTO for updating a division
+public class UpdateDivisionDto
+{
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public int? TeamUnitId { get; set; }
+    public int? AgeGroupId { get; set; }
+    public int? SkillLevelId { get; set; }
+    public int? MaxUnits { get; set; }
+    public decimal? DivisionFee { get; set; }
+
+    // Tournament structure
+    public int? DefaultScoreFormatId { get; set; }
+    public int? PoolCount { get; set; }
+    public int? PoolSize { get; set; }
+    public string? ScheduleType { get; set; }
+    public string? BracketType { get; set; }
+    public int? PlayoffFromPools { get; set; }
+    public int? GamesPerMatch { get; set; }
 }
 
 // Division with registrations

@@ -169,6 +169,11 @@ public class EventDivision
     // Tournament structure
     public int? DefaultScoreFormatId { get; set; }
     public int? PoolCount { get; set; } // Number of pools for round robin
+    public int? PoolSize { get; set; } // Target number of units per pool
+    [MaxLength(30)]
+    public string? ScheduleType { get; set; } // RoundRobin, RoundRobinPlayoff, SingleElimination, DoubleElimination, RandomPairing
+    [MaxLength(20)]
+    public string ScheduleStatus { get; set; } = "NotGenerated"; // NotGenerated, TemplateReady, UnitsAssigned, Finalized
     [MaxLength(20)]
     public string? BracketType { get; set; } // SingleElimination, DoubleElimination, RoundRobin, Hybrid
     public int? PlayoffFromPools { get; set; } // How many from each pool advance to playoffs

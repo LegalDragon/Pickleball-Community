@@ -1289,6 +1289,99 @@ public class EventsController : ControllerBase
         }
     }
 
+    // PUT: /events/{id}/divisions/{divisionId} - Update division
+    [HttpPut("{id}/divisions/{divisionId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventDivisionDto>>> UpdateDivision(int id, int divisionId, [FromBody] UpdateDivisionDto dto)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new ApiResponse<EventDivisionDto> { Success = false, Message = "User not authenticated" });
+
+            var evt = await _context.Events.FindAsync(id);
+            if (evt == null || !evt.IsActive)
+                return NotFound(new ApiResponse<EventDivisionDto> { Success = false, Message = "Event not found" });
+
+            // Check if user is organizer or admin
+            var user = await _context.Users.FindAsync(userId.Value);
+            var isAdmin = user?.Role == "Admin";
+            if (evt.OrganizedByUserId != userId.Value && !isAdmin)
+                return Forbid();
+
+            var division = await _context.EventDivisions
+                .Include(d => d.TeamUnit)
+                .Include(d => d.SkillLevel)
+                .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == id && d.IsActive);
+
+            if (division == null)
+                return NotFound(new ApiResponse<EventDivisionDto> { Success = false, Message = "Division not found" });
+
+            // Update fields if provided
+            if (dto.Name != null) division.Name = dto.Name;
+            if (dto.Description != null) division.Description = dto.Description;
+            if (dto.TeamUnitId.HasValue) division.TeamUnitId = dto.TeamUnitId;
+            if (dto.AgeGroupId.HasValue) division.AgeGroupId = dto.AgeGroupId;
+            if (dto.SkillLevelId.HasValue) division.SkillLevelId = dto.SkillLevelId;
+            if (dto.MaxUnits.HasValue) division.MaxUnits = dto.MaxUnits;
+            if (dto.DivisionFee.HasValue) division.DivisionFee = dto.DivisionFee;
+
+            // Tournament structure fields
+            if (dto.DefaultScoreFormatId.HasValue) division.DefaultScoreFormatId = dto.DefaultScoreFormatId;
+            if (dto.PoolCount.HasValue) division.PoolCount = dto.PoolCount;
+            if (dto.PoolSize.HasValue) division.PoolSize = dto.PoolSize;
+            if (dto.ScheduleType != null) division.ScheduleType = dto.ScheduleType;
+            if (dto.BracketType != null) division.BracketType = dto.BracketType;
+            if (dto.PlayoffFromPools.HasValue) division.PlayoffFromPools = dto.PlayoffFromPools;
+            if (dto.GamesPerMatch.HasValue) division.GamesPerMatch = dto.GamesPerMatch.Value;
+
+            await _context.SaveChangesAsync();
+
+            // Reload with navigation properties
+            await _context.Entry(division).Reference(d => d.TeamUnit).LoadAsync();
+            await _context.Entry(division).Reference(d => d.SkillLevel).LoadAsync();
+
+            var registeredCount = await _context.EventUnits
+                .CountAsync(u => u.DivisionId == division.Id && u.Status != "Cancelled");
+
+            return Ok(new ApiResponse<EventDivisionDto>
+            {
+                Success = true,
+                Data = new EventDivisionDto
+                {
+                    Id = division.Id,
+                    EventId = division.EventId,
+                    Name = division.Name,
+                    Description = division.Description,
+                    TeamUnitId = division.TeamUnitId,
+                    TeamUnitName = division.TeamUnit?.Name,
+                    SkillLevelId = division.SkillLevelId,
+                    SkillLevelName = division.SkillLevel?.Name,
+                    MaxUnits = division.MaxUnits,
+                    DivisionFee = division.DivisionFee,
+                    SortOrder = division.SortOrder,
+                    RegisteredCount = registeredCount,
+                    // Tournament structure
+                    DefaultScoreFormatId = division.DefaultScoreFormatId,
+                    PoolCount = division.PoolCount,
+                    PoolSize = division.PoolSize,
+                    ScheduleType = division.ScheduleType,
+                    ScheduleStatus = division.ScheduleStatus,
+                    BracketType = division.BracketType,
+                    PlayoffFromPools = division.PlayoffFromPools,
+                    GamesPerMatch = division.GamesPerMatch
+                },
+                Message = "Division updated successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating division {DivisionId}", divisionId);
+            return StatusCode(500, new ApiResponse<EventDivisionDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // DELETE: /events/{id}/divisions/{divisionId} - Remove division
     [HttpDelete("{id}/divisions/{divisionId}")]
     [Authorize]
