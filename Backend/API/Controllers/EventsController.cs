@@ -339,6 +339,8 @@ public class EventsController : ControllerBase
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Registrations)
                 .Include(e => e.Divisions)
+                    .ThenInclude(d => d.Units)
+                .Include(e => e.Divisions)
                     .ThenInclude(d => d.PartnerRequests)
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.TeamUnit)
@@ -428,7 +430,7 @@ public class EventsController : ControllerBase
                         MaxTeams = d.MaxTeams,
                         DivisionFee = d.DivisionFee,
                         SortOrder = d.SortOrder,
-                        RegisteredCount = d.Registrations.Count,
+                        RegisteredCount = d.Units.Count(u => u.Status != "Cancelled"),
                         LookingForPartnerCount = d.PartnerRequests.Count(p => p.IsLookingForPartner && p.Status == "Open"),
                         Rewards = d.Rewards.Where(r => r.IsActive).OrderBy(r => r.Placement).Select(r => new DivisionRewardDto
                         {
