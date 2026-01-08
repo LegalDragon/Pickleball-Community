@@ -51,7 +51,8 @@ export default function Venues() {
   const [selectedState, setSelectedState] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [citySearch, setCitySearch] = useState('');
-  const [courtNameSearch, setCourtNameSearch] = useState('');
+  const [courtNameSearch, setCourtNameSearch] = useState(''); // For input display
+  const [debouncedSearch, setDebouncedSearch] = useState(''); // For API calls
 
   // Legacy state for old endpoint
   const [states, setStates] = useState([]);
@@ -302,7 +303,7 @@ export default function Venues() {
         if (selectedCountry) params.country = selectedCountry;
         if (selectedState) params.state = selectedState;
         if (selectedCity) params.city = selectedCity;
-        if (courtNameSearch) params.query = courtNameSearch;
+        if (debouncedSearch) params.query = debouncedSearch;
       }
 
       const response = await venuesApi.search(params);
@@ -310,8 +311,8 @@ export default function Venues() {
         let items = response.data.items || [];
 
         // Smart sorting when there's a search query
-        if (courtNameSearch && courtNameSearch.trim()) {
-          const searchLower = courtNameSearch.toLowerCase().trim();
+        if (debouncedSearch) {
+          const searchLower = debouncedSearch.toLowerCase();
           items = [...items].sort((a, b) => {
             // First: verified venues (with user confirmations) come first
             const aVerified = (a.aggregatedInfo?.confirmationCount || 0) > 0;
@@ -375,20 +376,21 @@ export default function Venues() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, courtNameSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder]);
+  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, debouncedSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder]);
 
   useEffect(() => {
     loadCourts();
   }, [loadCourts]);
 
-  // Debounced search for court name
-  const [searchTimeout, setSearchTimeout] = useState(null);
+  // Debounced search for court name - waits for user to stop typing
+  const searchTimeoutRef = useRef(null);
   const handleCourtNameSearch = (value) => {
-    setCourtNameSearch(value);
-    if (searchTimeout) clearTimeout(searchTimeout);
-    setSearchTimeout(setTimeout(() => {
+    setCourtNameSearch(value); // Update input immediately
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(value.trim()); // Update debounced value after delay
       setPage(1);
-    }, 500));
+    }, 400);
   };
 
   // Handle sort change
