@@ -1208,6 +1208,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   // Profile modal state
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
 
+  // Partner finder state
+  const [findingPartnerForReg, setFindingPartnerForReg] = useState(null);
+  const [availableUnits, setAvailableUnits] = useState([]);
+  const [loadingAvailableUnits, setLoadingAvailableUnits] = useState(false);
+  const [joiningUnitId, setJoiningUnitId] = useState(null);
+
   // Court selection for editing
   const [topCourts, setTopCourts] = useState([]);
   const [courtsLoading, setCourtsLoading] = useState(false);
@@ -2164,6 +2170,54 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Load available units for partner finding
+  const loadAvailableUnits = async (reg) => {
+    setFindingPartnerForReg(reg);
+    setLoadingAvailableUnits(true);
+    try {
+      const response = await tournamentApi.getEventUnits(event.id, reg.divisionId);
+      if (response.success) {
+        // Filter to only show incomplete units that the user is not already a member of
+        const available = (response.data || []).filter(unit =>
+          !unit.isComplete &&
+          unit.id !== reg.unitId &&
+          !unit.members?.some(m => m.userId === currentUserId)
+        );
+        setAvailableUnits(available);
+      }
+    } catch (err) {
+      console.error('Error loading available units:', err);
+      toast.error('Failed to load available partners');
+    } finally {
+      setLoadingAvailableUnits(false);
+    }
+  };
+
+  // Handle joining another unit
+  const handleJoinUnit = async (unitId) => {
+    setJoiningUnitId(unitId);
+    try {
+      const response = await tournamentApi.requestToJoinUnit(unitId, 'I would like to join your team');
+      if (response.success) {
+        toast.success('Join request sent!');
+        setFindingPartnerForReg(null);
+        setAvailableUnits([]);
+        // Refetch event data to update the view
+        const updatedEventResponse = await eventsApi.getEvent(event.id);
+        if (updatedEventResponse.success) {
+          onUpdate(updatedEventResponse.data);
+        }
+      } else {
+        toast.error(response.message || 'Failed to send join request');
+      }
+    } catch (err) {
+      console.error('Error joining unit:', err);
+      toast.error(err?.message || 'Failed to send join request');
+    } finally {
+      setJoiningUnitId(null);
+    }
+  };
+
   const canRegister = () => {
     const now = new Date();
     if (event.registrationOpenDate && new Date(event.registrationOpenDate) > now) return false;
@@ -2385,22 +2439,68 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                               )}
                               {/* Needs partner warning */}
                               {reg.needsPartner && (
-                                <div className="mt-2 flex items-center gap-2 text-orange-600">
-                                  <UserPlus className="w-4 h-4" />
-                                  <span className="text-sm">Looking for partner</span>
-                                  <button
-                                    onClick={() => {
-                                      setActiveTab('divisions');
-                                      // Find the division and expand it
-                                      setTimeout(() => {
-                                        const divElement = document.getElementById(`division-${reg.divisionId}`);
-                                        if (divElement) divElement.scrollIntoView({ behavior: 'smooth' });
-                                      }, 100);
-                                    }}
-                                    className="text-xs text-orange-700 underline hover:no-underline"
-                                  >
-                                    Find Partner
-                                  </button>
+                                <div className="mt-2">
+                                  <div className="flex items-center gap-2 text-orange-600">
+                                    <UserPlus className="w-4 h-4" />
+                                    <span className="text-sm">Looking for partner</span>
+                                    <button
+                                      onClick={() => loadAvailableUnits(reg)}
+                                      disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
+                                      className="text-xs text-orange-700 underline hover:no-underline disabled:opacity-50"
+                                    >
+                                      {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId ? 'Loading...' : 'Find Partner'}
+                                    </button>
+                                    {findingPartnerForReg?.unitId === reg.unitId && (
+                                      <button
+                                        onClick={() => { setFindingPartnerForReg(null); setAvailableUnits([]); }}
+                                        className="text-xs text-gray-500 hover:text-gray-700"
+                                      >
+                                        Close
+                                      </button>
+                                    )}
+                                  </div>
+                                  {/* Available units list */}
+                                  {findingPartnerForReg?.unitId === reg.unitId && !loadingAvailableUnits && (
+                                    <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
+                                      {availableUnits.length === 0 ? (
+                                        <div className="p-3 text-sm text-gray-500 text-center">
+                                          No other players looking for partners in this division yet
+                                        </div>
+                                      ) : (
+                                        <div className="divide-y divide-orange-100">
+                                          {availableUnits.map(unit => (
+                                            <div key={unit.id} className="p-3 flex items-center justify-between bg-orange-50/50">
+                                              <div className="flex items-center gap-2">
+                                                {unit.members?.map(member => (
+                                                  <button
+                                                    key={member.id}
+                                                    onClick={() => setSelectedProfileUserId(member.userId)}
+                                                    className="flex items-center gap-1.5 hover:opacity-80"
+                                                  >
+                                                    {member.profileImageUrl ? (
+                                                      <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                    ) : (
+                                                      <div className="w-6 h-6 rounded-full bg-orange-200 flex items-center justify-center text-xs text-orange-700">
+                                                        {member.firstName?.charAt(0) || '?'}
+                                                      </div>
+                                                    )}
+                                                    <span className="text-sm text-gray-700">{member.firstName} {member.lastName}</span>
+                                                  </button>
+                                                ))}
+                                              </div>
+                                              <button
+                                                onClick={() => handleJoinUnit(unit.id)}
+                                                disabled={joiningUnitId === unit.id}
+                                                className="px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                                              >
+                                                {joiningUnitId === unit.id ? 'Joining...' : 'Join'}
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
