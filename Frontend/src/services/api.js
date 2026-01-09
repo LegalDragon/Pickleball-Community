@@ -1262,6 +1262,7 @@ export const tournamentApi = {
   },
   getMyUnits: () => api.get('/tournament/my-units'),
   requestToJoinUnit: (unitId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message }),
+  cancelJoinRequest: (requestId) => api.delete(`/tournament/join-requests/${requestId}`),
   respondToJoinRequest: (requestId, accept, message = null) =>
     api.post('/tournament/units/join-request/respond', { requestId, accept, message }),
   respondToInvitation: (unitId, accept) =>

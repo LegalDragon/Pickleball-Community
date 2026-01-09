@@ -362,6 +362,34 @@ public class EventsController : ControllerBase
             var userId = GetCurrentUserId();
             var isAdmin = await IsAdminAsync();
 
+            // Get user's pending join requests for this event
+            var pendingJoinRequests = userId.HasValue
+                ? await _context.EventUnitJoinRequests
+                    .Include(jr => jr.Unit)
+                        .ThenInclude(u => u!.Division)
+                            .ThenInclude(d => d!.TeamUnit)
+                    .Include(jr => jr.Unit)
+                        .ThenInclude(u => u!.Captain)
+                    .Where(jr => jr.UserId == userId.Value
+                        && jr.Status == "Pending"
+                        && jr.Unit != null
+                        && jr.Unit.EventId == id)
+                    .Select(jr => new MyPendingJoinRequestDto
+                    {
+                        RequestId = jr.Id,
+                        UnitId = jr.UnitId,
+                        UnitName = jr.Unit!.Name,
+                        DivisionId = jr.Unit.DivisionId,
+                        DivisionName = jr.Unit.Division != null ? jr.Unit.Division.Name : "",
+                        TeamUnitName = jr.Unit.Division != null ? jr.Unit.Division.TeamUnit!.Name : null,
+                        CaptainName = jr.Unit.Captain != null ? $"{jr.Unit.Captain.FirstName} {jr.Unit.Captain.LastName}".Trim() : null,
+                        CaptainProfileImageUrl = jr.Unit.Captain != null ? jr.Unit.Captain.ProfileImageUrl : null,
+                        Status = jr.Status,
+                        CreatedAt = jr.CreatedAt
+                    })
+                    .ToListAsync()
+                : new List<MyPendingJoinRequestDto>();
+
             var dto = new EventDetailDto
             {
                 Id = evt.Id,
@@ -446,6 +474,7 @@ public class EventsController : ControllerBase
                             }))
                         .ToList()
                     : new List<UserRegistrationInfoDto>(),
+                MyPendingJoinRequests = pendingJoinRequests,
                 Divisions = evt.Divisions
                     .Where(d => d.IsActive)
                     .OrderBy(d => d.SortOrder)

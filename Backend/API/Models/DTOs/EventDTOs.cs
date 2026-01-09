@@ -55,7 +55,29 @@ public class EventDetailDto : EventDto
     public List<int> RegisteredDivisionIds { get; set; } = new();
     public List<UserRegistrationInfoDto> MyRegistrations { get; set; } = new();
 
+    /// <summary>
+    /// User's pending join requests for units in this event
+    /// </summary>
+    public List<MyPendingJoinRequestDto> MyPendingJoinRequests { get; set; } = new();
+
     public List<EventDivisionDto> Divisions { get; set; } = new();
+}
+
+/// <summary>
+/// Info about a pending join request the user has submitted
+/// </summary>
+public class MyPendingJoinRequestDto
+{
+    public int RequestId { get; set; }
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string? TeamUnitName { get; set; }
+    public string? CaptainName { get; set; }
+    public string? CaptainProfileImageUrl { get; set; }
+    public string Status { get; set; } = "Pending";
+    public DateTime CreatedAt { get; set; }
 }
 
 /// <summary>

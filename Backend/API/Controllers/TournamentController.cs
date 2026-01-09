@@ -481,6 +481,35 @@ public class TournamentController : ControllerBase
     }
 
     /// <summary>
+    /// Cancel a join request (by the user who made the request)
+    /// </summary>
+    [Authorize]
+    [HttpDelete("join-requests/{requestId}")]
+    public async Task<ActionResult<ApiResponse<bool>>> CancelJoinRequest(int requestId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var joinRequest = await _context.EventUnitJoinRequests
+            .FirstOrDefaultAsync(r => r.Id == requestId);
+
+        if (joinRequest == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Request not found" });
+
+        if (joinRequest.UserId != userId.Value)
+            return Forbid();
+
+        if (joinRequest.Status != "Pending")
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "Can only cancel pending requests" });
+
+        _context.EventUnitJoinRequests.Remove(joinRequest);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Join request cancelled" });
+    }
+
+    /// <summary>
     /// Get the current user's units (teams they're on) and pending requests
     /// </summary>
     [Authorize]

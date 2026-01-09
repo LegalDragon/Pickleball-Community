@@ -2318,6 +2318,31 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Handle canceling a pending join request
+  const [cancelingJoinRequest, setCancelingJoinRequest] = useState(null);
+  const handleCancelJoinRequest = async (requestId) => {
+    if (!confirm('Are you sure you want to cancel this join request?')) return;
+    setCancelingJoinRequest(requestId);
+    try {
+      const response = await tournamentApi.cancelJoinRequest(requestId);
+      if (response.success) {
+        toast.success('Join request cancelled');
+        // Refetch event data to update the view
+        const updatedEventResponse = await eventsApi.getEvent(event.id);
+        if (updatedEventResponse.success) {
+          onUpdate(updatedEventResponse.data);
+        }
+      } else {
+        toast.error(response.message || 'Failed to cancel join request');
+      }
+    } catch (err) {
+      console.error('Error canceling join request:', err);
+      toast.error(err?.message || 'Failed to cancel join request');
+    } finally {
+      setCancelingJoinRequest(null);
+    }
+  };
+
   const canRegister = () => {
     const now = new Date();
     if (event.registrationOpenDate && new Date(event.registrationOpenDate) > now) return false;
@@ -2657,6 +2682,55 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                         Register for Another Division
                       </button>
                     )}
+                  </div>
+                )}
+
+                {/* Show pending join requests */}
+                {event.myPendingJoinRequests?.length > 0 && (
+                  <div className="w-full bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-yellow-700 font-medium mb-3">
+                      <Clock className="w-5 h-5" />
+                      Pending Partner Requests
+                    </div>
+                    <div className="space-y-2">
+                      {event.myPendingJoinRequests.map(req => (
+                        <div key={req.requestId} className="bg-white rounded-lg p-3 border border-yellow-100">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {req.captainProfileImageUrl ? (
+                                <img
+                                  src={getSharedAssetUrl(req.captainProfileImageUrl)}
+                                  alt=""
+                                  className="w-10 h-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-medium">
+                                  {req.captainName?.charAt(0) || '?'}
+                                </div>
+                              )}
+                              <div>
+                                <div className="font-medium text-gray-900">{req.divisionName}</div>
+                                <div className="text-sm text-gray-500">
+                                  Waiting for {req.captainName || 'team captain'} to accept
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleCancelJoinRequest(req.requestId)}
+                              disabled={cancelingJoinRequest === req.requestId}
+                              className="px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {cancelingJoinRequest === req.requestId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <X className="w-4 h-4" />
+                              )}
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
