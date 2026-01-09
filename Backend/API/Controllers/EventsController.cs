@@ -330,6 +330,7 @@ public class EventsController : ControllerBase
 
     // GET: /events/{id} - Get event details
     [HttpGet("{id}")]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<EventDetailDto>>> GetEvent(int id)
     {
         try

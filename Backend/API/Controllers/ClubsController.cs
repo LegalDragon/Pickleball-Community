@@ -318,6 +318,7 @@ public class ClubsController : ControllerBase
 
     // GET: /clubs/{id} - Get club details
     [HttpGet("{id}")]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<ClubDetailDto>>> GetClub(int id)
     {
         try
@@ -812,8 +813,8 @@ public class ClubsController : ControllerBase
             if (membership == null || membership.ClubId != id || !membership.IsActive)
                 return NotFound(new ApiResponse<bool> { Success = false, Message = "Member not found" });
 
-            // Validate role against database
-            var validRole = await _context.ClubMemberRoles.AnyAsync(r => r.Name == dto.Role && r.IsActive);
+            // Validate role against database (case-insensitive)
+            var validRole = await _context.ClubMemberRoles.AnyAsync(r => r.Name.ToLower() == dto.Role.ToLower() && r.IsActive);
             if (!validRole)
                 return BadRequest(new ApiResponse<bool> { Success = false, Message = "Invalid role" });
 
@@ -869,8 +870,8 @@ public class ClubsController : ControllerBase
             // Update fields if provided
             if (!string.IsNullOrEmpty(dto.Role))
             {
-                // Validate role against database
-                var validRole = await _context.ClubMemberRoles.AnyAsync(r => r.Name == dto.Role && r.IsActive);
+                // Validate role against database (case-insensitive)
+                var validRole = await _context.ClubMemberRoles.AnyAsync(r => r.Name.ToLower() == dto.Role.ToLower() && r.IsActive);
                 if (!validRole)
                     return BadRequest(new ApiResponse<ClubMemberDto> { Success = false, Message = "Invalid role" });
 
