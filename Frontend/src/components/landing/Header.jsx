@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getSharedAssetUrl, themeApi } from '../../services/api';
-import { Play, Pause, Volume2, VolumeX, MapPin, Users, Award, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Users, Award, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
 const SITE_KEY = 'community';
@@ -33,8 +34,6 @@ const getYouTubeEmbedUrl = (url) => {
 
 const Header = () => {
   const { theme } = useTheme();
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true);
   const [logoHtml, setLogoHtml] = useState(null);
   const [activeVideos, setActiveVideos] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -127,24 +126,6 @@ const Header = () => {
     }
   }, []);
 
-  const togglePlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
   return (
     <header className="relative min-h-[80vh] flex items-center overflow-hidden">
       {/* Background Video or Image */}
@@ -174,7 +155,7 @@ const Header = () => {
                 className="absolute inset-0 w-full h-full object-cover"
                 autoPlay
                 loop
-                muted={isMuted}
+                muted
                 playsInline
                 poster={heroThumbnailUrl ? getSharedAssetUrl(heroThumbnailUrl) : undefined}
               >
@@ -206,25 +187,6 @@ const Header = () => {
             </>
           )}
 
-          {/* Video Controls - only for local videos */}
-          {!isExternalVideo && (
-            <div className="absolute bottom-4 right-4 flex gap-2 z-20">
-              <button
-                onClick={togglePlay}
-                className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              </button>
-              <button
-                onClick={toggleMute}
-                className="p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
-                aria-label={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </button>
-            </div>
-          )}
         </>
       ) : hasImage ? (
         <img
@@ -239,6 +201,11 @@ const Header = () => {
 
       {/* Overlay for text readability */}
       <div className="absolute inset-0 bg-black/40" />
+
+      {/* Language Switcher - top right corner */}
+      <div className="absolute top-4 right-4 z-20">
+        <LanguageSwitcher variant="compact" />
+      </div>
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 py-20">
