@@ -886,15 +886,6 @@ export default function Events() {
                             </div>
                           </div>
                         </div>
-                        {/* Manage Button */}
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <button
-                            onClick={() => handleViewDetails(event)}
-                            className="w-full py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors text-sm"
-                          >
-                            Manage Event
-                          </button>
-                        </div>
                       </div>
                     ))}
                   </div>
