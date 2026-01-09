@@ -10,6 +10,7 @@ import {
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown, Bell, Send
 } from 'lucide-react'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
+import PublicProfileModal from '../components/ui/PublicProfileModal'
 
 // Import admin components for inline rendering
 import BlogAdmin from './BlogAdmin'
@@ -39,6 +40,7 @@ const AdminDashboard = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const [savingUser, setSavingUser] = useState(false)
   const [usersError, setUsersError] = useState(null)
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState(null)
 
   // Theme state
   const [themeSettings, setThemeSettings] = useState(null)
@@ -728,7 +730,11 @@ const AdminDashboard = () => {
                             <td className="px-4 py-4 text-sm font-mono text-gray-600">{u.id}</td>
                             <td className="px-6 py-4">
                               <div className="flex items-center">
-                                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                                <button
+                                  onClick={() => setSelectedProfileUserId(u.id)}
+                                  className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-blue-500 transition-all cursor-pointer"
+                                  title="View profile"
+                                >
                                   {u.profileImageUrl ? (
                                     <img
                                       src={getSharedAssetUrl(u.profileImageUrl)}
@@ -740,11 +746,14 @@ const AdminDashboard = () => {
                                       {(u.firstName?.[0] || '') + (u.lastName?.[0] || '')}
                                     </div>
                                   )}
-                                </div>
+                                </button>
                                 <div className="ml-4">
-                                  <div className="font-medium text-gray-900">
+                                  <button
+                                    onClick={() => setSelectedProfileUserId(u.id)}
+                                    className="font-medium text-gray-900 hover:text-blue-600 text-left"
+                                  >
                                     {u.firstName || ''} {u.lastName || ''}
-                                  </div>
+                                  </button>
                                   <div className="text-sm text-gray-500">{u.email || 'No email'}</div>
                                 </div>
                               </div>
@@ -2341,6 +2350,14 @@ const AdminDashboard = () => {
         title="Add Hero Video"
         maxSizeMB={100}
       />
+
+      {/* Public Profile Modal */}
+      {selectedProfileUserId && (
+        <PublicProfileModal
+          userId={selectedProfileUserId}
+          onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
     </div>
   )
 }
