@@ -344,6 +344,7 @@ public class EventsController : ControllerBase
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Units)
                         .ThenInclude(u => u.Members)
+                            .ThenInclude(m => m.User)
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.PartnerRequests)
                 .Include(e => e.Divisions)
