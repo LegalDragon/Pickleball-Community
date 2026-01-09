@@ -901,11 +901,7 @@ public class LeaguesController : ControllerBase
                 return Unauthorized(new ApiResponse<LeagueClubRequestDto> { Success = false, Message = "Not authenticated" });
 
             // Check club exists and user is site admin or club admin
-<<<<<<< HEAD
-            var isSiteAdmin = await IsSiteAdminAsync();
-=======
             var isSiteAdmin = await IsAdminAsync();
->>>>>>> a8f904d8d65671f0cc640a20421f5a3864f10f09
             var clubMember = await _context.ClubMembers
                 .Include(m => m.Club)
                 .FirstOrDefaultAsync(m => m.ClubId == clubId && m.UserId == userId.Value && m.IsActive);
