@@ -34,8 +34,9 @@ const getYouTubeEmbedUrl = (url) => {
 };
 
 const Header = () => {
-  const { t } = useTranslation('home');
+  const { t, i18n } = useTranslation('home');
   const { theme } = useTheme();
+  const isEnglish = i18n.language?.startsWith('en');
   const [logoHtml, setLogoHtml] = useState(null);
   const [activeVideos, setActiveVideos] = useState([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
@@ -228,10 +229,10 @@ const Header = () => {
             )}
             <div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
-                {theme?.heroTitle || t('defaultTitle')}
+                {isEnglish && theme?.heroTitle ? theme.heroTitle : t('defaultTitle')}
               </h1>
               <p className="text-xl md:text-2xl text-white/90 mt-2">
-                {theme?.heroSubtitle || t('defaultSubtitle')}
+                {isEnglish && theme?.heroSubtitle ? theme.heroSubtitle : t('defaultSubtitle')}
               </p>
             </div>
           </div>
@@ -243,15 +244,15 @@ const Header = () => {
               className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               <MapPin className="w-5 h-5" />
-              {theme?.heroCtaText || t('findCourts')}
+              {isEnglish && theme?.heroCtaText ? theme.heroCtaText : t('findCourts')}
             </Link>
-            {(theme?.heroSecondaryCtaText || !theme) && (
+            {(isEnglish ? theme?.heroSecondaryCtaText : true) && (
               <Link
                 to={theme?.heroSecondaryCtaLink || '/clubs'}
                 className="inline-flex items-center gap-2 px-8 py-4 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-xl backdrop-blur-sm transition-all border border-white/30"
               >
                 <Users className="w-5 h-5" />
-                {theme?.heroSecondaryCtaText || t('joinClub')}
+                {isEnglish && theme?.heroSecondaryCtaText ? theme.heroSecondaryCtaText : t('joinClub')}
               </Link>
             )}
           </div>
