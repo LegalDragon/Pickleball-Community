@@ -1318,6 +1318,7 @@ export default function Events() {
           user={user}
           formatDate={formatDate}
           formatTime={formatTime}
+          formatPrice={formatPrice}
           teamUnits={teamUnits}
           skillLevels={skillLevels}
           ageGroups={ageGroups}
@@ -1443,7 +1444,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
   );
 }
 
-function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
+function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState('details');
   const [registrations, setRegistrations] = useState({});
   const [partnerRequests, setPartnerRequests] = useState({});
