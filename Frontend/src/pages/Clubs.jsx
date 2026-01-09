@@ -320,6 +320,11 @@ export default function Clubs() {
       }
     } catch (err) {
       console.error('Error loading club details:', err);
+      // Check if this is a profile completion requirement (403)
+      if (err?.message?.toLowerCase().includes('complete your profile')) {
+        toast.showToast('Please complete your profile to view club details', 'warning');
+        navigate('/profile-completion');
+      }
     }
   };
 

@@ -366,6 +366,8 @@ export default function Events() {
     }, 500));
   };
 
+  const { showToast } = useToast();
+
   const handleViewDetails = async (event) => {
     try {
       const response = await eventsApi.getEvent(event.id);
@@ -374,6 +376,11 @@ export default function Events() {
       }
     } catch (err) {
       console.error('Error loading event details:', err);
+      // Check if this is a profile completion requirement (403)
+      if (err?.message?.toLowerCase().includes('complete your profile')) {
+        showToast('Please complete your profile to view event details', 'warning');
+        navigate('/profile-completion');
+      }
     }
   };
 
