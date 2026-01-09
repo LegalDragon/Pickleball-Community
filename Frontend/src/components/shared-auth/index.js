@@ -2,7 +2,7 @@
  * Funtime Shared Auth Components
  *
  * Shared authentication UI components for consistent login/register/password recovery
- * across all Funtime sites (pickleball.college, pickleball.date, etc.)
+ * across all Funtime sites (pickleball.Community, pickleball.date, etc.)
  *
  * Usage:
  *
@@ -25,7 +25,7 @@
  *        const response = await api.post('/auth/sync', { token })
  *        return response.user
  *      }}
- *      siteName="Pickleball College"
+ *      siteName="Pickleball Community"
  *      showRoleSelection={true}
  *      roles={[
  *        { value: 'Student', label: 'Student', description: 'Learn pickleball' },
@@ -40,7 +40,7 @@
  *      onSuccess={handleSuccess}
  *      onSwitchToRegister={() => navigate('/register')}
  *      onForgotPassword={() => navigate('/forgot-password')}
- *      siteName="Pickleball College"
+ *      siteName="Pickleball Community"
  *    />
  *
  * Dependencies:
@@ -52,5 +52,6 @@
 export { default as SharedLogin } from './SharedLogin'
 export { default as SharedRegister } from './SharedRegister'
 export { default as SharedForgotPassword } from './SharedForgotPassword'
+export { default as SharedChangeCredential } from './SharedChangeCredential'
 export { default as SharedAuthModal } from './SharedAuthModal'
 export { default as SiteLogoOverlay, SiteLogoPreview } from './SiteLogoOverlay'

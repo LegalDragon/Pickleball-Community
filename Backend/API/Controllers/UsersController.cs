@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -51,7 +51,6 @@ public class UsersController : ControllerBase
             }
 
             var user = await _context.Users
-                .Include(u => u.CoachProfile)
                 .FirstOrDefaultAsync(u => u.Id == userId.Value);
 
             if (user == null)
@@ -75,6 +74,113 @@ public class UsersController : ControllerBase
         {
             _logger.LogError(ex, "Error fetching user profile");
             return StatusCode(500, new ApiResponse<UserProfileDto>
+            {
+                Success = false,
+                Message = "An error occurred while fetching profile"
+            });
+        }
+    }
+
+    // GET: api/Users/{id}/public - Get public profile (anyone authenticated can view)
+    [HttpGet("{id}/public")]
+    public async Task<ActionResult<ApiResponse<PublicProfileDto>>> GetPublicProfile(int id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var user = await _context.Users
+                .Where(u => u.Id == id && u.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<PublicProfileDto>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            var publicProfile = new PublicProfileDto
+            {
+                Id = user.Id,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Bio = user.Bio,
+                ProfileImageUrl = user.ProfileImageUrl,
+                City = user.City,
+                State = user.State,
+                Country = user.Country,
+                Handedness = user.Handedness,
+                ExperienceLevel = user.ExperienceLevel,
+                PlayingStyle = user.PlayingStyle,
+                PaddleBrand = user.PaddleBrand,
+                PaddleModel = user.PaddleModel,
+                YearsPlaying = user.YearsPlaying,
+                TournamentLevel = user.TournamentLevel,
+                FavoriteShot = user.FavoriteShot,
+                IntroVideo = user.IntroVideo,
+                CreatedAt = user.CreatedAt,
+                FriendshipStatus = "none",
+                FriendRequestId = null
+            };
+
+            // Check friendship status if user is logged in and viewing someone else's profile
+            if (currentUserId.HasValue && currentUserId.Value != id)
+            {
+                // Check if they are friends (UserId1 is always smaller, UserId2 is always larger)
+                var smallerId = Math.Min(currentUserId.Value, id);
+                var largerId = Math.Max(currentUserId.Value, id);
+                var friendship = await _context.Friendships
+                    .Where(f => f.UserId1 == smallerId && f.UserId2 == largerId)
+                    .FirstOrDefaultAsync();
+
+                if (friendship != null)
+                {
+                    publicProfile.FriendshipStatus = "friends";
+                }
+                else
+                {
+                    // Check for pending friend requests
+                    var sentRequest = await _context.FriendRequests
+                        .Where(fr => fr.SenderId == currentUserId.Value && fr.RecipientId == id && fr.Status == "Pending")
+                        .FirstOrDefaultAsync();
+
+                    if (sentRequest != null)
+                    {
+                        publicProfile.FriendshipStatus = "pending_sent";
+                        publicProfile.FriendRequestId = sentRequest.Id;
+                    }
+                    else
+                    {
+                        var receivedRequest = await _context.FriendRequests
+                            .Where(fr => fr.SenderId == id && fr.RecipientId == currentUserId.Value && fr.Status == "Pending")
+                            .FirstOrDefaultAsync();
+
+                        if (receivedRequest != null)
+                        {
+                            publicProfile.FriendshipStatus = "pending_received";
+                            publicProfile.FriendRequestId = receivedRequest.Id;
+                        }
+                    }
+                }
+            }
+            else if (currentUserId.HasValue && currentUserId.Value == id)
+            {
+                publicProfile.FriendshipStatus = "self";
+            }
+
+            return Ok(new ApiResponse<PublicProfileDto>
+            {
+                Success = true,
+                Data = publicProfile
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching public profile for user {UserId}", id);
+            return StatusCode(500, new ApiResponse<PublicProfileDto>
             {
                 Success = false,
                 Message = "An error occurred while fetching profile"
@@ -115,6 +221,8 @@ public class UsersController : ControllerBase
                 user.LastName = request.LastName;
             if (request.Bio != null)
                 user.Bio = request.Bio;
+            if (request.ProfileImageUrl != null)
+                user.ProfileImageUrl = request.ProfileImageUrl;
 
             // Update basic info fields
             if (request.Gender != null)
@@ -154,7 +262,7 @@ public class UsersController : ControllerBase
             if (request.IntroVideo != null)
                 user.IntroVideo = request.IntroVideo;
 
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.Now;
 
             await _context.SaveChangesAsync();
 
@@ -179,7 +287,8 @@ public class UsersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating profile");
+            _logger.LogError(ex, "Error updating profile for user {UserId}. Message: {Message}, InnerException: {Inner}",
+                GetCurrentUserId(), ex.Message, ex.InnerException?.Message);
             return StatusCode(500, new ApiResponse<UserProfileDto>
             {
                 Success = false,
@@ -245,7 +354,7 @@ public class UsersController : ControllerBase
 
             // Update user
             user.ProfileImageUrl = result.Url;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
             // Log activity
@@ -309,7 +418,7 @@ public class UsersController : ControllerBase
             }
 
             user.ProfileImageUrl = null;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
             // Log activity
@@ -339,6 +448,52 @@ public class UsersController : ControllerBase
         }
     }
 
+    // GET: api/Users/recent - Get recently joined players (public, for home page marquee)
+    [HttpGet("recent")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<List<RecentPlayerDto>>>> GetRecentPlayers([FromQuery] int count = 20, [FromQuery] int days = 30)
+    {
+        try
+        {
+            // Limit to reasonable range
+            count = Math.Clamp(count, 5, 50);
+            days = Math.Clamp(days, 1, 365);
+
+            var cutoffDate = DateTime.Now.AddDays(-days);
+
+            var recentPlayers = await _context.Users
+                .Where(u => u.IsActive && !string.IsNullOrEmpty(u.FirstName) && u.CreatedAt >= cutoffDate)
+                .OrderByDescending(u => u.CreatedAt)
+                .Take(count)
+                .Select(u => new RecentPlayerDto
+                {
+                    Id = u.Id,
+                    FirstName = u.FirstName,
+                    LastName = u.LastName,
+                    ProfileImageUrl = u.ProfileImageUrl,
+                    City = u.City,
+                    State = u.State,
+                    JoinedAt = u.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<RecentPlayerDto>>
+            {
+                Success = true,
+                Data = recentPlayers
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching recent players");
+            return StatusCode(500, new ApiResponse<List<RecentPlayerDto>>
+            {
+                Success = false,
+                Message = "An error occurred while fetching recent players"
+            });
+        }
+    }
+
     // GET: api/Users/coaches (Public - anyone can browse coaches)
     [HttpGet("coaches")]
     [AllowAnonymous]
@@ -346,8 +501,8 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var coaches = await _context.Users
-                .Where(u => u.Role == "Coach" && u.IsActive)
+            var managers = await _context.Users
+                .Where(u => u.Role == "Manager" && u.IsActive)
                 .Select(u => new UserProfileDto
                 {
                     Id = u.Id,
@@ -368,7 +523,7 @@ public class UsersController : ControllerBase
             return Ok(new ApiResponse<List<UserProfileDto>>
             {
                 Success = true,
-                Data = coaches
+                Data = managers
             });
         }
         catch (Exception ex)
@@ -389,8 +544,8 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var coach = await _context.Users
-                .Where(u => u.Id == id && u.Role == "Coach" && u.IsActive)
+            var manager = await _context.Users
+                .Where(u => u.Id == id && u.Role == "Manager" && u.IsActive)
                 .Select(u => new UserProfileDto
                 {
                     Id = u.Id,
@@ -409,19 +564,19 @@ public class UsersController : ControllerBase
                 })
                 .FirstOrDefaultAsync();
 
-            if (coach == null)
+            if (manager == null)
             {
                 return NotFound(new ApiResponse<UserProfileDto>
                 {
                     Success = false,
-                    Message = "Coach not found"
+                    Message = "Manager not found"
                 });
             }
 
             return Ok(new ApiResponse<UserProfileDto>
             {
                 Success = true,
-                Data = coach
+                Data = manager
             });
         }
         catch (Exception ex)
@@ -486,7 +641,7 @@ public class UsersController : ControllerBase
             return StatusCode(500, new ApiResponse<List<UserProfileDto>>
             {
                 Success = false,
-                Message = "An error occurred while fetching users"
+                Message = $"Error fetching users: {ex.Message}"
             });
         }
     }
@@ -520,7 +675,7 @@ public class UsersController : ControllerBase
             if (request.IsActive.HasValue)
                 user.IsActive = request.IsActive.Value;
 
-            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.Now;
 
             await _context.SaveChangesAsync();
 

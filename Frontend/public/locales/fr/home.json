@@ -1,0 +1,26 @@
+{
+  "defaultTitle": "Pickleball.Community",
+  "defaultSubtitle": "Connectez. Jouez. Certifiez-vous.",
+  "findCourts": "Trouver des Terrains",
+  "joinClub": "Rejoindre un Club",
+  "previousVideo": "Vidéo précédente",
+  "nextVideo": "Vidéo suivante",
+  "quickStats": {
+    "courts": {
+      "label": "Terrains Locaux",
+      "value": "Trouver à Proximité"
+    },
+    "clubs": {
+      "label": "Clubs Actifs",
+      "value": "Rejoignez Aujourd'hui"
+    },
+    "certified": {
+      "label": "Certifiez-vous",
+      "value": "Évaluations par Pairs"
+    },
+    "events": {
+      "label": "Événements Locaux",
+      "value": "Jouez Plus"
+    }
+  }
+}

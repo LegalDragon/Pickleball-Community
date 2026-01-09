@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 public class User
 {
@@ -8,13 +8,13 @@ public class User
 
     [Required]
     [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public string? Email { get; set; } = string.Empty;
 
     // PasswordHash can be null for users authenticating via shared auth
     public string? PasswordHash { get; set; }
 
     [Required]
-    public string Role { get; set; } = "Student";
+    public string? Role { get; set; } = "Player";
 
     [Required]
     public string? FirstName { get; set; } = string.Empty;
@@ -77,14 +77,18 @@ public class User
     [MaxLength(500)]
     public string? IntroVideo { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
     public bool IsActive { get; set; } = true;
 
-    // Navigation properties
-    public CoachProfile? CoachProfile { get; set; }
-    public ICollection<TrainingMaterial> TrainingMaterials { get; set; } = new List<TrainingMaterial>();
-    public ICollection<MaterialPurchase> MaterialPurchases { get; set; } = new List<MaterialPurchase>();
-    public ICollection<TrainingSession> CoachingSessions { get; set; } = new List<TrainingSession>();
-    public ICollection<TrainingSession> StudentSessions { get; set; } = new List<TrainingSession>();
+    // Blog permissions
+    public bool CanWriteBlog { get; set; } = false;
+
+    // Messaging preferences (opt-in)
+    public bool AllowDirectMessages { get; set; } = true;
+    public bool AllowClubMessages { get; set; } = true;
+
+    // Navigation
+    public virtual ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
+    public virtual ICollection<BlogComment> BlogComments { get; set; } = new List<BlogComment>();
 }

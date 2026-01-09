@@ -6,41 +6,31 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: "/",
+  // Set build time for service worker cache-busting
+  define: {
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(Date.now().toString())
+  },
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
-      // Disable service worker in development
+      // Enable service worker in development for push notification testing
       devOptions: {
-        enabled: false
+        enabled: true
       },
-      manifest: {
-        name: 'Pickleball College',
-        short_name: 'PB College',
-        theme_color: '#3b82f6',
-        background_color: '#ffffff',
-        display: 'standalone',
-        icons: [
-          {
-            src: '/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      },
+      // Use existing manifest.json from public folder (more complete)
+      manifest: false,
+      // Manual registration via registerSW() in main.jsx
+      injectRegister: false,
       workbox: {
+        // Import push notification handlers into the service worker
+        importScripts: ['/push-handler.js'],
         skipWaiting: true,
         clientsClaim: true,
-        // Clean old caches on update
         cleanupOutdatedCaches: true,
-        // Don't cache index.html - always fetch fresh
         navigateFallback: null,
-        // Exclude API calls and assets from service worker caching
         navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/asset/],
+        // Exclude manifest.webmanifest since we use manifest.json from public folder
+        globPatterns: ['**/*.{js,css,html}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.(js|css)$/,
@@ -49,7 +39,7 @@ export default defineConfig({
               cacheName: 'static-resources',
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours
+                maxAgeSeconds: 60 * 60 * 24
               }
             }
           }
@@ -65,7 +55,7 @@ export default defineConfig({
     },
   },
   publicDir: "public",
-  envDir: "./src", // Look for .env files in src directory
+  envDir: "./src",
   server: {
     port: 3000,
   },

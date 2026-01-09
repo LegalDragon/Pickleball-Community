@@ -2,7 +2,7 @@
 -- WARNING: This migration will drop and recreate tables. Backup your data first!
 -- Date: 2025-12-09
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================
@@ -171,7 +171,7 @@ PRINT 'Creating ThemeSettings table...';
 
 CREATE TABLE ThemeSettings (
     ThemeId INT IDENTITY(1,1) PRIMARY KEY,
-    OrganizationName NVARCHAR(200) NOT NULL DEFAULT 'Pickleball College',
+    OrganizationName NVARCHAR(200) NOT NULL DEFAULT 'Pickleball Community',
     LogoUrl NVARCHAR(500),
     FaviconUrl NVARCHAR(500),
 
@@ -287,12 +287,12 @@ PRINT 'Inserting default data...';
 
 -- Insert default theme
 INSERT INTO ThemeSettings (OrganizationName, IsActive)
-VALUES ('Pickleball College', 1);
+VALUES ('Pickleball Community', 1);
 
 -- Insert default theme presets
 INSERT INTO ThemePresets (PresetName, Description, PrimaryColor, PrimaryDarkColor, PrimaryLightColor, AccentColor, AccentDarkColor, AccentLightColor, IsDefault)
 VALUES
-('Default Green', 'Default Pickleball College theme', '#047857', '#065f46', '#d1fae5', '#f59e0b', '#d97706', '#fef3c7', 1),
+('Default Green', 'Default Pickleball Community theme', '#047857', '#065f46', '#d1fae5', '#f59e0b', '#d97706', '#fef3c7', 1),
 ('Ocean Blue', 'Professional blue theme', '#0369a1', '#075985', '#e0f2fe', '#f59e0b', '#d97706', '#fef3c7', 0),
 ('Royal Purple', 'Elegant purple theme', '#7c3aed', '#6d28d9', '#ede9fe', '#f59e0b', '#d97706', '#fef3c7', 0),
 ('Sunset Orange', 'Warm orange theme', '#ea580c', '#c2410c', '#ffedd5', '#0d9488', '#0f766e', '#ccfbf1', 0);
@@ -301,7 +301,7 @@ VALUES
 -- Password hash for 'Admin123!' using BCrypt
 INSERT INTO Users (Email, PasswordHash, Role, FirstName, LastName, Bio, IsActive)
 VALUES (
-    'admin@pickleball.college',
+    'admin@pickleball.Community',
     '$2a$11$rBNhFYnvTMOsOGpLgpwMkOQHTP6RoIE6KF.fVxmqFp1FkHKj3.ZWq', -- BCrypt hash for 'Admin123!'
     'Admin',
     'System',

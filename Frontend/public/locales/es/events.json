@@ -1,0 +1,66 @@
+{
+  "title": "Eventos",
+  "upcoming": "Próximos Eventos",
+  "past": "Eventos Pasados",
+  "myEvents": "Mis Eventos",
+  "createEvent": "Crear Evento",
+  "editEvent": "Editar Evento",
+  "eventDetails": "Detalles del Evento",
+  "filters": {
+    "all": "Todos los Eventos",
+    "tournaments": "Torneos",
+    "leagues": "Ligas",
+    "openPlay": "Juego Abierto",
+    "clinics": "Clínicas",
+    "social": "Eventos Sociales"
+  },
+  "fields": {
+    "name": "Nombre del Evento",
+    "description": "Descripción",
+    "date": "Fecha",
+    "time": "Hora",
+    "location": "Ubicación",
+    "venue": "Lugar",
+    "type": "Tipo de Evento",
+    "skillLevel": "Nivel de Habilidad",
+    "maxParticipants": "Participantes Máximos",
+    "registrationDeadline": "Fecha Límite de Inscripción",
+    "entryFee": "Cuota de Entrada",
+    "prizes": "Premios"
+  },
+  "status": {
+    "upcoming": "Próximo",
+    "ongoing": "En Curso",
+    "completed": "Completado",
+    "cancelled": "Cancelado",
+    "full": "Lleno"
+  },
+  "registration": {
+    "register": "Inscribirse",
+    "registered": "Inscrito",
+    "unregister": "Cancelar Inscripción",
+    "waitlist": "Unirse a Lista de Espera",
+    "onWaitlist": "En Lista de Espera",
+    "spotsLeft": "{{count}} lugares disponibles",
+    "registrationClosed": "Inscripción Cerrada",
+    "registrationOpens": "Inscripción Abre {{date}}"
+  },
+  "tournament": {
+    "bracket": "Cuadro",
+    "standings": "Clasificación",
+    "schedule": "Calendario",
+    "results": "Resultados",
+    "rounds": "Rondas",
+    "matches": "Partidos",
+    "seeds": "Cabezas de Serie"
+  },
+  "messages": {
+    "registerSuccess": "Inscripción exitosa al evento",
+    "registerError": "Error al inscribirse al evento",
+    "unregisterSuccess": "Inscripción cancelada",
+    "unregisterError": "Error al cancelar inscripción",
+    "eventCreated": "Evento creado exitosamente",
+    "eventUpdated": "Evento actualizado exitosamente",
+    "eventDeleted": "Evento eliminado exitosamente"
+  }
+}

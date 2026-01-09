@@ -1,0 +1,60 @@
+{
+  "title": "Clubs",
+  "myClubs": "Mes Clubs",
+  "allClubs": "Tous les Clubs",
+  "createClub": "Créer un Club",
+  "editClub": "Modifier le Club",
+  "clubDetails": "Détails du Club",
+  "joinClub": "Rejoindre le Club",
+  "leaveClub": "Quitter le Club",
+  "members": "Membres",
+  "events": "Événements du Club",
+  "filters": {
+    "all": "Tous les Clubs",
+    "joined": "Mes Clubs",
+    "nearby": "À Proximité",
+    "popular": "Populaires"
+  },
+  "fields": {
+    "name": "Nom du Club",
+    "description": "Description",
+    "location": "Emplacement",
+    "memberCount": "Membres",
+    "founded": "Fondé",
+    "website": "Site Web",
+    "contactEmail": "E-mail de Contact",
+    "skillLevels": "Niveaux de Compétence",
+    "meetingSchedule": "Horaire des Réunions"
+  },
+  "roles": {
+    "owner": "Propriétaire",
+    "admin": "Administrateur",
+    "moderator": "Modérateur",
+    "member": "Membre"
+  },
+  "membership": {
+    "join": "Rejoindre le Club",
+    "joined": "Rejoint",
+    "leave": "Quitter le Club",
+    "pending": "Approbation en Attente",
+    "rejected": "Demande Rejetée",
+    "requestSent": "Demande Envoyée",
+    "memberSince": "Membre Depuis"
+  },
+  "messages": {
+    "joinSuccess": "Club rejoint avec succès",
+    "joinError": "Échec de l'adhésion au club",
+    "leaveSuccess": "Club quitté avec succès",
+    "leaveError": "Échec pour quitter le club",
+    "requestSent": "Demande d'adhésion envoyée",
+    "clubCreated": "Club créé avec succès",
+    "clubUpdated": "Club mis à jour avec succès",
+    "clubDeleted": "Club supprimé avec succès"
+  },
+  "stats": {
+    "totalMembers": "Membres Totaux",
+    "activeMembers": "Membres Actifs",
+    "upcomingEvents": "Événements à Venir",
+    "totalEvents": "Total des Événements"
+  }
+}

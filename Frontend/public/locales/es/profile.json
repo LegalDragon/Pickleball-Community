@@ -1,0 +1,61 @@
+{
+  "title": "Perfil",
+  "editProfile": "Editar Perfil",
+  "viewProfile": "Ver Perfil",
+  "myProfile": "Mi Perfil",
+  "publicProfile": "Perfil Público",
+  "sections": {
+    "personalInfo": "Información Personal",
+    "playStyle": "Estilo de Juego",
+    "equipment": "Equipamiento",
+    "availability": "Disponibilidad",
+    "certification": "Certificación",
+    "stats": "Estadísticas"
+  },
+  "fields": {
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "email": "Correo electrónico",
+    "phone": "Teléfono",
+    "bio": "Biografía",
+    "location": "Ubicación",
+    "skillLevel": "Nivel de Habilidad",
+    "playingSince": "Jugando Desde",
+    "preferredHand": "Mano Preferida",
+    "paddle": "Paleta",
+    "playFrequency": "Frecuencia de Juego"
+  },
+  "playStyle": {
+    "singles": "Individuales",
+    "doubles": "Dobles",
+    "mixed": "Dobles Mixtos",
+    "competitive": "Competitivo",
+    "recreational": "Recreativo"
+  },
+  "hand": {
+    "right": "Derecha",
+    "left": "Izquierda",
+    "ambidextrous": "Ambidiestro"
+  },
+  "frequency": {
+    "daily": "Diario",
+    "weekly": "Semanal",
+    "biweekly": "Quincenal",
+    "monthly": "Mensual",
+    "occasionally": "Ocasionalmente"
+  },
+  "messages": {
+    "updateSuccess": "Perfil actualizado exitosamente",
+    "updateError": "Error al actualizar el perfil",
+    "photoUpdateSuccess": "Foto de perfil actualizada",
+    "photoUpdateError": "Error al actualizar la foto de perfil"
+  },
+  "certification": {
+    "title": "Certificación de Habilidad",
+    "level": "Nivel Certificado",
+    "verifiedBy": "Verificado Por",
+    "lastUpdated": "Última Actualización",
+    "requestReview": "Solicitar Revisión",
+    "viewCertificate": "Ver Certificado"
+  }
+}

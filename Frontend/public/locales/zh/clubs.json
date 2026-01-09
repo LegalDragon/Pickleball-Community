@@ -1,0 +1,60 @@
+{
+  "title": "俱乐部",
+  "myClubs": "我的俱乐部",
+  "allClubs": "所有俱乐部",
+  "createClub": "创建俱乐部",
+  "editClub": "编辑俱乐部",
+  "clubDetails": "俱乐部详情",
+  "joinClub": "加入俱乐部",
+  "leaveClub": "退出俱乐部",
+  "members": "成员",
+  "events": "俱乐部活动",
+  "filters": {
+    "all": "所有俱乐部",
+    "joined": "我加入的",
+    "nearby": "附近",
+    "popular": "热门"
+  },
+  "fields": {
+    "name": "俱乐部名称",
+    "description": "描述",
+    "location": "位置",
+    "memberCount": "成员数",
+    "founded": "创建时间",
+    "website": "网站",
+    "contactEmail": "联系邮箱",
+    "skillLevels": "技能等级",
+    "meetingSchedule": "活动时间"
+  },
+  "roles": {
+    "owner": "创建者",
+    "admin": "管理员",
+    "moderator": "版主",
+    "member": "成员"
+  },
+  "membership": {
+    "join": "加入俱乐部",
+    "joined": "已加入",
+    "leave": "退出俱乐部",
+    "pending": "待审批",
+    "rejected": "申请被拒绝",
+    "requestSent": "已发送申请",
+    "memberSince": "加入时间"
+  },
+  "messages": {
+    "joinSuccess": "成功加入俱乐部",
+    "joinError": "加入俱乐部失败",
+    "leaveSuccess": "已退出俱乐部",
+    "leaveError": "退出俱乐部失败",
+    "requestSent": "已发送加入申请",
+    "clubCreated": "俱乐部创建成功",
+    "clubUpdated": "俱乐部更新成功",
+    "clubDeleted": "俱乐部删除成功"
+  },
+  "stats": {
+    "totalMembers": "总成员数",
+    "activeMembers": "活跃成员",
+    "upcomingEvents": "即将举行的活动",
+    "totalEvents": "活动总数"
+  }
+}

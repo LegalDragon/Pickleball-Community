@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using Pickleball.College.Services;
-using Pickleball.College.API.Models.DTOs;
+using Pickleball.Community.Services;
+using Pickleball.Community.API.Models.DTOs;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -224,6 +224,90 @@ public class PlayerCertificationController : ControllerBase
         return Ok(new { message = "Request deactivated successfully" });
     }
 
+    [HttpGet("requests/active")]
+    [Authorize]
+    public async Task<ActionResult<CertificationRequestDto>> GetOrCreateActiveRequest()
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var request = await _certificationService.GetOrCreateActiveRequestAsync(userId, GetBaseUrl());
+        return Ok(request);
+    }
+
+    [HttpPut("requests/{id}")]
+    [Authorize]
+    public async Task<ActionResult<CertificationRequestDto>> UpdateRequest(int id, [FromBody] UpdateCertificationRequestDto dto)
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var request = await _certificationService.UpdateRequestAsync(id, userId, dto, GetBaseUrl());
+        if (request == null) return NotFound();
+        return Ok(request);
+    }
+
+    #endregion
+
+    #region Invitations (Student)
+
+    [HttpGet("requests/{id}/invitable-peers")]
+    [Authorize]
+    public async Task<ActionResult<InvitablePeersDto>> GetInvitablePeers(int id)
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var peers = await _certificationService.GetInvitablePeersAsync(userId);
+        return Ok(peers);
+    }
+
+    [HttpGet("requests/{id}/invitations")]
+    [Authorize]
+    public async Task<ActionResult<List<CertificationInvitationDto>>> GetInvitations(int id)
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var invitations = await _certificationService.GetInvitationsAsync(id, userId);
+        return Ok(invitations);
+    }
+
+    [HttpPost("requests/{id}/invitations")]
+    [Authorize]
+    public async Task<ActionResult> InvitePeers(int id, [FromBody] InvitePeersDto dto)
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var count = await _certificationService.InvitePeersAsync(id, userId, dto);
+        return Ok(new { message = $"Successfully invited {count} peer(s)", count });
+    }
+
+    #endregion
+
+    #region Pending Reviews (Invited User)
+
+    /// <summary>
+    /// Get all pending review requests where the current user has been invited to review another player
+    /// </summary>
+    [HttpGet("my-pending-reviews")]
+    [Authorize]
+    public async Task<ActionResult<List<PendingReviewInvitationDto>>> GetMyPendingReviews()
+    {
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var pendingReviews = await _certificationService.GetMyPendingReviewsAsync(userId, GetBaseUrl());
+        return Ok(pendingReviews);
+    }
+
     #endregion
 
     #region Review Page (Public)
@@ -232,7 +316,13 @@ public class PlayerCertificationController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<ReviewPageInfoDto>> GetReviewPage(string token)
     {
-        var info = await _certificationService.GetReviewPageInfoAsync(token);
+        // Get current user ID if authenticated
+        int? currentUserId = null;
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var userId))
+            currentUserId = userId;
+
+        var info = await _certificationService.GetReviewPageInfoAsync(token, currentUserId);
         return Ok(info);
     }
 
@@ -240,9 +330,15 @@ public class PlayerCertificationController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> SubmitReview(string token, [FromBody] SubmitReviewDto dto)
     {
-        var result = await _certificationService.SubmitReviewAsync(token, dto);
+        // Get current user ID if authenticated
+        int? currentUserId = null;
+        var userIdStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var userId))
+            currentUserId = userId;
+
+        var result = await _certificationService.SubmitReviewAsync(token, dto, currentUserId);
         if (!result)
-            return BadRequest(new { message = "Unable to submit review. The link may be invalid or expired." });
+            return BadRequest(new { message = "Unable to submit review. The link may be invalid, expired, or you don't have permission to review." });
 
         return Ok(new { message = "Review submitted successfully. Thank you!" });
     }
