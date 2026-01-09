@@ -713,16 +713,76 @@ export default function Events() {
                     </div>
                   </div>
                 ) : (
-                  /* List View */
-                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {events.map(event => (
-                      <EventCard
-                        key={event.id}
-                        event={event}
-                        formatDate={formatDate}
-                        formatTime={formatTime}
-                        onViewDetails={() => handleViewDetails(event)}
-                      />
+                  /* List View - Full Row Cards */
+                  <div className="space-y-3">
+                    {events.map((event, index) => (
+                      <div key={event.id} className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${index % 2 === 0 ? 'border-l-orange-400' : 'border-l-blue-400'}`}>
+                        <div className="flex items-start gap-3">
+                          <button
+                            onClick={() => handleViewDetails(event)}
+                            className="flex-shrink-0 hover:opacity-80 transition-opacity"
+                          >
+                            {event.posterImageUrl ? (
+                              <img
+                                src={getSharedAssetUrl(event.posterImageUrl)}
+                                alt=""
+                                className="w-14 h-14 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-lg bg-orange-100 flex items-center justify-center">
+                                <Calendar className="w-6 h-6 text-orange-600" />
+                              </div>
+                            )}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <button
+                                onClick={() => handleViewDetails(event)}
+                                className="font-medium text-gray-900 hover:text-orange-600 text-left block"
+                              >
+                                {event.name}
+                              </button>
+                              {event.registrationFee > 0 && (
+                                <span className="text-sm font-medium text-gray-700 flex-shrink-0">
+                                  ${event.registrationFee}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500">
+                              {formatDate(event.startDate)} • {event.venueName || `${event.city}, ${event.state}`}
+                            </p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                {event.registeredCount || 0} registered
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Layers className="w-3 h-3" />
+                                {event.divisionCount || 0} division{(event.divisionCount || 0) !== 1 ? 's' : ''}
+                              </span>
+                              {event.distance && (
+                                <span className="flex items-center gap-1 text-orange-600">
+                                  <MapPin className="w-3 h-3" />
+                                  {event.distance.toFixed(1)} mi
+                                </span>
+                              )}
+                              {(() => {
+                                const EventIcon = event.eventTypeIcon ? getIconByName(event.eventTypeIcon, null) : null;
+                                const colors = getColorValues(event.eventTypeColor);
+                                return (
+                                  <span
+                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded"
+                                    style={{ backgroundColor: colors.bg, color: colors.text }}
+                                  >
+                                    {EventIcon && <EventIcon className="w-3 h-3" />}
+                                    {event.eventTypeName || 'Event'}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -824,8 +884,8 @@ export default function Events() {
               <div className="space-y-6">
                 {myEvents.eventsIOrganize.length > 0 ? (
                   <div className="space-y-3">
-                    {myEvents.eventsIOrganize.map(event => (
-                      <div key={event.id} className="bg-white rounded-lg shadow-sm p-4">
+                    {myEvents.eventsIOrganize.map((event, index) => (
+                      <div key={event.id} className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${index % 2 === 0 ? 'border-l-orange-400' : 'border-l-blue-400'}`}>
                         {/* Event Header - Clickable */}
                         <div className="flex items-start gap-3">
                           <button
@@ -1027,8 +1087,8 @@ export default function Events() {
                 {/* Registered Events */}
                 {myEvents.eventsImRegisteredFor.length > 0 ? (
                   <div className="space-y-3">
-                    {myEvents.eventsImRegisteredFor.map(reg => (
-                      <div key={reg.eventId} className="bg-white rounded-lg shadow-sm p-4">
+                    {myEvents.eventsImRegisteredFor.map((reg, index) => (
+                      <div key={reg.eventId} className={`bg-white rounded-lg shadow-sm p-4 border-l-4 ${index % 2 === 0 ? 'border-l-orange-400' : 'border-l-blue-400'}`}>
                         {/* Event Header - Clickable */}
                         <div className="flex items-start gap-3 mb-3">
                           <button
