@@ -1,0 +1,52 @@
+{
+  "welcome": {
+    "title": "欢迎来到匹克球社区",
+    "subtitle": "连接、比赛、提升你的球技"
+  },
+  "buttons": {
+    "submit": "提交",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "confirm": "确认",
+    "back": "返回",
+    "next": "下一步",
+    "loading": "加载中...",
+    "viewAll": "查看全部",
+    "learnMore": "了解更多",
+    "getStarted": "开始使用"
+  },
+  "status": {
+    "active": "活跃",
+    "inactive": "未活跃",
+    "pending": "待处理",
+    "approved": "已批准",
+    "rejected": "已拒绝"
+  },
+  "messages": {
+    "success": "成功！",
+    "error": "发生错误",
+    "notFound": "未找到",
+    "loading": "加载中...",
+    "noResults": "没有找到结果",
+    "confirmDelete": "确定要删除吗？"
+  },
+  "time": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "tomorrow": "明天",
+    "now": "现在",
+    "ago": "前",
+    "in": "后"
+  },
+  "units": {
+    "minutes": "分钟",
+    "hours": "小时",
+    "days": "天",
+    "weeks": "周",
+    "months": "月",
+    "years": "年"
+  }
+}

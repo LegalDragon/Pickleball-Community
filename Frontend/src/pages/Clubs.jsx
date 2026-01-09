@@ -313,12 +313,6 @@ export default function Clubs() {
   };
 
   const handleViewDetails = async (club) => {
-    // Redirect to login if not authenticated
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-
     try {
       const response = await clubsApi.getClub(club.id);
       if (response.success) {

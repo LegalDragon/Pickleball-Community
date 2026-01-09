@@ -22,9 +22,16 @@ export const AuthProvider = ({ children }) => {
     const storedUser = localStorage.getItem('pickleball_user')
     const token = localStorage.getItem('jwtToken')
 
+    console.log('AuthContext init:', {
+      hasStoredUser: !!storedUser,
+      hasToken: !!token,
+      tokenLength: token?.length
+    })
+
     if (storedUser && token) {
       try {
         const parsedUser = JSON.parse(storedUser)
+        console.log('AuthContext: Setting user from localStorage', parsedUser?.email)
         setUser(parsedUser)
         setIsAuthenticated(true)
 
@@ -34,6 +41,8 @@ export const AuthProvider = ({ children }) => {
         console.error('Error parsing stored user:', error)
         clearAuthData()
       }
+    } else {
+      console.log('AuthContext: No stored user or token found')
     }
     setLoading(false)
   }, [])
@@ -52,15 +61,27 @@ export const AuthProvider = ({ children }) => {
           const sharedResponse = await authApi.sharedLogin(email, password)
           const sharedData = sharedResponse.data
 
-          token = sharedData.token || sharedData.Token
+          const sharedToken = sharedData.token || sharedData.Token
           const sharedUser = sharedData.user || sharedData.User
 
-          if (token) {
-            // Step 2: Sync user to local database
-            localStorage.setItem('jwtToken', token)
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          if (sharedToken) {
+            // Step 2: Sync user to local database (temporarily use shared token for sync call)
+            localStorage.setItem('jwtToken', sharedToken)
+            axios.defaults.headers.common['Authorization'] = `Bearer ${sharedToken}`
 
-            const syncResponse = await authApi.syncFromSharedAuth(token)
+            const syncResponse = await authApi.syncFromSharedAuth(sharedToken)
+            console.log('Sync response:', syncResponse)
+
+            // Use the LOCAL token from sync response - this has the proper site-specific role
+            // The sync endpoint returns { Token, User } - use the LOCAL token, not shared token
+            const localToken = syncResponse.Token || syncResponse.token
+            if (localToken) {
+              token = localToken
+              console.log('Using local token from sync (first 50 chars):', localToken.substring(0, 50))
+            } else {
+              console.warn('No local token in sync response, falling back to shared token')
+              token = sharedToken
+            }
             userData = syncResponse.User || syncResponse.user || sharedUser
           }
         } catch (sharedError) {
@@ -119,14 +140,21 @@ export const AuthProvider = ({ children }) => {
           const sharedResponse = await authApi.sharedRegister(userData)
           const sharedData = sharedResponse.data
 
-          const token = sharedData.token || sharedData.Token
+          const sharedToken = sharedData.token || sharedData.Token
 
-          if (token) {
-            localStorage.setItem('jwtToken', token)
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          if (sharedToken) {
+            localStorage.setItem('jwtToken', sharedToken)
+            axios.defaults.headers.common['Authorization'] = `Bearer ${sharedToken}`
 
-            // Sync to local database
-            response = await authApi.syncFromSharedAuth(token)
+            // Sync to local database - use the returned local token
+            const syncResponse = await authApi.syncFromSharedAuth(sharedToken)
+            // Replace with local token that has proper site-specific role
+            const localToken = syncResponse.Token || syncResponse.token
+            if (localToken) {
+              localStorage.setItem('jwtToken', localToken)
+              axios.defaults.headers.common['Authorization'] = `Bearer ${localToken}`
+            }
+            response = syncResponse
           } else {
             response = sharedData
           }
@@ -181,7 +209,7 @@ export const AuthProvider = ({ children }) => {
           email: userDataFromResponse.email || userData.email,
           firstName: userDataFromResponse.firstName || userDataFromResponse.first_name || userData.firstName,
           lastName: userDataFromResponse.lastName || userDataFromResponse.last_name || userData.lastName,
-          role: userDataFromResponse.role || userData.role || 'Student',
+          role: userDataFromResponse.role || userData.role || 'Player',
           profileImageUrl: userDataFromResponse.profileImageUrl || userDataFromResponse.ProfileImageUrl || null
         }
 

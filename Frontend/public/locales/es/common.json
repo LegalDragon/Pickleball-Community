@@ -1,0 +1,52 @@
+{
+  "welcome": {
+    "title": "Bienvenido a Pickleball Community",
+    "subtitle": "Conecta, Juega y Mejora Tu Juego"
+  },
+  "buttons": {
+    "submit": "Enviar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "back": "Volver",
+    "next": "Siguiente",
+    "loading": "Cargando...",
+    "viewAll": "Ver Todo",
+    "learnMore": "Saber Más",
+    "getStarted": "Comenzar"
+  },
+  "status": {
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "pending": "Pendiente",
+    "approved": "Aprobado",
+    "rejected": "Rechazado"
+  },
+  "messages": {
+    "success": "¡Éxito!",
+    "error": "Ocurrió un error",
+    "notFound": "No encontrado",
+    "loading": "Cargando...",
+    "noResults": "No se encontraron resultados",
+    "confirmDelete": "¿Estás seguro de que quieres eliminar esto?"
+  },
+  "time": {
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "tomorrow": "Mañana",
+    "now": "Ahora",
+    "ago": "hace",
+    "in": "en"
+  },
+  "units": {
+    "minutes": "minutos",
+    "hours": "horas",
+    "days": "días",
+    "weeks": "semanas",
+    "months": "meses",
+    "years": "años"
+  }
+}

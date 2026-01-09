@@ -1,0 +1,61 @@
+{
+  "title": "个人资料",
+  "editProfile": "编辑资料",
+  "viewProfile": "查看资料",
+  "myProfile": "我的资料",
+  "publicProfile": "公开资料",
+  "sections": {
+    "personalInfo": "个人信息",
+    "playStyle": "打球风格",
+    "equipment": "装备",
+    "availability": "可用时间",
+    "certification": "等级认证",
+    "stats": "统计数据"
+  },
+  "fields": {
+    "firstName": "名",
+    "lastName": "姓",
+    "email": "电子邮箱",
+    "phone": "电话",
+    "bio": "个人简介",
+    "location": "位置",
+    "skillLevel": "技能等级",
+    "playingSince": "开始打球时间",
+    "preferredHand": "惯用手",
+    "paddle": "球拍",
+    "playFrequency": "打球频率"
+  },
+  "playStyle": {
+    "singles": "单打",
+    "doubles": "双打",
+    "mixed": "混合双打",
+    "competitive": "竞技型",
+    "recreational": "休闲型"
+  },
+  "hand": {
+    "right": "右手",
+    "left": "左手",
+    "ambidextrous": "双手"
+  },
+  "frequency": {
+    "daily": "每天",
+    "weekly": "每周",
+    "biweekly": "每两周",
+    "monthly": "每月",
+    "occasionally": "偶尔"
+  },
+  "messages": {
+    "updateSuccess": "资料更新成功",
+    "updateError": "资料更新失败",
+    "photoUpdateSuccess": "头像更新成功",
+    "photoUpdateError": "头像更新失败"
+  },
+  "certification": {
+    "title": "技能认证",
+    "level": "认证等级",
+    "verifiedBy": "认证人",
+    "lastUpdated": "最后更新",
+    "requestReview": "申请评审",
+    "viewCertificate": "查看证书"
+  }
+}

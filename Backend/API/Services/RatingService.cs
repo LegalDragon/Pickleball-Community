@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Database;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public class RatingService : IRatingService
 {
     private readonly ApplicationDbContext _context;
-    private static readonly string[] ValidRatableTypes = { "Material", "Coach", "Course" };
+    private static readonly string[] ValidRatableTypes = { "Manager", "Player", "BlogPost", "Club", "Court", "Event" };
 
     public RatingService(ApplicationDbContext context)
     {
@@ -41,7 +41,7 @@ public class RatingService : IRatingService
             // Update existing rating
             existingRating.Stars = request.Stars;
             existingRating.Review = request.Review;
-            existingRating.UpdatedAt = DateTime.UtcNow;
+            existingRating.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
             return await MapToDto(existingRating);
         }
@@ -148,9 +148,12 @@ public class RatingService : IRatingService
     {
         return ratableType switch
         {
-            "Material" => await _context.TrainingMaterials.AnyAsync(m => m.Id == ratableId),
-            "Coach" => await _context.Users.AnyAsync(u => u.Id == ratableId && u.Role == "Coach"),
-            "Course" => await _context.Courses.AnyAsync(c => c.Id == ratableId),
+            "Manager" => await _context.Users.AnyAsync(u => u.Id == ratableId && u.Role == "Manager"),
+            "Player" => await _context.Users.AnyAsync(u => u.Id == ratableId),
+            "BlogPost" => await _context.BlogPosts.AnyAsync(p => p.Id == ratableId),
+            "Club" => await _context.Clubs.AnyAsync(c => c.Id == ratableId),
+            "Court" => await _context.Venues.AnyAsync(v => v.VenueId == ratableId),
+            "Event" => await _context.Events.AnyAsync(e => e.Id == ratableId),
             _ => false
         };
     }

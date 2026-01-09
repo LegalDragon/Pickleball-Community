@@ -2,7 +2,7 @@
 -- Date: 2025-12-10
 -- Description: Adds TagDefinitions, ObjectTags tables, and GetCommonTags stored procedure
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

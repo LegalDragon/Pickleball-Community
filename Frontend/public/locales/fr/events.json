@@ -1,0 +1,66 @@
+{
+  "title": "Événements",
+  "upcoming": "Événements à Venir",
+  "past": "Événements Passés",
+  "myEvents": "Mes Événements",
+  "createEvent": "Créer un Événement",
+  "editEvent": "Modifier l'Événement",
+  "eventDetails": "Détails de l'Événement",
+  "filters": {
+    "all": "Tous les Événements",
+    "tournaments": "Tournois",
+    "leagues": "Ligues",
+    "openPlay": "Jeu Libre",
+    "clinics": "Cliniques",
+    "social": "Événements Sociaux"
+  },
+  "fields": {
+    "name": "Nom de l'Événement",
+    "description": "Description",
+    "date": "Date",
+    "time": "Heure",
+    "location": "Lieu",
+    "venue": "Site",
+    "type": "Type d'Événement",
+    "skillLevel": "Niveau de Compétence",
+    "maxParticipants": "Participants Maximum",
+    "registrationDeadline": "Date Limite d'Inscription",
+    "entryFee": "Frais d'Entrée",
+    "prizes": "Prix"
+  },
+  "status": {
+    "upcoming": "À Venir",
+    "ongoing": "En Cours",
+    "completed": "Terminé",
+    "cancelled": "Annulé",
+    "full": "Complet"
+  },
+  "registration": {
+    "register": "S'inscrire",
+    "registered": "Inscrit",
+    "unregister": "Annuler l'Inscription",
+    "waitlist": "Liste d'Attente",
+    "onWaitlist": "Sur Liste d'Attente",
+    "spotsLeft": "{{count}} places restantes",
+    "registrationClosed": "Inscriptions Fermées",
+    "registrationOpens": "Inscriptions Ouvertes {{date}}"
+  },
+  "tournament": {
+    "bracket": "Tableau",
+    "standings": "Classement",
+    "schedule": "Calendrier",
+    "results": "Résultats",
+    "rounds": "Tours",
+    "matches": "Matchs",
+    "seeds": "Têtes de Série"
+  },
+  "messages": {
+    "registerSuccess": "Inscription réussie à l'événement",
+    "registerError": "Échec de l'inscription à l'événement",
+    "unregisterSuccess": "Inscription annulée",
+    "unregisterError": "Échec de l'annulation de l'inscription",
+    "eventCreated": "Événement créé avec succès",
+    "eventUpdated": "Événement mis à jour avec succès",
+    "eventDeleted": "Événement supprimé avec succès"
+  }
+}

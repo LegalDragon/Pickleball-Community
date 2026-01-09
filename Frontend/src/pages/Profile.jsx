@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useForm } from 'react-hook-form'
 import { useAuth } from '../contexts/AuthContext'
-import { userApi, assetApi, getAssetUrl } from '../services/api'
+import { useToast } from '../contexts/ToastContext'
+import { useForm } from 'react-hook-form'
+import { userApi, assetApi, sharedUserApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL } from '../services/api'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
+import PublicProfileModal from '../components/ui/PublicProfileModal'
+import ChangeCredentialModal from '../components/ui/ChangeCredentialModal'
 import {
   User, Camera, Video, MapPin, Phone, Calendar,
   Edit2, Save, Upload, X, Play, Award, Target,
-  Zap, Heart, Activity, TrendingUp, ChevronRight
+  Zap, Heart, Activity, TrendingUp, ChevronRight,
+  MessageCircle, Shield, Eye, Mail
 } from 'lucide-react'
 
 const Profile = () => {
   const { user, updateUser } = useAuth()
+  const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
   const [avatarPreview, setAvatarPreview] = useState(null)
@@ -26,11 +31,23 @@ const Profile = () => {
 
   // Bio modal state
   const [isBioModalOpen, setIsBioModalOpen] = useState(false)
+
+  // Public profile modal state
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [tempBio, setTempBio] = useState('')
   const [savingBio, setSavingBio] = useState(false)
 
   // Video modal state
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false)
+
+  // Credential change modal state
+  const [credentialModalOpen, setCredentialModalOpen] = useState(false)
+  const [credentialModalType, setCredentialModalType] = useState('email') // 'email' or 'phone'
+
+  // Messaging settings state
+  const [allowDirectMessages, setAllowDirectMessages] = useState(true)
+  const [allowClubMessages, setAllowClubMessages] = useState(true)
+  const [savingMessagingSettings, setSavingMessagingSettings] = useState(false)
 
   // Separate forms for each section
   const basicInfoForm = useForm({
@@ -123,13 +140,20 @@ const Profile = () => {
       setHandedness(user.handedness || '')
       setTempBio(user.bio || '')
 
-      // Set avatar preview from either avatar or profileImageUrl
+      // Set messaging settings
+      setAllowDirectMessages(user.allowDirectMessages !== false) // default true
+      setAllowClubMessages(user.allowClubMessages !== false) // default true
+
+      // Set avatar preview from either avatar or profileImageUrl (from Funtime-Shared)
       const avatarUrl = user.avatar || user.profileImageUrl
       if (avatarUrl) {
-        setAvatarPreview(getAssetUrl(avatarUrl))
+        setAvatarPreview(getSharedAssetUrl(avatarUrl))
       }
       if (user.introVideo) {
-        setVideoPreview(getAssetUrl(user.introVideo))
+        // Check if it's an external URL or uploaded file
+        const externalPatterns = ['youtube.com', 'youtu.be', 'tiktok.com', 'vimeo.com', 'facebook.com', 'instagram.com']
+        const isExternal = externalPatterns.some(pattern => user.introVideo.includes(pattern))
+        setVideoPreview(isExternal ? user.introVideo : getSharedAssetUrl(user.introVideo))
       }
     }
   }, [user])
@@ -139,7 +163,7 @@ const Profile = () => {
     const file = e.target.files[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert('Image size should be less than 5MB')
+        toast.error('Image size should be less than 5MB')
         return
       }
 
@@ -150,23 +174,44 @@ const Profile = () => {
       }
       reader.readAsDataURL(file)
 
-      // Upload to server using user avatar API (links asset to user)
+      // Upload to Funtime-Shared service
       setAvatarUploading(true)
       try {
-        const response = await userApi.uploadAvatar(file)
-        if (response.success && response.data) {
-          // Update local user with new avatar URL
-          const newAvatarUrl = response.data.avatarUrl
-          updateUser({ ...user, avatar: newAvatarUrl, profileImageUrl: newAvatarUrl })
-          setAvatarPreview(getAssetUrl(newAvatarUrl))
+        const response = await sharedUserApi.uploadAvatar(file)
+        console.log('Avatar upload response:', response)
+        console.log('Avatar upload response type:', typeof response)
+        console.log('Avatar upload response keys:', response ? Object.keys(response) : 'null')
+
+        // Handle Funtime-Shared response format
+        // Response: { data: { success: true, url: "/asset/11", ... } }
+        // Use response.data.url directly - it already contains the relative path
+        let assetPath = null
+
+        if (response?.data?.url) {
+          assetPath = response.data.url
+        } else if (response?.url) {
+          assetPath = response.url
+        }
+
+        if (assetPath) {
+          console.log('New avatar path:', assetPath)
+          // Update local user with new avatar path
+          updateUser({ ...user, avatar: assetPath, profileImageUrl: assetPath })
+          // Display using full URL
+          setAvatarPreview(`${SHARED_AUTH_URL}${assetPath}`)
+
+          // Save relative path to local backend
+          await userApi.updateProfile({ profileImageUrl: assetPath })
+          toast.success('Profile photo updated successfully')
         } else {
-          throw new Error(response.message || 'Upload failed')
+          console.error('Could not find asset URL in response:', JSON.stringify(response, null, 2))
+          throw new Error('Upload failed - no asset URL returned. Check console for response format.')
         }
       } catch (error) {
         console.error('Avatar upload error:', error)
-        alert('Failed to upload avatar: ' + (error.message || 'Unknown error'))
+        toast.error('Failed to upload avatar: ' + (error.response?.data?.message || error.message || 'Unknown error'))
         // Revert preview on error
-        setAvatarPreview(getAssetUrl(user?.avatar || user?.profileImageUrl) || null)
+        setAvatarPreview(getSharedAssetUrl(user?.avatar || user?.profileImageUrl) || null)
       } finally {
         setAvatarUploading(false)
       }
@@ -179,8 +224,10 @@ const Profile = () => {
     try {
       await userApi.updateProfile({ handedness: value })
       updateUser({ ...user, handedness: value })
+      toast.success(`Dominant hand updated to ${value === 'left' ? 'Left' : 'Right'}`)
     } catch (error) {
       console.error('Handedness update error:', error)
+      toast.error('Failed to update dominant hand')
       setHandedness(user?.handedness || '')
     }
   }
@@ -192,9 +239,10 @@ const Profile = () => {
       await userApi.updateProfile({ bio: tempBio })
       updateUser({ ...user, bio: tempBio })
       setIsBioModalOpen(false)
+      toast.success('Bio updated successfully')
     } catch (error) {
       console.error('Bio update error:', error)
-      alert('Failed to update bio')
+      toast.error('Failed to update bio')
     } finally {
       setSavingBio(false)
     }
@@ -211,11 +259,12 @@ const Profile = () => {
       if (type === 'url') {
         setVideoPreview(url) // External URL
       } else {
-        setVideoPreview(getAssetUrl(url)) // Local file
+        setVideoPreview(getSharedAssetUrl(url)) // Uploaded file
       }
+      toast.success('Intro video updated successfully')
     } catch (error) {
       console.error('Video save error:', error)
-      alert('Failed to save video: ' + (error.message || 'Unknown error'))
+      toast.error('Failed to save video: ' + (error.message || 'Unknown error'))
     }
   }
 
@@ -251,8 +300,80 @@ const Profile = () => {
       // Update user profile
       await userApi.updateProfile({ introVideo: null })
       updateUser({ ...user, introVideo: null })
+      toast.success('Intro video removed')
     } catch (error) {
       console.error('Error removing video:', error)
+      toast.error('Failed to remove video')
+    }
+  }
+
+  // Handle credential change success (email or phone updated via shared auth)
+  const handleCredentialChangeSuccess = async (newValue, sharedUser) => {
+    try {
+      // Update local state
+      const updateData = credentialModalType === 'email'
+        ? { email: newValue }
+        : { phone: newValue }
+
+      // Update the form display
+      if (credentialModalType === 'email') {
+        basicInfoForm.setValue('email', newValue)
+      } else {
+        basicInfoForm.setValue('phone', newValue)
+      }
+
+      // Sync with local backend
+      await userApi.updateProfile(updateData)
+
+      // Update local user state with the new value and any shared user data
+      const updatedUserData = { ...user, ...updateData }
+
+      // If shared auth returned user data, merge relevant fields
+      if (sharedUser) {
+        if (sharedUser.email) updatedUserData.email = sharedUser.email
+        if (sharedUser.phoneNumber) updatedUserData.phone = sharedUser.phoneNumber
+        if (sharedUser.firstName) updatedUserData.firstName = sharedUser.firstName
+        if (sharedUser.lastName) updatedUserData.lastName = sharedUser.lastName
+      }
+
+      updateUser(updatedUserData)
+
+      setCredentialModalOpen(false)
+      toast.success(`${credentialModalType === 'email' ? 'Email' : 'Phone number'} updated successfully`)
+    } catch (error) {
+      console.error('Error syncing credential change:', error)
+      toast.error(`Failed to sync ${credentialModalType === 'email' ? 'email' : 'phone'} change`)
+      // Still close the modal since shared auth was successful
+      setCredentialModalOpen(false)
+    }
+  }
+
+  // Handle messaging setting toggle
+  const handleMessagingSettingChange = async (setting, value) => {
+    setSavingMessagingSettings(true)
+    try {
+      const updateData = { [setting]: value }
+      await userApi.updateProfile(updateData)
+      updateUser({ ...user, ...updateData })
+
+      if (setting === 'allowDirectMessages') {
+        setAllowDirectMessages(value)
+        toast.success(`Direct messages ${value ? 'enabled' : 'disabled'}`)
+      } else if (setting === 'allowClubMessages') {
+        setAllowClubMessages(value)
+        toast.success(`Club chat auto-join ${value ? 'enabled' : 'disabled'}`)
+      }
+    } catch (error) {
+      console.error('Error updating messaging settings:', error)
+      toast.error('Failed to update messaging setting')
+      // Revert the toggle on error
+      if (setting === 'allowDirectMessages') {
+        setAllowDirectMessages(!value)
+      } else if (setting === 'allowClubMessages') {
+        setAllowClubMessages(!value)
+      }
+    } finally {
+      setSavingMessagingSettings(false)
     }
   }
 
@@ -265,12 +386,44 @@ const Profile = () => {
         ...data,
         dateOfBirth: data.dateOfBirth || null
       }
+
+      // Identify what fields were changed
+      const fieldLabels = {
+        firstName: 'First Name',
+        lastName: 'Last Name',
+        gender: 'Gender',
+        dateOfBirth: 'Date of Birth',
+        address: 'Address',
+        city: 'City',
+        state: 'State',
+        zipCode: 'ZIP Code',
+        country: 'Country'
+      }
+
+      const changedFields = Object.keys(fieldLabels).filter(key => {
+        const oldValue = user?.[key] || ''
+        const newValue = profileData[key] || ''
+        return oldValue !== newValue
+      })
+
       await userApi.updateProfile(profileData)
       updateUser({ ...user, ...profileData })
       setIsEditingBasicInfo(false)
+
+      // Show toast with specific fields updated
+      if (changedFields.length === 0) {
+        toast.info('No changes detected')
+      } else if (changedFields.length === 1) {
+        toast.success(`${fieldLabels[changedFields[0]]} updated successfully`)
+      } else if (changedFields.length <= 3) {
+        const fieldNames = changedFields.map(f => fieldLabels[f]).join(', ')
+        toast.success(`Updated: ${fieldNames}`)
+      } else {
+        toast.success(`Basic information updated (${changedFields.length} fields)`)
+      }
     } catch (error) {
       console.error('Basic info update error:', error)
-      alert('Failed to update basic information')
+      toast.error('Failed to update basic information')
     } finally {
       setSavingBasicInfo(false)
     }
@@ -285,12 +438,42 @@ const Profile = () => {
         ...data,
         yearsPlaying: data.yearsPlaying ? parseInt(data.yearsPlaying, 10) : null
       }
+
+      // Identify what fields were changed
+      const fieldLabels = {
+        experienceLevel: 'Experience Level',
+        playingStyle: 'Playing Style',
+        paddleBrand: 'Paddle Brand',
+        paddleModel: 'Paddle Model',
+        yearsPlaying: 'Years Playing',
+        tournamentLevel: 'Tournament Level',
+        favoriteShot: 'Favorite Shot'
+      }
+
+      const changedFields = Object.keys(fieldLabels).filter(key => {
+        const oldValue = String(user?.[key] || '')
+        const newValue = String(profileData[key] || '')
+        return oldValue !== newValue
+      })
+
       await userApi.updateProfile(profileData)
       updateUser({ ...user, ...profileData })
       setIsEditingPickleballInfo(false)
+
+      // Show toast with specific fields updated
+      if (changedFields.length === 0) {
+        toast.info('No changes detected')
+      } else if (changedFields.length === 1) {
+        toast.success(`${fieldLabels[changedFields[0]]} updated successfully`)
+      } else if (changedFields.length <= 3) {
+        const fieldNames = changedFields.map(f => fieldLabels[f]).join(', ')
+        toast.success(`Updated: ${fieldNames}`)
+      } else {
+        toast.success(`Pickleball information updated (${changedFields.length} fields)`)
+      }
     } catch (error) {
       console.error('Pickleball info update error:', error)
-      alert('Failed to update pickleball information')
+      toast.error('Failed to update pickleball information')
     } finally {
       setSavingPickleballInfo(false)
     }
@@ -365,10 +548,29 @@ const Profile = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-t-2xl px-6 py-8">
-          <h1 className="text-3xl font-bold text-white">My Profile</h1>
-          <p className="text-blue-100 mt-2">
-            Complete your profile to enhance your pickleball experience
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">My Profile</h1>
+              <p className="text-blue-100 mt-2">
+                Complete your profile to enhance your pickleball experience
+              </p>
+            </div>
+            {user?.id && (
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm font-medium"
+              >
+                <Eye className="w-4 h-4" />
+                View Public Profile
+              </button>
+            )}
+          </div>
+          <div className="mt-4 p-3 bg-white/10 rounded-lg">
+            <p className="text-white/90 text-sm">
+              This is your shared profile across all Funtime Pickleball sites including pickleball.community, pickleball.date, pickleball.college, and more.
+              Each site may have additional profile fields specific to its features, but your basic information stays consistent everywhere.
+            </p>
+          </div>
         </div>
 
         <div className="bg-white rounded-b-2xl shadow-xl">
@@ -501,7 +703,7 @@ const Profile = () => {
                       )
                     ) : (
                       <video
-                        src={videoPreview || getAssetUrl(user?.introVideo)}
+                        src={videoPreview || getSharedAssetUrl(user?.introVideo)}
                         controls
                         className="w-full h-40 rounded-lg object-cover bg-black"
                       />
@@ -613,21 +815,45 @@ const Profile = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm font-medium text-gray-700">Email</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCredentialModalType('email')
+                            setCredentialModalOpen(true)
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Change
+                        </button>
+                      </div>
                       <input
                         {...basicInfoForm.register('email')}
                         type="email"
-                        disabled={!isEditingBasicInfo}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-gray-50 disabled:text-gray-600"
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm font-medium text-gray-700">Phone</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCredentialModalType('phone')
+                            setCredentialModalOpen(true)
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Change
+                        </button>
+                      </div>
                       <input
                         {...basicInfoForm.register('phone')}
                         type="tel"
-                        disabled={!isEditingBasicInfo}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-gray-50 disabled:text-gray-600"
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                         placeholder="(123) 456-7890"
                       />
                     </div>
@@ -840,6 +1066,77 @@ const Profile = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Privacy & Messaging Settings Section */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-green-500" />
+                    Privacy & Messaging
+                  </h3>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Allow Direct Messages */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-blue-500" />
+                        <span className="font-medium text-gray-900">Direct Messages from Friends</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 ml-7">
+                        Allow your friends to send you direct messages
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleMessagingSettingChange('allowDirectMessages', !allowDirectMessages)}
+                      disabled={savingMessagingSettings}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+                        allowDirectMessages ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          allowDirectMessages ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Allow Club Messages */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-purple-500" />
+                        <span className="font-medium text-gray-900">Club Chat Auto-Join</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 ml-7">
+                        Automatically join club chat when you join a club
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleMessagingSettingChange('allowClubMessages', !allowClubMessages)}
+                      disabled={savingMessagingSettings}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+                        allowClubMessages ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          allowClubMessages ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {savingMessagingSettings && (
+                    <div className="flex items-center justify-center text-sm text-gray-500 pt-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Saving...
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -922,6 +1219,23 @@ const Profile = () => {
         objectId={user?.id}
         title="Add Intro Video"
         maxSizeMB={100}
+      />
+
+      {/* Public Profile Modal */}
+      {showProfileModal && user && (
+        <PublicProfileModal
+          userId={user.id}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
+
+      {/* Change Email/Phone Modal */}
+      <ChangeCredentialModal
+        isOpen={credentialModalOpen}
+        onClose={() => setCredentialModalOpen(false)}
+        type={credentialModalType}
+        currentValue={credentialModalType === 'email' ? user?.email : user?.phone}
+        onSuccess={handleCredentialChangeSuccess}
       />
     </div>
   )

@@ -1,4 +1,4 @@
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// Represents a unique tag name in the system
@@ -7,7 +7,7 @@ public class TagDefinition
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public ICollection<ObjectTag> ObjectTags { get; set; } = new List<ObjectTag>();
 }
@@ -25,7 +25,7 @@ public class ObjectTag
     public int ObjectId { get; set; }
 
     public int? CreatedByUserId { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public TagDefinition Tag { get; set; } = null!;
     public User? CreatedByUser { get; set; }

@@ -369,12 +369,6 @@ export default function Events() {
   const toast = useToast();
 
   const handleViewDetails = async (event) => {
-    // Redirect to login if not authenticated
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-
     try {
       const response = await eventsApi.getEvent(event.id);
       if (response.success) {
