@@ -101,6 +101,7 @@ public class EventUnitDto
     public decimal AmountDue { get; set; }
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
+    public string? ReferenceId { get; set; }
     public DateTime? PaidAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -387,6 +388,13 @@ public class TournamentStatsDto
     public int InProgressGames { get; set; }
     public int AvailableCourts { get; set; }
     public int InUseCourts { get; set; }
+
+    // Payment stats
+    public int PaymentsSubmitted { get; set; }
+    public int PaymentsPaid { get; set; }
+    public int PaymentsPending { get; set; }
+    public decimal TotalAmountDue { get; set; }
+    public decimal TotalAmountPaid { get; set; }
 }
 
 // ============================================
@@ -516,5 +524,6 @@ public class PaymentInfoDto
     public decimal AmountDue { get; set; }
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
+    public string? ReferenceId { get; set; }
     public DateTime? PaidAt { get; set; }
 }

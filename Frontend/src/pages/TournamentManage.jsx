@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
   ChevronDown, ChevronUp, RefreshCw, Shuffle, Settings, Target,
-  AlertCircle, Loader2, Plus, Edit2
+  AlertCircle, Loader2, Plus, Edit2, DollarSign
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { tournamentApi, eventsApi, getSharedAssetUrl } from '../services/api';
@@ -316,6 +316,44 @@ export default function TournamentManage() {
                 </div>
               </div>
             </div>
+
+            {/* Payment Summary */}
+            {(dashboard?.stats?.totalAmountDue > 0 || dashboard?.stats?.paymentsSubmitted > 0) && (
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  Payment Summary
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-orange-50 rounded-lg p-3">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {dashboard?.stats?.paymentsSubmitted || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">Payments Submitted</div>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <div className="text-2xl font-bold text-green-600">
+                      {dashboard?.stats?.paymentsPaid || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">Verified Paid</div>
+                  </div>
+                  <div className="bg-yellow-50 rounded-lg p-3">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {dashboard?.stats?.paymentsPending || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">Pending</div>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <div className="text-2xl font-bold text-blue-600">
+                      ${(dashboard?.stats?.totalAmountPaid || 0).toFixed(2)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      of ${(dashboard?.stats?.totalAmountDue || 0).toFixed(2)} Collected
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Division Summary */}
             <div className="bg-white rounded-xl shadow-sm p-6">

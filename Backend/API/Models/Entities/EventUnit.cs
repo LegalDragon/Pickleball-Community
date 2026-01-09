@@ -76,6 +76,12 @@ public class EventUnit
     [MaxLength(100)]
     public string? PaymentReference { get; set; }
 
+    /// <summary>
+    /// System-generated reference ID in format E{eventId}-U{unitId} for matching payments
+    /// </summary>
+    [MaxLength(50)]
+    public string? ReferenceId { get; set; }
+
     // Stats
     public int MatchesPlayed { get; set; } = 0;
     public int MatchesWon { get; set; } = 0;

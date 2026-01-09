@@ -136,6 +136,14 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
             </span>
           </div>
 
+          {/* Reference ID */}
+          {unit.referenceId && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div className="text-sm font-medium text-orange-700 mb-1">Reference ID</div>
+              <code className="text-sm font-mono text-orange-900">{unit.referenceId}</code>
+            </div>
+          )}
+
           {/* Payment Reference */}
           {unit.paymentReference && (
             <div className="bg-gray-50 rounded-lg p-3">

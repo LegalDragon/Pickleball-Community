@@ -739,6 +739,12 @@ public class TournamentController : ControllerBase
             unit.AmountPaid = request.AmountPaid.Value;
         }
 
+        // Generate reference ID if not already set (for matching payments)
+        if (string.IsNullOrEmpty(unit.ReferenceId))
+        {
+            unit.ReferenceId = $"E{eventId}-U{unitId}";
+        }
+
         // Calculate amount due
         var amountDue = (unit.Event?.RegistrationFee ?? 0) + (unit.Division?.DivisionFee ?? 0);
 
@@ -772,6 +778,7 @@ public class TournamentController : ControllerBase
                 AmountDue = amountDue,
                 PaymentProofUrl = unit.PaymentProofUrl,
                 PaymentReference = unit.PaymentReference,
+                ReferenceId = unit.ReferenceId,
                 PaidAt = unit.PaidAt
             },
             Message = "Payment info updated"
@@ -822,6 +829,7 @@ public class TournamentController : ControllerBase
                 AmountDue = amountDue,
                 PaymentProofUrl = unit.PaymentProofUrl,
                 PaymentReference = unit.PaymentReference,
+                ReferenceId = unit.ReferenceId,
                 PaidAt = unit.PaidAt
             },
             Message = "Marked as paid"
@@ -880,6 +888,7 @@ public class TournamentController : ControllerBase
                 AmountDue = amountDue,
                 PaymentProofUrl = unit.PaymentProofUrl,
                 PaymentReference = unit.PaymentReference,
+                ReferenceId = unit.ReferenceId,
                 PaidAt = unit.PaidAt
             },
             Message = "Payment unmarked"
@@ -1609,6 +1618,12 @@ public class TournamentController : ControllerBase
             .Where(c => c.EventId == eventId && c.IsActive)
             .ToListAsync();
 
+        // Calculate payment stats
+        var activeUnits = units.Where(u => u.Status != "Cancelled").ToList();
+        var paymentsSubmitted = activeUnits.Count(u => !string.IsNullOrEmpty(u.PaymentProofUrl) || !string.IsNullOrEmpty(u.PaymentReference));
+        var paymentsPaid = activeUnits.Count(u => u.PaymentStatus == "Paid");
+        var paymentsPending = activeUnits.Count(u => u.PaymentStatus == "Pending" || u.PaymentStatus == "PendingVerification" || u.PaymentStatus == "Partial");
+
         var dashboard = new TournamentDashboardDto
         {
             EventId = eventId,
@@ -1616,13 +1631,19 @@ public class TournamentController : ControllerBase
             TournamentStatus = evt.TournamentStatus,
             Stats = new TournamentStatsDto
             {
-                TotalRegistrations = units.Count(u => u.Status != "Cancelled"),
+                TotalRegistrations = activeUnits.Count,
                 CheckedInPlayers = units.SelectMany(u => u.Members).Count(m => m.IsCheckedIn),
                 TotalMatches = matches.Count,
                 CompletedMatches = matches.Count(m => m.Status == "Completed"),
                 InProgressGames = games.Count(g => g.Status == "Playing" || g.Status == "Started"),
                 AvailableCourts = courts.Count(c => c.Status == "Available"),
-                InUseCourts = courts.Count(c => c.Status == "InUse")
+                InUseCourts = courts.Count(c => c.Status == "InUse"),
+                // Payment stats
+                PaymentsSubmitted = paymentsSubmitted,
+                PaymentsPaid = paymentsPaid,
+                PaymentsPending = paymentsPending,
+                TotalAmountDue = activeUnits.Sum(u => (evt.RegistrationFee ?? 0) + (evt.Divisions.FirstOrDefault(d => d.Id == u.DivisionId)?.DivisionFee ?? 0)),
+                TotalAmountPaid = activeUnits.Sum(u => u.AmountPaid)
             },
             Divisions = evt.Divisions.Where(d => d.IsActive).Select(d => new DivisionStatusDto
             {
@@ -1726,6 +1747,7 @@ public class TournamentController : ControllerBase
             AmountDue = (u.Event?.RegistrationFee ?? 0) + (u.Division?.DivisionFee ?? 0),
             PaymentProofUrl = u.PaymentProofUrl,
             PaymentReference = u.PaymentReference,
+            ReferenceId = u.ReferenceId,
             PaidAt = u.PaidAt,
             CreatedAt = u.CreatedAt,
             Members = u.Members.Select(m => new EventUnitMemberDto
