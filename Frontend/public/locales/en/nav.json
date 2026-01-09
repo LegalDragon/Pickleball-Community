@@ -1,0 +1,29 @@
+{
+  "home": "Home",
+  "events": "Events",
+  "venues": "Venues",
+  "clubs": "Clubs",
+  "blog": "Blog",
+  "faq": "FAQ",
+  "feedback": "Feedback",
+  "profile": "Profile",
+  "dashboard": "Dashboard",
+  "adminDashboard": "Admin Dashboard",
+  "messages": "Messages",
+  "notifications": "Notifications",
+  "alerts": "Alerts",
+  "settings": "Settings",
+  "signIn": "Sign In",
+  "signOut": "Sign Out",
+  "enroll": "Enroll Now",
+  "logout": "Logout",
+  "viewAllNotifications": "View all notifications",
+  "menu": {
+    "open": "Open menu",
+    "close": "Close menu"
+  },
+  "user": {
+    "greeting": "Hello, {{name}}",
+    "role": "{{role}}"
+  }
+}

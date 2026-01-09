@@ -1,0 +1,29 @@
+{
+  "home": "Inicio",
+  "events": "Eventos",
+  "venues": "Lugares",
+  "clubs": "Clubes",
+  "blog": "Blog",
+  "faq": "Preguntas Frecuentes",
+  "feedback": "Comentarios",
+  "profile": "Perfil",
+  "dashboard": "Panel",
+  "adminDashboard": "Panel de Administrador",
+  "messages": "Mensajes",
+  "notifications": "Notificaciones",
+  "alerts": "Alertas",
+  "settings": "Configuración",
+  "signIn": "Iniciar Sesión",
+  "signOut": "Cerrar Sesión",
+  "enroll": "Inscribirse",
+  "logout": "Cerrar Sesión",
+  "viewAllNotifications": "Ver todas las notificaciones",
+  "menu": {
+    "open": "Abrir menú",
+    "close": "Cerrar menú"
+  },
+  "user": {
+    "greeting": "Hola, {{name}}",
+    "role": "{{role}}"
+  }
+}

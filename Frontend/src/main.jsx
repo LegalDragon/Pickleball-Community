@@ -5,11 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { LanguageProvider } from './contexts/LanguageContext'
 import Navigation from './components/ui/Navigation' // Import here
 import PWAInstallPrompt from './components/ui/PWAInstallPrompt'
 
 import Footer from './components/landing/Footer'; // Make sure this is imported
 import App from './App'
+import './i18n' // Initialize i18n
 import './styles/globals.css'
 import 'leaflet/dist/leaflet.css'
 
@@ -40,14 +42,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider>
-          <AuthProvider>
-            <ToastProvider>
-              <Navigation /> {/* Navigation now inside AuthProvider */}
-              <App /> {/* App doesn't need to have Navigation */}
-              <Footer /> {/* Footer added here */}
-              <PWAInstallPrompt />
-            </ToastProvider>
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <ToastProvider>
+                <Navigation /> {/* Navigation now inside AuthProvider */}
+                <App /> {/* App doesn't need to have Navigation */}
+                <Footer /> {/* Footer added here */}
+                <PWAInstallPrompt />
+              </ToastProvider>
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>

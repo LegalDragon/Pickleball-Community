@@ -1,0 +1,61 @@
+{
+  "title": "Profile",
+  "editProfile": "Edit Profile",
+  "viewProfile": "View Profile",
+  "myProfile": "My Profile",
+  "publicProfile": "Public Profile",
+  "sections": {
+    "personalInfo": "Personal Information",
+    "playStyle": "Play Style",
+    "equipment": "Equipment",
+    "availability": "Availability",
+    "certification": "Certification",
+    "stats": "Statistics"
+  },
+  "fields": {
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "email": "Email",
+    "phone": "Phone",
+    "bio": "Bio",
+    "location": "Location",
+    "skillLevel": "Skill Level",
+    "playingSince": "Playing Since",
+    "preferredHand": "Preferred Hand",
+    "paddle": "Paddle",
+    "playFrequency": "Play Frequency"
+  },
+  "playStyle": {
+    "singles": "Singles",
+    "doubles": "Doubles",
+    "mixed": "Mixed Doubles",
+    "competitive": "Competitive",
+    "recreational": "Recreational"
+  },
+  "hand": {
+    "right": "Right",
+    "left": "Left",
+    "ambidextrous": "Ambidextrous"
+  },
+  "frequency": {
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "biweekly": "Bi-weekly",
+    "monthly": "Monthly",
+    "occasionally": "Occasionally"
+  },
+  "messages": {
+    "updateSuccess": "Profile updated successfully",
+    "updateError": "Failed to update profile",
+    "photoUpdateSuccess": "Profile photo updated",
+    "photoUpdateError": "Failed to update profile photo"
+  },
+  "certification": {
+    "title": "Skill Certification",
+    "level": "Certified Level",
+    "verifiedBy": "Verified By",
+    "lastUpdated": "Last Updated",
+    "requestReview": "Request Review",
+    "viewCertificate": "View Certificate"
+  }
+}

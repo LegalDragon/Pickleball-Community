@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getAssetUrl, getSharedAssetUrl, notificationsApi, leaguesApi } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
 import { useNotifications } from '../../hooks/useNotifications';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 // Shared Auth API URL from environment
 const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
@@ -286,6 +287,9 @@ const Navigation = () => {
 
           {/* User Section */}
           <div className="hidden md:flex items-center space-x-4 user-dropdown-container">
+            {/* Language Switcher */}
+            <LanguageSwitcher />
+
             {isAuthenticated && user ? (
               <>
                 {/* Notification Bell Icon */}
@@ -403,6 +407,9 @@ const Navigation = () => {
 
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center space-x-2">
+            {/* Mobile Language Switcher */}
+            <LanguageSwitcher variant="compact" />
+
             {/* Mobile Notification Bell */}
             {isAuthenticated && user && (
               <Link
