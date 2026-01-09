@@ -1244,6 +1244,27 @@ export const skillLevelsApi = {
   delete: (id) => api.delete(`/skill-levels/${id}`)
 }
 
+// Age Groups API (for event divisions)
+export const ageGroupsApi = {
+  // Get all active age groups
+  getAll: () => api.get('/agegroups'),
+
+  // Get all age groups including inactive (admin only)
+  getAllIncludingInactive: () => api.get('/agegroups/all'),
+
+  // Get single age group
+  getById: (id) => api.get(`/agegroups/${id}`),
+
+  // Create new age group (admin only)
+  create: (data) => api.post('/agegroups', data),
+
+  // Update age group (admin only)
+  update: (id, data) => api.put(`/agegroups/${id}`, data),
+
+  // Delete age group (admin only - soft delete)
+  delete: (id) => api.delete(`/agegroups/${id}`)
+}
+
 // Tournament API
 export const tournamentApi = {
   // Score Formats

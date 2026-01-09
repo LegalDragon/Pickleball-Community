@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
 import ShareLink, { QrCodeModal } from '../components/ui/ShareLink';
 import { getIconByName } from '../utils/iconMap';
@@ -22,6 +22,7 @@ export default function Events() {
   const [eventTypes, setEventTypes] = useState([]);
   const [teamUnits, setTeamUnits] = useState([]);
   const [skillLevels, setSkillLevels] = useState([]);
+  const [ageGroups, setAgeGroups] = useState([]);
   const [myEvents, setMyEvents] = useState(null);
   const [myUnits, setMyUnits] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -177,9 +178,20 @@ export default function Events() {
         console.error('Error loading skill levels:', err);
       }
     };
+    const loadAgeGroups = async () => {
+      try {
+        const response = await ageGroupsApi.getAll();
+        if (response.success) {
+          setAgeGroups(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading age groups:', err);
+      }
+    };
     loadEventTypes();
     loadTeamUnits();
     loadSkillLevels();
+    loadAgeGroups();
   }, []);
 
   // Load countries on mount
@@ -1280,6 +1292,7 @@ export default function Events() {
           formatTime={formatTime}
           teamUnits={teamUnits}
           skillLevels={skillLevels}
+          ageGroups={ageGroups}
           onClose={() => setSelectedEvent(null)}
           onUpdate={(updatedEvent) => {
             if (updatedEvent) {
@@ -1402,7 +1415,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
   );
 }
 
-function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, teamUnits = [], skillLevels = [], onClose, onUpdate }) {
+function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState('details');
   const [registrations, setRegistrations] = useState({});
   const [partnerRequests, setPartnerRequests] = useState({});
@@ -1861,6 +1874,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       const updateData = {
         name: editingDivision.name,
         description: editingDivision.description,
+        teamUnitId: editingDivision.teamUnitId || null,
+        skillLevelId: editingDivision.skillLevelId || null,
+        ageGroupId: editingDivision.ageGroupId || null,
         maxUnits: editingDivision.maxUnits ? parseInt(editingDivision.maxUnits) : null,
         divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null,
         scheduleType: editingDivision.scheduleType || null,
@@ -1875,7 +1891,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         toast.success('Division updated successfully');
         setShowEditDivision(false);
         setEditingDivision(null);
-        loadEvent(); // Reload event to get updated divisions
+        onUpdate(); // Reload event to get updated divisions
       } else {
         toast.error(response.message || 'Failed to update division');
       }
@@ -3778,18 +3794,31 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                             <div>
                               <div className="font-medium text-gray-900">{division.name}</div>
                               <div className="text-sm text-gray-500">
-                                Team size: {division.teamSize}
-                                {division.maxTeams && ` • Max: ${division.maxTeams} teams`}
-                                {division.entryFee > 0 && ` • $${division.entryFee}`}
+                                {division.teamUnitName || `Team size: ${division.teamSize}`}
+                                {division.skillLevelName && ` • ${division.skillLevelName}`}
+                                {division.ageGroupName && ` • ${division.ageGroupName}`}
+                                {division.maxUnits && ` • Max: ${division.maxUnits} teams`}
+                                {division.divisionFee > 0 && ` • $${division.divisionFee}`}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveDivision(division.id)}
-                              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditDivision(division)}
+                                className="p-1 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded"
+                                title="Edit Division"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDivision(division.id)}
+                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                                title="Remove Division"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -4561,6 +4590,55 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                   rows={2}
                   className="w-full border border-gray-300 rounded-lg p-2"
                 />
+              </div>
+
+              {/* Division Classification */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Division Classification</h4>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Format</label>
+                    <select
+                      value={editingDivision.teamUnitId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, teamUnitId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select format...</option>
+                      {teamUnits.map(unit => (
+                        <option key={unit.id} value={unit.id}>{unit.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
+                    <select
+                      value={editingDivision.skillLevelId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, skillLevelId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select skill level...</option>
+                      {skillLevels.map(level => (
+                        <option key={level.id} value={level.id}>{level.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Age Group</label>
+                    <select
+                      value={editingDivision.ageGroupId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, ageGroupId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select age group...</option>
+                      {ageGroups.map(group => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
