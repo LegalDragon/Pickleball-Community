@@ -1,7 +1,17 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const ProtectedRoute = ({ children, role, roles }) => {
+/**
+ * ProtectedRoute - Ensures user is authenticated and optionally has required role
+ *
+ * @param {object} props
+ * @param {React.ReactNode} props.children - The protected content
+ * @param {string} props.role - Single role required (e.g., "Admin")
+ * @param {string[]} props.roles - Multiple allowed roles
+ * @param {boolean} props.skipProfileCheck - If true, skip the profile completion check
+ *                                           (used for /profile and /complete-profile routes)
+ */
+const ProtectedRoute = ({ children, role, roles, skipProfileCheck = false }) => {
   const { user, loading, isAuthenticated } = useAuth()
   const location = useLocation()
 
@@ -12,6 +22,7 @@ const ProtectedRoute = ({ children, role, roles }) => {
     isAuthenticated,
     hasUser: !!user,
     userRole: user?.role,
+    skipProfileCheck,
     // Also check localStorage directly
     hasStoredUser: !!localStorage.getItem('pickleball_user'),
     hasToken: !!localStorage.getItem('jwtToken')
@@ -44,6 +55,18 @@ const ProtectedRoute = ({ children, role, roles }) => {
 
     if (!allowedRoles.includes(userRole)) {
       return <Navigate to="/unauthorized" replace />
+    }
+  }
+
+  // Check if user needs to complete their profile
+  // A user needs to complete their profile if their name is "New User" (the default)
+  if (!skipProfileCheck) {
+    const needsProfileCompletion = user.firstName?.toLowerCase() === 'new' &&
+                                   user.lastName?.toLowerCase() === 'user'
+
+    if (needsProfileCompletion) {
+      console.log('ProtectedRoute: User needs to complete profile, redirecting to /complete-profile')
+      return <Navigate to="/complete-profile" state={{ from: location }} replace />
     }
   }
 

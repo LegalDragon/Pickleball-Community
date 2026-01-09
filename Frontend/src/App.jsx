@@ -5,6 +5,7 @@ import Register from './pages/Register'
 import MemberDashboard from './pages/MemberDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
+import ProfileCompletion from './pages/ProfileCompletion'
 import Notifications from './pages/Notifications'
 import PlayerReview from './pages/PlayerReview'
 import MyCertificate from './pages/MyCertificate'
@@ -206,9 +207,16 @@ function App() {
         </ProtectedRoute>
       } />
 
+      {/* Profile Completion - First-time users must complete their profile */}
+      <Route path="/complete-profile" element={
+        <ProtectedRoute skipProfileCheck>
+          <ProfileCompletion />
+        </ProtectedRoute>
+      } />
+
       {/* Protected Routes - Any Authenticated User */}
       <Route path="/profile" element={
-        <ProtectedRoute>
+        <ProtectedRoute skipProfileCheck>
           <Profile />
         </ProtectedRoute>
       } />
