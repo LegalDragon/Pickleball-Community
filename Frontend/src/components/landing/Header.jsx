@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getSharedAssetUrl, themeApi } from '../../services/api';
 import { MapPin, Users, Award, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -33,6 +34,7 @@ const getYouTubeEmbedUrl = (url) => {
 };
 
 const Header = () => {
+  const { t } = useTranslation('home');
   const { theme } = useTheme();
   const [logoHtml, setLogoHtml] = useState(null);
   const [activeVideos, setActiveVideos] = useState([]);
@@ -171,14 +173,14 @@ const Header = () => {
               <button
                 onClick={goToPrevVideo}
                 className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white/80 hover:text-white transition-all"
-                aria-label="Previous video"
+                aria-label={t('previousVideo')}
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
               <button
                 onClick={goToNextVideo}
                 className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white/80 hover:text-white transition-all"
-                aria-label="Next video"
+                aria-label={t('nextVideo')}
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
@@ -226,10 +228,10 @@ const Header = () => {
             )}
             <div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
-                {theme?.heroTitle || 'Pickleball.Community'}
+                {theme?.heroTitle || t('defaultTitle')}
               </h1>
               <p className="text-xl md:text-2xl text-white/90 mt-2">
-                {theme?.heroSubtitle || 'Connect. Play. Get Certified.'}
+                {theme?.heroSubtitle || t('defaultSubtitle')}
               </p>
             </div>
           </div>
@@ -241,7 +243,7 @@ const Header = () => {
               className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               <MapPin className="w-5 h-5" />
-              {theme?.heroCtaText || 'Find Courts'}
+              {theme?.heroCtaText || t('findCourts')}
             </Link>
             {(theme?.heroSecondaryCtaText || !theme) && (
               <Link
@@ -249,17 +251,17 @@ const Header = () => {
                 className="inline-flex items-center gap-2 px-8 py-4 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-xl backdrop-blur-sm transition-all border border-white/30"
               >
                 <Users className="w-5 h-5" />
-                {theme?.heroSecondaryCtaText || 'Join a Club'}
+                {theme?.heroSecondaryCtaText || t('joinClub')}
               </Link>
             )}
           </div>
 
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <QuickStat icon={MapPin} label="Local Courts" value="Find Nearby" link="/courts" />
-            <QuickStat icon={Users} label="Active Clubs" value="Join Today" link="/clubs" />
-            <QuickStat icon={Award} label="Get Certified" value="Peer Reviews" link="/my-certificate" />
-            <QuickStat icon={Calendar} label="Local Events" value="Play More" link="/events" />
+            <QuickStat icon={MapPin} label={t('quickStats.courts.label')} value={t('quickStats.courts.value')} link="/courts" />
+            <QuickStat icon={Users} label={t('quickStats.clubs.label')} value={t('quickStats.clubs.value')} link="/clubs" />
+            <QuickStat icon={Award} label={t('quickStats.certified.label')} value={t('quickStats.certified.value')} link="/my-certificate" />
+            <QuickStat icon={Calendar} label={t('quickStats.events.label')} value={t('quickStats.events.value')} link="/events" />
           </div>
         </div>
       </div>

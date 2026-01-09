@@ -1,0 +1,26 @@
+{
+  "defaultTitle": "Pickleball.Community",
+  "defaultSubtitle": "Connect. Play. Get Certified.",
+  "findCourts": "Find Courts",
+  "joinClub": "Join a Club",
+  "previousVideo": "Previous video",
+  "nextVideo": "Next video",
+  "quickStats": {
+    "courts": {
+      "label": "Local Courts",
+      "value": "Find Nearby"
+    },
+    "clubs": {
+      "label": "Active Clubs",
+      "value": "Join Today"
+    },
+    "certified": {
+      "label": "Get Certified",
+      "value": "Peer Reviews"
+    },
+    "events": {
+      "label": "Local Events",
+      "value": "Play More"
+    }
+  }
+}
