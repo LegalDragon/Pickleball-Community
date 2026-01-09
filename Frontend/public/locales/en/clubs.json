@@ -1,0 +1,60 @@
+{
+  "title": "Clubs",
+  "myClubs": "My Clubs",
+  "allClubs": "All Clubs",
+  "createClub": "Create Club",
+  "editClub": "Edit Club",
+  "clubDetails": "Club Details",
+  "joinClub": "Join Club",
+  "leaveClub": "Leave Club",
+  "members": "Members",
+  "events": "Club Events",
+  "filters": {
+    "all": "All Clubs",
+    "joined": "My Clubs",
+    "nearby": "Nearby",
+    "popular": "Popular"
+  },
+  "fields": {
+    "name": "Club Name",
+    "description": "Description",
+    "location": "Location",
+    "memberCount": "Members",
+    "founded": "Founded",
+    "website": "Website",
+    "contactEmail": "Contact Email",
+    "skillLevels": "Skill Levels",
+    "meetingSchedule": "Meeting Schedule"
+  },
+  "roles": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "moderator": "Moderator",
+    "member": "Member"
+  },
+  "membership": {
+    "join": "Join Club",
+    "joined": "Joined",
+    "leave": "Leave Club",
+    "pending": "Pending Approval",
+    "rejected": "Request Rejected",
+    "requestSent": "Request Sent",
+    "memberSince": "Member Since"
+  },
+  "messages": {
+    "joinSuccess": "Successfully joined club",
+    "joinError": "Failed to join club",
+    "leaveSuccess": "Left club successfully",
+    "leaveError": "Failed to leave club",
+    "requestSent": "Join request sent",
+    "clubCreated": "Club created successfully",
+    "clubUpdated": "Club updated successfully",
+    "clubDeleted": "Club deleted successfully"
+  },
+  "stats": {
+    "totalMembers": "Total Members",
+    "activeMembers": "Active Members",
+    "upcomingEvents": "Upcoming Events",
+    "totalEvents": "Total Events"
+  }
+}

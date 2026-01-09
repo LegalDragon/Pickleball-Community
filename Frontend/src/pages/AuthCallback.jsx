@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../services/api'
 import axios from 'axios'
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import PushNotificationPrompt, { shouldShowPushPrompt } from '../components/ui/PushNotificationPrompt'
 
 /**
  * AuthCallback - Handles the redirect from shared auth UI
@@ -12,13 +13,17 @@ import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
  * - token: JWT token from shared auth
  * - returnTo: (optional) path to redirect after auth (default: based on role)
  * - error: (optional) error message if auth failed
+ * - siteRole: (optional) user's role for this site from shared auth
+ * - isSiteAdmin: (optional) whether user is admin for this site
  */
 const AuthCallback = () => {
   const [status, setStatus] = useState('processing') // 'processing', 'success', 'error'
   const [message, setMessage] = useState('Processing authentication...')
+  const [showPushPrompt, setShowPushPrompt] = useState(false)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { updateUser } = useAuth()
+  const redirectPathRef = useRef('/member/dashboard')
 
   useEffect(() => {
     handleCallback()
@@ -26,6 +31,9 @@ const AuthCallback = () => {
 
   const handleCallback = async () => {
     try {
+      // Log all URL parameters from shared auth
+      console.log('AuthCallback URL params:', Object.fromEntries(searchParams.entries()))
+
       // Check for error from shared auth
       const error = searchParams.get('error')
       if (error) {
@@ -34,8 +42,12 @@ const AuthCallback = () => {
         return
       }
 
-      // Get token from URL
+      // Get token and site-specific role info from URL
       const token = searchParams.get('token')
+      const siteRole = searchParams.get('siteRole')
+      const isSiteAdmin = searchParams.get('isSiteAdmin') === 'true'
+      console.log('Site role from shared auth:', siteRole, 'isSiteAdmin:', isSiteAdmin)
+
       if (!token) {
         setStatus('error')
         setMessage('No authentication token received')
@@ -50,11 +62,27 @@ const AuthCallback = () => {
 
       setMessage('Syncing user data...')
 
-      // Sync user to local database
+      // Determine role: isSiteAdmin takes precedence, then siteRole, then default
+      const effectiveRole = isSiteAdmin ? 'Admin' : (siteRole || 'Player')
+      console.log('Effective role for sync:', effectiveRole)
+
+      // Sync user to local database - this returns a NEW local JWT with site-specific role
       let userData = null
+      let localToken = token // fallback to shared auth token
       try {
-        const syncResponse = await authApi.syncFromSharedAuth(token)
+        const syncResponse = await authApi.syncFromSharedAuth(token, effectiveRole)
         userData = syncResponse.User || syncResponse.user
+
+        // Use the new local token if provided (contains site-specific role)
+        if (syncResponse.Token || syncResponse.token) {
+          localToken = syncResponse.Token || syncResponse.token
+          console.log('Using local token with site-specific role')
+
+          // Update stored token with the new local token
+          localStorage.setItem('jwtToken', localToken)
+          axios.defaults.headers.common['Authorization'] = `Bearer ${localToken}`
+        }
+
         console.log('User synced successfully:', userData)
       } catch (syncError) {
         console.warn('User sync failed, decoding token locally:', syncError.message)
@@ -67,7 +95,7 @@ const AuthCallback = () => {
             email: payload.email,
             firstName: payload.firstName || payload.given_name,
             lastName: payload.lastName || payload.family_name,
-            role: payload.role || 'Student'
+            role: effectiveRole  // Use role from shared auth params
           }
         } catch (decodeError) {
           console.error('Failed to decode token:', decodeError)
@@ -80,9 +108,13 @@ const AuthCallback = () => {
         return
       }
 
-      // Store user data
+      // Normalize user data to lowercase property names (backend uses PascalCase)
       const userWithDefaults = {
-        ...userData,
+        id: userData.id || userData.Id,
+        email: userData.email || userData.Email,
+        firstName: userData.firstName || userData.FirstName,
+        lastName: userData.lastName || userData.LastName,
+        role: userData.role || userData.Role || effectiveRole,
         profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null
       }
       localStorage.setItem('pickleball_user', JSON.stringify(userWithDefaults))
@@ -95,30 +127,24 @@ const AuthCallback = () => {
       setStatus('success')
       setMessage('Authentication successful!')
 
-      // Determine redirect path
+      // Determine redirect path - all users go to member dashboard
       const returnTo = searchParams.get('returnTo')
-      let redirectPath = returnTo ? decodeURIComponent(returnTo) : '/'
+      redirectPathRef.current = (!returnTo || returnTo === '/')
+        ? '/member/dashboard'
+        : decodeURIComponent(returnTo)
 
-      // If no returnTo, redirect based on role
-      if (!returnTo && userData.role) {
-        const role = userData.role.toLowerCase()
-        switch (role) {
-          case 'coach':
-            redirectPath = '/coach/dashboard'
-            break
-          case 'student':
-            redirectPath = '/student/dashboard'
-            break
-          case 'admin':
-            redirectPath = '/admin/dashboard'
-            break
-        }
+      // Check if we should show push notification prompt
+      if (shouldShowPushPrompt()) {
+        // Show prompt after a short delay
+        setTimeout(() => {
+          setShowPushPrompt(true)
+        }, 1200)
+      } else {
+        // No prompt needed, redirect directly
+        setTimeout(() => {
+          navigate(redirectPathRef.current, { replace: true })
+        }, 1000)
       }
-
-      // Redirect after short delay to show success message
-      setTimeout(() => {
-        navigate(redirectPath, { replace: true })
-      }, 1000)
 
     } catch (error) {
       console.error('Auth callback error:', error)
@@ -127,8 +153,21 @@ const AuthCallback = () => {
     }
   }
 
+  // Handle push prompt completion - redirect to dashboard
+  const handlePushPromptComplete = () => {
+    setShowPushPrompt(false)
+    navigate(redirectPathRef.current, { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex flex-col items-center justify-center">
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt
+        isOpen={showPushPrompt}
+        onClose={handlePushPromptComplete}
+        onComplete={handlePushPromptComplete}
+      />
+
       <div className="text-center bg-white p-8 rounded-2xl shadow-xl max-w-md">
         {status === 'processing' && (
           <>

@@ -1,0 +1,29 @@
+{
+  "home": "首页",
+  "events": "活动",
+  "venues": "场馆",
+  "clubs": "俱乐部",
+  "blog": "博客",
+  "faq": "常见问题",
+  "feedback": "意见反馈",
+  "profile": "个人资料",
+  "dashboard": "控制台",
+  "adminDashboard": "管理后台",
+  "messages": "消息",
+  "notifications": "通知",
+  "alerts": "提醒",
+  "settings": "设置",
+  "signIn": "登录",
+  "signOut": "退出",
+  "enroll": "立即注册",
+  "logout": "退出登录",
+  "viewAllNotifications": "查看所有通知",
+  "menu": {
+    "open": "打开菜单",
+    "close": "关闭菜单"
+  },
+  "user": {
+    "greeting": "你好，{{name}}",
+    "role": "{{role}}"
+  }
+}

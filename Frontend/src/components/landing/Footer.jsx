@@ -1,10 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const Footer = () => {
   const footerLinks = {
     quickLinks: ['Home', 'Courses', 'Coaches', 'Pricing'],
     resources: [
-      { name: 'Blog', href: '#' },
+      { name: 'Blog', href: '/blog' },
       { name: 'Training Videos', href: '#' },
       { name: 'Drills', href: '#' },
       { name: 'Strategy Guides', href: '#' },
@@ -20,10 +21,10 @@ const Footer = () => {
           <div className="footer-column">
   <h3 className=" text-blue-500">Our Mission:</h3>
   <p className="text-gray-500">
-       
+
        Democratizing pickleball education through technology.
     </p>
-  
+
   <div className="mt-4 pt-4 border-t border-gray-700">
     <p className=" text-sm  text-gray-500">
     To create a friendly and supportive community  where every pickleball player
@@ -44,12 +45,19 @@ const Footer = () => {
             <ul>
               {footerLinks.resources.map((resource, index) => (
                 <li key={index}>
-                  <a
-                    href={resource.href}
-                    {...(resource.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  >
-                    {resource.name}
-                  </a>
+                  {resource.external ? (
+                    <a
+                      href={resource.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {resource.name}
+                    </a>
+                  ) : resource.href !== '#' ? (
+                    <Link to={resource.href}>{resource.name}</Link>
+                  ) : (
+                    <a href="#">{resource.name}</a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -64,7 +72,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="copyright">
-          &copy; 2023-2025 Pickleball.College. All rights reserved.
+          &copy; 2023-{new Date().getFullYear()} Funtime Pickleball Inc. All rights reserved.
         </div>
       </div>
     </footer>

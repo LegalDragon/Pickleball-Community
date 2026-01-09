@@ -1,4 +1,4 @@
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 public class Rating
 {
@@ -12,8 +12,8 @@ public class Rating
     public int Stars { get; set; } // 1-5
     public string? Review { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
     public User User { get; set; } = null!;
 }

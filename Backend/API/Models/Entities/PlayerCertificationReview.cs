@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Pickleball.College.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
 /// An individual review submitted by a reviewer
@@ -16,6 +16,14 @@ public class PlayerCertificationReview
 
     [ForeignKey("RequestId")]
     public virtual PlayerCertificationRequest Request { get; set; } = null!;
+
+    /// <summary>
+    /// The user ID of the reviewer (if logged in)
+    /// </summary>
+    public int? ReviewerId { get; set; }
+
+    [ForeignKey("ReviewerId")]
+    public virtual User? Reviewer { get; set; }
 
     [Required]
     [MaxLength(100)]
@@ -36,12 +44,22 @@ public class PlayerCertificationReview
     public bool IsAnonymous { get; set; } = false;
 
     /// <summary>
+    /// Whether this is a self-review (player reviewing themselves)
+    /// </summary>
+    public bool IsSelfReview { get; set; } = false;
+
+    /// <summary>
     /// Optional comments from the reviewer
     /// </summary>
     [MaxLength(2000)]
     public string? Comments { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    /// <summary>
+    /// When the review was last updated (null if never updated)
+    /// </summary>
+    public DateTime? UpdatedAt { get; set; }
 
     // Navigation property
     public virtual ICollection<PlayerCertificationScore> Scores { get; set; } = new List<PlayerCertificationScore>();

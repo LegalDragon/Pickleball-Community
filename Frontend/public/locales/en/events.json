@@ -1,0 +1,66 @@
+{
+  "title": "Events",
+  "upcoming": "Upcoming Events",
+  "past": "Past Events",
+  "myEvents": "My Events",
+  "createEvent": "Create Event",
+  "editEvent": "Edit Event",
+  "eventDetails": "Event Details",
+  "filters": {
+    "all": "All Events",
+    "tournaments": "Tournaments",
+    "leagues": "Leagues",
+    "openPlay": "Open Play",
+    "clinics": "Clinics",
+    "social": "Social Events"
+  },
+  "fields": {
+    "name": "Event Name",
+    "description": "Description",
+    "date": "Date",
+    "time": "Time",
+    "location": "Location",
+    "venue": "Venue",
+    "type": "Event Type",
+    "skillLevel": "Skill Level",
+    "maxParticipants": "Max Participants",
+    "registrationDeadline": "Registration Deadline",
+    "entryFee": "Entry Fee",
+    "prizes": "Prizes"
+  },
+  "status": {
+    "upcoming": "Upcoming",
+    "ongoing": "Ongoing",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "full": "Full"
+  },
+  "registration": {
+    "register": "Register",
+    "registered": "Registered",
+    "unregister": "Cancel Registration",
+    "waitlist": "Join Waitlist",
+    "onWaitlist": "On Waitlist",
+    "spotsLeft": "{{count}} spots left",
+    "registrationClosed": "Registration Closed",
+    "registrationOpens": "Registration Opens {{date}}"
+  },
+  "tournament": {
+    "bracket": "Bracket",
+    "standings": "Standings",
+    "schedule": "Schedule",
+    "results": "Results",
+    "rounds": "Rounds",
+    "matches": "Matches",
+    "seeds": "Seeds"
+  },
+  "messages": {
+    "registerSuccess": "Successfully registered for event",
+    "registerError": "Failed to register for event",
+    "unregisterSuccess": "Registration cancelled",
+    "unregisterError": "Failed to cancel registration",
+    "eventCreated": "Event created successfully",
+    "eventUpdated": "Event updated successfully",
+    "eventDeleted": "Event deleted successfully"
+  }
+}

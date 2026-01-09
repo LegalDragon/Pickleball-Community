@@ -2,7 +2,7 @@
 -- Date: 2025-12-10
 -- Description: Adds proposal columns to TrainingSessions table for coach counter-proposals
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 PRINT 'Starting Migration_011_SessionProposals...';

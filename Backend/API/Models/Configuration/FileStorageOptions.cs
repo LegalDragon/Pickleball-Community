@@ -1,4 +1,4 @@
-namespace Pickleball.College.Models.Configuration;
+namespace Pickleball.Community.Models.Configuration;
 
 public class FileStorageOptions
 {

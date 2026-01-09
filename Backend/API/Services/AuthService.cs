@@ -7,14 +7,14 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.SqlServer;
 using Microsoft.IdentityModel.Tokens;
-using Pickleball.College.Database;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
 
 using Microsoft.AspNetCore.Mvc;
 using Stripe.Climate;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public class AuthService : IAuthService
 {
@@ -120,8 +120,8 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             Role = request.Role,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
         };
 
         _context.Users.Add(user);
@@ -139,7 +139,7 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.GivenName, user.FirstName),
             new Claim(ClaimTypes.Surname, user.LastName),
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
-            new Claim(ClaimTypes.Role, user.Role)
+            new Claim(ClaimTypes.Role, user.Role)  // Use ClaimTypes.Role for proper [Authorize(Roles=...)]
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
@@ -164,14 +164,14 @@ public class AuthService : IAuthService
         }
 
         // Validate role
-        var validRoles = new[] { "Student", "Coach", "Admin" };
+        var validRoles = new[] { "Player", "Manager", "Admin" };
         if (!validRoles.Contains(role))
         {
             throw new ArgumentException($"Invalid role. Must be one of: {string.Join(", ", validRoles)}");
         }
 
         user.Role = role;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
         return user;

@@ -2,7 +2,7 @@
 -- Date: 2025-12-09
 -- Description: Creates ContentTypes table for dynamic material type configuration
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================
