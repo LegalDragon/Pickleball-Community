@@ -1129,21 +1129,18 @@ public class TournamentController : ControllerBase
 
         if (existingMatches.Any())
         {
-            // Get all game IDs that will be deleted
-            var gameIds = existingMatches.SelectMany(m => m.Games).Select(g => g.Id).ToList();
+            // Clear TournamentCourt references to games in this division first
+            // Using a subquery approach to avoid OPENJSON issues with List.Contains()
+            var courtsWithGames = await _context.TournamentCourts
+                .Where(c => c.CurrentGameId != null &&
+                    _context.EventGames.Any(g => g.Id == c.CurrentGameId &&
+                        _context.EventMatches.Any(m => m.Id == g.MatchId && m.DivisionId == divisionId)))
+                .ToListAsync();
 
-            // Clear TournamentCourt references to these games first
-            if (gameIds.Any())
+            foreach (var court in courtsWithGames)
             {
-                var courtsWithGames = await _context.TournamentCourts
-                    .Where(c => c.CurrentGameId != null && gameIds.Contains(c.CurrentGameId.Value))
-                    .ToListAsync();
-
-                foreach (var court in courtsWithGames)
-                {
-                    court.CurrentGameId = null;
-                    court.Status = "Available";
-                }
+                court.CurrentGameId = null;
+                court.Status = "Available";
             }
 
             // Delete games first, then matches
