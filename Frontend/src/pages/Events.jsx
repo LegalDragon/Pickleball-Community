@@ -4180,6 +4180,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     amountDue: reg.amountDue,
                                     paymentProofUrl: reg.paymentProofUrl,
                                     paymentReference: reg.paymentReference,
+                                    referenceId: reg.referenceId,
                                     paidAt: reg.paidAt,
                                     members: []
                                   });
