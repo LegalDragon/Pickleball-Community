@@ -2765,171 +2765,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
               {/* Registration Status / Register Button */}
               <div className="flex flex-col items-center gap-3">
-                {/* Show user's current registrations if registered */}
-                {isRegistered && event.myRegistrations?.length > 0 && (
-                  <div className="w-full bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-green-700 font-medium mb-3">
-                      <CheckCircle className="w-5 h-5" />
-                      You are registered for this event
-                    </div>
-                    <div className="space-y-3">
-                      {event.myRegistrations.map(reg => (
-                        <div key={reg.unitId} className="bg-white rounded-lg p-3 border border-green-100">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900">{reg.divisionName}</div>
-                              <div className="text-sm text-gray-500">
-                                {reg.teamUnitName && <span>{reg.teamUnitName}</span>}
-                                {reg.skillLevelName && <span> • {reg.skillLevelName}</span>}
-                              </div>
-                              {/* Partner info */}
-                              {reg.partners?.length > 0 && (
-                                <div className="mt-2 flex items-center gap-2">
-                                  <span className="text-xs text-gray-500">Partner:</span>
-                                  {reg.partners.map(partner => (
-                                    <button
-                                      key={partner.userId}
-                                      onClick={() => setSelectedProfileUserId(partner.userId)}
-                                      className="flex items-center gap-1.5 hover:opacity-80"
-                                    >
-                                      {partner.profileImageUrl ? (
-                                        <img src={getSharedAssetUrl(partner.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
-                                      ) : (
-                                        <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
-                                          {partner.name?.charAt(0) || '?'}
-                                        </div>
-                                      )}
-                                      <span className="text-sm text-gray-700">{partner.name}</span>
-                                      {partner.inviteStatus === 'Pending' && (
-                                        <span className="text-xs text-yellow-600">(pending)</span>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Needs partner warning */}
-                              {reg.needsPartner && (
-                                <div className="mt-2">
-                                  <div className="flex items-center gap-2 text-orange-600">
-                                    <UserPlus className="w-4 h-4" />
-                                    <span className="text-sm">Looking for partner</span>
-                                    <button
-                                      onClick={() => loadAvailableUnits(reg)}
-                                      disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
-                                      className="text-xs text-orange-700 underline hover:no-underline disabled:opacity-50"
-                                    >
-                                      {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId ? 'Loading...' : 'Find Partner'}
-                                    </button>
-                                    {findingPartnerForReg?.unitId === reg.unitId && (
-                                      <button
-                                        onClick={() => { setFindingPartnerForReg(null); setAvailableUnits([]); }}
-                                        className="text-xs text-gray-500 hover:text-gray-700"
-                                      >
-                                        Close
-                                      </button>
-                                    )}
-                                  </div>
-                                  {/* Available units list */}
-                                  {findingPartnerForReg?.unitId === reg.unitId && !loadingAvailableUnits && (
-                                    <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
-                                      {availableUnits.length === 0 ? (
-                                        <div className="p-3 text-sm text-gray-500 text-center">
-                                          No other players looking for partners in this division yet
-                                        </div>
-                                      ) : (
-                                        <div className="divide-y divide-orange-100">
-                                          {availableUnits.map(unit => (
-                                            <div key={unit.id} className="p-3 flex items-center justify-between bg-orange-50/50">
-                                              <div className="flex items-center gap-2">
-                                                {unit.members?.map(member => (
-                                                  <button
-                                                    key={member.id}
-                                                    onClick={() => setSelectedProfileUserId(member.userId)}
-                                                    className="flex items-center gap-1.5 hover:opacity-80"
-                                                  >
-                                                    {member.profileImageUrl ? (
-                                                      <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                                    ) : (
-                                                      <div className="w-6 h-6 rounded-full bg-orange-200 flex items-center justify-center text-xs text-orange-700">
-                                                        {member.firstName?.charAt(0) || '?'}
-                                                      </div>
-                                                    )}
-                                                    <span className="text-sm text-gray-700">{member.firstName} {member.lastName}</span>
-                                                  </button>
-                                                ))}
-                                              </div>
-                                              <button
-                                                onClick={() => handleJoinPartnerUnit(unit.id)}
-                                                disabled={joiningUnitId === unit.id}
-                                                className="px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                                              >
-                                                {joiningUnitId === unit.id ? 'Joining...' : 'Join'}
-                                              </button>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {/* Payment status/button */}
-                              {reg.amountDue > 0 && (
-                                <button
-                                  onClick={() => {
-                                    if (reg.needsPartner) {
-                                      toast.info('Payment is only available after your team is complete. Find a partner first!');
-                                    } else {
-                                      setSelectedPaymentReg(reg);
-                                    }
-                                  }}
-                                  className={`px-2 py-1 text-sm rounded-lg flex items-center gap-1 ${
-                                    reg.paymentStatus === 'Paid'
-                                      ? 'bg-green-100 text-green-700'
-                                      : reg.paymentStatus === 'Partial' || reg.paymentStatus === 'PendingVerification'
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : reg.needsPartner
-                                      ? 'bg-gray-100 text-gray-500'
-                                      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                  }`}
-                                  title={reg.paymentStatus === 'Paid' ? 'Payment complete' : reg.needsPartner ? 'Find a partner first' : `$${reg.amountDue - reg.amountPaid} remaining`}
-                                >
-                                  <DollarSign className="w-4 h-4" />
-                                  {reg.paymentStatus === 'Paid' ? 'Paid' :
-                                   reg.paymentStatus === 'PendingVerification' ? 'Pending' :
-                                   reg.paymentStatus === 'Partial' ? 'Partial' : 'Pay'}
-                                </button>
-                              )}
-                              {/* Cancel button */}
-                              {canRegister() && (
-                                <button
-                                  onClick={() => handleCancelRegistration(reg.divisionId)}
-                                  className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
-                                >
-                                  <X className="w-4 h-4" />
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Option to register for more divisions */}
-                    {canRegister() && event.allowMultipleDivisions && (
-                      <button
-                        onClick={() => setActiveTab('divisions')}
-                        className="mt-3 w-full px-4 py-2 text-orange-600 border border-orange-300 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Register for Another Division
-                      </button>
-                    )}
-                  </div>
-                )}
-
                 {/* Show pending join requests */}
                 {event.myPendingJoinRequests?.length > 0 && (
                   <div className="w-full bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -3110,27 +2945,155 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
           {/* Registrations Tab */}
           {activeTab === 'divisions' && (
             <div className="space-y-4">
-              {/* Current User's Registrations */}
+              {/* Current User's Registrations - Full version */}
               {isAuthenticated && event.myRegistrations?.length > 0 && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-800 mb-2 flex items-center gap-2">
-                    <Check className="w-4 h-4" />
-                    Your Registrations
-                  </h4>
-                  <div className="space-y-2">
-                    {event.myRegistrations.map((reg, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm">
-                        <span className="text-green-700">
-                          {reg.divisionName}
-                          {reg.partnerName && ` with ${reg.partnerName}`}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          reg.status === 'Confirmed' ? 'bg-blue-100 text-blue-700' :
-                          reg.status === 'Waitlisted' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {reg.status || 'Registered'}
-                        </span>
+                  <div className="flex items-center gap-2 text-green-700 font-medium mb-3">
+                    <CheckCircle className="w-5 h-5" />
+                    You are registered for this event
+                  </div>
+                  <div className="space-y-3">
+                    {event.myRegistrations.map(reg => (
+                      <div key={reg.unitId} className="bg-white rounded-lg p-3 border border-green-100">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{reg.divisionName}</div>
+                            <div className="text-sm text-gray-500">
+                              {reg.teamUnitName && <span>{reg.teamUnitName}</span>}
+                              {reg.skillLevelName && <span> • {reg.skillLevelName}</span>}
+                            </div>
+                            {/* Partner info */}
+                            {reg.partners?.length > 0 && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="text-xs text-gray-500">Partner:</span>
+                                {reg.partners.map(partner => (
+                                  <button
+                                    key={partner.userId}
+                                    onClick={() => setSelectedProfileUserId(partner.userId)}
+                                    className="flex items-center gap-1.5 hover:opacity-80"
+                                  >
+                                    {partner.profileImageUrl ? (
+                                      <img src={getSharedAssetUrl(partner.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
+                                        {partner.name?.charAt(0) || '?'}
+                                      </div>
+                                    )}
+                                    <span className="text-sm text-gray-700">{partner.name}</span>
+                                    {partner.inviteStatus === 'Pending' && (
+                                      <span className="text-xs text-yellow-600">(pending)</span>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {/* Needs partner warning */}
+                            {reg.needsPartner && (
+                              <div className="mt-2">
+                                <div className="flex items-center gap-2 text-orange-600">
+                                  <UserPlus className="w-4 h-4" />
+                                  <span className="text-sm">Looking for partner</span>
+                                  <button
+                                    onClick={() => loadAvailableUnits(reg)}
+                                    disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
+                                    className="text-xs text-orange-700 underline hover:no-underline disabled:opacity-50"
+                                  >
+                                    {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId ? 'Loading...' : 'Find Partner'}
+                                  </button>
+                                  {findingPartnerForReg?.unitId === reg.unitId && (
+                                    <button
+                                      onClick={() => { setFindingPartnerForReg(null); setAvailableUnits([]); }}
+                                      className="text-xs text-gray-500 hover:text-gray-700"
+                                    >
+                                      Close
+                                    </button>
+                                  )}
+                                </div>
+                                {/* Available units list */}
+                                {findingPartnerForReg?.unitId === reg.unitId && !loadingAvailableUnits && (
+                                  <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
+                                    {availableUnits.length === 0 ? (
+                                      <div className="p-3 text-sm text-gray-500 text-center">
+                                        No other players looking for partners in this division yet
+                                      </div>
+                                    ) : (
+                                      <div className="divide-y divide-orange-100">
+                                        {availableUnits.map(unit => (
+                                          <div key={unit.id} className="p-3 flex items-center justify-between bg-orange-50/50">
+                                            <div className="flex items-center gap-2">
+                                              {unit.members?.map(member => (
+                                                <button
+                                                  key={member.id}
+                                                  onClick={() => setSelectedProfileUserId(member.userId)}
+                                                  className="flex items-center gap-1.5 hover:opacity-80"
+                                                >
+                                                  {member.profileImageUrl ? (
+                                                    <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                  ) : (
+                                                    <div className="w-6 h-6 rounded-full bg-orange-200 flex items-center justify-center text-xs text-orange-700">
+                                                      {member.firstName?.charAt(0) || '?'}
+                                                    </div>
+                                                  )}
+                                                  <span className="text-sm text-gray-700">{member.firstName} {member.lastName}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                            <button
+                                              onClick={() => handleJoinPartnerUnit(unit.id)}
+                                              disabled={joiningUnitId === unit.id}
+                                              className="px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                                            >
+                                              {joiningUnitId === unit.id ? 'Joining...' : 'Join'}
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {/* Payment status/button */}
+                            {reg.amountDue > 0 && (
+                              <button
+                                onClick={() => {
+                                  if (reg.needsPartner) {
+                                    toast.info('Payment is only available after your team is complete. Find a partner first!');
+                                  } else {
+                                    setSelectedPaymentReg(reg);
+                                  }
+                                }}
+                                className={`px-2 py-1 text-sm rounded-lg flex items-center gap-1 ${
+                                  reg.paymentStatus === 'Paid'
+                                    ? 'bg-green-100 text-green-700'
+                                    : reg.paymentStatus === 'Partial' || reg.paymentStatus === 'PendingVerification'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : reg.needsPartner
+                                    ? 'bg-gray-100 text-gray-500'
+                                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                }`}
+                                title={reg.paymentStatus === 'Paid' ? 'Payment complete' : reg.needsPartner ? 'Find a partner first' : `$${reg.amountDue - reg.amountPaid} remaining`}
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                {reg.paymentStatus === 'Paid' ? 'Paid' :
+                                 reg.paymentStatus === 'PendingVerification' ? 'Pending' :
+                                 reg.paymentStatus === 'Partial' ? 'Partial' : 'Pay'}
+                              </button>
+                            )}
+                            {/* Cancel button */}
+                            {canRegister() && (
+                              <button
+                                onClick={() => handleCancelRegistration(reg.divisionId)}
+                                className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <X className="w-4 h-4" />
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
