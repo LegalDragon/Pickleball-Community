@@ -34,6 +34,7 @@ public class EventDto
     public int RegisteredCount { get; set; }
     public int RegisteredPlayerCount { get; set; }
     public int DivisionCount { get; set; }
+    public int PrimaryTeamSize { get; set; } = 2; // Most common team size across divisions (1=singles, 2=pairs, 3+=teams)
     public double? Distance { get; set; }
     public int OrganizedByUserId { get; set; }
     public string? OrganizerName { get; set; }

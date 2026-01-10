@@ -427,6 +427,26 @@ export default function Events() {
     return `$${fee}${unitLabel}${perPersonNote}`;
   };
 
+  // Format registration count with appropriate label based on team size
+  const formatRegistrationCount = (event) => {
+    const unitCount = event.registeredCount || 0;
+    const playerCount = event.registeredPlayerCount || 0;
+    const teamSize = event.primaryTeamSize || 2;
+
+    // Determine unit label based on team size
+    let unitLabel;
+    if (teamSize > 2) {
+      unitLabel = unitCount === 1 ? 'team' : 'teams';
+    } else if (teamSize === 2) {
+      unitLabel = unitCount === 1 ? 'pair' : 'pairs';
+    } else {
+      // Singles - just show players
+      return `${playerCount} player${playerCount !== 1 ? 's' : ''}`;
+    }
+
+    return `${unitCount} ${unitLabel} • ${playerCount} player${playerCount !== 1 ? 's' : ''}`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -801,7 +821,7 @@ export default function Events() {
                             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 flex-wrap">
                               <span className="flex items-center gap-1">
                                 <Users className="w-3 h-3" />
-                                {event.registeredCount || 0} registered
+                                {formatRegistrationCount(event)}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Layers className="w-3 h-3" />
@@ -978,7 +998,7 @@ export default function Events() {
                             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                               <span className="flex items-center gap-1">
                                 <Users className="w-3 h-3" />
-                                {event.registeredCount || 0} registered
+                                {formatRegistrationCount(event)}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Layers className="w-3 h-3" />
@@ -1454,7 +1474,17 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
           </div>
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" />
-            <span>{event.registeredCount} registered • {event.divisionCount} division{event.divisionCount !== 1 ? 's' : ''}</span>
+            <span>
+              {(() => {
+                const unitCount = event.registeredCount || 0;
+                const playerCount = event.registeredPlayerCount || 0;
+                const teamSize = event.primaryTeamSize || 2;
+                if (teamSize === 1) return `${playerCount} player${playerCount !== 1 ? 's' : ''}`;
+                const unitLabel = teamSize > 2 ? (unitCount === 1 ? 'team' : 'teams') : (unitCount === 1 ? 'pair' : 'pairs');
+                return `${unitCount} ${unitLabel} • ${playerCount} player${playerCount !== 1 ? 's' : ''}`;
+              })()}
+              {' • '}{event.divisionCount} division{event.divisionCount !== 1 ? 's' : ''}
+            </span>
           </div>
           {event.distance && (
             <div className="flex items-center gap-2 text-orange-600">
