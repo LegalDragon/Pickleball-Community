@@ -1121,11 +1121,39 @@ public class TournamentController : ControllerBase
         if (targetUnitCount < 2)
             return BadRequest(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Need at least 2 units/placeholders to generate schedule" });
 
-        // Clear existing matches for this division
+        // Clear existing matches and games for this division
         var existingMatches = await _context.EventMatches
+            .Include(m => m.Games)
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
-        _context.EventMatches.RemoveRange(existingMatches);
+
+        if (existingMatches.Any())
+        {
+            // Get all game IDs that will be deleted
+            var gameIds = existingMatches.SelectMany(m => m.Games).Select(g => g.Id).ToList();
+
+            // Clear TournamentCourt references to these games first
+            if (gameIds.Any())
+            {
+                var courtsWithGames = await _context.TournamentCourts
+                    .Where(c => c.CurrentGameId != null && gameIds.Contains(c.CurrentGameId.Value))
+                    .ToListAsync();
+
+                foreach (var court in courtsWithGames)
+                {
+                    court.CurrentGameId = null;
+                    court.Status = "Available";
+                }
+            }
+
+            // Delete games first, then matches
+            foreach (var match in existingMatches)
+            {
+                _context.EventGames.RemoveRange(match.Games);
+            }
+            _context.EventMatches.RemoveRange(existingMatches);
+            await _context.SaveChangesAsync();
+        }
 
         // Also clear unit number assignments since schedule is being regenerated
         foreach (var unit in units)
