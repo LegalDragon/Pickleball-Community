@@ -10,22 +10,22 @@ public class Venue
     [Column("Id")]
     public int VenueId { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(200)]
     public string? Name { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(200)]
     public string? Addr1 { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(200)]
     public string? Addr2 { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(100)]
     public string? City { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(100)]
     public string? County { get; set; }
 
-    [MaxLength(50)]
+    [MaxLength(100)]
     public string? State { get; set; }
 
     [Column("ZIP")]
@@ -36,21 +36,21 @@ public class Venue
     [MaxLength(5)]
     public string? Zip4 { get; set; }
 
-    [MaxLength(20)]
+    [MaxLength(100)]
     public string? Country { get; set; }
 
     [Column("Admin_UID")]
     public int? AdminUid { get; set; }
 
-    [MaxLength(12)]
+    [MaxLength(50)]
     public string? Phone { get; set; }
 
     [Column("WWW")]
-    [MaxLength(50)]
+    [MaxLength(500)]
     public string? Website { get; set; }
 
     [Column("EMail")]
-    [MaxLength(50)]
+    [MaxLength(200)]
     public string? Email { get; set; }
 
     [Column("Indoor_Num")]
