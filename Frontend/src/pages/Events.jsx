@@ -3173,210 +3173,158 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 const teamUnit = division.teamUnitId ? teamUnits.find(t => t.id === division.teamUnitId) : null;
                 const teamSize = teamUnit?.totalPlayers || division.teamSize || 1;
                 const isFull = division.maxUnits && division.registeredCount >= division.maxUnits;
+                const canRegisterForThisDivision = canRegisterForDivision(division.id) && isAuthenticated && canRegister();
+
+                // Sort units: completed first, then incomplete
+                const sortedUnits = [...(divisionRegistrationsCache[division.id] || [])].sort((a, b) => {
+                  const aComplete = a.isComplete ? 1 : 0;
+                  const bComplete = b.isComplete ? 1 : 0;
+                  return bComplete - aComplete;
+                });
 
                 return (
                   <div className="border rounded-lg overflow-hidden">
-                    {/* Division Info Header */}
-                    <div className="p-4 bg-gray-50">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-gray-900 text-lg">{division.name}</h4>
-                        <div className="flex items-center gap-2">
-                          {division.divisionFee > 0 && (
-                            <span className="text-sm font-medium text-gray-600">+${division.divisionFee}</span>
-                          )}
-                          {isFull && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">
-                              Full - Waitlist
-                            </span>
+                    {/* Simplified Division Header */}
+                    <div className="p-4 bg-gray-50 border-b">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 text-lg">{division.name}</h4>
+                          {division.description && (
+                            <p className="mt-1 text-sm text-gray-600">{division.description}</p>
                           )}
                         </div>
-                      </div>
 
-                      {/* Division Details */}
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-gray-500">Format:</span>
-                          <span className="ml-2 text-gray-900">{teamUnit?.name || (teamSize === 1 ? 'Singles' : teamSize === 2 ? 'Doubles' : `${teamSize}-Player Team`)}</span>
-                        </div>
-                        {division.skillLevelName && (
-                          <div>
-                            <span className="text-gray-500">Skill:</span>
-                            <span className="ml-2 text-gray-900">{division.skillLevelName}</span>
-                          </div>
-                        )}
-                        {division.gender && (
-                          <div>
-                            <span className="text-gray-500">Gender:</span>
-                            <span className="ml-2 text-gray-900">{division.gender}</span>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-gray-500">Registered:</span>
-                          <span className="ml-2 text-gray-900">
-                            {division.registeredCount}{division.maxUnits && ` / ${division.maxUnits}`}
-                            {division.waitlistedCount > 0 && <span className="text-yellow-600 ml-1">(+{division.waitlistedCount} waitlisted)</span>}
-                          </span>
-                        </div>
-                      </div>
-
-                      {division.description && (
-                        <p className="mt-3 text-sm text-gray-600">{division.description}</p>
-                      )}
-
-                      {/* Registration Actions */}
-                      <div className="mt-4 flex items-center gap-3">
-                        {event.registeredDivisionIds?.includes(division.id) ? (
-                          <button
-                            onClick={() => handleCancelRegistration(division.id)}
-                            className="px-4 py-2 text-red-600 border border-red-300 rounded-lg text-sm font-medium hover:bg-red-50"
-                          >
-                            Cancel Registration
-                          </button>
-                        ) : (
+                        {/* Registration Button */}
+                        {canRegisterForThisDivision ? (
                           <button
                             onClick={() => handleRegister(division.id)}
-                            disabled={!isAuthenticated || !canRegister() || registeringDivision === division.id}
-                            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+                            disabled={registeringDivision === division.id}
+                            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50 whitespace-nowrap"
                           >
                             {registeringDivision === division.id ? 'Registering...' : (isFull ? 'Join Waitlist' : 'Register')}
                           </button>
-                        )}
-                        {canEditDivision && (
-                          <button
-                            onClick={() => handleEditDivision(division)}
-                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                            title="Edit Division"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Looking for Partner */}
-                      {teamSize > 1 && division.lookingForPartnerCount > 0 && !event.registeredDivisionIds?.includes(division.id) && (
-                        <button
-                          onClick={() => {
-                            setSelectedDivisionForRegistration(division);
-                            setShowTeamRegistration(true);
-                            loadUnitsLookingForPartners(division.id);
-                          }}
-                          className="mt-3 w-full px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-2 text-sm text-blue-700 hover:bg-blue-100 transition-colors"
-                        >
-                          <span className="flex items-center gap-2">
-                            <UserPlus className="w-4 h-4" />
-                            {division.lookingForPartnerCount} player{division.lookingForPartnerCount !== 1 ? 's' : ''} looking for a partner
+                        ) : event.registeredDivisionIds?.includes(division.id) ? (
+                          <span className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4" />
+                            Registered
                           </span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      )}
+                        ) : null}
+                      </div>
                     </div>
 
-                    {/* Registered Units List */}
-                    <div className="border-t">
-                      <div className="px-4 py-3 bg-white flex items-center justify-between">
-                        <h5 className="font-medium text-gray-900 flex items-center gap-2">
+                    {/* Registered Units List - Horizontal Cards */}
+                    <div className="bg-white">
+                      <div className="px-4 py-3 border-b bg-gray-50/50">
+                        <h5 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                           <Users className="w-4 h-4" />
-                          Registered {teamSize > 2 ? 'Teams' : teamSize === 2 ? 'Pairs' : 'Players'} ({division.registeredCount})
+                          {division.registeredCount || 0} {teamSize > 2 ? 'Teams' : teamSize === 2 ? 'Pairs' : 'Players'} Registered
+                          {division.waitlistedCount > 0 && <span className="text-yellow-600">(+{division.waitlistedCount} waitlisted)</span>}
                         </h5>
                       </div>
 
-                      <div className="bg-white">
-                        {loadingDivisionId === division.id ? (
-                          <div className="p-6 text-center text-gray-500">
-                            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
-                            Loading registrations...
-                          </div>
-                        ) : (divisionRegistrationsCache[division.id] || []).length === 0 ? (
-                          <div className="p-6 text-center text-gray-500">
-                            No registrations yet. Be the first to register!
-                          </div>
-                        ) : (
-                          <div className="p-4">
-                            <div className="flex flex-wrap gap-4">
-                              {(divisionRegistrationsCache[division.id] || []).map((unit, index) => {
-                                const requiredPlayers = unit.requiredPlayers || teamSize;
-                                const isTeam = requiredPlayers > 2;
-                                const isDoubles = requiredPlayers === 2;
+                      {loadingDivisionId === division.id ? (
+                        <div className="p-6 text-center text-gray-500">
+                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                          Loading registrations...
+                        </div>
+                      ) : sortedUnits.length === 0 ? (
+                        <div className="p-6 text-center text-gray-500">
+                          No registrations yet. Be the first to register!
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {sortedUnits.map((unit, index) => {
+                            const requiredPlayers = unit.requiredPlayers || teamSize;
+                            const isComplete = unit.isComplete;
+                            const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
 
-                                return (
-                                  <div key={unit.id || index} className={isTeam ? "w-full border-b pb-3 last:border-b-0" : isDoubles ? "bg-gray-50 rounded-lg p-3" : ""}>
-                                    {isTeam ? (
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <Trophy className="w-4 h-4 text-orange-500" />
-                                          <span className="font-medium text-gray-900">{unit.name || `Team ${index + 1}`}</span>
-                                          {!unit.isComplete && (
-                                            <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">Looking for players</span>
-                                          )}
+                            return (
+                              <div
+                                key={unit.id || index}
+                                className={`px-4 py-3 flex items-center gap-3 ${
+                                  isComplete
+                                    ? 'bg-white'
+                                    : 'bg-amber-50/50'
+                                } ${index % 2 === 1 && isComplete ? 'bg-gray-50/50' : ''}`}
+                              >
+                                {/* Unit Number/Index */}
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+                                  isComplete
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {index + 1}
+                                </div>
+
+                                {/* Members - Horizontal Layout */}
+                                <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto">
+                                  {unit.members?.map((member, mIdx) => (
+                                    <button
+                                      key={mIdx}
+                                      onClick={() => member.userId && setSelectedProfileUserId(member.userId)}
+                                      className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition-colors shrink-0"
+                                    >
+                                      {member.profileImageUrl ? (
+                                        <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                      ) : (
+                                        <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-xs font-medium">
+                                          {(member.firstName || 'P')[0].toUpperCase()}
                                         </div>
-                                        <div className="ml-6 space-y-1">
-                                          {unit.members?.map((member, mIdx) => (
-                                            <button
-                                              key={mIdx}
-                                              onClick={() => member.userId && setSelectedProfileUserId(member.userId)}
-                                              className="text-sm text-gray-600 flex items-center gap-2 hover:text-orange-600"
-                                            >
-                                              {member.profileImageUrl ? (
-                                                <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
-                                              ) : (
-                                                <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-xs font-medium">
-                                                  {(member.firstName || 'P')[0].toUpperCase()}
-                                                </div>
-                                              )}
-                                              {member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : member.firstName || 'Player'}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : isDoubles ? (
-                                      <div>
-                                        <div className="text-xs text-gray-400 mb-2">Pair {index + 1}</div>
-                                        <div className="flex items-start gap-3">
-                                          {unit.members?.slice(0, 2).map((member, mIdx) => (
-                                            <button
-                                              key={mIdx}
-                                              onClick={() => member.userId && setSelectedProfileUserId(member.userId)}
-                                              className="flex flex-col items-center text-center hover:opacity-80"
-                                            >
-                                              {member.profileImageUrl ? (
-                                                <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
-                                              ) : (
-                                                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-sm font-medium">
-                                                  {(member.firstName || 'P')[0].toUpperCase()}
-                                                </div>
-                                              )}
-                                              <span className="text-xs text-gray-700 mt-1 max-w-[70px] truncate">{member.firstName || 'Player'}</span>
-                                            </button>
-                                          ))}
-                                          {(unit.members?.length || 0) < 2 && (
-                                            <div className="flex flex-col items-center text-center">
-                                              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 text-sm">?</div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        onClick={() => unit.members?.[0]?.userId && setSelectedProfileUserId(unit.members[0].userId)}
-                                        className="flex flex-col items-center text-center hover:opacity-80"
-                                      >
-                                        {unit.members?.[0]?.profileImageUrl ? (
-                                          <img src={getSharedAssetUrl(unit.members[0].profileImageUrl)} alt="" className="w-10 h-10 rounded-full object-cover" />
-                                        ) : (
-                                          <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-700 text-sm font-medium">
-                                            {(unit.members?.[0]?.firstName || unit.name || 'P')[0].toUpperCase()}
-                                          </div>
-                                        )}
-                                        <span className="text-xs text-gray-700 mt-1">{unit.members?.[0]?.firstName || unit.name || 'Player'}</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                                      )}
+                                      <span className="text-sm text-gray-700 max-w-[100px] truncate">
+                                        {member.firstName || 'Player'}
+                                      </span>
+                                      {member.inviteStatus === 'Pending' && (
+                                        <span className="text-xs text-amber-600">(pending)</span>
+                                      )}
+                                    </button>
+                                  ))}
+
+                                  {/* Empty slots for incomplete units */}
+                                  {!isComplete && Array.from({ length: requiredPlayers - (unit.members?.length || 0) }).map((_, i) => (
+                                    <div key={`empty-${i}`} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 border border-dashed border-gray-300 shrink-0">
+                                      <div className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 text-xs">?</div>
+                                      <span className="text-sm text-gray-400">Needed</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Status Badge */}
+                                <div className="shrink-0">
+                                  {isComplete ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                                      <Check className="w-3 h-3" />
+                                      Complete
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-full">
+                                      <UserPlus className="w-3 h-3" />
+                                      Looking
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Looking for Partner Option */}
+                      {teamSize > 1 && division.lookingForPartnerCount > 0 && canRegisterForThisDivision && (
+                        <div className="p-3 border-t bg-blue-50">
+                          <button
+                            onClick={() => {
+                              setSelectedDivisionForRegistration(division);
+                              setShowTeamRegistration(true);
+                              loadUnitsLookingForPartners(division.id);
+                            }}
+                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                            Join an existing {teamSize > 2 ? 'team' : 'pair'} ({division.lookingForPartnerCount} looking)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
