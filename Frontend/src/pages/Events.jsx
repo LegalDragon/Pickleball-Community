@@ -2674,7 +2674,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                   )}
                   <span className="flex items-center gap-1">
                     <Users className="w-4 h-4" />
-                    {event.registeredCount || 0} registered
+                    {event.registeredCount || 0} unit{event.registeredCount !== 1 ? 's' : ''} • {event.registeredPlayerCount || 0} player{event.registeredPlayerCount !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>

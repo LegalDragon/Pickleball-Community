@@ -32,6 +32,7 @@ public class EventDto
     public string? PaymentModel { get; set; }
     public int? MaxParticipants { get; set; }
     public int RegisteredCount { get; set; }
+    public int RegisteredPlayerCount { get; set; }
     public int DivisionCount { get; set; }
     public double? Distance { get; set; }
     public int OrganizedByUserId { get; set; }
