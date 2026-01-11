@@ -104,6 +104,9 @@ public class EventUnitDto
     // Members
     public List<EventUnitMemberDto> Members { get; set; } = new();
 
+    // Pending join requests (users who requested to join this unit)
+    public List<UnitJoinRequestDto> JoinRequests { get; set; } = new();
+
     // Team unit info
     public int? TeamUnitId { get; set; }
     public int RequiredPlayers { get; set; }

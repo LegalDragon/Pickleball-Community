@@ -445,6 +445,8 @@ public class TournamentController : ControllerBase
         var query = _context.EventUnits
             .Include(u => u.Members)
                 .ThenInclude(m => m.User)
+            .Include(u => u.JoinRequests)
+                .ThenInclude(jr => jr.User)
             .Include(u => u.Division)
                 .ThenInclude(d => d!.TeamUnit)
             .Include(u => u.Captain)
@@ -2081,7 +2083,19 @@ public class TournamentController : ControllerBase
                 InviteStatus = m.InviteStatus,
                 IsCheckedIn = m.IsCheckedIn,
                 CheckedInAt = m.CheckedInAt
-            }).ToList()
+            }).ToList(),
+            JoinRequests = u.JoinRequests?.Where(jr => jr.Status == "Pending").Select(jr => new UnitJoinRequestDto
+            {
+                Id = jr.Id,
+                UnitId = jr.UnitId,
+                UnitName = u.Name,
+                UserId = jr.UserId,
+                UserName = jr.User != null ? $"{jr.User.FirstName} {jr.User.LastName}".Trim() : null,
+                ProfileImageUrl = jr.User?.ProfileImageUrl,
+                Message = jr.Message,
+                Status = jr.Status,
+                CreatedAt = jr.CreatedAt
+            }).ToList() ?? new List<UnitJoinRequestDto>()
         };
     }
 
