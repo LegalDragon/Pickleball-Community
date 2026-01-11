@@ -459,9 +459,14 @@ public class EventsController : ControllerBase
                 ClubName = evt.OrganizedByClub?.Name,
                 CreatedAt = evt.CreatedAt,
                 IsOrganizer = isAdmin || (userId.HasValue && evt.OrganizedByUserId == userId.Value),
-                IsRegistered = userId.HasValue && evt.Divisions.Any(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))),
+                IsRegistered = userId.HasValue && (
+                    evt.Divisions.Any(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))) ||
+                    pendingJoinRequests.Any()
+                ),
                 RegisteredDivisionIds = userId.HasValue
-                    ? evt.Divisions.Where(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))).Select(d => d.Id).ToList()
+                    ? evt.Divisions.Where(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))).Select(d => d.Id)
+                        .Union(pendingJoinRequests.Select(p => p.DivisionId))
+                        .ToList()
                     : new List<int>(),
                 MyRegistrations = userId.HasValue
                     ? evt.Divisions

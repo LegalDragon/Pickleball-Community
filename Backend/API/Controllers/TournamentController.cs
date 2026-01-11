@@ -314,6 +314,20 @@ public class TournamentController : ControllerBase
 
             if (existingMember != null) continue;
 
+            // Check if user has a pending join request in this division
+            var hasPendingJoinRequest = await _context.EventUnitJoinRequests
+                .Include(r => r.Unit)
+                .AnyAsync(r => r.UserId == userId.Value &&
+                    r.Unit!.DivisionId == divisionId &&
+                    r.Unit.EventId == eventId &&
+                    r.Status == "Pending");
+
+            if (hasPendingJoinRequest)
+            {
+                warnings.Add($"You have a pending join request in division '{division.Name}'. Cancel it first or wait for a response.");
+                continue;
+            }
+
             // Check gender compatibility with division
             if (!string.IsNullOrEmpty(division.Gender) && division.Gender != "Open")
             {
@@ -472,12 +486,33 @@ public class TournamentController : ControllerBase
         if (currentMembers >= teamSize)
             return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "Unit is already full" });
 
-        // Check for existing request
-        var existing = await _context.EventUnitJoinRequests
+        // Check for existing request to this specific unit
+        var existingToUnit = await _context.EventUnitJoinRequests
             .FirstOrDefaultAsync(r => r.UnitId == unitId && r.UserId == userId.Value && r.Status == "Pending");
 
-        if (existing != null)
-            return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You already have a pending request" });
+        if (existingToUnit != null)
+            return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You already have a pending request to this team" });
+
+        // Check for any pending request in the same division
+        var existingInDivision = await _context.EventUnitJoinRequests
+            .Include(r => r.Unit)
+            .FirstOrDefaultAsync(r => r.UserId == userId.Value &&
+                r.Unit!.DivisionId == unit.DivisionId &&
+                r.Status == "Pending");
+
+        if (existingInDivision != null)
+            return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You already have a pending request in this division. Cancel it first before requesting to join another team." });
+
+        // Check if already registered in this division
+        var alreadyRegistered = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .AnyAsync(m => m.UserId == userId.Value &&
+                m.Unit!.DivisionId == unit.DivisionId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+
+        if (alreadyRegistered)
+            return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You are already registered in this division" });
 
         var joinRequest = new EventUnitJoinRequest
         {
