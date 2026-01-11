@@ -20,6 +20,18 @@ Store all database migration scripts in `/Backend/API/Scripts/` with naming conv
 - Include `IF NOT EXISTS` checks for tables and columns
 - Use `PRINT` statements for progress logging
 
+## Database Best Practices
+- **Prefer stored procedures** over complex inline EF Core queries whenever possible
+- Stored procedures avoid EF Core query generation issues (e.g., SQL syntax errors with CTEs, `Contains()` on lists)
+- Stored procedures provide better performance for complex operations
+- Create stored procedures in migration scripts with `CREATE OR ALTER PROCEDURE`
+- Call stored procedures from C# using `_context.Database.ExecuteSqlRawAsync()` or `FromSqlRaw()`
+- Use stored procedures especially for:
+  - Bulk operations (merge, delete multiple records)
+  - Complex joins or subqueries
+  - Operations with multiple steps that should be atomic
+  - Queries with dynamic filtering on lists of IDs
+
 ## Commands
 - Backend: `dotnet run` in `/Backend/API`
 - Frontend: `npm run dev` in `/Frontend`
