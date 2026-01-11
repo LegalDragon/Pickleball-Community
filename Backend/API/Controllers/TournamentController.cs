@@ -1268,6 +1268,22 @@ public class TournamentController : ControllerBase
             .ToListAsync();
         _context.EventUnitJoinRequests.RemoveRange(sourceJoinRequests);
 
+        // Also delete any pending join requests TO the target unit from users who are now members
+        var mergedUserIds = targetUnit.Members.Select(m => m.UserId).ToList();
+        var targetJoinRequestsFromMembers = await _context.EventUnitJoinRequests
+            .Where(r => r.UnitId == targetUnit.Id && mergedUserIds.Contains(r.UserId))
+            .ToListAsync();
+        _context.EventUnitJoinRequests.RemoveRange(targetJoinRequestsFromMembers);
+
+        // Also delete any pending join requests FROM the merged users to other units in this division
+        var otherJoinRequests = await _context.EventUnitJoinRequests
+            .Include(r => r.Unit)
+            .Where(r => mergedUserIds.Contains(r.UserId) &&
+                r.Unit!.DivisionId == targetUnit.DivisionId &&
+                r.Status == "Pending")
+            .ToListAsync();
+        _context.EventUnitJoinRequests.RemoveRange(otherJoinRequests);
+
         // Remove the source unit
         _context.EventUnits.Remove(sourceUnit);
 
