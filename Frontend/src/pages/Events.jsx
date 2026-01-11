@@ -3288,8 +3288,10 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                           {(member.firstName || 'P')[0].toUpperCase()}
                                         </div>
                                       )}
-                                      <span className="text-sm text-gray-700 max-w-[100px] truncate">
-                                        {member.firstName || 'Player'}
+                                      <span className="text-sm text-gray-700 max-w-[150px] truncate">
+                                        {member.lastName && member.firstName
+                                          ? `${member.lastName}, ${member.firstName}`
+                                          : member.lastName || member.firstName || 'Player'}
                                       </span>
                                       {member.inviteStatus === 'Pending' && (
                                         <span className="text-xs text-amber-600">(pending)</span>
