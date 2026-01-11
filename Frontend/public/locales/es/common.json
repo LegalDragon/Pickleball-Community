@@ -13,17 +13,44 @@
     "confirm": "Confirmar",
     "back": "Volver",
     "next": "Siguiente",
+    "previous": "Anterior",
     "loading": "Cargando...",
     "viewAll": "Ver Todo",
     "learnMore": "Saber Más",
-    "getStarted": "Comenzar"
+    "getStarted": "Comenzar",
+    "refresh": "Actualizar",
+    "retry": "Reintentar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "clear": "Limpiar",
+    "apply": "Aplicar",
+    "reset": "Restablecer",
+    "create": "Crear",
+    "update": "Actualizar",
+    "add": "Agregar",
+    "remove": "Eliminar",
+    "view": "Ver",
+    "share": "Compartir",
+    "copy": "Copiar",
+    "download": "Descargar",
+    "upload": "Subir",
+    "select": "Seleccionar",
+    "selectAll": "Seleccionar Todo",
+    "deselectAll": "Deseleccionar Todo"
   },
   "status": {
     "active": "Activo",
     "inactive": "Inactivo",
     "pending": "Pendiente",
     "approved": "Aprobado",
-    "rejected": "Rechazado"
+    "rejected": "Rechazado",
+    "completed": "Completado",
+    "cancelled": "Cancelado",
+    "confirmed": "Confirmado",
+    "accepted": "Aceptado",
+    "declined": "Rechazado",
+    "invited": "Invitado",
+    "requested": "Solicitado"
   },
   "messages": {
     "success": "¡Éxito!",
@@ -31,7 +58,15 @@
     "notFound": "No encontrado",
     "loading": "Cargando...",
     "noResults": "No se encontraron resultados",
-    "confirmDelete": "¿Estás seguro de que quieres eliminar esto?"
+    "confirmDelete": "¿Estás seguro de que quieres eliminar esto?",
+    "saved": "Cambios guardados",
+    "deleted": "Eliminado exitosamente",
+    "copied": "Copiado al portapapeles",
+    "required": "Este campo es requerido",
+    "invalid": "Valor inválido",
+    "networkError": "Error de red. Por favor intenta de nuevo.",
+    "unauthorized": "Por favor inicia sesión para continuar",
+    "forbidden": "No tienes permiso para hacer esto"
   },
   "time": {
     "today": "Hoy",
@@ -39,14 +74,82 @@
     "tomorrow": "Mañana",
     "now": "Ahora",
     "ago": "hace",
-    "in": "en"
+    "in": "en",
+    "just_now": "Ahora mismo"
   },
   "units": {
     "minutes": "minutos",
+    "minute": "minuto",
     "hours": "horas",
+    "hour": "hora",
     "days": "días",
+    "day": "día",
     "weeks": "semanas",
+    "week": "semana",
     "months": "meses",
-    "years": "años"
+    "month": "mes",
+    "years": "años",
+    "year": "año"
+  },
+  "labels": {
+    "name": "Nombre",
+    "email": "Correo electrónico",
+    "phone": "Teléfono",
+    "password": "Contraseña",
+    "description": "Descripción",
+    "date": "Fecha",
+    "time": "Hora",
+    "location": "Ubicación",
+    "address": "Dirección",
+    "city": "Ciudad",
+    "state": "Estado",
+    "country": "País",
+    "zipCode": "Código Postal",
+    "notes": "Notas",
+    "status": "Estado",
+    "type": "Tipo",
+    "category": "Categoría",
+    "price": "Precio",
+    "free": "Gratis",
+    "total": "Total",
+    "count": "Cantidad",
+    "amount": "Monto"
+  },
+  "pagination": {
+    "showing": "Mostrando {{from}} a {{to}} de {{total}}",
+    "page": "Página {{current}} de {{total}}",
+    "first": "Primera",
+    "last": "Última",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "perPage": "Por página"
+  },
+  "empty": {
+    "noData": "No hay datos disponibles",
+    "noResults": "No se encontraron resultados",
+    "noItems": "No hay elementos para mostrar"
+  },
+  "confirm": {
+    "title": "Confirmar Acción",
+    "delete": "¿Estás seguro de que quieres eliminar esto?",
+    "cancel": "¿Estás seguro de que quieres cancelar?",
+    "leave": "¿Estás seguro de que quieres salir?",
+    "unsaved": "Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?"
+  },
+  "errors": {
+    "generic": "Algo salió mal. Por favor intenta de nuevo.",
+    "network": "Error de red. Por favor verifica tu conexión.",
+    "server": "Error del servidor. Por favor intenta más tarde.",
+    "notFound": "El recurso solicitado no fue encontrado.",
+    "unauthorized": "Necesitas iniciar sesión para acceder a esto.",
+    "forbidden": "No tienes permiso para acceder a esto."
+  },
+  "accessibility": {
+    "loading": "Cargando contenido",
+    "menu": "Menú",
+    "close": "Cerrar",
+    "expand": "Expandir",
+    "collapse": "Contraer",
+    "openInNewTab": "Abre en nueva pestaña"
   }
 }

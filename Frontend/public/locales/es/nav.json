@@ -2,6 +2,7 @@
   "home": "Inicio",
   "events": "Eventos",
   "venues": "Lugares",
+  "courts": "Canchas",
   "clubs": "Clubes",
   "blog": "Blog",
   "faq": "Preguntas Frecuentes",
@@ -9,6 +10,7 @@
   "profile": "Perfil",
   "dashboard": "Panel",
   "adminDashboard": "Panel de Administrador",
+  "leagueAdmin": "{{name}} Admin",
   "messages": "Mensajes",
   "notifications": "Notificaciones",
   "alerts": "Alertas",
@@ -18,6 +20,7 @@
   "enroll": "Inscribirse",
   "logout": "Cerrar Sesión",
   "viewAllNotifications": "Ver todas las notificaciones",
+  "newNotifications": "{{count}} nuevas",
   "menu": {
     "open": "Abrir menú",
     "close": "Cerrar menú"
@@ -25,5 +28,26 @@
   "user": {
     "greeting": "Hola, {{name}}",
     "role": "{{role}}"
+  },
+  "footer": {
+    "mission": "Nuestra Misión:",
+    "missionText": "Democratizando la educación del pickleball a través de la tecnología.",
+    "communityText": "Crear una comunidad amigable y solidaria donde cada jugador de pickleball pueda aprender, crecer y conectarse entre sí.",
+    "quickLinks": "Enlaces Rápidos",
+    "resources": "Recursos",
+    "contact": "Contacto",
+    "home": "Inicio",
+    "courses": "Cursos",
+    "coaches": "Entrenadores",
+    "pricing": "Precios",
+    "blog": "Blog",
+    "trainingVideos": "Videos de Entrenamiento",
+    "drills": "Ejercicios",
+    "strategyGuides": "Guías de Estrategia",
+    "usaPickleballRules": "Reglas de USA Pickleball",
+    "support": "Soporte",
+    "becomeACoach": "Conviértete en Entrenador",
+    "partnerships": "Asociaciones",
+    "copyright": "Funtime Pickleball Inc. Todos los derechos reservados."
   }
 }

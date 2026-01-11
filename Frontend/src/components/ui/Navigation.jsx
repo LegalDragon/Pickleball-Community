@@ -165,7 +165,7 @@ const Navigation = () => {
     }] : []),
     // League Admin links - only shown for non-admin league managers
     ...(!isAdmin && managedLeagues.length > 0 ? managedLeagues.map(league => ({
-      name: `${league.rootLeagueName} Admin`,
+      name: t('leagueAdmin', { name: league.rootLeagueName }),
       href: `/leagues/${league.leagueId}`,
       icon: Network,
       isLeagueAdmin: true
@@ -369,16 +369,16 @@ const Navigation = () => {
                             >
                               <div className="relative mr-3">
                                 <item.icon className="w-4 h-4" />
-                                {item.name === 'Notifications' && unreadCount > 0 && (
+                                {item.name === t('notifications') && unreadCount > 0 && (
                                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-medium text-[10px]">
                                     {unreadCount > 9 ? '9+' : unreadCount}
                                   </span>
                                 )}
                               </div>
                               {item.name}
-                              {item.name === 'Notifications' && unreadCount > 0 && (
+                              {item.name === t('notifications') && unreadCount > 0 && (
                                 <span className="ml-auto bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">
-                                  {unreadCount} new
+                                  {t('newNotifications', { count: unreadCount })}
                                 </span>
                               )}
                             </Link>
@@ -544,7 +544,7 @@ const Navigation = () => {
                         onClick={() => setIsOpen(false)}
                       >
                         <Network className="w-4 h-4" />
-                        <span>{league.rootLeagueName} Admin</span>
+                        <span>{t('leagueAdmin', { name: league.rootLeagueName })}</span>
                       </Link>
                     ))}
                   </div>
@@ -635,7 +635,7 @@ const Navigation = () => {
               className="mt-3 block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
               onClick={() => setNewNotification(null)}
             >
-              View all notifications
+              {t('viewAllNotifications')}
             </Link>
           </div>
         </div>

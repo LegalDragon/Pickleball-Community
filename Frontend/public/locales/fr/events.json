@@ -1,18 +1,55 @@
 {
-  "title": "Événements",
+  "title": "Événements de Pickleball",
+  "subtitle": "Trouvez des tournois, du jeu libre et des événements communautaires",
   "upcoming": "Événements à Venir",
   "past": "Événements Passés",
   "myEvents": "Mes Événements",
+  "searchEvents": "Rechercher des Événements",
   "createEvent": "Créer un Événement",
+  "createAnEvent": "Créer un Événement",
   "editEvent": "Modifier l'Événement",
   "eventDetails": "Détails de l'Événement",
+  "creatingEventAt": "Création d'événement à:",
   "filters": {
     "all": "Tous les Événements",
+    "allTypes": "Tous les Types",
+    "allCountries": "Tous les Pays",
+    "allStates": "Tous les États",
+    "allCities": "Toutes les Villes",
+    "allDivisions": "Toutes les Divisions",
     "tournaments": "Tournois",
     "leagues": "Ligues",
     "openPlay": "Jeu Libre",
     "clinics": "Cliniques",
-    "social": "Événements Sociaux"
+    "social": "Événements Sociaux",
+    "searchEvents": "Rechercher des événements...",
+    "searchByName": "Rechercher par nom..."
+  },
+  "distance": {
+    "within": "Dans un rayon de {{miles}} miles",
+    "miles": "mi"
+  },
+  "sort": {
+    "label": "Trier:",
+    "distance": "Distance",
+    "date": "Date",
+    "name": "Nom"
+  },
+  "view": {
+    "list": "Liste",
+    "map": "Carte"
+  },
+  "location": {
+    "showRecent": "Afficher les événements récents",
+    "gettingLocation": "Obtention de la localisation...",
+    "blocked": "L'accès à la localisation est bloqué. Activez la localisation dans les paramètres du navigateur pour trier par distance.",
+    "denied": "L'accès à la localisation a été refusé. Tri par distance non disponible.",
+    "unavailable": "Localisation non disponible.",
+    "timeout": "La demande de localisation a expiré.",
+    "error": "Impossible d'obtenir votre localisation.",
+    "notSupported": "La géolocalisation n'est pas supportée par votre navigateur",
+    "eventsOnMap": "{{count}} événements sur la carte",
+    "eventsWithoutCoords": "{{count}} événements sans coordonnées"
   },
   "fields": {
     "name": "Nom de l'Événement",
@@ -26,24 +63,44 @@
     "maxParticipants": "Participants Maximum",
     "registrationDeadline": "Date Limite d'Inscription",
     "entryFee": "Frais d'Entrée",
-    "prizes": "Prix"
+    "prizes": "Prix",
+    "organizer": "Organisateur",
+    "contactEmail": "Email de Contact",
+    "notes": "Notes"
   },
   "status": {
     "upcoming": "À Venir",
     "ongoing": "En Cours",
     "completed": "Terminé",
     "cancelled": "Annulé",
-    "full": "Complet"
+    "full": "Complet",
+    "all": "Tous les Statuts",
+    "active": "Actif",
+    "pending": "En Attente",
+    "confirmed": "Confirmé",
+    "checkedIn": "Enregistré"
   },
   "registration": {
     "register": "S'inscrire",
     "registered": "Inscrit",
     "unregister": "Annuler l'Inscription",
+    "withdraw": "Se Retirer",
     "waitlist": "Liste d'Attente",
     "onWaitlist": "Sur Liste d'Attente",
     "spotsLeft": "{{count}} places restantes",
     "registrationClosed": "Inscriptions Fermées",
-    "registrationOpens": "Inscriptions Ouvertes {{date}}"
+    "registrationOpens": "Inscriptions Ouvertes {{date}}",
+    "registerNow": "S'inscrire Maintenant",
+    "registrations": "Inscriptions",
+    "myRegistrations": "Mes Inscriptions",
+    "viewRegistrations": "Voir les Inscriptions",
+    "manageRegistrations": "Gérer les Inscriptions",
+    "paymentRequired": "Paiement Requis",
+    "paymentCompleted": "Paiement Effectué",
+    "payNow": "Payer Maintenant",
+    "paid": "Payé",
+    "unpaid": "Non Payé",
+    "tab": "Inscriptions"
   },
   "tournament": {
     "bracket": "Tableau",
@@ -52,15 +109,108 @@
     "results": "Résultats",
     "rounds": "Tours",
     "matches": "Matchs",
-    "seeds": "Têtes de Série"
+    "seeds": "Têtes de Série",
+    "divisions": "Divisions",
+    "division": "Division",
+    "teams": "Équipes",
+    "pairs": "Paires",
+    "team": "Équipe",
+    "pair": "Paire",
+    "players": "Joueurs",
+    "player": "Joueur",
+    "captain": "Capitaine",
+    "partner": "Partenaire",
+    "createUnit": "Créer une Équipe",
+    "createPair": "Créer une Paire",
+    "registerAsSingle": "S'inscrire en Individuel",
+    "findPartner": "Trouver un Partenaire",
+    "joinTeam": "Rejoindre l'Équipe",
+    "leaveTeam": "Quitter l'Équipe",
+    "invitePlayer": "Inviter un Joueur",
+    "acceptInvite": "Accepter l'Invitation",
+    "declineInvite": "Refuser l'Invitation",
+    "requestToJoin": "Demander à Rejoindre",
+    "approveRequest": "Approuver",
+    "rejectRequest": "Rejeter",
+    "pendingInvites": "Invitations en Attente",
+    "pendingRequests": "Demandes en Attente",
+    "lookingForPartner": "Recherche de Partenaire",
+    "yourTeam": "Votre Équipe",
+    "editTeam": "Modifier l'Équipe",
+    "cancelRegistration": "Annuler l'Inscription",
+    "merge": "Fusionner",
+    "mergeRegistrations": "Fusionner les Inscriptions"
+  },
+  "organizer": {
+    "manage": "Gérer l'Événement",
+    "edit": "Modifier l'Événement",
+    "cancel": "Annuler l'Événement",
+    "delete": "Supprimer l'Événement",
+    "publish": "Publier l'Événement",
+    "unpublish": "Dépublier l'Événement",
+    "clone": "Cloner l'Événement",
+    "organized": "Organisé",
+    "eventsIOrganize": "Événements que j'Organise"
+  },
+  "tabs": {
+    "details": "Détails",
+    "divisions": "Divisions",
+    "registrations": "Inscriptions",
+    "schedule": "Calendrier",
+    "brackets": "Tableaux",
+    "gameDayManage": "Jour de Match"
+  },
+  "stats": {
+    "registered": "Inscrits",
+    "divisions": "Divisions",
+    "checkedIn": "Enregistrés",
+    "capacity": "Capacité"
+  },
+  "noEvents": {
+    "title": "Aucun Événement Trouvé",
+    "noMatch": "Aucun événement ne correspond à vos critères de recherche.",
+    "noRecent": "Aucun événement trouvé le mois dernier.",
+    "noUpcoming": "Aucun événement prévu."
+  },
+  "pagination": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page {{current}} sur {{total}}"
   },
   "messages": {
+    "loginRequired": "Veuillez vous connecter pour voir les détails de l'événement",
+    "completeProfile": "Veuillez compléter votre profil pour voir les détails de l'événement",
     "registerSuccess": "Inscription réussie à l'événement",
     "registerError": "Échec de l'inscription à l'événement",
     "unregisterSuccess": "Inscription annulée",
     "unregisterError": "Échec de l'annulation de l'inscription",
     "eventCreated": "Événement créé avec succès",
     "eventUpdated": "Événement mis à jour avec succès",
-    "eventDeleted": "Événement supprimé avec succès"
+    "eventDeleted": "Événement supprimé avec succès",
+    "inviteSent": "Invitation envoyée",
+    "inviteAccepted": "Invitation acceptée",
+    "inviteDeclined": "Invitation refusée",
+    "requestSent": "Demande envoyée",
+    "requestApproved": "Demande approuvée",
+    "requestRejected": "Demande rejetée",
+    "teamsMerged": "Équipes fusionnées automatiquement !",
+    "paymentSuccess": "Paiement effectué avec succès",
+    "paymentError": "Le paiement a échoué"
+  },
+  "units": {
+    "perPerson": "/personne",
+    "perPair": "/paire",
+    "perTeam": "/équipe",
+    "each": " ch"
+  },
+  "actions": {
+    "viewDetails": "Voir les Détails",
+    "share": "Partager",
+    "copyLink": "Copier le Lien",
+    "downloadQr": "Télécharger le Code QR",
+    "viewOnMap": "Voir sur la Carte",
+    "getDirections": "Obtenir l'Itinéraire",
+    "checkIn": "Enregistrer",
+    "undoCheckIn": "Annuler l'Enregistrement"
   }
 }

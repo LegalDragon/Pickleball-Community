@@ -13,17 +13,44 @@
     "confirm": "Confirmer",
     "back": "Retour",
     "next": "Suivant",
+    "previous": "Précédent",
     "loading": "Chargement...",
     "viewAll": "Voir Tout",
     "learnMore": "En Savoir Plus",
-    "getStarted": "Commencer"
+    "getStarted": "Commencer",
+    "refresh": "Actualiser",
+    "retry": "Réessayer",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "clear": "Effacer",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser",
+    "create": "Créer",
+    "update": "Mettre à jour",
+    "add": "Ajouter",
+    "remove": "Supprimer",
+    "view": "Voir",
+    "share": "Partager",
+    "copy": "Copier",
+    "download": "Télécharger",
+    "upload": "Téléverser",
+    "select": "Sélectionner",
+    "selectAll": "Tout Sélectionner",
+    "deselectAll": "Tout Désélectionner"
   },
   "status": {
     "active": "Actif",
     "inactive": "Inactif",
     "pending": "En attente",
     "approved": "Approuvé",
-    "rejected": "Rejeté"
+    "rejected": "Rejeté",
+    "completed": "Terminé",
+    "cancelled": "Annulé",
+    "confirmed": "Confirmé",
+    "accepted": "Accepté",
+    "declined": "Refusé",
+    "invited": "Invité",
+    "requested": "Demandé"
   },
   "messages": {
     "success": "Succès !",
@@ -31,7 +58,15 @@
     "notFound": "Non trouvé",
     "loading": "Chargement...",
     "noResults": "Aucun résultat trouvé",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ceci ?"
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ceci ?",
+    "saved": "Modifications enregistrées",
+    "deleted": "Supprimé avec succès",
+    "copied": "Copié dans le presse-papiers",
+    "required": "Ce champ est requis",
+    "invalid": "Valeur invalide",
+    "networkError": "Erreur réseau. Veuillez réessayer.",
+    "unauthorized": "Veuillez vous connecter pour continuer",
+    "forbidden": "Vous n'avez pas la permission de faire cela"
   },
   "time": {
     "today": "Aujourd'hui",
@@ -39,14 +74,82 @@
     "tomorrow": "Demain",
     "now": "Maintenant",
     "ago": "il y a",
-    "in": "dans"
+    "in": "dans",
+    "just_now": "À l'instant"
   },
   "units": {
     "minutes": "minutes",
+    "minute": "minute",
     "hours": "heures",
+    "hour": "heure",
     "days": "jours",
+    "day": "jour",
     "weeks": "semaines",
+    "week": "semaine",
     "months": "mois",
-    "years": "ans"
+    "month": "mois",
+    "years": "ans",
+    "year": "an"
+  },
+  "labels": {
+    "name": "Nom",
+    "email": "Email",
+    "phone": "Téléphone",
+    "password": "Mot de passe",
+    "description": "Description",
+    "date": "Date",
+    "time": "Heure",
+    "location": "Lieu",
+    "address": "Adresse",
+    "city": "Ville",
+    "state": "État",
+    "country": "Pays",
+    "zipCode": "Code Postal",
+    "notes": "Notes",
+    "status": "Statut",
+    "type": "Type",
+    "category": "Catégorie",
+    "price": "Prix",
+    "free": "Gratuit",
+    "total": "Total",
+    "count": "Nombre",
+    "amount": "Montant"
+  },
+  "pagination": {
+    "showing": "Affichage de {{from}} à {{to}} sur {{total}}",
+    "page": "Page {{current}} sur {{total}}",
+    "first": "Premier",
+    "last": "Dernier",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "perPage": "Par page"
+  },
+  "empty": {
+    "noData": "Aucune donnée disponible",
+    "noResults": "Aucun résultat trouvé",
+    "noItems": "Aucun élément à afficher"
+  },
+  "confirm": {
+    "title": "Confirmer l'Action",
+    "delete": "Êtes-vous sûr de vouloir supprimer ceci ?",
+    "cancel": "Êtes-vous sûr de vouloir annuler ?",
+    "leave": "Êtes-vous sûr de vouloir quitter ?",
+    "unsaved": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir quitter ?"
+  },
+  "errors": {
+    "generic": "Quelque chose s'est mal passé. Veuillez réessayer.",
+    "network": "Erreur réseau. Veuillez vérifier votre connexion.",
+    "server": "Erreur serveur. Veuillez réessayer plus tard.",
+    "notFound": "La ressource demandée n'a pas été trouvée.",
+    "unauthorized": "Vous devez vous connecter pour y accéder.",
+    "forbidden": "Vous n'avez pas la permission d'y accéder."
+  },
+  "accessibility": {
+    "loading": "Chargement du contenu",
+    "menu": "Menu",
+    "close": "Fermer",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "openInNewTab": "Ouvre dans un nouvel onglet"
   }
 }

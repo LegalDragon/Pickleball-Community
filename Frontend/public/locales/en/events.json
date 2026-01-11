@@ -1,18 +1,55 @@
 {
-  "title": "Events",
+  "title": "Pickleball Events",
+  "subtitle": "Find tournaments, open play, and community events",
   "upcoming": "Upcoming Events",
   "past": "Past Events",
   "myEvents": "My Events",
+  "searchEvents": "Search Events",
   "createEvent": "Create Event",
+  "createAnEvent": "Create an Event",
   "editEvent": "Edit Event",
   "eventDetails": "Event Details",
+  "creatingEventAt": "Creating event at:",
   "filters": {
     "all": "All Events",
+    "allTypes": "All Types",
+    "allCountries": "All Countries",
+    "allStates": "All States",
+    "allCities": "All Cities",
+    "allDivisions": "All Divisions",
     "tournaments": "Tournaments",
     "leagues": "Leagues",
     "openPlay": "Open Play",
     "clinics": "Clinics",
-    "social": "Social Events"
+    "social": "Social Events",
+    "searchEvents": "Search events...",
+    "searchByName": "Search by name..."
+  },
+  "distance": {
+    "within": "Within {{miles}} miles",
+    "miles": "mi"
+  },
+  "sort": {
+    "label": "Sort:",
+    "distance": "Distance",
+    "date": "Date",
+    "name": "Name"
+  },
+  "view": {
+    "list": "List",
+    "map": "Map"
+  },
+  "location": {
+    "showRecent": "Show recent events",
+    "gettingLocation": "Getting location...",
+    "blocked": "Location access is blocked. Enable location in browser settings to sort by distance.",
+    "denied": "Location access was denied. Sort by distance unavailable.",
+    "unavailable": "Location unavailable.",
+    "timeout": "Location request timed out.",
+    "error": "Unable to get your location.",
+    "notSupported": "Geolocation is not supported by your browser",
+    "eventsOnMap": "{{count}} events on map",
+    "eventsWithoutCoords": "{{count}} events without coordinates"
   },
   "fields": {
     "name": "Event Name",
@@ -26,24 +63,44 @@
     "maxParticipants": "Max Participants",
     "registrationDeadline": "Registration Deadline",
     "entryFee": "Entry Fee",
-    "prizes": "Prizes"
+    "prizes": "Prizes",
+    "organizer": "Organizer",
+    "contactEmail": "Contact Email",
+    "notes": "Notes"
   },
   "status": {
     "upcoming": "Upcoming",
     "ongoing": "Ongoing",
     "completed": "Completed",
     "cancelled": "Cancelled",
-    "full": "Full"
+    "full": "Full",
+    "all": "All Status",
+    "active": "Active",
+    "pending": "Pending",
+    "confirmed": "Confirmed",
+    "checkedIn": "Checked In"
   },
   "registration": {
     "register": "Register",
     "registered": "Registered",
     "unregister": "Cancel Registration",
+    "withdraw": "Withdraw",
     "waitlist": "Join Waitlist",
     "onWaitlist": "On Waitlist",
     "spotsLeft": "{{count}} spots left",
     "registrationClosed": "Registration Closed",
-    "registrationOpens": "Registration Opens {{date}}"
+    "registrationOpens": "Registration Opens {{date}}",
+    "registerNow": "Register Now",
+    "registrations": "Registrations",
+    "myRegistrations": "My Registrations",
+    "viewRegistrations": "View Registrations",
+    "manageRegistrations": "Manage Registrations",
+    "paymentRequired": "Payment Required",
+    "paymentCompleted": "Payment Completed",
+    "payNow": "Pay Now",
+    "paid": "Paid",
+    "unpaid": "Unpaid",
+    "tab": "Registrations"
   },
   "tournament": {
     "bracket": "Bracket",
@@ -52,15 +109,108 @@
     "results": "Results",
     "rounds": "Rounds",
     "matches": "Matches",
-    "seeds": "Seeds"
+    "seeds": "Seeds",
+    "divisions": "Divisions",
+    "division": "Division",
+    "teams": "Teams",
+    "pairs": "Pairs",
+    "team": "Team",
+    "pair": "Pair",
+    "players": "Players",
+    "player": "Player",
+    "captain": "Captain",
+    "partner": "Partner",
+    "createUnit": "Create Team",
+    "createPair": "Create Pair",
+    "registerAsSingle": "Register as Single",
+    "findPartner": "Find Partner",
+    "joinTeam": "Join Team",
+    "leaveTeam": "Leave Team",
+    "invitePlayer": "Invite Player",
+    "acceptInvite": "Accept Invite",
+    "declineInvite": "Decline Invite",
+    "requestToJoin": "Request to Join",
+    "approveRequest": "Approve",
+    "rejectRequest": "Reject",
+    "pendingInvites": "Pending Invites",
+    "pendingRequests": "Pending Requests",
+    "lookingForPartner": "Looking for Partner",
+    "yourTeam": "Your Team",
+    "editTeam": "Edit Team",
+    "cancelRegistration": "Cancel Registration",
+    "merge": "Merge",
+    "mergeRegistrations": "Merge Registrations"
+  },
+  "organizer": {
+    "manage": "Manage Event",
+    "edit": "Edit Event",
+    "cancel": "Cancel Event",
+    "delete": "Delete Event",
+    "publish": "Publish Event",
+    "unpublish": "Unpublish Event",
+    "clone": "Clone Event",
+    "organized": "Organized",
+    "eventsIOrganize": "Events I Organize"
+  },
+  "tabs": {
+    "details": "Details",
+    "divisions": "Divisions",
+    "registrations": "Registrations",
+    "schedule": "Schedule",
+    "brackets": "Brackets",
+    "gameDayManage": "Game Day"
+  },
+  "stats": {
+    "registered": "Registered",
+    "divisions": "Divisions",
+    "checkedIn": "Checked In",
+    "capacity": "Capacity"
+  },
+  "noEvents": {
+    "title": "No Events Found",
+    "noMatch": "No events match your search criteria.",
+    "noRecent": "No events found in the past month.",
+    "noUpcoming": "No upcoming events scheduled."
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {{current}} of {{total}}"
   },
   "messages": {
+    "loginRequired": "Please log in to view event details",
+    "completeProfile": "Please complete your profile to view event details",
     "registerSuccess": "Successfully registered for event",
     "registerError": "Failed to register for event",
     "unregisterSuccess": "Registration cancelled",
     "unregisterError": "Failed to cancel registration",
     "eventCreated": "Event created successfully",
     "eventUpdated": "Event updated successfully",
-    "eventDeleted": "Event deleted successfully"
+    "eventDeleted": "Event deleted successfully",
+    "inviteSent": "Invitation sent",
+    "inviteAccepted": "Invitation accepted",
+    "inviteDeclined": "Invitation declined",
+    "requestSent": "Join request sent",
+    "requestApproved": "Join request approved",
+    "requestRejected": "Join request rejected",
+    "teamsMerged": "Teams merged automatically!",
+    "paymentSuccess": "Payment completed successfully",
+    "paymentError": "Payment failed"
+  },
+  "units": {
+    "perPerson": "/person",
+    "perPair": "/pair",
+    "perTeam": "/team",
+    "each": " ea"
+  },
+  "actions": {
+    "viewDetails": "View Details",
+    "share": "Share",
+    "copyLink": "Copy Link",
+    "downloadQr": "Download QR Code",
+    "viewOnMap": "View on Map",
+    "getDirections": "Get Directions",
+    "checkIn": "Check In",
+    "undoCheckIn": "Undo Check-In"
   }
 }

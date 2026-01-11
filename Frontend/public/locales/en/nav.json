@@ -2,6 +2,7 @@
   "home": "Home",
   "events": "Events",
   "venues": "Venues",
+  "courts": "Courts",
   "clubs": "Clubs",
   "blog": "Blog",
   "faq": "FAQ",
@@ -9,6 +10,7 @@
   "profile": "Profile",
   "dashboard": "Dashboard",
   "adminDashboard": "Admin Dashboard",
+  "leagueAdmin": "{{name}} Admin",
   "messages": "Messages",
   "notifications": "Notifications",
   "alerts": "Alerts",
@@ -18,6 +20,7 @@
   "enroll": "Enroll Now",
   "logout": "Logout",
   "viewAllNotifications": "View all notifications",
+  "newNotifications": "{{count}} new",
   "menu": {
     "open": "Open menu",
     "close": "Close menu"
@@ -25,5 +28,26 @@
   "user": {
     "greeting": "Hello, {{name}}",
     "role": "{{role}}"
+  },
+  "footer": {
+    "mission": "Our Mission:",
+    "missionText": "Democratizing pickleball education through technology.",
+    "communityText": "To create a friendly and supportive community where every pickleball player can learn, grow, and connect with each other.",
+    "quickLinks": "Quick Links",
+    "resources": "Resources",
+    "contact": "Contact",
+    "home": "Home",
+    "courses": "Courses",
+    "coaches": "Coaches",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "trainingVideos": "Training Videos",
+    "drills": "Drills",
+    "strategyGuides": "Strategy Guides",
+    "usaPickleballRules": "USA Pickleball Rules",
+    "support": "Support",
+    "becomeACoach": "Become a Coach",
+    "partnerships": "Partnerships",
+    "copyright": "Funtime Pickleball Inc. All rights reserved."
   }
 }
