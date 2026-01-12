@@ -1820,6 +1820,38 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   }, [event.id]); // Reset when event changes
 
+  // Load registrations when selected division changes
+  useEffect(() => {
+    const loadDivisionData = async (divId) => {
+      if (!divisionRegistrationsCache[divId]) {
+        setLoadingDivisionId(divId);
+        try {
+          const response = await tournamentApi.getEventUnits(event.id, divId);
+          if (response.success) {
+            const sorted = (response.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divId]: sorted }));
+          }
+        } catch (err) {
+          console.error('Error loading registrations:', err);
+        } finally {
+          setLoadingDivisionId(null);
+        }
+      }
+    };
+
+    if (selectedRegDivisionId === 'all') {
+      // Load all divisions
+      event.divisions?.forEach(div => loadDivisionData(div.id));
+    } else if (selectedRegDivisionId) {
+      // Load single division
+      loadDivisionData(selectedRegDivisionId);
+    }
+  }, [selectedRegDivisionId, event.id]);
+
   // Load courts for editing
   const loadTopCourts = async () => {
     setCourtsLoading(true);
@@ -3188,8 +3220,10 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 <div className="flex items-center gap-2 text-orange-600">
                                   <UserPlus className="w-4 h-4" />
                                   <span className="text-sm">
-                                    {reg.partners?.some(p => p.inviteStatus === 'Pending')
-                                      ? 'Waiting for partner to accept'
+                                    {reg.partners?.length > 0
+                                      ? (reg.partners.some(p => p.inviteStatus === 'Pending')
+                                          ? 'Waiting for partner to accept'
+                                          : 'Waiting for captain accept')
                                       : 'Looking for partner'}
                                   </span>
                                   <button
