@@ -3176,7 +3176,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                               <div className="mt-2">
                                 <div className="flex items-center gap-2 text-orange-600">
                                   <UserPlus className="w-4 h-4" />
-                                  <span className="text-sm">Looking for partner</span>
+                                  <span className="text-sm">
+                                    {reg.partners?.some(p => p.inviteStatus === 'Pending')
+                                      ? 'Waiting for partner to accept'
+                                      : 'Looking for partner'}
+                                  </span>
                                   <button
                                     onClick={() => loadAvailableUnits(reg)}
                                     disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
