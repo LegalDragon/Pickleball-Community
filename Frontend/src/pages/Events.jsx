@@ -3835,8 +3835,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     {originalIndex + 1}
                                   </div>
 
-                                  {/* Members - Horizontal Layout (includes accepted, pending invites, and join requests via UNION) */}
-                                  <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto">
+                                  {/* Members - Responsive Layout: wraps on mobile, horizontal on desktop */}
+                                  <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
                                     {unit.members?.map((member, mIdx) => {
                                       // Different styling for join requests (InviteStatus = "Requested")
                                       const isJoinRequest = member.inviteStatus === 'Requested';
