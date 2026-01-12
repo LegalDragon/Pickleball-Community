@@ -2,7 +2,7 @@
 -- Date: 2025-12-14
 -- Description: Creates tables for player skill certification with peer reviews
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 PRINT 'Starting Migration_013_PlayerCertification...';

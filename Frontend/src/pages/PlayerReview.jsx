@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { certificationApi } from '../services/api';
-import { getAssetUrl } from '../services/api';
+import { certificationApi, SHARED_AUTH_URL, getSharedAssetUrl } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Star, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Star, CheckCircle, AlertCircle, Award, GraduationCap, RefreshCw, Info } from 'lucide-react';
 
 export default function PlayerReview() {
   const { token } = useParams();
@@ -20,16 +19,20 @@ export default function PlayerReview() {
     reviewerEmail: '',
     knowledgeLevelId: '',
     isAnonymous: false,
+    isSelfReview: false,
     comments: '',
     scores: {}
   });
+
+  // Check if this is a self-review (logged-in user is the player being reviewed)
+  const isSelfReview = user && pageInfo?.playerId && user.id === pageInfo.playerId;
 
   // Prefill user info when component mounts
   useEffect(() => {
     if (user) {
       setFormData(prev => ({
         ...prev,
-        reviewerName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        reviewerName: user.lastName && user.firstName ? `${user.lastName}, ${user.firstName}` : (user.lastName || user.firstName || ''),
         reviewerEmail: user.email || ''
       }));
     }
@@ -71,12 +74,12 @@ export default function PlayerReview() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.reviewerName.trim()) {
+    if (!isSelfReview && !formData.reviewerName.trim()) {
       alert('Please enter your name');
       return;
     }
 
-    if (!formData.knowledgeLevelId) {
+    if (!isSelfReview && !formData.knowledgeLevelId) {
       alert('Please select how well you know this player');
       return;
     }
@@ -86,10 +89,11 @@ export default function PlayerReview() {
       setError(null);
 
       const submitData = {
-        reviewerName: formData.reviewerName,
+        reviewerName: isSelfReview ? 'Self Review' : formData.reviewerName,
         reviewerEmail: formData.reviewerEmail || null,
-        knowledgeLevelId: parseInt(formData.knowledgeLevelId),
+        knowledgeLevelId: isSelfReview ? null : parseInt(formData.knowledgeLevelId),
         isAnonymous: formData.isAnonymous,
+        isSelfReview: isSelfReview,
         comments: formData.comments || null,
         scores: Object.entries(formData.scores).map(([skillAreaId, score]) => ({
           skillAreaId: parseInt(skillAreaId),
@@ -142,23 +146,41 @@ export default function PlayerReview() {
     );
   }
 
-  // Group skill areas by category
-  const skillsByCategory = pageInfo.skillAreas?.reduce((acc, skill) => {
-    const category = skill.category || 'Other';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(skill);
+  // Group skill areas by SkillGroup (using skillGroupId and skillGroupName)
+  const skillsByGroup = pageInfo.skillAreas?.reduce((acc, skill) => {
+    const groupKey = skill.skillGroupId || 0;
+    const groupName = skill.skillGroupName || 'Other Skills';
+    if (!acc[groupKey]) {
+      acc[groupKey] = {
+        name: groupName,
+        skills: []
+      };
+    }
+    acc[groupKey].skills.push(skill);
     return acc;
   }, {}) || {};
+
+  // Sort groups by their ID (which should match sortOrder from backend)
+  const sortedGroups = Object.entries(skillsByGroup).sort(([a], [b]) => {
+    if (a === '0') return 1; // 'Other Skills' goes last
+    if (b === '0') return -1;
+    return parseInt(a) - parseInt(b);
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <div className={`rounded-xl shadow-lg p-6 mb-6 ${isSelfReview ? 'bg-gradient-to-r from-purple-50 to-indigo-50' : 'bg-white'}`}>
+          {isSelfReview && (
+            <div className="mb-4 inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-sm font-medium">
+              Self Assessment Mode
+            </div>
+          )}
           <div className="flex items-center gap-4">
             {pageInfo.playerProfileImageUrl ? (
               <img
-                src={getAssetUrl(pageInfo.playerProfileImageUrl)}
+                src={getSharedAssetUrl(pageInfo.playerProfileImageUrl)}
                 alt={pageInfo.playerName}
                 className="w-20 h-20 rounded-full object-cover"
               />
@@ -169,14 +191,16 @@ export default function PlayerReview() {
             )}
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Rate {pageInfo.playerName}'s Skills
+                {isSelfReview ? 'Rate Your Own Skills' : `Rate ${pageInfo.playerName}'s Skills`}
               </h1>
               <p className="text-gray-600">
-                Help {pageInfo.playerName.split(' ')[0]} get certified by providing your honest assessment.
+                {isSelfReview
+                  ? 'Provide an honest self-assessment of your skills. This will be compared with peer reviews.'
+                  : `Help ${pageInfo.playerName.split(' ')[0]} get certified by providing your honest assessment.`}
               </p>
             </div>
           </div>
-          {pageInfo.message && (
+          {pageInfo.message && !isSelfReview && (
             <div className="mt-4 p-4 bg-primary-50 rounded-lg">
               <p className="text-primary-800">{pageInfo.message}</p>
             </div>
@@ -189,69 +213,137 @@ export default function PlayerReview() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Reviewer Info */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Your Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.reviewerName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reviewerName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Enter your name"
-                  required
-                />
+        {/* Certified Reviewer Encouragement - Hidden for self-review */}
+        {!isSelfReview && (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-start gap-4">
+              {/* College Logo */}
+              <div className="flex-shrink-0 relative">
+                <div className="w-16 h-16 bg-white rounded-xl shadow-md flex items-center justify-center p-2">
+                  <img
+                    src={`${SHARED_AUTH_URL}/sites/College/logo`}
+                    alt="Pickleball College"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="hidden w-full h-full items-center justify-center">
+                    <GraduationCap className="w-8 h-8 text-indigo-600" />
+                  </div>
+                </div>
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-amber-400 text-amber-900 text-xs font-bold rounded-full">
+                  Soon
+                </span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email (optional)
-                </label>
-                <input
-                  type="email"
-                  value={formData.reviewerEmail}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reviewerEmail: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="your@email.com"
-                />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isAnonymous}
-                  onChange={(e) => setFormData(prev => ({ ...prev, isAnonymous: e.target.checked }))}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-                />
-                <span className="text-gray-700">Keep my name hidden from the player</span>
-              </label>
-            </div>
-          </div>
 
-          {/* Knowledge Level */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <label className="block text-lg font-semibold text-gray-900 mb-2">
-              How well do you know this player? *
-            </label>
-            <select
-              value={formData.knowledgeLevelId}
-              onChange={(e) => setFormData(prev => ({ ...prev, knowledgeLevelId: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
-              required
-            >
-              <option value="">Select an option...</option>
-              {pageInfo.knowledgeLevels?.map(level => (
-                <option key={level.id} value={level.id}>
-                  {level.name}
-                </option>
-              ))}
-            </select>
+              {/* Content */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Become a Certified Reviewer</h3>
+                </div>
+                <p className="text-gray-700 text-sm mb-3">
+                  Your accurate and consistent reviews matter! We track reviewer accuracy over time.
+                  Reviewers who provide thoughtful, consistent ratings will earn the
+                  <span className="font-semibold text-indigo-700"> "Certified Reviewer" </span>
+                  badge.
+                </p>
+                <div className="bg-white/60 rounded-lg p-3 border border-indigo-100">
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium text-indigo-700">Coming Soon on Pickleball.College:</span> Certified Reviewers
+                    will be able to provide official skill certifications that players can showcase on their profiles
+                    and use for tournament seeding.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* Review Update Notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1 flex items-center gap-1">
+              <RefreshCw className="w-4 h-4" />
+              Review Update Policy
+            </p>
+            <p>
+              If you've reviewed this player before, submitting a new review within <span className="font-semibold">1 month</span> will
+              update your previous scores. After 1 month, a new review entry is created to track skill progression over time.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Reviewer Info - Hidden for self-review */}
+          {!isSelfReview && (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Your Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.reviewerName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reviewerName: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Enter your name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email (optional)
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.reviewerEmail}
+                    onChange={(e) => setFormData(prev => ({ ...prev, reviewerEmail: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="your@email.com"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.isAnonymous}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isAnonymous: e.target.checked }))}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-gray-700">Keep my name hidden from the player</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Knowledge Level - Hidden for self-review */}
+          {!isSelfReview && (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <label className="block text-lg font-semibold text-gray-900 mb-2">
+                How well do you know this player? *
+              </label>
+              <select
+                value={formData.knowledgeLevelId}
+                onChange={(e) => setFormData(prev => ({ ...prev, knowledgeLevelId: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-primary-500 focus:border-primary-500"
+                required
+              >
+                <option value="">Select an option...</option>
+                {pageInfo.knowledgeLevels?.map(level => (
+                  <option key={level.id} value={level.id}>
+                    {level.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Skill Ratings */}
           <div className="bg-white rounded-xl shadow-lg p-6">
@@ -259,13 +351,13 @@ export default function PlayerReview() {
               Rate Skills (1-10)
             </h2>
             <div className="space-y-6">
-              {Object.entries(skillsByCategory).map(([category, skills]) => (
-                <div key={category}>
-                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
-                    {category}
+              {sortedGroups.map(([groupId, group]) => (
+                <div key={groupId} className="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
+                  <h3 className="text-sm font-semibold text-primary-700 uppercase tracking-wide mb-4">
+                    {group.name}
                   </h3>
                   <div className="space-y-4">
-                    {skills.map(skill => (
+                    {group.skills.map(skill => (
                       <div key={skill.id} className="flex items-center gap-4">
                         <div className="w-40 flex-shrink-0">
                           <span className="text-gray-700">{skill.name}</span>

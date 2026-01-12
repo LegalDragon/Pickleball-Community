@@ -10,7 +10,7 @@ import { Eye, EyeOff, KeyRound, ArrowLeft, CheckCircle, Mail, Phone } from 'luci
  * @param {Function} props.onSuccess - Callback on successful password reset
  * @param {Function} props.onError - Callback with error message on failure
  * @param {Function} props.onBackToLogin - Callback to go back to login
- * @param {string} props.siteName - Name of the site (e.g., "Pickleball College")
+ * @param {string} props.siteName - Name of the site (e.g., "Pickleball Community")
  * @param {string} props.primaryColor - Primary brand color (default: blue)
  */
 const SharedForgotPassword = ({

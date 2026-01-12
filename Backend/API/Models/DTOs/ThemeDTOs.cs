@@ -1,9 +1,9 @@
-namespace Pickleball.College.Models.DTOs;
+namespace Pickleball.Community.Models.DTOs;
 
 public class ThemeSettingsDto
 {
     public int ThemeId { get; set; }
-    public string OrganizationName { get; set; } = "Pickleball College";
+    public string OrganizationName { get; set; } = "Pickleball Community";
     public string? LogoUrl { get; set; }
     public string? FaviconUrl { get; set; }
 
@@ -42,6 +42,25 @@ public class ThemeSettingsDto
 
     // Custom CSS
     public string? CustomCss { get; set; }
+
+    // Hero Section
+    public string? HeroVideoUrl { get; set; }
+    public string? HeroVideoThumbnailUrl { get; set; }
+    public string? HeroImageUrl { get; set; }
+    public string? HeroTitle { get; set; }
+    public string? HeroSubtitle { get; set; }
+    public string? HeroCtaText { get; set; }
+    public string? HeroCtaLink { get; set; }
+    public string? HeroSecondaryCtaText { get; set; }
+    public string? HeroSecondaryCtaLink { get; set; }
+
+    // Marquee Settings
+    public bool MarqueeShowPlayers { get; set; } = true;
+    public bool MarqueeShowClubs { get; set; } = true;
+    public int MarqueeRecentDays { get; set; } = 30;
+    public int MarqueePlayerCount { get; set; } = 20;
+    public int MarqueeClubCount { get; set; } = 15;
+    public int MarqueeSpeed { get; set; } = 40;
 
     public DateTime? UpdatedAt { get; set; }
 }
@@ -87,6 +106,25 @@ public class UpdateThemeRequest
 
     // Custom CSS
     public string? CustomCss { get; set; }
+
+    // Hero Section
+    public string? HeroVideoUrl { get; set; }
+    public string? HeroVideoThumbnailUrl { get; set; }
+    public string? HeroImageUrl { get; set; }
+    public string? HeroTitle { get; set; }
+    public string? HeroSubtitle { get; set; }
+    public string? HeroCtaText { get; set; }
+    public string? HeroCtaLink { get; set; }
+    public string? HeroSecondaryCtaText { get; set; }
+    public string? HeroSecondaryCtaLink { get; set; }
+
+    // Marquee Settings
+    public bool? MarqueeShowPlayers { get; set; }
+    public bool? MarqueeShowClubs { get; set; }
+    public int? MarqueeRecentDays { get; set; }
+    public int? MarqueePlayerCount { get; set; }
+    public int? MarqueeClubCount { get; set; }
+    public int? MarqueeSpeed { get; set; }
 }
 
 public class ThemePresetDto
@@ -109,6 +147,50 @@ public class ThemePresetDto
     public bool IsDefault { get; set; }
 }
 
+// Hero Video DTOs
+public class HeroVideoDto
+{
+    public int Id { get; set; }
+    public int ThemeId { get; set; }
+    public string VideoUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string VideoType { get; set; } = "upload";
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; }
+    public int? DisplayDuration { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreateHeroVideoRequest
+{
+    public string VideoUrl { get; set; } = string.Empty;
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string VideoType { get; set; } = "upload";
+    public int? DisplayDuration { get; set; }
+}
+
+public class UpdateHeroVideoRequest
+{
+    public string? VideoUrl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string? VideoType { get; set; }
+    public int? SortOrder { get; set; }
+    public bool? IsActive { get; set; }
+    public int? DisplayDuration { get; set; }
+}
+
+public class ReorderHeroVideosRequest
+{
+    public List<int> VideoIds { get; set; } = new();
+}
+
 public class UploadResponse
 {
     public string Url { get; set; } = string.Empty;
@@ -119,4 +201,5 @@ public class ApiResponse<T>
     public bool Success { get; set; }
     public string? Message { get; set; }
     public T? Data { get; set; }
+    public List<string>? Warnings { get; set; }
 }

@@ -1,52 +1,58 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Pickleball.College.Models.Entities
+namespace Pickleball.Community.Models.Entities;
+
+public enum BlogPostStatus
 {
-    public class BlogPost
-    {
-        [Key]
-        public int Id { get; set; }
+    Draft,
+    Published,
+    Archived
+}
 
-        [Required]
-        [MaxLength(200)]
-        public string Title { get; set; } = string.Empty;
+public class BlogPost
+{
+    public int Id { get; set; }
 
-        [Required]
-        [MaxLength(500)]
-        public string Slug { get; set; } = string.Empty;
+    [Required]
+    [MaxLength(200)]
+    public string Title { get; set; } = string.Empty;
 
-        [MaxLength(500)]
-        public string? Summary { get; set; }
+    [Required]
+    [MaxLength(200)]
+    public string Slug { get; set; } = string.Empty;
 
-        [Required]
-        public string Content { get; set; } = string.Empty;
+    [MaxLength(500)]
+    public string? Excerpt { get; set; }
 
-        [MaxLength(500)]
-        public string? FeaturedImageUrl { get; set; }
+    [Required]
+    public string Content { get; set; } = string.Empty;
 
-        [MaxLength(100)]
-        public string? Category { get; set; }
+    [MaxLength(500)]
+    public string? FeaturedImageUrl { get; set; }
 
-        [MaxLength(500)]
-        public string? Tags { get; set; } // Comma-separated tags
+    public int AuthorId { get; set; }
 
-        [Required]
+    public int? CategoryId { get; set; }
 
-        public int AuthorId { get; set; }
+    public BlogPostStatus Status { get; set; } = BlogPostStatus.Draft;
 
-        [ForeignKey("AuthorId")]
-        public virtual User Author { get; set; } = null!;
+    public DateTime? PublishedAt { get; set; }
 
-        public bool IsPublished { get; set; } = false;
+    public int ViewCount { get; set; } = 0;
 
-        public DateTime? PublishedAt { get; set; }
+    public bool AllowComments { get; set; } = true;
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
 
-        public int ViewCount { get; set; } = 0;
-    }
+    // Navigation
+    [ForeignKey("AuthorId")]
+    public virtual User? Author { get; set; }
+
+    [ForeignKey("CategoryId")]
+    public virtual BlogCategory? Category { get; set; }
+
+    public virtual ICollection<BlogComment> Comments { get; set; } = new List<BlogComment>();
 }

@@ -1,0 +1,194 @@
+{
+  "title": "即时游戏",
+  "subtitle": "随时随地开始比赛",
+  "description": "在您所在地区开始或加入自发的匹克球比赛",
+
+  "browse": {
+    "title": "进行中的比赛",
+    "empty": "附近没有活跃的比赛",
+    "emptyDescription": "成为第一个开始比赛的人！",
+    "searching": "搜索比赛中...",
+    "nearYou": "附近的比赛",
+    "refresh": "刷新"
+  },
+
+  "create": {
+    "title": "开始比赛",
+    "subtitle": "创建新的游戏会话",
+    "gameName": "比赛名称",
+    "gameNamePlaceholder": "周六练习赛 @ 纪念公园",
+    "teamSize": "队伍人数",
+    "singles": "单打 (1v1)",
+    "doubles": "双打 (2v2)",
+    "schedulingMethod": "排程方式",
+    "manual": "手动",
+    "manualDescription": "组织者为每场比赛选择队伍",
+    "popcorn": "爆米花模式",
+    "popcornDescription": "获胜者分开，与失败者配对",
+    "gauntlet": "挑战模式",
+    "gauntletDescription": "获胜者留场，失败者排到队尾",
+    "maxPlayers": "最大玩家数",
+    "maxPlayersHint": "留空表示不限",
+    "location": "地点",
+    "selectVenue": "选择场馆",
+    "customLocation": "自定义地点",
+    "customLocationPlaceholder": "输入地点名称",
+    "useCurrentLocation": "使用当前位置",
+    "scoreFormat": "计分格式",
+    "defaultScoreFormat": "默认（11分，赢2分）",
+    "createButton": "创建比赛",
+    "creating": "创建中..."
+  },
+
+  "join": {
+    "title": "加入比赛",
+    "enterCode": "输入加入码",
+    "codePlaceholder": "G-XXXX",
+    "joinButton": "加入比赛",
+    "joining": "加入中...",
+    "invalidCode": "无效的加入码",
+    "gameFull": "比赛已满",
+    "alreadyJoined": "您已在此比赛中"
+  },
+
+  "main": {
+    "lobby": "等候大厅",
+    "active": "进行中",
+    "paused": "已暂停",
+    "ended": "已结束"
+  },
+
+  "tabs": {
+    "scoreboard": "计分板",
+    "players": "玩家",
+    "queue": "队列"
+  },
+
+  "scoreboard": {
+    "title": "当前比赛",
+    "match": "比赛 #{{number}}",
+    "vs": "VS",
+    "noActiveMatch": "没有进行中的比赛",
+    "waitingForPlayers": "等待玩家...",
+    "submitScore": "提交分数",
+    "confirmScore": "确认分数",
+    "disputeScore": "争议",
+    "scoreSubmittedBy": "由 {{name}} 提交",
+    "awaitingConfirmation": "等待对手确认",
+    "team1Wins": "队伍1获胜！",
+    "team2Wins": "队伍2获胜！",
+    "startMatch": "开始比赛",
+    "endSession": "结束会话",
+    "confirmEndSession": "确定要结束此会话吗？"
+  },
+
+  "players": {
+    "title": "玩家",
+    "count": "{{count}} 位玩家",
+    "available": "可用",
+    "playing": "比赛中",
+    "resting": "休息中",
+    "left": "已离开",
+    "organizer": "组织者",
+    "you": "（您）",
+    "makeAvailable": "设为可用",
+    "takeBreak": "休息一下",
+    "leaveGame": "离开比赛",
+    "confirmLeave": "确定要离开此比赛吗？",
+    "removePlayer": "移除",
+    "confirmRemove": "从比赛中移除 {{name}}？",
+    "promoteOrganizer": "设为组织者",
+    "stats": {
+      "gamesPlayed": "比赛数",
+      "wins": "胜",
+      "losses": "负",
+      "winRate": "胜率",
+      "pointsScored": "得分",
+      "pointsAgainst": "失分",
+      "differential": "+/-",
+      "currentStreak": "连胜",
+      "maxStreak": "最高连胜"
+    }
+  },
+
+  "queue": {
+    "title": "比赛队列",
+    "empty": "队列为空",
+    "emptyDescription": "添加比赛到队列开始游戏",
+    "position": "#{{position}}",
+    "addToQueue": "添加到队列",
+    "removeFromQueue": "移除",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "startNext": "开始下一场",
+    "challengeQueue": "挑战队列",
+    "nextUp": "下一个"
+  },
+
+  "scheduling": {
+    "generateNext": "生成下一场比赛",
+    "generating": "生成中...",
+    "notEnoughPlayers": "可用玩家不足",
+    "needMorePlayers": "需要至少 {{count}} 位可用玩家",
+    "selectTeams": "选择队伍",
+    "team1": "队伍 1",
+    "team2": "队伍 2",
+    "availablePlayers": "可用玩家",
+    "tapToAdd": "点击玩家添加",
+    "randomize": "随机分配",
+    "createMatch": "创建比赛"
+  },
+
+  "joinCode": "加入码",
+  "shareCodeInstruction": "与玩家分享此代码",
+  "scanToJoin": "扫码加入",
+  "shareInvite": "分享邀请",
+  "copyLink": "复制链接",
+  "shareMessage": "加入我的即时游戏！使用代码：{{code}}",
+  "joinGame": "加入即时游戏",
+
+  "session": {
+    "start": "开始会话",
+    "pause": "暂停会话",
+    "resume": "恢复会话",
+    "end": "结束会话",
+    "settings": "设置"
+  },
+
+  "status": {
+    "lobby": "在等候大厅",
+    "active": "活跃",
+    "paused": "已暂停",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+
+  "matchStatus": {
+    "pending": "待处理",
+    "ready": "就绪",
+    "inProgress": "进行中",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+
+  "notifications": {
+    "matchReady": "您的比赛已准备好！",
+    "scoreSubmitted": "分数已提交，等待确认",
+    "scoreConfirmed": "分数已确认！",
+    "playerJoined": "{{name}} 加入了比赛",
+    "playerLeft": "{{name}} 离开了比赛",
+    "sessionStarted": "游戏会话已开始",
+    "sessionEnded": "游戏会话已结束",
+    "yourTurn": "轮到您比赛了！"
+  },
+
+  "errors": {
+    "loadFailed": "加载比赛失败",
+    "joinFailed": "加入比赛失败",
+    "createFailed": "创建比赛失败",
+    "updateFailed": "更新失败",
+    "notFound": "比赛未找到",
+    "notOrganizer": "只有组织者可以执行此操作",
+    "sessionNotActive": "会话未激活"
+  }
+}

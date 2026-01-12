@@ -1,18 +1,121 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, BookOpen, HomeIcon, School2Icon, User, Bell, FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Menu, X, LogOut, HomeIcon, School2Icon, User, Bell, FileText, Calendar, MapPin, Users, MessageCircle, HelpCircle, MessageSquarePlus, Network, Zap, Trophy } from 'lucide-react';
+import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAssetUrl } from '../../services/api';
+import { getAssetUrl, getSharedAssetUrl, notificationsApi, leaguesApi } from '../../services/api';
 import { useSharedAuth } from '../../hooks/useSharedAuth';
+import { useNotifications } from '../../hooks/useNotifications';
+import { LanguageSwitcher } from './LanguageSwitcher';
+
+// Shared Auth API URL from environment
+const SHARED_AUTH_URL = import.meta.env.VITE_SHARED_AUTH_URL || 'https://shared.funtimepb.com/api';
+const SITE_KEY = 'community';
 
 const Navigation = () => {
+  const { t } = useTranslation('nav');
   const [isOpen, setIsOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [authKey, setAuthKey] = useState(0); // Add this
+  const [logoHtml, setLogoHtml] = useState(null);
+  const [newNotification, setNewNotification] = useState(null);
+  const [managedLeagues, setManagedLeagues] = useState([]);
+  const [runningEvents, setRunningEvents] = useState([]);
   const location = useLocation();
 
   const { user, logout, isAuthenticated } = useAuth();
   const { redirectToLogin, redirectToRegister } = useSharedAuth();
+  const {
+    unreadCount,
+    connect: connectNotifications,
+    disconnect: disconnectNotifications,
+    addListener,
+    setInitialUnreadCount,
+    isConnected: notificationsConnected
+  } = useNotifications();
+
+  // Connect to notification hub when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      connectNotifications();
+      // Fetch initial unread count from API
+      notificationsApi.getUnreadCount()
+        .then(res => {
+          const count = res?.data?.count ?? res?.count ?? 0;
+          setInitialUnreadCount(count);
+        })
+        .catch(err => console.error('Failed to get unread count:', err));
+    } else {
+      disconnectNotifications();
+    }
+  }, [isAuthenticated, user]);
+
+  // Fetch managed leagues for non-admin league managers
+  useEffect(() => {
+    if (isAuthenticated && user && user.role?.toLowerCase() !== 'admin') {
+      leaguesApi.getMyManagedLeagues()
+        .then(res => {
+          if (res?.success && res?.data) {
+            setManagedLeagues(res.data);
+          }
+        })
+        .catch(err => console.error('Failed to get managed leagues:', err));
+    } else {
+      setManagedLeagues([]);
+    }
+  }, [isAuthenticated, user]);
+
+  // Fetch running events for the user
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      api.get('/event-running/my-running-events')
+        .then(res => {
+          if (res?.success && res?.data) {
+            // Deduplicate by eventId
+            const uniqueEvents = res.data.reduce((acc, event) => {
+              if (!acc.find(e => e.eventId === event.eventId)) {
+                acc.push(event);
+              }
+              return acc;
+            }, []);
+            setRunningEvents(uniqueEvents);
+          }
+        })
+        .catch(err => console.error('Failed to get running events:', err));
+    } else {
+      setRunningEvents([]);
+    }
+  }, [isAuthenticated, user]);
+
+  // Show toast for new notifications
+  useEffect(() => {
+    const removeListener = addListener((notification) => {
+      setNewNotification(notification);
+      // Auto-hide after 5 seconds
+      setTimeout(() => setNewNotification(null), 5000);
+    });
+    return removeListener;
+  }, [addListener]);
+
+  // Fetch logo HTML from shared auth
+  useEffect(() => {
+    const fetchLogoHtml = async () => {
+      try {
+        const res = await fetch(`${SHARED_AUTH_URL}/settings/logo-html?site=${SITE_KEY}&size=lg`);
+        if (res.ok) {
+          const html = await res.text();
+          setLogoHtml(html);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch logo HTML:', err);
+      }
+    };
+
+    if (SHARED_AUTH_URL) {
+      fetchLogoHtml();
+    }
+  }, []);
 
   console.log('Navigation useAuth returns:', { user, isAuthenticated });
 
@@ -22,13 +125,25 @@ const Navigation = () => {
     setAuthKey(prev => prev + 1); // Force re-render
   }, [isAuthenticated, user]);
 
-  const navigation = [
-    { name: 'Home', href: '/', icon: School2Icon },
-    { name: 'Marketplace', href: '/marketplace', icon: BookOpen },
-    { name: 'Blog', href: '/blog', icon: FileText },
+  // Primary navigation - most used (Home removed since logo links to dashboard)
+  const primaryNav = [
+    { name: t('events'), href: '/events', icon: Calendar },
+    { name: t('venues'), href: '/venues', icon: MapPin },
+    { name: t('clubs'), href: '/clubs', icon: Users },
   ];
 
+  // Secondary navigation - less frequently used
+  const secondaryNav = [
+    { name: t('blog'), href: '/blog', icon: FileText },
+    { name: t('faq'), href: '/faq', icon: HelpCircle },
+    { name: t('feedback'), href: '/feedback', icon: MessageSquarePlus },
+  ];
+
+  // Combined for desktop
+  const navigation = [...primaryNav, ...secondaryNav];
+
   const isActive = (path) => location.pathname === path;
+  const isHomePage = location.pathname === '/';
 
   const logoPath = '/Logo.png';
 
@@ -45,51 +160,65 @@ const Navigation = () => {
 
   const handleLogout = async () => {
     try {
-      await logout(); // Use the logout function from AuthContext
       setShowUserDropdown(false);
       setIsOpen(false);
-
-      // Force a full page refresh to clear any cached state
-      // window.location.href = '/home';
-      // window.location.reload(); // Force reload
-
-      // OR use navigate with force refresh
-      window.location.replace('/');
-      //   navigate('/', { replace: true });
-      setTimeout(() => window.location.reload(), 100);
+      await logout(); // Use the logout function from AuthContext
+      // ProtectedRoute will redirect to home if on a protected page
+      // For non-protected pages, navigate to home
+      window.location.href = '/';
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
 
-  // Get dashboard path based on role
+  // Get dashboard path - all members go to the same dashboard
   const getDashboardPath = () => {
-    if (!user?.role) return '/';
-
-    switch (user.role.toLowerCase()) {
-      case 'coach':
-        return '/coach/dashboard';
-      case 'student':
-      case 'player':
-        return '/student/dashboard';
-      case 'admin':
-        return '/admin/dashboard';
-      default:
-        return '/';
-    }
+    return user?.role ? '/member/dashboard' : '/';
   };
 
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
   const userMenuItems = [
+    // Admin Dashboard - only shown for admin users
+    ...(isAdmin ? [{
+      name: t('adminDashboard'),
+      href: '/admin/dashboard',
+      icon: School2Icon,
+      isAdmin: true
+    }] : []),
+    // InstaGame - admin only for testing
+    ...(isAdmin ? [{
+      name: t('instaGame'),
+      href: '/instagame',
+      icon: Zap,
+      isAdmin: true
+    }] : []),
+    // League Admin links - only shown for non-admin league managers
+    ...(!isAdmin && managedLeagues.length > 0 ? managedLeagues.map(league => ({
+      name: t('leagueAdmin', { name: league.rootLeagueName }),
+      href: `/leagues/${league.leagueId}`,
+      icon: Network,
+      isLeagueAdmin: true
+    })) : []),
+    // Running Events - shown when user has active events
+    ...(runningEvents.length > 0 ? runningEvents.map(event => ({
+      name: event.eventName,
+      href: `/event-dashboard/${event.eventId}`,
+      icon: Trophy,
+      isRunningEvent: true,
+      badge: !event.isCheckedIn ? 'Check In' : 'Live'
+    })) : []),
     {
-      name: 'Dashboard',
+      name: t('dashboard'),
       href: getDashboardPath(),
       icon: HomeIcon,
       isDashboard: true
     },
-    { name: 'Profile', href: '/profile', icon: User },
-    { name: 'Notifications', href: '/notifications', icon: Bell },
-    { name: 'Sign Out', action: handleLogout, icon: LogOut, isDestructive: true },
+    { name: t('profile'), href: '/profile', icon: User },
+    { name: t('messages'), href: '/messages', icon: MessageCircle },
+    { name: t('notifications'), href: '/notifications', icon: Bell },
+    { name: t('signOut'), action: handleLogout, icon: LogOut, isDestructive: true },
   ];
 
   // Get user initials safely
@@ -106,11 +235,11 @@ const Navigation = () => {
   const getUserDisplayName = () => {
     if (!user) return 'User';
 
-    if (user.firstName && user.lastName) {
-      return `${user.firstName} ${user.lastName}`;
+    if (user.lastName && user.firstName) {
+      return `${user.lastName}, ${user.firstName}`;
     }
 
-    return user.name || user.email?.split('@')[0] || 'User';
+    return user.lastName || user.firstName || user.name || user.email?.split('@')[0] || 'User';
   };
 
   // Get user role safely
@@ -119,10 +248,10 @@ const Navigation = () => {
     return user.role?.toLowerCase() || 'user';
   };
 
-  // Get user avatar URL
+  // Get user avatar URL (from Funtime-Shared)
   const getUserAvatarUrl = () => {
     if (!user?.profileImageUrl) return null;
-    return getAssetUrl(user.profileImageUrl);
+    return getSharedAssetUrl(user.profileImageUrl);
   };
 
   // Close dropdown when clicking outside
@@ -142,28 +271,42 @@ const Navigation = () => {
     setIsOpen(false);
   }, [location.pathname]);
 
+  // No navbar for home page when not authenticated - hero section handles CTAs
+  if (isHomePage && !isAuthenticated) {
+    return null;
+  }
+
   return (
     <nav className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3 group">
-            <div style={{ width: "60px", height: "66px" }}
-              className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
-              <img
-                src={logoPath}
-                alt="Pickleball.College Logo"
-                className="w-full h-full object-contain p-1"
-                onError={handleImageError}
-                onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+          {/* Logo - goes to dashboard if logged in, home if not */}
+          <Link to={isAuthenticated ? getDashboardPath() : "/"} className="flex items-center space-x-3 group">
+            {logoHtml ? (
+              <div
+                className="flex items-center"
+                dangerouslySetInnerHTML={{ __html: logoHtml }}
               />
-            </div>
-            <div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
-                Pickleball.College
-              </span>
-              <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
-            </div>
+            ) : (
+              <>
+                <div style={{ width: "60px", height: "66px" }}
+                  className="rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                  <img
+                    src={logoPath}
+                    alt="Pickleball.Community Logo"
+                    className="w-full h-full object-contain p-1"
+                    onError={handleImageError}
+                    onLoad={() => console.log('Logo loaded successfully from:', logoPath)}
+                  />
+                </div>
+                <div>
+                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-800 bg-clip-text text-transparent">
+                    Pickleball.Community
+                  </span>
+                  <div className="h-1 w-0 group-hover:w-full bg-gradient-to-r from-blue-500 to-purple-700 transition-all duration-300 rounded-full"></div>
+                </div>
+              </>
+            )}
           </Link>
 
           {/* Desktop Navigation */}
@@ -172,12 +315,12 @@ const Navigation = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${isActive(item.href)
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${isActive(item.href)
                   ? 'bg-blue-50 text-blue-600'
                   : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
                   }`}
               >
-                {item.icon && <item.icon className="w-8 h-8 inline mr-2" />}
+                {item.icon && <item.icon className="w-5 h-5 flex-shrink-0" />}
                 <span>{item.name}</span>
               </Link>
             ))}
@@ -185,9 +328,24 @@ const Navigation = () => {
 
           {/* User Section */}
           <div className="hidden md:flex items-center space-x-4 user-dropdown-container">
+            {/* Language Switcher */}
+            <LanguageSwitcher />
+
             {isAuthenticated && user ? (
               <>
-
+                {/* Notification Bell Icon */}
+                <Link
+                  to="/notifications"
+                  className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-medium px-1">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </Link>
 
                 {/* User Avatar with Dropdown */}
                 <div className="relative">
@@ -245,11 +403,39 @@ const Navigation = () => {
                             <Link
                               key={item.name}
                               to={item.href}
-                              className="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              className={`flex items-center px-4 py-3 text-sm transition-colors ${
+                                item.isRunningEvent
+                                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`}
                               onClick={() => setShowUserDropdown(false)}
                             >
-                              <item.icon className="w-4 h-4 mr-3" />
-                              {item.name}
+                              <div className="relative mr-3">
+                                <item.icon className={`w-4 h-4 ${item.isRunningEvent ? 'text-blue-600' : ''}`} />
+                                {item.name === t('notifications') && unreadCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-medium text-[10px]">
+                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                  </span>
+                                )}
+                                {item.isRunningEvent && (
+                                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                )}
+                              </div>
+                              <span className="flex-1 truncate">{item.name}</span>
+                              {item.name === t('notifications') && unreadCount > 0 && (
+                                <span className="ml-auto bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">
+                                  {t('newNotifications', { count: unreadCount })}
+                                </span>
+                              )}
+                              {item.badge && (
+                                <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+                                  item.badge === 'Live'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {item.badge}
+                                </span>
+                              )}
                             </Link>
                           )
                         ))}
@@ -264,20 +450,38 @@ const Navigation = () => {
                   onClick={() => redirectToLogin()}
                   className="text-gray-600 hover:text-blue-600 px-4 py-2 font-medium transition-colors"
                 >
-                  Sign In
+                  {t('signIn')}
                 </button>
                 <button
                   onClick={() => redirectToRegister()}
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow"
                 >
-                  Enroll Now
+                  {t('enroll')}
                 </button>
               </div>
             )}
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center space-x-2">
+            {/* Mobile Language Switcher */}
+            <LanguageSwitcher variant="compact" />
+
+            {/* Mobile Notification Bell */}
+            {isAuthenticated && user && (
+              <Link
+                to="/notifications"
+                className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-xl transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-6 h-6" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-medium px-1">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+            )}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="p-2 rounded-xl text-gray-600 hover:text-blue-600 hover:bg-gray-50 transition-colors"
@@ -292,27 +496,13 @@ const Navigation = () => {
 
       {/* Mobile menu */}
       {isOpen && (
-        <div className="md:hidden absolute top-16 inset-x-0 bg-white/95 backdrop-blur-lg border-b border-gray-200 shadow-xl">
-          <div className="px-4 py-6 space-y-4">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-lg font-medium transition-colors ${isActive(item.href)
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-                  }`}
-                onClick={() => setIsOpen(false)}
-              >
-                {item.icon && <item.icon className="w-5 h-5" />}
-                <span>{item.name}</span>
-              </Link>
-            ))}
-
+        <div className="md:hidden absolute top-16 inset-x-0 bg-white/95 backdrop-blur-lg border-b border-gray-200 shadow-xl max-h-[calc(100vh-4rem)] overflow-y-auto">
+          <div className="px-4 py-4">
             {isAuthenticated && user ? (
               <>
-                <div className="px-4 py-3 border-t border-gray-200">
-                  <div className="flex items-center space-x-3 mb-4">
+                {/* User section at top for logged-in users */}
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200">
+                  <div className="flex items-center space-x-3">
                     {getUserAvatarUrl() ? (
                       <img
                         src={getUserAvatarUrl()}
@@ -330,70 +520,218 @@ const Navigation = () => {
                       {getUserInitials()}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900">{getUserDisplayName()}</div>
-                      <div className="text-sm text-gray-500 capitalize">{getUserRole()}</div>
+                      <div className="font-semibold text-gray-900 text-sm">{getUserDisplayName()}</div>
+                      <div className="text-xs text-gray-500 capitalize">{getUserRole()}</div>
                     </div>
                   </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-1 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors text-sm"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>{t('logout')}</span>
+                  </button>
+                </div>
 
+                {/* Quick user actions */}
+                <div className="grid grid-cols-4 gap-2 pb-3 mb-3 border-b border-gray-200">
+                  <Link
+                    to="/member/dashboard"
+                    className="flex flex-col items-center p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <HomeIcon className="w-5 h-5" />
+                    <span className="text-xs mt-1">{t('dashboard')}</span>
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <User className="w-5 h-5" />
+                    <span className="text-xs mt-1">{t('profile')}</span>
+                  </Link>
+                  <Link
+                    to="/messages"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="text-xs mt-1">{t('messages')}</span>
+                  </Link>
+                  <Link
+                    to="/notifications"
+                    className="flex flex-col items-center p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors relative"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <div className="relative">
+                      <Bell className="w-5 h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs mt-1">{t('alerts')}</span>
+                  </Link>
+                </div>
 
-                  {/* Mobile User Menu */}
-                  <div className="space-y-2 mt-4">
-                    {/* Dashboard link for mobile */}
-                    {user?.role && (
+                {/* Admin links if admin */}
+                {isAdmin && (
+                  <div className="space-y-2 mb-3">
+                    <Link
+                      to="/admin/dashboard"
+                      className="flex items-center space-x-2 px-3 py-2 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors font-medium text-sm"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <School2Icon className="w-4 h-4" />
+                      <span>{t('adminDashboard')}</span>
+                    </Link>
+                    <Link
+                      to="/instagame"
+                      className="flex items-center space-x-2 px-3 py-2 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors font-medium text-sm"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <Zap className="w-4 h-4" />
+                      <span>{t('instaGame')}</span>
+                    </Link>
+                  </div>
+                )}
+
+                {/* League Admin links for non-admin league managers */}
+                {!isAdmin && managedLeagues.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {managedLeagues.map(league => (
                       <Link
-                        to={user.role === 'Coach' ? '/coach/dashboard' :
-                          user.role === 'Student' ? '/student/dashboard' :
-                            user.role === 'Admin' ? '/admin/dashboard' : '/'}
-                        className="flex items-center space-x-2 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-medium"
+                        key={league.leagueId}
+                        to={`/leagues/${league.leagueId}`}
+                        className="flex items-center space-x-2 px-3 py-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors font-medium text-sm"
                         onClick={() => setIsOpen(false)}
                       >
-                        <HomeIcon className="w-4 h-4" />
-                        <span>  Dashboard</span>
+                        <Network className="w-4 h-4" />
+                        <span>{t('leagueAdmin', { name: league.rootLeagueName })}</span>
                       </Link>
-                    )}
-
-                    <Link
-                      to="/profile"
-                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Profile</span>
-                    </Link>
-                    <Link
-                      to="/notifications"
-                      className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <Bell className="w-4 h-4" />
-                      <span>Notifications</span>
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center justify-center space-x-2 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl font-medium transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sign Out</span>
-                    </button>
+                    ))}
                   </div>
-                </div>
+                )}
+
+                {/* Running Events - shown when user has active events */}
+                {runningEvents.length > 0 && (
+                  <div className="space-y-2 mb-3 pb-3 border-b border-gray-200">
+                    <div className="flex items-center gap-2 px-1 mb-1">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <span className="text-xs font-medium text-gray-500 uppercase">Active Events</span>
+                    </div>
+                    {runningEvents.map(event => (
+                      <Link
+                        key={event.eventId}
+                        to={`/event-dashboard/${event.eventId}`}
+                        className="flex items-center justify-between px-3 py-2 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors font-medium text-sm"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <Trophy className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{event.eventName}</span>
+                        </div>
+                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          !event.isCheckedIn
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {!event.isCheckedIn ? 'Check In' : 'Live'}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
-              <div className="px-4 pt-4 border-t border-gray-200 space-y-3">
+              /* Auth buttons for non-logged in users */
+              <div className="flex space-x-2 pb-3 mb-3 border-b border-gray-200">
                 <button
                   onClick={() => { setIsOpen(false); redirectToLogin(); }}
-                  className="block w-full text-center px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="flex-1 text-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors text-sm"
                 >
-                  Sign In
+                  {t('signIn')}
                 </button>
                 <button
                   onClick={() => { setIsOpen(false); redirectToRegister(); }}
-                  className="block w-full text-center px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow"
+                  className="flex-1 text-center px-3 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:shadow-lg transition-shadow text-sm"
                 >
-                  Enroll
+                  {t('enroll')}
                 </button>
               </div>
             )}
+
+            {/* Primary Navigation */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {primaryNav.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`flex items-center space-x-2 px-3 py-3 rounded-lg font-medium transition-colors ${isActive(item.href)
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                    }`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item.icon && <item.icon className="w-5 h-5" />}
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Secondary Navigation - smaller */}
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+              {secondaryNav.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-sm transition-colors ${isActive(item.href)
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'
+                    }`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item.icon && <item.icon className="w-4 h-4" />}
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification for new notifications */}
+      {newNotification && (
+        <div className="fixed top-20 right-4 z-50 transition-all duration-300 transform translate-x-0">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-4 max-w-sm ring-2 ring-blue-500 ring-opacity-50">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Bell className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {newNotification.title}
+                </p>
+                <p className="text-sm text-gray-600 line-clamp-2">
+                  {newNotification.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setNewNotification(null)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <Link
+              to="/notifications"
+              className="mt-3 block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+              onClick={() => setNewNotification(null)}
+            >
+              {t('viewAllNotifications')}
+            </Link>
           </div>
         </div>
       )}

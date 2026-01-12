@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.API.Models.DTOs;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.API.Models.DTOs;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
 using System.Security.Cryptography;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface IPlayerCertificationService
 {
@@ -31,13 +31,23 @@ public interface IPlayerCertificationService
 
     // Certification Requests (Student)
     Task<CertificationRequestDto> CreateRequestAsync(int studentId, CreateCertificationRequestDto dto, string baseUrl);
+    Task<CertificationRequestDto?> GetOrCreateActiveRequestAsync(int studentId, string baseUrl);
     Task<List<CertificationRequestDto>> GetStudentRequestsAsync(int studentId, string baseUrl);
     Task<CertificationRequestDto?> GetRequestAsync(int requestId, int studentId, string baseUrl);
+    Task<CertificationRequestDto?> UpdateRequestAsync(int requestId, int studentId, UpdateCertificationRequestDto dto, string baseUrl);
     Task<bool> DeactivateRequestAsync(int requestId, int studentId);
 
+    // Invitations (Student)
+    Task<InvitablePeersDto> GetInvitablePeersAsync(int studentId);
+    Task<List<CertificationInvitationDto>> GetInvitationsAsync(int requestId, int studentId);
+    Task<int> InvitePeersAsync(int requestId, int studentId, InvitePeersDto dto);
+
+    // Pending Reviews (Invited User)
+    Task<List<PendingReviewInvitationDto>> GetMyPendingReviewsAsync(int userId, string baseUrl);
+
     // Review Page (Public)
-    Task<ReviewPageInfoDto> GetReviewPageInfoAsync(string token);
-    Task<bool> SubmitReviewAsync(string token, SubmitReviewDto dto);
+    Task<ReviewPageInfoDto> GetReviewPageInfoAsync(string token, int? currentUserId);
+    Task<bool> SubmitReviewAsync(string token, SubmitReviewDto dto, int? currentUserId);
 
     // Certificate View (Student)
     Task<CertificateSummaryDto?> GetCertificateSummaryAsync(int studentId);
@@ -46,10 +56,12 @@ public interface IPlayerCertificationService
 public class PlayerCertificationService : IPlayerCertificationService
 {
     private readonly ApplicationDbContext _context;
+    private readonly INotificationService _notificationService;
 
-    public PlayerCertificationService(ApplicationDbContext context)
+    public PlayerCertificationService(ApplicationDbContext context, INotificationService notificationService)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     #region Knowledge Levels
@@ -97,7 +109,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         entity.Description = dto.Description;
         entity.SortOrder = dto.SortOrder;
         entity.IsActive = dto.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.Now;
 
         await _context.SaveChangesAsync();
         return MapToKnowledgeLevelDto(entity);
@@ -114,7 +126,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             // Soft delete by deactivating
             entity.IsActive = false;
-            entity.UpdatedAt = DateTime.UtcNow;
+            entity.UpdatedAt = DateTime.Now;
         }
         else
         {
@@ -180,7 +192,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         entity.Weight = dto.Weight;
         entity.SortOrder = dto.SortOrder;
         entity.IsActive = dto.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.Now;
 
         await _context.SaveChangesAsync();
         return MapToSkillGroupDto(entity);
@@ -197,7 +209,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             // Soft delete by deactivating
             entity.IsActive = false;
-            entity.UpdatedAt = DateTime.UtcNow;
+            entity.UpdatedAt = DateTime.Now;
         }
         else
         {
@@ -268,7 +280,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         entity.SkillGroupId = dto.SkillGroupId;
         entity.SortOrder = dto.SortOrder;
         entity.IsActive = dto.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.Now;
 
         await _context.SaveChangesAsync();
 
@@ -288,7 +300,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             // Soft delete by deactivating
             entity.IsActive = false;
-            entity.UpdatedAt = DateTime.UtcNow;
+            entity.UpdatedAt = DateTime.Now;
         }
         else
         {
@@ -307,11 +319,17 @@ public class PlayerCertificationService : IPlayerCertificationService
     {
         var token = GenerateSecureToken();
 
+        // Parse visibility
+        var visibility = ReviewVisibility.Anyone;
+        if (Enum.TryParse<ReviewVisibility>(dto.Visibility, true, out var parsed))
+            visibility = parsed;
+
         var entity = new PlayerCertificationRequest
         {
             StudentId = studentId,
             Token = token,
             Message = dto.Message,
+            Visibility = visibility,
             ExpiresAt = dto.ExpiresAt,
             IsActive = true
         };
@@ -319,10 +337,29 @@ public class PlayerCertificationService : IPlayerCertificationService
         _context.PlayerCertificationRequests.Add(entity);
         await _context.SaveChangesAsync();
 
-        // Reload with student
+        // Reload with student and invitations
         await _context.Entry(entity).Reference(r => r.Student).LoadAsync();
+        await _context.Entry(entity).Collection(r => r.Invitations).LoadAsync();
 
         return MapToRequestDto(entity, baseUrl);
+    }
+
+    public async Task<CertificationRequestDto?> GetOrCreateActiveRequestAsync(int studentId, string baseUrl)
+    {
+        // Get existing active request or create a new one
+        var existingRequest = await _context.PlayerCertificationRequests
+            .Include(r => r.Student)
+            .Include(r => r.Reviews)
+            .Include(r => r.Invitations)
+            .FirstOrDefaultAsync(r => r.StudentId == studentId && r.IsActive);
+
+        if (existingRequest != null)
+        {
+            return MapToRequestDto(existingRequest, baseUrl);
+        }
+
+        // Create a new request
+        return await CreateRequestAsync(studentId, new CreateCertificationRequestDto(), baseUrl);
     }
 
     public async Task<List<CertificationRequestDto>> GetStudentRequestsAsync(int studentId, string baseUrl)
@@ -330,6 +367,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         var requests = await _context.PlayerCertificationRequests
             .Include(r => r.Student)
             .Include(r => r.Reviews)
+            .Include(r => r.Invitations)
             .Where(r => r.StudentId == studentId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
@@ -342,9 +380,31 @@ public class PlayerCertificationService : IPlayerCertificationService
         var request = await _context.PlayerCertificationRequests
             .Include(r => r.Student)
             .Include(r => r.Reviews)
+            .Include(r => r.Invitations)
             .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == studentId);
 
         return request == null ? null : MapToRequestDto(request, baseUrl);
+    }
+
+    public async Task<CertificationRequestDto?> UpdateRequestAsync(int requestId, int studentId, UpdateCertificationRequestDto dto, string baseUrl)
+    {
+        var request = await _context.PlayerCertificationRequests
+            .Include(r => r.Student)
+            .Include(r => r.Reviews)
+            .Include(r => r.Invitations)
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == studentId);
+
+        if (request == null) return null;
+
+        if (dto.Message != null)
+            request.Message = dto.Message;
+
+        if (dto.Visibility != null && Enum.TryParse<ReviewVisibility>(dto.Visibility, true, out var visibility))
+            request.Visibility = visibility;
+
+        await _context.SaveChangesAsync();
+
+        return MapToRequestDto(request, baseUrl);
     }
 
     public async Task<bool> DeactivateRequestAsync(int requestId, int studentId)
@@ -361,12 +421,199 @@ public class PlayerCertificationService : IPlayerCertificationService
 
     #endregion
 
+    #region Invitations
+
+    public async Task<InvitablePeersDto> GetInvitablePeersAsync(int studentId)
+    {
+        // Get active request for this student
+        var request = await _context.PlayerCertificationRequests
+            .Include(r => r.Invitations)
+            .Include(r => r.Reviews)
+            .FirstOrDefaultAsync(r => r.StudentId == studentId && r.IsActive);
+
+        var invitedUserIds = request?.Invitations.Select(i => i.InvitedUserId).ToHashSet() ?? new HashSet<int>();
+        var reviewedUserIds = request?.Reviews.Where(r => r.ReviewerId.HasValue).Select(r => r.ReviewerId!.Value).ToHashSet() ?? new HashSet<int>();
+
+        // Get friends
+        var friendships = await _context.Friendships
+            .Include(f => f.User1)
+            .Include(f => f.User2)
+            .Where(f => f.UserId1 == studentId || f.UserId2 == studentId)
+            .ToListAsync();
+
+        var friends = friendships.Select(f =>
+        {
+            var friend = f.UserId1 == studentId ? f.User2 : f.User1;
+            return new InvitableUserDto
+            {
+                UserId = friend.Id,
+                Name = Utility.FormatName(friend.LastName, friend.FirstName),
+                ProfileImageUrl = friend.ProfileImageUrl,
+                AlreadyInvited = invitedUserIds.Contains(friend.Id),
+                HasReviewed = reviewedUserIds.Contains(friend.Id)
+            };
+        }).ToList();
+
+        // Get clubs where student is a member and their members
+        var studentClubIds = await _context.ClubMembers
+            .Where(m => m.UserId == studentId)
+            .Select(m => m.ClubId)
+            .ToListAsync();
+
+        var clubs = new List<ClubWithMembersDto>();
+        foreach (var clubId in studentClubIds)
+        {
+            var club = await _context.Clubs
+                .Include(c => c.Members)
+                    .ThenInclude(m => m.User)
+                .FirstOrDefaultAsync(c => c.Id == clubId);
+
+            if (club != null)
+            {
+                var members = club.Members
+                    .Where(m => m.UserId != studentId) // Exclude self
+                    .Select(m => new InvitableUserDto
+                    {
+                        UserId = m.UserId,
+                        Name = Utility.FormatName(m.User.LastName, m.User.FirstName),
+                        ProfileImageUrl = m.User.ProfileImageUrl,
+                        AlreadyInvited = invitedUserIds.Contains(m.UserId),
+                        HasReviewed = reviewedUserIds.Contains(m.UserId)
+                    })
+                    .ToList();
+
+                clubs.Add(new ClubWithMembersDto
+                {
+                    ClubId = club.Id,
+                    ClubName = club.Name,
+                    Members = members
+                });
+            }
+        }
+
+        return new InvitablePeersDto
+        {
+            Friends = friends,
+            Clubs = clubs
+        };
+    }
+
+    public async Task<List<CertificationInvitationDto>> GetInvitationsAsync(int requestId, int studentId)
+    {
+        var request = await _context.PlayerCertificationRequests
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == studentId);
+
+        if (request == null) return new List<CertificationInvitationDto>();
+
+        var invitations = await _context.PlayerCertificationInvitations
+            .Include(i => i.InvitedUser)
+            .Where(i => i.RequestId == requestId)
+            .OrderByDescending(i => i.InvitedAt)
+            .ToListAsync();
+
+        return invitations.Select(i => new CertificationInvitationDto
+        {
+            Id = i.Id,
+            UserId = i.InvitedUserId,
+            UserName = Utility.FormatName(i.InvitedUser.LastName, i.InvitedUser.FirstName),
+            ProfileImageUrl = i.InvitedUser.ProfileImageUrl,
+            HasReviewed = i.HasReviewed,
+            InvitedAt = i.InvitedAt,
+            ReviewedAt = i.ReviewedAt
+        }).ToList();
+    }
+
+    public async Task<int> InvitePeersAsync(int requestId, int studentId, InvitePeersDto dto)
+    {
+        var request = await _context.PlayerCertificationRequests
+            .Include(r => r.Invitations)
+            .Include(r => r.Student)
+            .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == studentId);
+
+        if (request == null) return 0;
+
+        var existingInvitedIds = request.Invitations.Select(i => i.InvitedUserId).ToHashSet();
+        var newInvitedUserIds = new List<int>();
+
+        foreach (var userId in dto.UserIds)
+        {
+            if (userId == studentId) continue; // Can't invite self
+            if (existingInvitedIds.Contains(userId)) continue; // Already invited
+
+            _context.PlayerCertificationInvitations.Add(new PlayerCertificationInvitation
+            {
+                RequestId = requestId,
+                InvitedUserId = userId,
+                InvitedAt = DateTime.Now
+            });
+            newInvitedUserIds.Add(userId);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Send notifications to newly invited users
+        if (newInvitedUserIds.Count > 0)
+        {
+            var studentName = request.Student != null
+                ? Utility.FormatName(request.Student.LastName, request.Student.FirstName)
+                : "A player";
+
+            await _notificationService.CreateAndSendToUsersAsync(
+                newInvitedUserIds,
+                "PeerReviewRequest",
+                "Skill Review Request",
+                $"{studentName} is asking you to review their pickleball skills",
+                $"/review/{request.Token}",
+                "CertificationRequest",
+                requestId
+            );
+        }
+
+        return newInvitedUserIds.Count;
+    }
+
+    #endregion
+
+    #region Pending Reviews (Invited User)
+
+    public async Task<List<PendingReviewInvitationDto>> GetMyPendingReviewsAsync(int userId, string baseUrl)
+    {
+        // Get all pending invitations for this user where they haven't reviewed yet
+        // and the request is still active and not expired
+        var invitations = await _context.PlayerCertificationInvitations
+            .Include(i => i.Request)
+                .ThenInclude(r => r.Student)
+            .Where(i => i.InvitedUserId == userId
+                && !i.HasReviewed
+                && i.Request.IsActive
+                && (!i.Request.ExpiresAt.HasValue || i.Request.ExpiresAt.Value > DateTime.Now))
+            .OrderByDescending(i => i.InvitedAt)
+            .ToListAsync();
+
+        return invitations.Select(i => new PendingReviewInvitationDto
+        {
+            InvitationId = i.Id,
+            RequestId = i.RequestId,
+            StudentId = i.Request.StudentId,
+            StudentName = Utility.FormatName(i.Request.Student.LastName, i.Request.Student.FirstName),
+            StudentProfileImageUrl = i.Request.Student.ProfileImageUrl,
+            Message = i.Request.Message,
+            ReviewToken = i.Request.Token,
+            ReviewUrl = $"{baseUrl}/review/{i.Request.Token}",
+            InvitedAt = i.InvitedAt,
+            ExpiresAt = i.Request.ExpiresAt
+        }).ToList();
+    }
+
+    #endregion
+
     #region Review Page
 
-    public async Task<ReviewPageInfoDto> GetReviewPageInfoAsync(string token)
+    public async Task<ReviewPageInfoDto> GetReviewPageInfoAsync(string token, int? currentUserId)
     {
         var request = await _context.PlayerCertificationRequests
             .Include(r => r.Student)
+            .Include(r => r.Invitations)
             .FirstOrDefaultAsync(r => r.Token == token);
 
         if (request == null)
@@ -374,6 +621,7 @@ public class PlayerCertificationService : IPlayerCertificationService
             return new ReviewPageInfoDto
             {
                 IsValid = false,
+                CanReview = false,
                 ErrorMessage = "Invalid review link"
             };
         }
@@ -383,16 +631,32 @@ public class PlayerCertificationService : IPlayerCertificationService
             return new ReviewPageInfoDto
             {
                 IsValid = false,
+                CanReview = false,
                 ErrorMessage = "This review link is no longer active"
             };
         }
 
-        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value < DateTime.UtcNow)
+        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value < DateTime.Now)
         {
             return new ReviewPageInfoDto
             {
                 IsValid = false,
+                CanReview = false,
                 ErrorMessage = "This review link has expired"
+            };
+        }
+
+        // Check visibility permissions
+        var canReview = await CheckReviewPermissionAsync(request, currentUserId);
+        string? visibilityError = null;
+
+        if (!canReview)
+        {
+            visibilityError = request.Visibility switch
+            {
+                ReviewVisibility.Members => "Only community members can submit reviews for this player",
+                ReviewVisibility.InvitedOnly => "Only invited users can submit reviews for this player",
+                _ => null
             };
         }
 
@@ -402,51 +666,203 @@ public class PlayerCertificationService : IPlayerCertificationService
         return new ReviewPageInfoDto
         {
             RequestId = request.Id,
-            PlayerName = $"{request.Student.FirstName} {request.Student.LastName}",
+            PlayerId = request.StudentId,
+            PlayerName = Utility.FormatName(request.Student.LastName, request.Student.FirstName),
             PlayerProfileImageUrl = request.Student.ProfileImageUrl,
             Message = request.Message,
+            Visibility = request.Visibility.ToString(),
             IsValid = true,
+            CanReview = canReview,
+            ErrorMessage = visibilityError,
             KnowledgeLevels = knowledgeLevels,
             SkillAreas = skillAreas
         };
     }
 
-    public async Task<bool> SubmitReviewAsync(string token, SubmitReviewDto dto)
+    private async Task<bool> CheckReviewPermissionAsync(PlayerCertificationRequest request, int? currentUserId)
+    {
+        // Anyone can review if visibility is Anyone
+        if (request.Visibility == ReviewVisibility.Anyone)
+            return true;
+
+        // For Members and InvitedOnly, user must be logged in
+        if (!currentUserId.HasValue)
+            return false;
+
+        // Self can always review their own request
+        if (currentUserId.Value == request.StudentId)
+            return true;
+
+        // For Members visibility, check if user exists in our community
+        if (request.Visibility == ReviewVisibility.Members)
+        {
+            var userExists = await _context.Users.AnyAsync(u => u.Id == currentUserId.Value);
+            return userExists;
+        }
+
+        // For InvitedOnly, check if user is in the invitations list
+        if (request.Visibility == ReviewVisibility.InvitedOnly)
+        {
+            var isInvited = request.Invitations.Any(i => i.InvitedUserId == currentUserId.Value);
+            return isInvited;
+        }
+
+        return false;
+    }
+
+    public async Task<bool> SubmitReviewAsync(string token, SubmitReviewDto dto, int? currentUserId)
     {
         var request = await _context.PlayerCertificationRequests
+            .Include(r => r.Invitations)
             .FirstOrDefaultAsync(r => r.Token == token && r.IsActive);
 
         if (request == null) return false;
 
-        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value < DateTime.UtcNow)
+        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value < DateTime.Now)
             return false;
 
-        var review = new PlayerCertificationReview
-        {
-            RequestId = request.Id,
-            ReviewerName = dto.ReviewerName,
-            ReviewerEmail = dto.ReviewerEmail,
-            KnowledgeLevelId = dto.KnowledgeLevelId,
-            IsAnonymous = dto.IsAnonymous,
-            Comments = dto.Comments
-        };
+        // Check visibility permissions before allowing submission
+        var canReview = await CheckReviewPermissionAsync(request, currentUserId);
+        if (!canReview) return false;
 
-        _context.PlayerCertificationReviews.Add(review);
-        await _context.SaveChangesAsync();
-
-        // Add scores
-        foreach (var scoreDto in dto.Scores)
+        // For self-reviews, use a default knowledge level (or first available)
+        int knowledgeLevelId;
+        if (dto.IsSelfReview)
         {
-            var score = new PlayerCertificationScore
+            // Get default knowledge level for self-review
+            var defaultLevel = await _context.KnowledgeLevels
+                .Where(k => k.IsActive)
+                .OrderBy(k => k.SortOrder)
+                .FirstOrDefaultAsync();
+            knowledgeLevelId = defaultLevel?.Id ?? 1;
+        }
+        else
+        {
+            if (!dto.KnowledgeLevelId.HasValue)
+                return false; // Non-self reviews require knowledge level
+            knowledgeLevelId = dto.KnowledgeLevelId.Value;
+        }
+
+        // Check for existing review from the same reviewer
+        // If within 1 month, update existing review; otherwise create new
+        var oneMonthAgo = DateTime.Now.AddMonths(-1);
+        PlayerCertificationReview? existingReview = null;
+
+        if (currentUserId.HasValue)
+        {
+            // Find existing review by logged-in user
+            existingReview = await _context.PlayerCertificationReviews
+                .Include(r => r.Scores)
+                .Where(r => r.RequestId == request.Id
+                    && r.ReviewerId == currentUserId.Value
+                    && r.IsSelfReview == dto.IsSelfReview)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync();
+        }
+        else if (!string.IsNullOrEmpty(dto.ReviewerEmail))
+        {
+            // Find existing review by email (for anonymous reviewers)
+            existingReview = await _context.PlayerCertificationReviews
+                .Include(r => r.Scores)
+                .Where(r => r.RequestId == request.Id
+                    && r.ReviewerId == null
+                    && r.ReviewerEmail == dto.ReviewerEmail
+                    && r.IsSelfReview == dto.IsSelfReview)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync();
+        }
+
+        PlayerCertificationReview review;
+
+        if (existingReview != null && existingReview.CreatedAt > oneMonthAgo)
+        {
+            // Update existing review (less than 1 month old)
+            review = existingReview;
+            review.ReviewerName = dto.IsSelfReview ? "Self Review" : dto.ReviewerName;
+            review.ReviewerEmail = dto.ReviewerEmail;
+            review.KnowledgeLevelId = knowledgeLevelId;
+            review.IsAnonymous = dto.IsAnonymous;
+            review.Comments = dto.Comments;
+            review.UpdatedAt = DateTime.Now;
+
+            // Remove existing scores and add new ones
+            _context.PlayerCertificationScores.RemoveRange(existingReview.Scores);
+            await _context.SaveChangesAsync();
+
+            // Add new scores
+            foreach (var scoreDto in dto.Scores)
             {
-                ReviewId = review.Id,
-                SkillAreaId = scoreDto.SkillAreaId,
-                Score = scoreDto.Score
+                var score = new PlayerCertificationScore
+                {
+                    ReviewId = review.Id,
+                    SkillAreaId = scoreDto.SkillAreaId,
+                    Score = scoreDto.Score
+                };
+                _context.PlayerCertificationScores.Add(score);
+            }
+        }
+        else
+        {
+            // Create new review (no existing or existing is over 1 month old)
+            review = new PlayerCertificationReview
+            {
+                RequestId = request.Id,
+                ReviewerId = currentUserId,
+                ReviewerName = dto.IsSelfReview ? "Self Review" : dto.ReviewerName,
+                ReviewerEmail = dto.ReviewerEmail,
+                KnowledgeLevelId = knowledgeLevelId,
+                IsAnonymous = dto.IsAnonymous,
+                IsSelfReview = dto.IsSelfReview,
+                Comments = dto.Comments
             };
-            _context.PlayerCertificationScores.Add(score);
+
+            _context.PlayerCertificationReviews.Add(review);
+            await _context.SaveChangesAsync();
+
+            // Add scores
+            foreach (var scoreDto in dto.Scores)
+            {
+                var score = new PlayerCertificationScore
+                {
+                    ReviewId = review.Id,
+                    SkillAreaId = scoreDto.SkillAreaId,
+                    Score = scoreDto.Score
+                };
+                _context.PlayerCertificationScores.Add(score);
+            }
+        }
+
+        // Update invitation status if this user was invited
+        if (currentUserId.HasValue)
+        {
+            var invitation = request.Invitations.FirstOrDefault(i => i.InvitedUserId == currentUserId.Value);
+            if (invitation != null)
+            {
+                invitation.HasReviewed = true;
+                invitation.ReviewedAt = DateTime.Now;
+            }
         }
 
         await _context.SaveChangesAsync();
+
+        // Notify student about the new review (unless it's a self-review)
+        if (!dto.IsSelfReview)
+        {
+            var reviewerDisplayName = dto.IsAnonymous
+                ? "A peer"
+                : (string.IsNullOrEmpty(dto.ReviewerName) ? "Someone" : dto.ReviewerName);
+
+            await _notificationService.CreateAndSendAsync(
+                request.StudentId,
+                "PeerReviewCompleted",
+                "New Skill Review Received",
+                $"{reviewerDisplayName} has reviewed your pickleball skills",
+                "/member/certification",
+                "CertificationReview",
+                review.Id
+            );
+        }
+
         return true;
     }
 
@@ -459,7 +875,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         var student = await _context.Users.FindAsync(studentId);
         if (student == null) return null;
 
-        var reviews = await _context.PlayerCertificationReviews
+        var allReviews = await _context.PlayerCertificationReviews
             .Include(r => r.Request)
             .Include(r => r.KnowledgeLevel)
             .Include(r => r.Scores)
@@ -469,31 +885,107 @@ public class PlayerCertificationService : IPlayerCertificationService
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
+        // Separate self-review from peer reviews
+        var selfReview = allReviews.FirstOrDefault(r => r.IsSelfReview);
+        var peerReviews = allReviews.Where(r => !r.IsSelfReview).ToList();
+
         // Get all skill groups for weighted calculation
         var skillGroups = await _context.SkillGroups
             .Where(g => g.IsActive)
             .OrderBy(g => g.SortOrder)
             .ToListAsync();
 
-        if (!reviews.Any())
+        // Get knowledge levels for filtering
+        var knowledgeLevels = await GetKnowledgeLevelsAsync(true);
+
+        if (!peerReviews.Any() && selfReview == null)
         {
             return new CertificateSummaryDto
             {
-                StudentName = $"{student.FirstName} {student.LastName}",
+                StudentName = Utility.FormatName(student.LastName, student.FirstName),
                 StudentProfileImageUrl = student.ProfileImageUrl,
                 TotalReviews = 0,
+                PeerReviewCount = 0,
+                HasSelfReview = false,
                 OverallAverageScore = 0,
                 WeightedOverallScore = 0,
                 GroupScores = new List<SkillGroupScoreSummaryDto>(),
                 SkillAverages = new List<SkillAverageSummaryDto>(),
                 Reviews = new List<CertificationReviewSummaryDto>(),
-                LastUpdated = DateTime.UtcNow
+                KnowledgeLevels = knowledgeLevels,
+                LastUpdated = DateTime.Now
             };
         }
 
-        // Calculate skill averages
-        var allScores = reviews.SelectMany(r => r.Scores).ToList();
-        var skillAverages = allScores
+        // Calculate skill averages (peer reviews only for main scores)
+        var peerScores = peerReviews.SelectMany(r => r.Scores).ToList();
+        var (skillAverages, groupScores, overallAverage, weightedOverallScore) =
+            CalculateWeightedScores(peerScores, skillGroups);
+
+        // Calculate self-review scores if available
+        SelfReviewSummaryDto? selfReviewSummary = null;
+        if (selfReview != null)
+        {
+            var selfScores = selfReview.Scores.ToList();
+            var (selfSkillAverages, selfGroupScores, selfOverallAverage, selfWeightedOverall) =
+                CalculateWeightedScores(selfScores, skillGroups);
+
+            selfReviewSummary = new SelfReviewSummaryDto
+            {
+                ReviewId = selfReview.Id,
+                CreatedAt = selfReview.CreatedAt,
+                OverallAverageScore = selfOverallAverage,
+                WeightedOverallScore = selfWeightedOverall,
+                GroupScores = selfGroupScores,
+                SkillAverages = selfSkillAverages
+            };
+        }
+
+        var reviewSummaries = allReviews.Select(r => new CertificationReviewSummaryDto
+        {
+            Id = r.Id,
+            ReviewerDisplayName = r.IsSelfReview ? "Self Review" : (r.IsAnonymous ? "Anonymous" : r.ReviewerName),
+            KnowledgeLevelName = r.IsSelfReview ? "Self Assessment" : r.KnowledgeLevel.Name,
+            IsSelfReview = r.IsSelfReview,
+            Comments = r.Comments,
+            CreatedAt = r.CreatedAt,
+            Scores = r.Scores.Select(s => new CertificationScoreDto
+            {
+                Id = s.Id,
+                SkillAreaId = s.SkillAreaId,
+                SkillAreaName = s.SkillArea.Name,
+                SkillAreaCategory = s.SkillArea.Category,
+                Score = s.Score
+            }).ToList()
+        }).ToList();
+
+        return new CertificateSummaryDto
+        {
+            StudentName = Utility.FormatName(student.LastName, student.FirstName),
+            StudentProfileImageUrl = student.ProfileImageUrl,
+            TotalReviews = allReviews.Count,
+            PeerReviewCount = peerReviews.Count,
+            HasSelfReview = selfReview != null,
+            OverallAverageScore = overallAverage,
+            WeightedOverallScore = weightedOverallScore,
+            GroupScores = groupScores,
+            SkillAverages = skillAverages,
+            Reviews = reviewSummaries,
+            SelfReview = selfReviewSummary,
+            KnowledgeLevels = knowledgeLevels,
+            LastUpdated = allReviews.Any() ? allReviews.Max(r => r.CreatedAt) : DateTime.Now
+        };
+    }
+
+    private (List<SkillAverageSummaryDto> skillAverages, List<SkillGroupScoreSummaryDto> groupScores, double overallAverage, double weightedOverallScore)
+        CalculateWeightedScores(List<PlayerCertificationScore> scores, List<SkillGroup> skillGroups)
+    {
+        if (!scores.Any())
+        {
+            return (new List<SkillAverageSummaryDto>(), new List<SkillGroupScoreSummaryDto>(), 0, 0);
+        }
+
+        var skillAverages = scores
             .GroupBy(s => new {
                 s.SkillAreaId,
                 s.SkillArea.Name,
@@ -515,9 +1007,8 @@ public class PlayerCertificationService : IPlayerCertificationService
             .ThenBy(s => s.SkillAreaId)
             .ToList();
 
-        var overallAverage = allScores.Any() ? Math.Round(allScores.Average(s => s.Score), 1) : 0;
+        var overallAverage = scores.Any() ? Math.Round(scores.Average(s => s.Score), 1) : 0;
 
-        // Calculate weighted group scores
         var groupScores = new List<SkillGroupScoreSummaryDto>();
         double weightedTotal = 0;
         int totalWeight = 0;
@@ -556,7 +1047,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         if (ungroupedSkillAverages.Any())
         {
             var ungroupedAverage = Math.Round(ungroupedSkillAverages.Average(s => s.AverageScore), 1);
-            var ungroupedWeight = 100 - totalWeight; // Remaining weight goes to ungrouped
+            var ungroupedWeight = 100 - totalWeight;
             if (ungroupedWeight > 0)
             {
                 var weightedContribution = (ungroupedAverage / 10.0) * ungroupedWeight;
@@ -574,40 +1065,11 @@ public class PlayerCertificationService : IPlayerCertificationService
             }
         }
 
-        // Calculate final weighted score (scaled to 10)
         var weightedOverallScore = totalWeight > 0
             ? Math.Round((weightedTotal / totalWeight) * 10, 1)
             : overallAverage;
 
-        var reviewSummaries = reviews.Select(r => new CertificationReviewSummaryDto
-        {
-            Id = r.Id,
-            ReviewerDisplayName = r.IsAnonymous ? "Anonymous" : r.ReviewerName,
-            KnowledgeLevelName = r.KnowledgeLevel.Name,
-            Comments = r.Comments,
-            CreatedAt = r.CreatedAt,
-            Scores = r.Scores.Select(s => new CertificationScoreDto
-            {
-                Id = s.Id,
-                SkillAreaId = s.SkillAreaId,
-                SkillAreaName = s.SkillArea.Name,
-                SkillAreaCategory = s.SkillArea.Category,
-                Score = s.Score
-            }).ToList()
-        }).ToList();
-
-        return new CertificateSummaryDto
-        {
-            StudentName = $"{student.FirstName} {student.LastName}",
-            StudentProfileImageUrl = student.ProfileImageUrl,
-            TotalReviews = reviews.Count,
-            OverallAverageScore = overallAverage,
-            WeightedOverallScore = weightedOverallScore,
-            GroupScores = groupScores,
-            SkillAverages = skillAverages,
-            Reviews = reviewSummaries,
-            LastUpdated = reviews.Max(r => r.CreatedAt)
-        };
+        return (skillAverages, groupScores, overallAverage, weightedOverallScore);
     }
 
     #endregion
@@ -661,14 +1123,16 @@ public class PlayerCertificationService : IPlayerCertificationService
     {
         Id = entity.Id,
         StudentId = entity.StudentId,
-        StudentName = $"{entity.Student.FirstName} {entity.Student.LastName}",
+        StudentName = Utility.FormatName(entity.Student.LastName, entity.Student.FirstName),
         StudentProfileImageUrl = entity.Student.ProfileImageUrl,
         Token = entity.Token,
         Message = entity.Message,
+        Visibility = entity.Visibility.ToString(),
         IsActive = entity.IsActive,
         CreatedAt = entity.CreatedAt,
         ExpiresAt = entity.ExpiresAt,
         ReviewCount = entity.Reviews?.Count ?? 0,
+        InvitationCount = entity.Invitations?.Count ?? 0,
         ShareableUrl = $"{baseUrl}/review/{entity.Token}"
     };
 

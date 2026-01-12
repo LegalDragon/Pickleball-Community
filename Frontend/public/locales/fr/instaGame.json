@@ -1,0 +1,194 @@
+{
+  "title": "InstaGame",
+  "subtitle": "Parties Spontanées",
+  "description": "Démarrez ou rejoignez des parties de pickleball spontanées dans votre région",
+
+  "browse": {
+    "title": "Parties Actives",
+    "empty": "Aucune partie active à proximité",
+    "emptyDescription": "Soyez le premier à démarrer une partie!",
+    "searching": "Recherche de parties...",
+    "nearYou": "Parties Près de Vous",
+    "refresh": "Actualiser"
+  },
+
+  "create": {
+    "title": "Démarrer une Partie",
+    "subtitle": "Créer une nouvelle session de jeu",
+    "gameName": "Nom de la Partie",
+    "gameNamePlaceholder": "Pickup du Samedi @ Parc Mémorial",
+    "teamSize": "Taille de l'Équipe",
+    "singles": "Simple (1v1)",
+    "doubles": "Double (2v2)",
+    "schedulingMethod": "Méthode de Programmation",
+    "manual": "Manuel",
+    "manualDescription": "Les organisateurs sélectionnent les équipes pour chaque match",
+    "popcorn": "Popcorn",
+    "popcornDescription": "Les gagnants se séparent et s'associent aux perdants",
+    "gauntlet": "Gauntlet",
+    "gauntletDescription": "Les gagnants restent, les perdants vont en fin de file",
+    "maxPlayers": "Maximum de Joueurs",
+    "maxPlayersHint": "Laisser vide pour illimité",
+    "location": "Emplacement",
+    "selectVenue": "Sélectionner un Lieu",
+    "customLocation": "Emplacement Personnalisé",
+    "customLocationPlaceholder": "Entrez le nom du lieu",
+    "useCurrentLocation": "Utiliser Ma Position",
+    "scoreFormat": "Format de Score",
+    "defaultScoreFormat": "Par défaut (11 points, gagner par 2)",
+    "createButton": "Créer la Partie",
+    "creating": "Création..."
+  },
+
+  "join": {
+    "title": "Rejoindre une Partie",
+    "enterCode": "Entrez le Code",
+    "codePlaceholder": "G-XXXX",
+    "joinButton": "Rejoindre",
+    "joining": "Connexion...",
+    "invalidCode": "Code invalide",
+    "gameFull": "Cette partie est complète",
+    "alreadyJoined": "Vous êtes déjà dans cette partie"
+  },
+
+  "main": {
+    "lobby": "Salle d'Attente",
+    "active": "En Cours",
+    "paused": "En Pause",
+    "ended": "Terminé"
+  },
+
+  "tabs": {
+    "scoreboard": "Tableau de Score",
+    "players": "Joueurs",
+    "queue": "File d'Attente"
+  },
+
+  "scoreboard": {
+    "title": "Match en Cours",
+    "match": "Match #{{number}}",
+    "vs": "VS",
+    "noActiveMatch": "Aucun match actif",
+    "waitingForPlayers": "En attente de joueurs...",
+    "submitScore": "Soumettre le Score",
+    "confirmScore": "Confirmer le Score",
+    "disputeScore": "Contester",
+    "scoreSubmittedBy": "Soumis par {{name}}",
+    "awaitingConfirmation": "En attente de confirmation de l'adversaire",
+    "team1Wins": "L'Équipe 1 Gagne!",
+    "team2Wins": "L'Équipe 2 Gagne!",
+    "startMatch": "Démarrer le Match",
+    "endSession": "Terminer la Session",
+    "confirmEndSession": "Êtes-vous sûr de vouloir terminer cette session?"
+  },
+
+  "players": {
+    "title": "Joueurs",
+    "count": "{{count}} Joueurs",
+    "available": "Disponible",
+    "playing": "En Jeu",
+    "resting": "Au Repos",
+    "left": "Parti",
+    "organizer": "Organisateur",
+    "you": "(Vous)",
+    "makeAvailable": "Disponible",
+    "takeBreak": "Prendre une Pause",
+    "leaveGame": "Quitter la Partie",
+    "confirmLeave": "Êtes-vous sûr de vouloir quitter cette partie?",
+    "removePlayer": "Retirer",
+    "confirmRemove": "Retirer {{name}} de la partie?",
+    "promoteOrganizer": "Rendre Organisateur",
+    "stats": {
+      "gamesPlayed": "Matchs",
+      "wins": "Victoires",
+      "losses": "Défaites",
+      "winRate": "% Victoires",
+      "pointsScored": "Pts Pour",
+      "pointsAgainst": "Pts Contre",
+      "differential": "+/-",
+      "currentStreak": "Série",
+      "maxStreak": "Meilleure Série"
+    }
+  },
+
+  "queue": {
+    "title": "File des Matchs",
+    "empty": "La file est vide",
+    "emptyDescription": "Ajoutez des matchs à la file pour jouer",
+    "position": "#{{position}}",
+    "addToQueue": "Ajouter à la File",
+    "removeFromQueue": "Retirer",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "startNext": "Démarrer le Suivant",
+    "challengeQueue": "File des Défis",
+    "nextUp": "Prochain"
+  },
+
+  "scheduling": {
+    "generateNext": "Générer le Prochain Match",
+    "generating": "Génération...",
+    "notEnoughPlayers": "Pas assez de joueurs disponibles",
+    "needMorePlayers": "Il faut au moins {{count}} joueurs disponibles",
+    "selectTeams": "Sélectionner les Équipes",
+    "team1": "Équipe 1",
+    "team2": "Équipe 2",
+    "availablePlayers": "Joueurs Disponibles",
+    "tapToAdd": "Touchez les joueurs pour ajouter",
+    "randomize": "Aléatoire",
+    "createMatch": "Créer le Match"
+  },
+
+  "joinCode": "Code d'Accès",
+  "shareCodeInstruction": "Partagez ce code avec les joueurs",
+  "scanToJoin": "Scannez pour rejoindre",
+  "shareInvite": "Partager l'Invitation",
+  "copyLink": "Copier le Lien",
+  "shareMessage": "Rejoignez mon InstaGame! Utilisez le code: {{code}}",
+  "joinGame": "Rejoindre InstaGame",
+
+  "session": {
+    "start": "Démarrer la Session",
+    "pause": "Mettre en Pause",
+    "resume": "Reprendre",
+    "end": "Terminer la Session",
+    "settings": "Paramètres"
+  },
+
+  "status": {
+    "lobby": "En Salle d'Attente",
+    "active": "Actif",
+    "paused": "En Pause",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+
+  "matchStatus": {
+    "pending": "En Attente",
+    "ready": "Prêt",
+    "inProgress": "En Cours",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+
+  "notifications": {
+    "matchReady": "Votre match est prêt!",
+    "scoreSubmitted": "Score soumis, en attente de confirmation",
+    "scoreConfirmed": "Score confirmé!",
+    "playerJoined": "{{name}} a rejoint la partie",
+    "playerLeft": "{{name}} a quitté la partie",
+    "sessionStarted": "La session de jeu a commencé",
+    "sessionEnded": "La session de jeu est terminée",
+    "yourTurn": "C'est votre tour de jouer!"
+  },
+
+  "errors": {
+    "loadFailed": "Échec du chargement de la partie",
+    "joinFailed": "Échec de la connexion à la partie",
+    "createFailed": "Échec de la création de la partie",
+    "updateFailed": "Échec de la mise à jour",
+    "notFound": "Partie non trouvée",
+    "notOrganizer": "Seuls les organisateurs peuvent faire cela",
+    "sessionNotActive": "La session n'est pas active"
+  }
+}

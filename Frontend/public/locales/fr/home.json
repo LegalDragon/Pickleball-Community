@@ -1,0 +1,27 @@
+{
+  "defaultTitle": "Pickleball.Community",
+  "defaultSubtitle": "La Première Plateforme 100% Créée par IA pour Joueurs, Clubs et Événements",
+  "heroTagline": "Un système de gestion complet entièrement construit par l'IA pour toute la communauté Pickleball",
+  "findCourts": "Trouver des Terrains",
+  "joinClub": "Rejoindre un Club",
+  "previousVideo": "Vidéo précédente",
+  "nextVideo": "Vidéo suivante",
+  "quickStats": {
+    "courts": {
+      "label": "Terrains Locaux",
+      "value": "Trouver à Proximité"
+    },
+    "clubs": {
+      "label": "Clubs Actifs",
+      "value": "Rejoignez Aujourd'hui"
+    },
+    "certified": {
+      "label": "Certifiez-vous",
+      "value": "Évaluations par Pairs"
+    },
+    "events": {
+      "label": "Événements Locaux",
+      "value": "Jouez Plus"
+    }
+  }
+}

@@ -24,7 +24,7 @@ export const useSharedAuth = () => {
     const redirectUrl = `${currentUrl}/auth/callback`
     const returnPath = returnTo || location.state?.from?.pathname || location.pathname
 
-    window.location.href = `${SHARED_AUTH_UI_URL}/login?redirect=${encodeURIComponent(redirectUrl)}&returnTo=${encodeURIComponent(returnPath)}&site=pickleball.college`
+    window.location.href = `${SHARED_AUTH_UI_URL}/login?redirect=${encodeURIComponent(redirectUrl)}&returnTo=${encodeURIComponent(returnPath)}&site=community`
   }, [location])
 
   /**
@@ -40,7 +40,7 @@ export const useSharedAuth = () => {
     const currentUrl = window.location.origin
     const redirectUrl = `${currentUrl}/auth/callback`
 
-    window.location.href = `${SHARED_AUTH_UI_URL}/register?redirect=${encodeURIComponent(redirectUrl)}&site=pickleball.college`
+    window.location.href = `${SHARED_AUTH_UI_URL}/register?redirect=${encodeURIComponent(redirectUrl)}&site=community`
   }, [])
 
   /**
@@ -56,7 +56,7 @@ export const useSharedAuth = () => {
     const currentUrl = window.location.origin
     const redirectUrl = `${currentUrl}/auth/callback`
 
-    window.location.href = `${SHARED_AUTH_UI_URL}/forgot-password?redirect=${encodeURIComponent(redirectUrl)}&site=pickleball.college`
+    window.location.href = `${SHARED_AUTH_UI_URL}/forgot-password?redirect=${encodeURIComponent(redirectUrl)}&site=community`
   }, [])
 
   /**
@@ -70,7 +70,7 @@ export const useSharedAuth = () => {
     const redirectUrl = `${currentUrl}/auth/callback`
     const returnPath = returnTo || '/'
 
-    return `${SHARED_AUTH_UI_URL}/login?redirect=${encodeURIComponent(redirectUrl)}&returnTo=${encodeURIComponent(returnPath)}&site=pickleball.college`
+    return `${SHARED_AUTH_UI_URL}/login?redirect=${encodeURIComponent(redirectUrl)}&returnTo=${encodeURIComponent(returnPath)}&site=community`
   }, [])
 
   /**
@@ -82,7 +82,7 @@ export const useSharedAuth = () => {
     const currentUrl = window.location.origin
     const redirectUrl = `${currentUrl}/auth/callback`
 
-    return `${SHARED_AUTH_UI_URL}/register?redirect=${encodeURIComponent(redirectUrl)}&site=pickleball.college`
+    return `${SHARED_AUTH_UI_URL}/register?redirect=${encodeURIComponent(redirectUrl)}&site=community`
   }, [])
 
   return {

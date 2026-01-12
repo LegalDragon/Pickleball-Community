@@ -7,11 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Pickleball.College.Models.DTOs;
-using Pickleball.College.Services;
+using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 using Stripe.Climate;
 
-namespace Pickleball.College.API.Controllers;
+namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
@@ -52,10 +52,23 @@ public class AuthController : ControllerBase
             // Sync user to local database
             var localUser = await _sharedAuthService.SyncUserAsync(sharedUser);
 
-            // Return the local user with their site-specific role
+            // Update role if provided from shared auth (isSiteAdmin or siteRole)
+            if (!string.IsNullOrEmpty(request.Role))
+            {
+                var validRoles = new[] { "Player", "Manager", "Admin" };
+                if (validRoles.Contains(request.Role) && localUser.Role != request.Role)
+                {
+                    localUser = await _authService.UpdateRoleAsync(localUser.Id, request.Role);
+                }
+            }
+
+            // Generate a new local JWT with the site-specific role
+            var localToken = _authService.GenerateJwtToken(localUser);
+
+            // Return the local user with their site-specific role and NEW token
             return Ok(new
             {
-                Token = request.Token,  // Pass through the shared auth token
+                Token = localToken,  // Use local token with site-specific role
                 User = new
                 {
                     localUser.Id,
@@ -63,7 +76,8 @@ public class AuthController : ControllerBase
                     localUser.FirstName,
                     localUser.LastName,
                     localUser.Role,  // Site-specific role
-                    localUser.ProfileImageUrl
+                    localUser.ProfileImageUrl,
+                    localUser.CanWriteBlog
                 }
             });
         }
@@ -86,6 +100,26 @@ public class AuthController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Debug endpoint to check current token claims
+    /// </summary>
+    [HttpGet("me")]
+    [Authorize]
+    public ActionResult GetCurrentUser()
+    {
+        var claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+        var role = User.FindFirst("role")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        return Ok(new
+        {
+            UserId = userId,
+            Role = role,
+            IsAdmin = User.IsInRole("Admin"),
+            Claims = claims
+        });
+    }
+
     // Keep legacy endpoints for backwards compatibility during transition
     [HttpPost("register")]
     public async Task<ActionResult> Register(RegisterRequest request)
@@ -98,7 +132,7 @@ public class AuthController : ControllerBase
             return Ok(new
             {
                 Token = token,
-                User = new { user.Id, user.Email, user.FirstName, user.LastName, user.Role, user.ProfileImageUrl }
+                User = new { user.Id, user.Email, user.FirstName, user.LastName, user.Role, user.ProfileImageUrl, user.CanWriteBlog }
             });
         }
         catch (ArgumentException ex)
@@ -129,7 +163,8 @@ public class AuthController : ControllerBase
                 user.FirstName,
                 user.LastName,
                 user.Role,
-                user.ProfileImageUrl
+                user.ProfileImageUrl,
+                user.CanWriteBlog
             }
         });
     }
@@ -146,7 +181,7 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             Token = token,
-            User = new { user.Id, user.Email, user.FirstName, user.LastName, user.Role, user.ProfileImageUrl }
+            User = new { user.Id, user.Email, user.FirstName, user.LastName, user.Role, user.ProfileImageUrl, user.CanWriteBlog }
         });
     }
 
@@ -177,10 +212,11 @@ public class AuthController : ControllerBase
 public class SyncUserRequest
 {
     public string Token { get; set; } = string.Empty;
+    public string? Role { get; set; }  // Optional site-specific role from shared auth
 }
 
 public class UpdateRoleRequest
 {
     public int UserId { get; set; }
-    public string Role { get; set; } = "Student";
+    public string Role { get; set; } = "Player";
 }

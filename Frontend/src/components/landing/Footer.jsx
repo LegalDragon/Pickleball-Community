@@ -1,16 +1,29 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const Footer = () => {
+  const { t } = useTranslation('nav');
+
   const footerLinks = {
-    quickLinks: ['Home', 'Courses', 'Coaches', 'Pricing'],
-    resources: [
-      { name: 'Blog', href: '#' },
-      { name: 'Training Videos', href: '#' },
-      { name: 'Drills', href: '#' },
-      { name: 'Strategy Guides', href: '#' },
-      { name: 'USA Pickleball Rules', href: 'https://usapickleball.org/what-is-pickleball/official-rules/', external: true }
+    quickLinks: [
+      { key: 'home', href: '/' },
+      { key: 'courses', href: '#' },
+      { key: 'coaches', href: '#' },
+      { key: 'pricing', href: '#' }
     ],
-    contact: ['Support', 'Become a Coach', 'Partnerships']
+    resources: [
+      { key: 'blog', href: '/blog' },
+      { key: 'trainingVideos', href: '#' },
+      { key: 'drills', href: '#' },
+      { key: 'strategyGuides', href: '#' },
+      { key: 'usaPickleballRules', href: 'https://usapickleball.org/what-is-pickleball/official-rules/', external: true }
+    ],
+    contact: [
+      { key: 'support', href: '#' },
+      { key: 'becomeACoach', href: '#' },
+      { key: 'partnerships', href: '#' }
+    ]
   };
 
   return (
@@ -18,53 +31,63 @@ const Footer = () => {
       <div className="container">
         <div className="footer-content">
           <div className="footer-column">
-  <h3 className=" text-blue-500">Our Mission:</h3>
-  <p className="text-gray-500">
-       
-       Democratizing pickleball education through technology.
-    </p>
-  
-  <div className="mt-4 pt-4 border-t border-gray-700">
-    <p className=" text-sm  text-gray-500">
-    To create a friendly and supportive community  where every pickleball player
-     can learn, grow, and connect with each other.
-  </p>
-  </div>
-</div>
-          <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">Quick Links</h3>
-            <ul>
-              {footerLinks.quickLinks.map((link, index) => (
-                <li key={index}><a href="#">{link}</a></li>
-              ))}
-            </ul>
+            <h3 className="text-blue-500">{t('footer.mission')}</h3>
+            <p className="text-gray-500">
+              {t('footer.missionText')}
+            </p>
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <p className="text-sm text-gray-500">
+                {t('footer.communityText')}
+              </p>
+            </div>
           </div>
           <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">Resources</h3>
+            <h3 className="text-xl font-bold mb-4">{t('footer.quickLinks')}</h3>
             <ul>
-              {footerLinks.resources.map((resource, index) => (
+              {footerLinks.quickLinks.map((link, index) => (
                 <li key={index}>
-                  <a
-                    href={resource.href}
-                    {...(resource.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  >
-                    {resource.name}
-                  </a>
+                  {link.href !== '#' ? (
+                    <Link to={link.href}>{t(`footer.${link.key}`)}</Link>
+                  ) : (
+                    <a href="#">{t(`footer.${link.key}`)}</a>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
           <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">Contact</h3>
+            <h3 className="text-xl font-bold mb-4">{t('footer.resources')}</h3>
+            <ul>
+              {footerLinks.resources.map((resource, index) => (
+                <li key={index}>
+                  {resource.external ? (
+                    <a
+                      href={resource.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t(`footer.${resource.key}`)}
+                    </a>
+                  ) : resource.href !== '#' ? (
+                    <Link to={resource.href}>{t(`footer.${resource.key}`)}</Link>
+                  ) : (
+                    <a href="#">{t(`footer.${resource.key}`)}</a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="footer-column">
+            <h3 className="text-xl font-bold mb-4">{t('footer.contact')}</h3>
             <ul>
               {footerLinks.contact.map((contact, index) => (
-                <li key={index}><a href="#">{contact}</a></li>
+                <li key={index}><a href="#">{t(`footer.${contact.key}`)}</a></li>
               ))}
             </ul>
           </div>
         </div>
         <div className="copyright">
-          &copy; 2023-2025 Pickleball.College. All rights reserved.
+          &copy; 2023-{new Date().getFullYear()} {t('footer.copyright')}
         </div>
       </div>
     </footer>

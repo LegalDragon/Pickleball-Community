@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { themeApi } from '../services/api'
 
 const ThemeContext = createContext()
 
@@ -154,8 +155,23 @@ const THEME_STORAGE_KEY = 'pickleball_theme'
 export const ThemeProvider = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState('default')
   const [isLoading, setIsLoading] = useState(true)
+  const [theme, setThemeSettings] = useState(null) // API theme settings (heroVideoUrl, etc.)
 
-  // Load theme from localStorage on mount
+  // Fetch theme settings from API
+  const fetchThemeSettings = useCallback(async () => {
+    try {
+      const response = await themeApi.getActive()
+      if (response?.success && response?.data) {
+        setThemeSettings(response.data)
+      } else if (response && !response.success) {
+        console.warn('Theme API returned unsuccessful response')
+      }
+    } catch (error) {
+      console.warn('Failed to fetch theme settings:', error)
+    }
+  }, [])
+
+  // Load theme from localStorage and fetch API settings on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY)
     if (savedTheme && themePresets[savedTheme]) {
@@ -165,7 +181,10 @@ export const ThemeProvider = ({ children }) => {
       applyTheme('default')
     }
     setIsLoading(false)
-  }, [])
+
+    // Fetch API theme settings
+    fetchThemeSettings()
+  }, [fetchThemeSettings])
 
   // Apply theme CSS variables to document
   const applyTheme = (themeId) => {
@@ -213,7 +232,14 @@ export const ThemeProvider = ({ children }) => {
     return darkThemes.includes(currentTheme)
   }
 
+  // Refresh theme from server (for admin updates)
+  const refreshTheme = async () => {
+    applyTheme(currentTheme)
+    await fetchThemeSettings()
+  }
+
   const value = {
+    theme, // API theme settings (heroVideoUrl, heroImageUrl, heroTitle, etc.)
     currentTheme,
     setTheme,
     getTheme,
@@ -221,6 +247,7 @@ export const ThemeProvider = ({ children }) => {
     isDarkTheme,
     themePresets,
     isLoading,
+    refreshTheme,
   }
 
   return (

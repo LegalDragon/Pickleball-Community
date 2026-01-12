@@ -1,0 +1,60 @@
+{
+  "title": "Clubes",
+  "myClubs": "Mis Clubes",
+  "allClubs": "Todos los Clubes",
+  "createClub": "Crear Club",
+  "editClub": "Editar Club",
+  "clubDetails": "Detalles del Club",
+  "joinClub": "Unirse al Club",
+  "leaveClub": "Dejar el Club",
+  "members": "Miembros",
+  "events": "Eventos del Club",
+  "filters": {
+    "all": "Todos los Clubes",
+    "joined": "Mis Clubes",
+    "nearby": "Cercanos",
+    "popular": "Populares"
+  },
+  "fields": {
+    "name": "Nombre del Club",
+    "description": "Descripción",
+    "location": "Ubicación",
+    "memberCount": "Miembros",
+    "founded": "Fundado",
+    "website": "Sitio Web",
+    "contactEmail": "Correo de Contacto",
+    "skillLevels": "Niveles de Habilidad",
+    "meetingSchedule": "Horario de Reuniones"
+  },
+  "roles": {
+    "owner": "Propietario",
+    "admin": "Administrador",
+    "moderator": "Moderador",
+    "member": "Miembro"
+  },
+  "membership": {
+    "join": "Unirse al Club",
+    "joined": "Unido",
+    "leave": "Dejar el Club",
+    "pending": "Aprobación Pendiente",
+    "rejected": "Solicitud Rechazada",
+    "requestSent": "Solicitud Enviada",
+    "memberSince": "Miembro Desde"
+  },
+  "messages": {
+    "joinSuccess": "Te has unido al club exitosamente",
+    "joinError": "Error al unirse al club",
+    "leaveSuccess": "Has dejado el club exitosamente",
+    "leaveError": "Error al dejar el club",
+    "requestSent": "Solicitud de unión enviada",
+    "clubCreated": "Club creado exitosamente",
+    "clubUpdated": "Club actualizado exitosamente",
+    "clubDeleted": "Club eliminado exitosamente"
+  },
+  "stats": {
+    "totalMembers": "Miembros Totales",
+    "activeMembers": "Miembros Activos",
+    "upcomingEvents": "Próximos Eventos",
+    "totalEvents": "Eventos Totales"
+  }
+}

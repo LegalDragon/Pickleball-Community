@@ -11,9 +11,9 @@ import { Eye, EyeOff, LogIn, Phone, Mail } from 'lucide-react'
  * @param {Function} props.onError - Callback with error message on failure
  * @param {Function} props.onSwitchToRegister - Callback to switch to register view
  * @param {Function} props.onForgotPassword - Callback to switch to forgot password view
- * @param {string} props.siteName - Name of the site (e.g., "Pickleball College")
+ * @param {string} props.siteName - Name of the site (e.g., "Pickleball Community")
  * @param {string} props.primaryColor - Primary brand color (default: blue-600)
- * @param {string} props.site - Site code for cross-site auth (e.g., "college")
+ * @param {string} props.site - Site code for cross-site auth (e.g., "Community")
  * @param {React.ReactNode} props.logo - Custom logo component to display
  */
 const SharedLogin = ({

@@ -246,6 +246,20 @@ public static class Utility
 
     }
  
+    /// <summary>
+    /// Format name as "Last, First" when both are available
+    /// </summary>
+    public static string FormatName(string? lastName, string? firstName)
+    {
+        if (!string.IsNullOrWhiteSpace(lastName) && !string.IsNullOrWhiteSpace(firstName))
+            return $"{lastName}, {firstName}";
+        if (!string.IsNullOrWhiteSpace(lastName))
+            return lastName;
+        if (!string.IsNullOrWhiteSpace(firstName))
+            return firstName;
+        return "Unknown";
+    }
+
     public static string GetContentType(string fileName)
     {
         // Extract the file extension (e.g., ".pdf", ".jpg", ".txt")

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Pickleball.College.Models.DTOs;
+namespace Pickleball.Community.Models.DTOs;
 
 public class RatingDto
 {

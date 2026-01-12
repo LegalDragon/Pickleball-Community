@@ -15,7 +15,7 @@ import SharedForgotPassword from './SharedForgotPassword'
  * @param {Function} props.onAuthSuccess - Callback with { token, user } on successful auth
  * @param {Function} props.onSyncUser - Callback to sync user to local database (optional)
  * @param {string} props.initialView - Initial view: 'login', 'register', or 'forgot-password'
- * @param {string} props.siteName - Name of the site (e.g., "Pickleball College")
+ * @param {string} props.siteName - Name of the site (e.g., "Pickleball Community")
  * @param {string} props.primaryColor - Primary brand color (default: blue)
  * @param {boolean} props.showRoleSelection - Whether to show role selection in register
  * @param {Array} props.roles - Available roles for registration

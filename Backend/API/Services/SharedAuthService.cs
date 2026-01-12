@@ -3,10 +3,10 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Pickleball.College.Database;
-using Pickleball.College.Models.Entities;
+using Pickleball.Community.Database;
+using Pickleball.Community.Models.Entities;
 
-namespace Pickleball.College.Services;
+namespace Pickleball.Community.Services;
 
 public interface ISharedAuthService
 {
@@ -74,7 +74,7 @@ public class SharedAuthService : ISharedAuthService
             var jwtToken = handler.ReadJwtToken(token);
 
             // Check if token is expired
-            if (jwtToken.ValidTo < DateTime.UtcNow)
+            if (jwtToken.ValidTo < DateTime.Now)
             {
                 _logger.LogWarning("JWT token is expired");
                 return Task.FromResult<SharedUserInfo?>(null);
@@ -157,22 +157,43 @@ public class SharedAuthService : ISharedAuthService
                 LastName = sharedUser.LastName,
                 Phone = sharedUser.Phone,
                 ProfileImageUrl = sharedUser.ProfileImageUrl,
-                Role = "Student",  // Default role for new users
+                Role = "Player",  // Default role for new users
                 PasswordHash = null,  // No local password - auth handled by shared service
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
             };
 
-            _context.Users.Add(newUser);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Users.Add(newUser);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Created new local user {UserId} from shared auth", sharedUser.Id);
+                return newUser;
+            }
+            catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("duplicate key") == true ||
+                                                ex.InnerException?.Message?.Contains("PRIMARY KEY") == true)
+            {
+                // Race condition - user was created between our check and insert
+                // Detach the failed entity and fetch the existing one
+                _context.Entry(newUser).State = EntityState.Detached;
 
-            _logger.LogInformation("Created new local user {UserId} from shared auth", sharedUser.Id);
-            return newUser;
+                existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == sharedUser.Id);
+                if (existingUser != null)
+                {
+                    _logger.LogInformation("User {UserId} was created by another request, updating instead", sharedUser.Id);
+                    // Fall through to update logic below
+                }
+                else
+                {
+                    throw; // Something else went wrong
+                }
+            }
         }
-        else
+
+        // Update existing user with latest info from shared auth
+        if (existingUser != null)
         {
-            // Update existing user with latest info from shared auth
             existingUser.Email = sharedUser.Email;
             existingUser.FirstName = sharedUser.FirstName ?? existingUser.FirstName;
             existingUser.LastName = sharedUser.LastName ?? existingUser.LastName;
@@ -184,12 +205,14 @@ public class SharedAuthService : ISharedAuthService
                 existingUser.ProfileImageUrl = sharedUser.ProfileImageUrl;
             }
 
-            existingUser.UpdatedAt = DateTime.UtcNow;
+            existingUser.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Updated local user {UserId} from shared auth", sharedUser.Id);
             return existingUser;
         }
+
+        throw new InvalidOperationException($"Failed to sync user {sharedUser.Id}");
     }
 
     /// <summary>
@@ -212,11 +235,11 @@ public class SharedAuthService : ISharedAuthService
             Email = email,
             FirstName = firstName,
             LastName = lastName,
-            Role = "Student",
+            Role = "Player",
             PasswordHash = null,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
         };
 
         _context.Users.Add(newUser);
