@@ -1809,6 +1809,17 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     loadDocuments();
   }, [event.id]);
 
+  // Default division dropdown based on user registration
+  useEffect(() => {
+    if (event.myRegistrations?.length > 0) {
+      // Default to the user's first registered division
+      setSelectedRegDivisionId(event.myRegistrations[0].divisionId);
+    } else {
+      // Default to all divisions
+      setSelectedRegDivisionId('all');
+    }
+  }, [event.id]); // Reset when event changes
+
   // Load courts for editing
   const loadTopCourts = async () => {
     setCourtsLoading(true);
