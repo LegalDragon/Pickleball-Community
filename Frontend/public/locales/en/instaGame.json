@@ -1,0 +1,194 @@
+{
+  "title": "InstaGame",
+  "subtitle": "Pickup Games On-Demand",
+  "description": "Start or join spontaneous pickleball games in your area",
+
+  "browse": {
+    "title": "Active Games",
+    "empty": "No active games nearby",
+    "emptyDescription": "Be the first to start a pickup game!",
+    "searching": "Searching for games...",
+    "nearYou": "Games Near You",
+    "refresh": "Refresh"
+  },
+
+  "create": {
+    "title": "Start a Game",
+    "subtitle": "Create a new pickup game session",
+    "gameName": "Game Name",
+    "gameNamePlaceholder": "Saturday Pickup @ Memorial Park",
+    "teamSize": "Team Size",
+    "singles": "Singles (1v1)",
+    "doubles": "Doubles (2v2)",
+    "schedulingMethod": "Scheduling Method",
+    "manual": "Manual",
+    "manualDescription": "Organizers select teams for each match",
+    "popcorn": "Popcorn",
+    "popcornDescription": "Winners split up and pair with losers",
+    "gauntlet": "Gauntlet",
+    "gauntletDescription": "Winners stay on, losers go to end of queue",
+    "maxPlayers": "Max Players",
+    "maxPlayersHint": "Leave empty for unlimited",
+    "location": "Location",
+    "selectVenue": "Select a Venue",
+    "customLocation": "Custom Location",
+    "customLocationPlaceholder": "Enter location name",
+    "useCurrentLocation": "Use Current Location",
+    "scoreFormat": "Score Format",
+    "defaultScoreFormat": "Default (11 points, win by 2)",
+    "createButton": "Create Game",
+    "creating": "Creating..."
+  },
+
+  "join": {
+    "title": "Join a Game",
+    "enterCode": "Enter Join Code",
+    "codePlaceholder": "G-XXXX",
+    "joinButton": "Join Game",
+    "joining": "Joining...",
+    "invalidCode": "Invalid join code",
+    "gameFull": "This game is full",
+    "alreadyJoined": "You're already in this game"
+  },
+
+  "main": {
+    "lobby": "Lobby",
+    "active": "In Progress",
+    "paused": "Paused",
+    "ended": "Ended"
+  },
+
+  "tabs": {
+    "scoreboard": "Scoreboard",
+    "players": "Players",
+    "queue": "Queue"
+  },
+
+  "scoreboard": {
+    "title": "Current Match",
+    "match": "Match #{{number}}",
+    "vs": "VS",
+    "noActiveMatch": "No active match",
+    "waitingForPlayers": "Waiting for players...",
+    "submitScore": "Submit Score",
+    "confirmScore": "Confirm Score",
+    "disputeScore": "Dispute",
+    "scoreSubmittedBy": "Submitted by {{name}}",
+    "awaitingConfirmation": "Awaiting confirmation from opponent",
+    "team1Wins": "Team 1 Wins!",
+    "team2Wins": "Team 2 Wins!",
+    "startMatch": "Start Match",
+    "endSession": "End Session",
+    "confirmEndSession": "Are you sure you want to end this session?"
+  },
+
+  "players": {
+    "title": "Players",
+    "count": "{{count}} Players",
+    "available": "Available",
+    "playing": "Playing",
+    "resting": "Resting",
+    "left": "Left",
+    "organizer": "Organizer",
+    "you": "(You)",
+    "makeAvailable": "Available",
+    "takeBreak": "Take Break",
+    "leaveGame": "Leave Game",
+    "confirmLeave": "Are you sure you want to leave this game?",
+    "removePlayer": "Remove",
+    "confirmRemove": "Remove {{name}} from the game?",
+    "promoteOrganizer": "Make Organizer",
+    "stats": {
+      "gamesPlayed": "Games",
+      "wins": "Wins",
+      "losses": "Losses",
+      "winRate": "Win %",
+      "pointsScored": "Pts For",
+      "pointsAgainst": "Pts Against",
+      "differential": "+/-",
+      "currentStreak": "Streak",
+      "maxStreak": "Best Streak"
+    }
+  },
+
+  "queue": {
+    "title": "Match Queue",
+    "empty": "Queue is empty",
+    "emptyDescription": "Add matches to the queue to play",
+    "position": "#{{position}}",
+    "addToQueue": "Add to Queue",
+    "removeFromQueue": "Remove",
+    "moveUp": "Move Up",
+    "moveDown": "Move Down",
+    "startNext": "Start Next Match",
+    "challengeQueue": "Challenge Queue",
+    "nextUp": "Next Up"
+  },
+
+  "scheduling": {
+    "generateNext": "Generate Next Match",
+    "generating": "Generating...",
+    "notEnoughPlayers": "Not enough available players",
+    "needMorePlayers": "Need at least {{count}} available players",
+    "selectTeams": "Select Teams",
+    "team1": "Team 1",
+    "team2": "Team 2",
+    "availablePlayers": "Available Players",
+    "tapToAdd": "Tap players to add",
+    "randomize": "Randomize",
+    "createMatch": "Create Match"
+  },
+
+  "joinCode": "Join Code",
+  "shareCodeInstruction": "Share this code with players to join",
+  "scanToJoin": "Scan to join",
+  "shareInvite": "Share Invite",
+  "copyLink": "Copy Link",
+  "shareMessage": "Join my InstaGame! Use code: {{code}}",
+  "joinGame": "Join InstaGame",
+
+  "session": {
+    "start": "Start Session",
+    "pause": "Pause Session",
+    "resume": "Resume Session",
+    "end": "End Session",
+    "settings": "Settings"
+  },
+
+  "status": {
+    "lobby": "In Lobby",
+    "active": "Active",
+    "paused": "Paused",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+
+  "matchStatus": {
+    "pending": "Pending",
+    "ready": "Ready",
+    "inProgress": "In Progress",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+
+  "notifications": {
+    "matchReady": "Your match is ready!",
+    "scoreSubmitted": "Score submitted, waiting for confirmation",
+    "scoreConfirmed": "Score confirmed!",
+    "playerJoined": "{{name}} joined the game",
+    "playerLeft": "{{name}} left the game",
+    "sessionStarted": "Game session has started",
+    "sessionEnded": "Game session has ended",
+    "yourTurn": "It's your turn to play!"
+  },
+
+  "errors": {
+    "loadFailed": "Failed to load game",
+    "joinFailed": "Failed to join game",
+    "createFailed": "Failed to create game",
+    "updateFailed": "Failed to update",
+    "notFound": "Game not found",
+    "notOrganizer": "Only organizers can do this",
+    "sessionNotActive": "Session is not active"
+  }
+}

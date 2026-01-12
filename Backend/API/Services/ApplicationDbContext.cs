@@ -132,6 +132,12 @@ public class ApplicationDbContext : DbContext
     // Push Notifications
     public DbSet<UserPushSubscription> PushSubscriptions { get; set; }
 
+    // InstaGame (Pickup Games)
+    public DbSet<InstaGame> InstaGames { get; set; }
+    public DbSet<InstaGamePlayer> InstaGamePlayers { get; set; }
+    public DbSet<InstaGameMatch> InstaGameMatches { get; set; }
+    public DbSet<InstaGameQueue> InstaGameQueues { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
@@ -1219,6 +1225,95 @@ public class ApplicationDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(r => r.UpdatedByUserId)
                   .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // InstaGame configuration
+        modelBuilder.Entity<InstaGame>(entity =>
+        {
+            entity.Property(g => g.Name).IsRequired().HasMaxLength(100);
+            entity.Property(g => g.JoinCode).IsRequired().HasMaxLength(10);
+            entity.Property(g => g.Status).IsRequired().HasMaxLength(20);
+            entity.Property(g => g.SchedulingMethod).IsRequired().HasMaxLength(20);
+            entity.HasIndex(g => g.JoinCode).IsUnique();
+            entity.HasIndex(g => g.Status);
+            entity.HasIndex(g => g.CreatorId);
+            entity.HasIndex(g => g.CreatedAt);
+
+            entity.HasOne(g => g.Creator)
+                  .WithMany()
+                  .HasForeignKey(g => g.CreatorId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(g => g.Venue)
+                  .WithMany()
+                  .HasForeignKey(g => g.VenueId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(g => g.ScoreFormat)
+                  .WithMany()
+                  .HasForeignKey(g => g.ScoreFormatId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // InstaGamePlayer configuration
+        modelBuilder.Entity<InstaGamePlayer>(entity =>
+        {
+            entity.Property(p => p.Status).IsRequired().HasMaxLength(20);
+            entity.HasIndex(p => p.InstaGameId);
+            entity.HasIndex(p => p.UserId);
+            entity.HasIndex(p => new { p.InstaGameId, p.UserId }).IsUnique();
+            entity.HasIndex(p => new { p.InstaGameId, p.Status });
+            entity.HasIndex(p => new { p.InstaGameId, p.QueuePosition });
+
+            entity.HasOne(p => p.InstaGame)
+                  .WithMany(g => g.Players)
+                  .HasForeignKey(p => p.InstaGameId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // InstaGameMatch configuration
+        modelBuilder.Entity<InstaGameMatch>(entity =>
+        {
+            entity.Property(m => m.Status).IsRequired().HasMaxLength(20);
+            entity.Property(m => m.Team1PlayerIds).IsRequired().HasMaxLength(200);
+            entity.Property(m => m.Team2PlayerIds).IsRequired().HasMaxLength(200);
+            entity.HasIndex(m => m.InstaGameId);
+            entity.HasIndex(m => m.Status);
+            entity.HasIndex(m => new { m.InstaGameId, m.MatchNumber });
+
+            entity.HasOne(m => m.InstaGame)
+                  .WithMany(g => g.Matches)
+                  .HasForeignKey(m => m.InstaGameId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.ScoreSubmittedBy)
+                  .WithMany()
+                  .HasForeignKey(m => m.ScoreSubmittedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(m => m.ScoreConfirmedBy)
+                  .WithMany()
+                  .HasForeignKey(m => m.ScoreConfirmedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // InstaGameQueue configuration
+        modelBuilder.Entity<InstaGameQueue>(entity =>
+        {
+            entity.Property(q => q.Team1PlayerIds).IsRequired().HasMaxLength(200);
+            entity.Property(q => q.QueueType).IsRequired().HasMaxLength(20);
+            entity.HasIndex(q => new { q.InstaGameId, q.Position });
+            entity.HasIndex(q => new { q.InstaGameId, q.QueueType });
+
+            entity.HasOne(q => q.InstaGame)
+                  .WithMany(g => g.Queue)
+                  .HasForeignKey(q => q.InstaGameId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

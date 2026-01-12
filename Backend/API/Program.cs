@@ -124,6 +124,7 @@ builder.Services.AddScoped<IPlayerCertificationService, PlayerCertificationServi
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddScoped<IActivityAwardService, ActivityAwardService>();
+builder.Services.AddScoped<IInstaGameService, InstaGameService>();
 
 // CORS - Load allowed origins from configuration
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();

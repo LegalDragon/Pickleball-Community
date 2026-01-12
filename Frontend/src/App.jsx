@@ -42,6 +42,9 @@ import ProtectedRoute from './components/ProtectedRoute'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import AuthCallback from './pages/AuthCallback'
+import InstaGameList from './pages/InstaGame/InstaGameList'
+import InstaGameCreate from './pages/InstaGame/InstaGameCreate'
+import InstaGameMain from './pages/InstaGame/InstaGameMain'
 
 
 function App() {
@@ -80,6 +83,28 @@ function App() {
       <Route path="/faq" element={<Faq />} />
       <Route path="/features" element={<Features />} />
       <Route path="/feedback" element={<Feedback />} />
+
+      {/* InstaGame - Pickup Games */}
+      <Route path="/instagame" element={
+        <ProtectedRoute>
+          <InstaGameList />
+        </ProtectedRoute>
+      } />
+      <Route path="/instagame/create" element={
+        <ProtectedRoute>
+          <InstaGameCreate />
+        </ProtectedRoute>
+      } />
+      <Route path="/instagame/join/:code" element={
+        <ProtectedRoute>
+          <InstaGameList />
+        </ProtectedRoute>
+      } />
+      <Route path="/instagame/:id" element={
+        <ProtectedRoute>
+          <InstaGameMain />
+        </ProtectedRoute>
+      } />
 
       {/* My Blog - For writers to manage their posts */}
       <Route path="/my-blog" element={

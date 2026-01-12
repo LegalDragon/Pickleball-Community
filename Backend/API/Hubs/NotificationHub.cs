@@ -192,4 +192,30 @@ public class NotificationHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
         _logger.LogInformation("User {UserId} left club group {GroupName}", userId.Value, groupName);
     }
+
+    /// <summary>
+    /// Join an InstaGame group to receive real-time updates
+    /// </summary>
+    public async Task JoinInstaGameGroup(int instaGameId)
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue) return;
+
+        var groupName = $"instagame_{instaGameId}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("User {UserId} joined InstaGame group {GroupName}", userId.Value, groupName);
+    }
+
+    /// <summary>
+    /// Leave an InstaGame group
+    /// </summary>
+    public async Task LeaveInstaGameGroup(int instaGameId)
+    {
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue) return;
+
+        var groupName = $"instagame_{instaGameId}";
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("User {UserId} left InstaGame group {GroupName}", userId.Value, groupName);
+    }
 }
