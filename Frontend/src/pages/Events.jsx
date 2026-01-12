@@ -1407,7 +1407,10 @@ export default function Events() {
 
 function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = false }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+    <div
+      onClick={onViewDetails}
+      className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+    >
       {event.posterImageUrl && (
         <div className="h-40 bg-orange-100 relative">
           <img
@@ -1447,7 +1450,10 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
           )}
         </div>
 
-        <h3 className="font-semibold text-gray-900 mb-2">{event.name}</h3>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition-colors">{event.name}</h3>
+          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors flex-shrink-0 mt-0.5" />
+        </div>
 
         <div className="space-y-2 text-sm text-gray-600">
           <div className="flex items-center gap-2">
@@ -1495,7 +1501,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
         </div>
 
         <button
-          onClick={onViewDetails}
+          onClick={(e) => { e.stopPropagation(); onViewDetails(); }}
           className="mt-4 w-full py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors"
         >
           {showManage ? 'Manage Event' : 'View Details'}

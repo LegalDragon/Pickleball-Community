@@ -326,9 +326,12 @@ function EventCard({ event, formatDate, formatTime }) {
 
       {/* Content */}
       <div className="p-4">
-        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1 group-hover:text-orange-600 transition-colors">
-          {event.name}
-        </h3>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h3 className="font-semibold text-gray-900 line-clamp-1 group-hover:text-orange-600 transition-colors">
+            {event.name}
+          </h3>
+          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors flex-shrink-0" />
+        </div>
 
         <div className="space-y-1.5 text-sm text-gray-600">
           <div className="flex items-center gap-2">
