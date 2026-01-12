@@ -3143,10 +3143,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="font-medium text-gray-900">{reg.divisionName}</div>
-                            <div className="text-sm text-gray-500">
-                              {reg.teamUnitName && <span>{reg.teamUnitName}</span>}
-                              {reg.skillLevelName && <span> • {reg.skillLevelName}</span>}
-                            </div>
+                            {reg.divisionDescription && (
+                              <div className="text-sm text-gray-500">{reg.divisionDescription}</div>
+                            )}
                             {/* Partner info */}
                             {reg.partners?.length > 0 && (
                               <div className="mt-2 flex items-center gap-2">
@@ -3172,7 +3171,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 ))}
                               </div>
                             )}
-                            {/* Needs partner warning */}
+                            {/* Partner status and find/change partner option */}
                             {reg.needsPartner && (
                               <div className="mt-2">
                                 <div className="flex items-center gap-2 text-orange-600">
@@ -3183,7 +3182,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
                                     className="text-xs text-orange-700 underline hover:no-underline disabled:opacity-50"
                                   >
-                                    {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId ? 'Loading...' : 'Find Partner'}
+                                    {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId
+                                      ? 'Loading...'
+                                      : (reg.partners?.length > 0 ? 'Change Partner' : 'Find a partner')}
                                   </button>
                                   {findingPartnerForReg?.unitId === reg.unitId && (
                                     <button

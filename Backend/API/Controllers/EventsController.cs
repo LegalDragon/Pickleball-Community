@@ -503,6 +503,7 @@ public class EventsController : ControllerBase
                                     UnitId = u.Id,
                                     DivisionId = d.Id,
                                     DivisionName = d.Name,
+                                    DivisionDescription = d.Description,
                                     TeamUnitName = d.TeamUnit?.Name,
                                     SkillLevelName = d.SkillLevel?.Name,
                                     UnitName = u.Name,

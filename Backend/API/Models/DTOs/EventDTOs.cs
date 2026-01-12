@@ -92,6 +92,7 @@ public class UserRegistrationInfoDto
     public int UnitId { get; set; }
     public int DivisionId { get; set; }
     public string DivisionName { get; set; } = string.Empty;
+    public string? DivisionDescription { get; set; }
     public string? TeamUnitName { get; set; }
     public string? SkillLevelName { get; set; }
     public string UnitName { get; set; } = string.Empty;
