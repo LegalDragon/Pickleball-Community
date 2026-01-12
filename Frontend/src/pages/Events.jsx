@@ -2749,16 +2749,20 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         <div className="sticky top-0 bg-white z-10 border-b">
           <div className="px-6 py-4">
             <div className="flex items-start gap-4">
-              {/* Optional thumbnail */}
-              {(event.posterImageUrl || event.bannerImageUrl) && (
-                <div className="hidden sm:block flex-shrink-0">
+              {/* Event thumbnail/avatar */}
+              <div className="flex-shrink-0">
+                {(event.posterImageUrl || event.bannerImageUrl) ? (
                   <img
                     src={getSharedAssetUrl(event.posterImageUrl || event.bannerImageUrl)}
                     alt=""
-                    className="w-20 h-20 rounded-lg object-cover"
+                    className="w-14 h-14 sm:w-20 sm:h-20 rounded-lg object-cover"
                   />
-                </div>
-              )}
+                ) : (
+                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600" />
+                  </div>
+                )}
+              </div>
 
               {/* Event info */}
               <div className="flex-1 min-w-0">
