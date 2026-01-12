@@ -479,9 +479,9 @@ export default function Venues() {
           {searchMode === 'distance' ? (
             /* Distance Search Mode */
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
                 {/* Current Location */}
-                <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3 flex-1 min-w-[250px]">
+                <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3 flex-1 min-w-0 sm:min-w-[250px]">
                   <Locate className={`w-5 h-5 ${userLocation ? 'text-green-600' : 'text-gray-400'}`} />
                   <div className="flex-1">
                     {gettingLocation ? (
@@ -742,10 +742,11 @@ export default function Venues() {
         ) : venues.length > 0 ? (
           <>
             {viewMode === 'map' ? (
-              /* Map View with Side List */
+              /* Map View - Mobile responsive */
               <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="flex h-[600px]">
-                  {/* Compact Venue List */}
+                {/* Desktop: Side-by-side layout */}
+                <div className="hidden md:flex h-[600px]">
+                  {/* Compact Venue List - Desktop */}
                   <div className="w-80 border-r border-gray-200 flex flex-col">
                     <div className="p-3 border-b bg-gray-50">
                       <p className="text-sm font-medium text-gray-700">
@@ -809,7 +810,7 @@ export default function Venues() {
                       )}
                     </div>
                   </div>
-                  {/* Map */}
+                  {/* Map - Desktop */}
                   <div className="flex-1">
                     <VenueMap
                       venues={venues}
@@ -820,6 +821,89 @@ export default function Venues() {
                       showNumbers={true}
                     />
                   </div>
+                </div>
+
+                {/* Mobile: Stacked layout with horizontal scrollable list */}
+                <div className="md:hidden flex flex-col">
+                  {/* Map - Mobile (takes most of the viewport) */}
+                  <div className="h-[50vh] min-h-[300px]">
+                    <VenueMap
+                      venues={venues}
+                      userLocation={userLocation}
+                      onVenueClick={(court) => handleViewDetails(court)}
+                      onMarkerSelect={(court) => setHoveredCourtId(court.courtId || court.id)}
+                      selectedVenueId={hoveredCourtId}
+                      showNumbers={true}
+                    />
+                  </div>
+
+                  {/* Venue count indicator */}
+                  <div className="px-3 py-2 bg-gray-50 border-t border-b border-gray-200">
+                    <p className="text-sm font-medium text-gray-700">
+                      {venues.filter(c => c.latitude || c.gpsLat).length} venues on map - scroll to browse
+                    </p>
+                  </div>
+
+                  {/* Horizontal scrollable venue cards - Mobile */}
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-3 p-3" style={{ minWidth: 'min-content' }}>
+                      {venues.filter(c => c.latitude || c.gpsLat).map((court, index) => {
+                        const courtId = court.courtId || court.id;
+                        const isSelected = hoveredCourtId === courtId;
+                        return (
+                          <div
+                            key={courtId}
+                            className={`flex-shrink-0 w-[200px] p-3 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-green-50 border-green-300 shadow-md'
+                                : 'bg-white border-gray-200 hover:border-green-200'
+                            }`}
+                            onClick={() => handleViewDetails(court)}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
+                                isSelected ? 'bg-green-600' : 'bg-blue-600'
+                              }`}>
+                                {index + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
+                                  {court.name || 'Unnamed Venue'}
+                                </h4>
+                                <p className="text-xs text-gray-500 truncate mt-0.5">
+                                  {[court.city, court.state].filter(Boolean).join(', ')}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  {court.distance && (
+                                    <span className="text-xs text-green-600 font-medium">
+                                      {court.distance.toFixed(1)} mi
+                                    </span>
+                                  )}
+                                  {(court.indoorNum > 0 || court.outdoorNum > 0 || court.aggregatedInfo?.mostConfirmedIndoorCount > 0 || court.aggregatedInfo?.mostConfirmedOutdoorCount > 0) && (
+                                    <span className="text-xs text-gray-400">
+                                      {(() => {
+                                        const agg = court.aggregatedInfo || {};
+                                        const indoor = agg.mostConfirmedIndoorCount ?? court.indoorNum ?? 0;
+                                        const outdoor = agg.mostConfirmedOutdoorCount ?? court.outdoorNum ?? 0;
+                                        const covered = court.coveredNum || 0;
+                                        return indoor + outdoor + covered;
+                                      })()} courts
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {venues.filter(c => !(c.latitude || c.gpsLat)).length > 0 && (
+                    <div className="p-3 text-xs text-gray-400 text-center border-t border-gray-200">
+                      {venues.filter(c => !(c.latitude || c.gpsLat)).length} venues without coordinates
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

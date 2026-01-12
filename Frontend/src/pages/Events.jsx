@@ -718,10 +718,11 @@ export default function Events() {
             ) : events.length > 0 ? (
               <>
                 {viewMode === 'map' ? (
-                  /* Map View with Side List */
+                  /* Map View - Mobile responsive */
                   <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="flex h-[600px]">
-                      {/* Compact Event List */}
+                    {/* Desktop: Side-by-side layout */}
+                    <div className="hidden md:flex h-[600px]">
+                      {/* Compact Event List - Desktop */}
                       <div className="w-80 border-r border-gray-200 flex flex-col">
                         <div className="p-3 border-b bg-gray-50">
                           <p className="text-sm font-medium text-gray-700">
@@ -790,7 +791,7 @@ export default function Events() {
                           )}
                         </div>
                       </div>
-                      {/* Map */}
+                      {/* Map - Desktop */}
                       <div className="flex-1">
                         <VenueMap
                           venues={events.map(e => ({
@@ -807,6 +808,96 @@ export default function Events() {
                           showNumbers={true}
                         />
                       </div>
+                    </div>
+
+                    {/* Mobile: Stacked layout with horizontal scrollable list */}
+                    <div className="md:hidden flex flex-col">
+                      {/* Map - Mobile (takes most of the viewport) */}
+                      <div className="h-[50vh] min-h-[300px]">
+                        <VenueMap
+                          venues={events.map(e => ({
+                            ...e,
+                            id: e.id,
+                            name: e.name,
+                            latitude: e.latitude,
+                            longitude: e.longitude
+                          }))}
+                          userLocation={userLocation}
+                          onVenueClick={(event) => handleViewDetails(event)}
+                          onMarkerSelect={(event) => setHoveredEventId(event.id)}
+                          selectedVenueId={hoveredEventId}
+                          showNumbers={true}
+                        />
+                      </div>
+
+                      {/* Event count indicator */}
+                      <div className="px-3 py-2 bg-gray-50 border-t border-b border-gray-200">
+                        <p className="text-sm font-medium text-gray-700">
+                          {events.filter(e => e.latitude || e.gpsLat).length} events on map - scroll to browse
+                        </p>
+                      </div>
+
+                      {/* Horizontal scrollable event cards - Mobile */}
+                      <div className="overflow-x-auto">
+                        <div className="flex gap-3 p-3" style={{ minWidth: 'min-content' }}>
+                          {events.filter(e => e.latitude || e.gpsLat).map((event, index) => {
+                            const eventId = event.id;
+                            const isSelected = hoveredEventId === eventId;
+                            const EventIcon = event.eventTypeIcon ? getIconByName(event.eventTypeIcon, null) : null;
+                            const colors = getColorValues(event.eventTypeColor);
+                            return (
+                              <div
+                                key={eventId}
+                                className={`flex-shrink-0 w-[220px] p-3 rounded-lg border cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? 'bg-orange-50 border-orange-300 shadow-md'
+                                    : 'bg-white border-gray-200 hover:border-orange-200'
+                                }`}
+                                onClick={() => handleViewDetails(event)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
+                                    isSelected ? 'bg-orange-600' : 'bg-blue-600'
+                                  }`}>
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
+                                      {event.name}
+                                    </h4>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {formatDate(event.startDate)}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {event.venueName || [event.city, event.state].filter(Boolean).join(', ')}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                      {event.distance && (
+                                        <span className="text-xs text-orange-600 font-medium">
+                                          {event.distance.toFixed(1)} mi
+                                        </span>
+                                      )}
+                                      <span
+                                        className="text-xs flex items-center gap-1"
+                                        style={{ color: colors.text }}
+                                      >
+                                        {EventIcon && <EventIcon className="w-3 h-3" />}
+                                        {event.eventTypeName || 'Event'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {events.filter(e => !(e.latitude || e.gpsLat)).length > 0 && (
+                        <div className="p-3 text-xs text-gray-400 text-center border-t border-gray-200">
+                          {events.filter(e => !(e.latitude || e.gpsLat)).length} events without coordinates
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
