@@ -58,7 +58,7 @@ public class SiteContentController : ControllerBase
             Title = content.Title,
             Content = content.Content,
             LastUpdatedByUserName = content.LastUpdatedByUser != null
-                ? $"{content.LastUpdatedByUser.FirstName} {content.LastUpdatedByUser.LastName}".Trim()
+                ? Utility.FormatName(content.LastUpdatedByUser.LastName, content.LastUpdatedByUser.FirstName)
                 : null,
             CreatedAt = content.CreatedAt,
             UpdatedAt = content.UpdatedAt

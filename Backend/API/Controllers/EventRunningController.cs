@@ -180,7 +180,7 @@ public class EventRunningController : ControllerBase
                     .Select(m => new PlayerMemberDto
                     {
                         UserId = m.UserId,
-                        Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                        Name = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
                         ProfileImageUrl = m.User?.ProfileImageUrl,
                         IsCheckedIn = m.IsCheckedIn,
                         IsMe = m.UserId == userId.Value
@@ -475,7 +475,7 @@ public class EventRunningController : ControllerBase
                             .Select(m => new AdminPlayerDto
                             {
                                 UserId = m.UserId,
-                                Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                                Name = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
                                 ProfileImageUrl = m.User?.ProfileImageUrl,
                                 IsCheckedIn = m.IsCheckedIn,
                                 CheckedInAt = m.CheckedInAt
@@ -1089,7 +1089,7 @@ public class EventRunningController : ControllerBase
                     .Select(mem => new AdminPlayerDto
                     {
                         UserId = mem.UserId,
-                        Name = $"{mem.User?.FirstName} {mem.User?.LastName}".Trim(),
+                        Name = Utility.FormatName(mem.User?.LastName, mem.User?.FirstName),
                         ProfileImageUrl = mem.User?.ProfileImageUrl,
                         IsCheckedIn = mem.IsCheckedIn
                     }).ToList() ?? new List<AdminPlayerDto>()
@@ -1103,7 +1103,7 @@ public class EventRunningController : ControllerBase
                     .Select(mem => new AdminPlayerDto
                     {
                         UserId = mem.UserId,
-                        Name = $"{mem.User?.FirstName} {mem.User?.LastName}".Trim(),
+                        Name = Utility.FormatName(mem.User?.LastName, mem.User?.FirstName),
                         ProfileImageUrl = mem.User?.ProfileImageUrl,
                         IsCheckedIn = mem.IsCheckedIn
                     }).ToList() ?? new List<AdminPlayerDto>()

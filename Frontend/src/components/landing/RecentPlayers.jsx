@@ -197,7 +197,9 @@ const RecentPlayers = () => {
 };
 
 const PlayerCard = ({ player }) => {
-  const displayName = `${player.firstName || ''} ${player.lastName?.charAt(0) || ''}`.trim() || 'Player';
+  const displayName = player.lastName && player.firstName
+    ? `${player.lastName}, ${player.firstName.charAt(0)}.`
+    : (player.lastName || player.firstName || 'Player');
   const location = [player.city, player.state].filter(Boolean).join(', ');
 
   return (

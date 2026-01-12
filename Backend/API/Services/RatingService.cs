@@ -166,7 +166,7 @@ public class RatingService : IRatingService
         {
             Id = rating.Id,
             UserId = rating.UserId,
-            UserName = user != null ? $"{user.FirstName} {user.LastName}" : "Unknown User",
+            UserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "Unknown User",
             UserAvatar = user?.ProfileImageUrl,
             RatableType = rating.RatableType,
             RatableId = rating.RatableId,

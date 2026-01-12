@@ -276,7 +276,7 @@ export default function Messages() {
                   ...c,
                   lastMessagePreview: newMessage.trim().substring(0, 50),
                   lastMessageAt: new Date().toISOString(),
-                  lastMessageSenderName: `${user?.firstName} ${user?.lastName}`.trim()
+                  lastMessageSenderName: user?.lastName && user?.firstName ? `${user.lastName}, ${user.firstName}` : (user?.lastName || user?.firstName || '')
                 }
               : c
           );

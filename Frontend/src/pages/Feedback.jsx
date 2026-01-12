@@ -57,7 +57,7 @@ export default function Feedback() {
       setFormData(prev => ({
         ...prev,
         userEmail: user.email || '',
-        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim()
+        userName: user.lastName && user.firstName ? `${user.lastName}, ${user.firstName}` : (user.lastName || user.firstName || '')
       }));
     }
   }, [isAuthenticated, user]);
@@ -127,7 +127,7 @@ export default function Feedback() {
       subject: '',
       message: '',
       userEmail: isAuthenticated ? user?.email || '' : '',
-      userName: isAuthenticated ? `${user?.firstName || ''} ${user?.lastName || ''}`.trim() : ''
+      userName: isAuthenticated ? (user?.lastName && user?.firstName ? `${user.lastName}, ${user.firstName}` : (user?.lastName || user?.firstName || '')) : ''
     });
   };
 

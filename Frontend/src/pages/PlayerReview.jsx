@@ -32,7 +32,7 @@ export default function PlayerReview() {
     if (user) {
       setFormData(prev => ({
         ...prev,
-        reviewerName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        reviewerName: user.lastName && user.firstName ? `${user.lastName}, ${user.firstName}` : (user.lastName || user.firstName || ''),
         reviewerEmail: user.email || ''
       }));
     }

@@ -357,7 +357,7 @@ public class TournamentController : ControllerBase
 
             // Create unit
             var unitName = isSingles
-                ? $"{user.FirstName} {user.LastName}"
+                ? Utility.FormatName(user.LastName, user.FirstName)
                 : $"{user.FirstName}'s Team";
 
             var unit = new EventUnit
@@ -589,14 +589,14 @@ public class TournamentController : ControllerBase
                 return Ok(new ApiResponse<UnitJoinRequestDto>
                 {
                     Success = true,
-                    Message = $"Mutual request detected! Your team has been automatically merged with {targetUser?.FirstName} {targetUser?.LastName}'s registration.",
+                    Message = $"Mutual request detected! Your team has been automatically merged with {Utility.FormatName(targetUser?.LastName, targetUser?.FirstName)}'s registration.",
                     Data = new UnitJoinRequestDto
                     {
                         Id = 0, // No join request created - units were merged
                         UnitId = requesterUnit.Id,
                         UnitName = requesterUnit.Name,
                         UserId = userId.Value,
-                        UserName = $"{requesterUser?.FirstName} {requesterUser?.LastName}",
+                        UserName = Utility.FormatName(requesterUser?.LastName, requesterUser?.FirstName),
                         ProfileImageUrl = requesterUser?.ProfileImageUrl,
                         Message = "Units merged automatically",
                         Status = "Merged",
@@ -642,7 +642,7 @@ public class TournamentController : ControllerBase
                 UnitId = unitId,
                 UnitName = unit.Name,
                 UserId = userId.Value,
-                UserName = $"{user?.FirstName} {user?.LastName}",
+                UserName = Utility.FormatName(user?.LastName, user?.FirstName),
                 ProfileImageUrl = user?.ProfileImageUrl,
                 Message = request.Message,
                 Status = "Pending",
@@ -803,7 +803,7 @@ public class TournamentController : ControllerBase
                     UnitId = r.UnitId,
                     UnitName = r.Unit!.Name,
                     UserId = r.UserId,
-                    UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : null,
+                    UserName = r.User != null ? Utility.FormatName(r.User.LastName, r.User.FirstName) : null,
                     ProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
                     Message = r.Message,
                     Status = r.Status,
@@ -837,7 +837,7 @@ public class TournamentController : ControllerBase
                 DivisionId = r.Unit.DivisionId,
                 DivisionName = r.Unit.Division != null ? r.Unit.Division.Name : "",
                 TeamUnitName = r.Unit.Division != null && r.Unit.Division.TeamUnit != null ? r.Unit.Division.TeamUnit.Name : null,
-                CaptainName = r.Unit.Captain != null ? $"{r.Unit.Captain.FirstName} {r.Unit.Captain.LastName}".Trim() : null,
+                CaptainName = r.Unit.Captain != null ? Utility.FormatName(r.Unit.Captain.LastName, r.Unit.Captain.FirstName) : null,
                 CaptainProfileImageUrl = r.Unit.Captain != null ? r.Unit.Captain.ProfileImageUrl : null,
                 Status = r.Status,
                 CreatedAt = r.CreatedAt
@@ -1405,7 +1405,7 @@ public class TournamentController : ControllerBase
             WaitlistPosition = unit.WaitlistPosition,
             CaptainUserId = unit.CaptainUserId,
             CaptainName = unit.Members?.FirstOrDefault(m => m.UserId == unit.CaptainUserId)?.User != null
-                ? $"{unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.FirstName} {unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.LastName}"
+                ? Utility.FormatName(unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.LastName, unit.Members.First(m => m.UserId == unit.CaptainUserId).User!.FirstName)
                 : null,
             CaptainProfileImageUrl = unit.Members?.FirstOrDefault(m => m.UserId == unit.CaptainUserId)?.User?.ProfileImageUrl,
             MatchesPlayed = unit.MatchesPlayed,
@@ -2073,7 +2073,7 @@ public class TournamentController : ControllerBase
         {
             EventId = eventId,
             UserId = g.Key,
-            UserName = $"{g.First().User?.FirstName} {g.First().User?.LastName}",
+            UserName = Utility.FormatName(g.First().User?.LastName, g.First().User?.FirstName),
             ProfileImageUrl = g.First().User?.ProfileImageUrl,
             IsCheckedIn = g.All(m => m.IsCheckedIn),
             CheckedInAt = g.Where(m => m.IsCheckedIn).Min(m => m.CheckedInAt),
@@ -2852,7 +2852,7 @@ public class TournamentController : ControllerBase
         {
             EventId = eventId,
             UserId = userId.Value,
-            UserName = user != null ? $"{user.FirstName} {user.LastName}" : null,
+            UserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : null,
             ProfileImageUrl = user?.ProfileImageUrl,
             IsCheckedIn = members.All(m => m.IsCheckedIn),
             CheckedInAt = members.Where(m => m.IsCheckedIn).Min(m => m.CheckedInAt),

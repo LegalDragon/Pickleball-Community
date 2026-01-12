@@ -265,7 +265,7 @@ public class ClubFinanceController : ControllerBase
                 Description = t.Description,
                 MemberId = t.MemberId,
                 MemberUserId = t.MemberUserId,
-                MemberName = t.MemberUser != null ? $"{t.MemberUser.FirstName} {t.MemberUser.LastName}".Trim() : null,
+                MemberName = t.MemberUser != null ? Utility.FormatName(t.MemberUser.LastName, t.MemberUser.FirstName) : null,
                 PaymentMethod = t.PaymentMethod,
                 PaymentReference = t.PaymentReference,
                 Vendor = t.Vendor,
@@ -275,13 +275,13 @@ public class ClubFinanceController : ControllerBase
                 ReferenceNumber = t.ReferenceNumber,
                 ExternalReferenceId = t.ExternalReferenceId,
                 RecordedByUserId = t.RecordedByUserId,
-                RecordedByName = t.RecordedBy != null ? $"{t.RecordedBy.FirstName} {t.RecordedBy.LastName}".Trim() : "",
+                RecordedByName = t.RecordedBy != null ? Utility.FormatName(t.RecordedBy.LastName, t.RecordedBy.FirstName) : "",
                 ApprovedByUserId = t.ApprovedByUserId,
-                ApprovedByName = t.ApprovedBy != null ? $"{t.ApprovedBy.FirstName} {t.ApprovedBy.LastName}".Trim() : null,
+                ApprovedByName = t.ApprovedBy != null ? Utility.FormatName(t.ApprovedBy.LastName, t.ApprovedBy.FirstName) : null,
                 Notes = t.Notes,
                 IsVoided = t.IsVoided,
                 VoidedByUserId = t.VoidedByUserId,
-                VoidedByName = t.VoidedBy != null ? $"{t.VoidedBy.FirstName} {t.VoidedBy.LastName}".Trim() : null,
+                VoidedByName = t.VoidedBy != null ? Utility.FormatName(t.VoidedBy.LastName, t.VoidedBy.FirstName) : null,
                 VoidedAt = t.VoidedAt,
                 VoidReason = t.VoidReason,
                 CreatedAt = t.CreatedAt,
@@ -296,7 +296,7 @@ public class ClubFinanceController : ControllerBase
                     FileSize = a.FileSize,
                     Description = a.Description,
                     UploadedByUserId = a.UploadedByUserId,
-                    UploadedByName = a.UploadedBy != null ? $"{a.UploadedBy.FirstName} {a.UploadedBy.LastName}".Trim() : "",
+                    UploadedByName = a.UploadedBy != null ? Utility.FormatName(a.UploadedBy.LastName, a.UploadedBy.FirstName) : "",
                     CreatedAt = a.CreatedAt
                 }).ToList()
             })
@@ -423,7 +423,7 @@ public class ClubFinanceController : ControllerBase
                 ReferenceNumber = transaction.ReferenceNumber,
                 ExternalReferenceId = transaction.ExternalReferenceId,
                 RecordedByUserId = transaction.RecordedByUserId,
-                RecordedByName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                RecordedByName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                 Notes = transaction.Notes,
                 CreatedAt = transaction.CreatedAt,
                 UpdatedAt = transaction.UpdatedAt,
@@ -490,7 +490,7 @@ public class ClubFinanceController : ControllerBase
                 BalanceAfter = transaction.BalanceAfter,
                 Description = transaction.Description,
                 RecordedByUserId = transaction.RecordedByUserId,
-                RecordedByName = transaction.RecordedBy != null ? $"{transaction.RecordedBy.FirstName} {transaction.RecordedBy.LastName}".Trim() : "",
+                RecordedByName = transaction.RecordedBy != null ? Utility.FormatName(transaction.RecordedBy.LastName, transaction.RecordedBy.FirstName) : "",
                 CreatedAt = transaction.CreatedAt,
                 UpdatedAt = transaction.UpdatedAt
             }
@@ -606,7 +606,7 @@ public class ClubFinanceController : ControllerBase
                 FileSize = attachment.FileSize,
                 Description = attachment.Description,
                 UploadedByUserId = attachment.UploadedByUserId,
-                UploadedByName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                UploadedByName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                 CreatedAt = attachment.CreatedAt
             }
         });
@@ -686,7 +686,7 @@ public class ClubFinanceController : ControllerBase
             .Select(g => new MemberPaymentSummaryDto
             {
                 MemberUserId = g.Key,
-                MemberName = g.First().MemberUser != null ? $"{g.First().MemberUser!.FirstName} {g.First().MemberUser.LastName}".Trim() : "",
+                MemberName = g.First().MemberUser != null ? Utility.FormatName(g.First().MemberUser!.LastName, g.First().MemberUser.FirstName) : "",
                 MemberEmail = g.First().MemberUser != null ? g.First().MemberUser!.Email : null,
                 TotalPaid = g.Sum(t => t.Amount),
                 LastPaymentDate = g.Max(t => t.CreatedAt),
@@ -725,7 +725,7 @@ public class ClubFinanceController : ControllerBase
             {
                 MemberId = m.Id,
                 UserId = m.UserId,
-                Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "",
+                Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "",
                 Email = m.User != null ? m.User.Email : null,
                 Role = m.Role
             })

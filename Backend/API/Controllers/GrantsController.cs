@@ -461,13 +461,13 @@ public class GrantsController : ControllerBase
                     ReferenceNumber = t.ReferenceNumber,
                     ExternalReferenceId = t.ExternalReferenceId,
                     ProcessedByUserId = t.ProcessedByUserId,
-                    ProcessedByName = t.ProcessedBy != null ? $"{t.ProcessedBy.FirstName} {t.ProcessedBy.LastName}".Trim() : "",
+                    ProcessedByName = t.ProcessedBy != null ? Utility.FormatName(t.ProcessedBy.LastName, t.ProcessedBy.FirstName) : "",
                     ApprovedByUserId = t.ApprovedByUserId,
-                    ApprovedByName = t.ApprovedBy != null ? $"{t.ApprovedBy.FirstName} {t.ApprovedBy.LastName}".Trim() : null,
+                    ApprovedByName = t.ApprovedBy != null ? Utility.FormatName(t.ApprovedBy.LastName, t.ApprovedBy.FirstName) : null,
                     Notes = t.Notes,
                     IsVoided = t.IsVoided,
                     VoidedByUserId = t.VoidedByUserId,
-                    VoidedByName = t.VoidedBy != null ? $"{t.VoidedBy.FirstName} {t.VoidedBy.LastName}".Trim() : null,
+                    VoidedByName = t.VoidedBy != null ? Utility.FormatName(t.VoidedBy.LastName, t.VoidedBy.FirstName) : null,
                     VoidedAt = t.VoidedAt,
                     VoidReason = t.VoidReason,
                     CreatedAt = t.CreatedAt,
@@ -482,7 +482,7 @@ public class GrantsController : ControllerBase
                         FileSize = a.FileSize,
                         Description = a.Description,
                         UploadedByUserId = a.UploadedByUserId,
-                        UploadedByName = a.UploadedBy != null ? $"{a.UploadedBy.FirstName} {a.UploadedBy.LastName}".Trim() : "",
+                        UploadedByName = a.UploadedBy != null ? Utility.FormatName(a.UploadedBy.LastName, a.UploadedBy.FirstName) : "",
                         CreatedAt = a.CreatedAt
                     }).ToList()
                 })
@@ -640,7 +640,7 @@ public class GrantsController : ControllerBase
                 GrantPurpose = createdTransaction.GrantPurpose,
                 ReferenceNumber = createdTransaction.ReferenceNumber,
                 ProcessedByUserId = createdTransaction.ProcessedByUserId,
-                ProcessedByName = createdTransaction.ProcessedBy != null ? $"{createdTransaction.ProcessedBy.FirstName} {createdTransaction.ProcessedBy.LastName}".Trim() : "",
+                ProcessedByName = createdTransaction.ProcessedBy != null ? Utility.FormatName(createdTransaction.ProcessedBy.LastName, createdTransaction.ProcessedBy.FirstName) : "",
                 Notes = createdTransaction.Notes,
                 CreatedAt = createdTransaction.CreatedAt,
                 UpdatedAt = createdTransaction.UpdatedAt
@@ -756,7 +756,7 @@ public class GrantsController : ControllerBase
                     FileSize = a.FileSize,
                     Description = a.Description,
                     UploadedByUserId = a.UploadedByUserId,
-                    UploadedByName = a.UploadedBy != null ? $"{a.UploadedBy.FirstName} {a.UploadedBy.LastName}".Trim() : "",
+                    UploadedByName = a.UploadedBy != null ? Utility.FormatName(a.UploadedBy.LastName, a.UploadedBy.FirstName) : "",
                     CreatedAt = a.CreatedAt
                 })
                 .OrderByDescending(a => a.CreatedAt)
@@ -826,7 +826,7 @@ public class GrantsController : ControllerBase
                 FileSize = attachment.FileSize,
                 Description = attachment.Description,
                 UploadedByUserId = attachment.UploadedByUserId,
-                UploadedByName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                UploadedByName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                 CreatedAt = attachment.CreatedAt
             };
 
@@ -907,7 +907,7 @@ public class GrantsController : ControllerBase
                 {
                     Id = gm.Id,
                     UserId = gm.UserId,
-                    UserName = gm.User != null ? $"{gm.User.FirstName} {gm.User.LastName}".Trim() : "",
+                    UserName = gm.User != null ? Utility.FormatName(gm.User.LastName, gm.User.FirstName) : "",
                     UserEmail = gm.User != null ? gm.User.Email : null,
                     UserProfileImageUrl = gm.User != null ? gm.User.ProfileImageUrl : null,
                     LeagueId = gm.LeagueId,
@@ -920,7 +920,7 @@ public class GrantsController : ControllerBase
                     CanManageManagers = gm.CanManageManagers,
                     IsActive = gm.IsActive,
                     CreatedByUserId = gm.CreatedByUserId,
-                    CreatedByName = gm.CreatedBy != null ? $"{gm.CreatedBy.FirstName} {gm.CreatedBy.LastName}".Trim() : "",
+                    CreatedByName = gm.CreatedBy != null ? Utility.FormatName(gm.CreatedBy.LastName, gm.CreatedBy.FirstName) : "",
                     CreatedAt = gm.CreatedAt
                 })
                 .OrderBy(gm => gm.UserName)
@@ -988,7 +988,7 @@ public class GrantsController : ControllerBase
             {
                 Id = createdManager!.Id,
                 UserId = createdManager.UserId,
-                UserName = createdManager.User != null ? $"{createdManager.User.FirstName} {createdManager.User.LastName}".Trim() : "",
+                UserName = createdManager.User != null ? Utility.FormatName(createdManager.User.LastName, createdManager.User.FirstName) : "",
                 UserEmail = createdManager.User?.Email,
                 UserProfileImageUrl = createdManager.User?.ProfileImageUrl,
                 LeagueId = createdManager.LeagueId,
@@ -1001,7 +1001,7 @@ public class GrantsController : ControllerBase
                 CanManageManagers = createdManager.CanManageManagers,
                 IsActive = createdManager.IsActive,
                 CreatedByUserId = createdManager.CreatedByUserId,
-                CreatedByName = createdManager.CreatedBy != null ? $"{createdManager.CreatedBy.FirstName} {createdManager.CreatedBy.LastName}".Trim() : "",
+                CreatedByName = createdManager.CreatedBy != null ? Utility.FormatName(createdManager.CreatedBy.LastName, createdManager.CreatedBy.FirstName) : "",
                 CreatedAt = createdManager.CreatedAt
             };
 
@@ -1224,7 +1224,7 @@ public class GrantsController : ControllerBase
                     GrantPurpose = t.GrantPurpose,
                     ReferenceNumber = t.ReferenceNumber,
                     ProcessedByUserId = t.ProcessedByUserId,
-                    ProcessedByName = t.ProcessedBy != null ? $"{t.ProcessedBy.FirstName} {t.ProcessedBy.LastName}".Trim() : "",
+                    ProcessedByName = t.ProcessedBy != null ? Utility.FormatName(t.ProcessedBy.LastName, t.ProcessedBy.FirstName) : "",
                     Notes = t.Notes,
                     IsVoided = t.IsVoided,
                     CreatedAt = t.CreatedAt,

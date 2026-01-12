@@ -233,7 +233,7 @@ export default function DrawingModal({
                             </div>
                             <div className="text-sm text-gray-500">
                               {assignment.unit.members?.map(m =>
-                                m.firstName ? `${m.firstName} ${m.lastName || ''}`.trim() : 'Player'
+                                m.lastName && m.firstName ? `${m.lastName}, ${m.firstName}` : (m.lastName || m.firstName || 'Player')
                               ).join(' & ') || 'No members'}
                             </div>
                           </div>

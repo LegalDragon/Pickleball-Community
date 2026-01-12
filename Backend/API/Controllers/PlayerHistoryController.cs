@@ -245,7 +245,7 @@ public class PlayerHistoryController : ControllerBase
                 .Select(p => new GameOpponentDto
                 {
                     UserId = p.UserId,
-                    Name = p.User != null ? $"{p.User.FirstName} {p.User.LastName}".Trim() : "Unknown",
+                    Name = p.User != null ? Utility.FormatName(p.User.LastName, p.User.FirstName) : "Unknown",
                     ProfileImageUrl = p.User?.ProfileImageUrl
                 })
                 .ToList();
@@ -253,7 +253,7 @@ public class PlayerHistoryController : ControllerBase
             // Apply partner/opponent name filters
             if (!string.IsNullOrEmpty(request.PartnerName))
             {
-                var partnerName = partner != null ? $"{partner.FirstName} {partner.LastName}".Trim().ToLower() : "";
+                var partnerName = partner != null ? Utility.FormatName(partner.LastName, partner.FirstName).ToLower() : "";
                 if (!partnerName.Contains(request.PartnerName.ToLower()))
                     continue;
             }
@@ -292,7 +292,7 @@ public class PlayerHistoryController : ControllerBase
                 IsWin = isWin,
                 Result = isWin ? "Win" : "Loss",
                 PartnerId = partner?.Id,
-                PartnerName = partner != null ? $"{partner.FirstName} {partner.LastName}".Trim() : null,
+                PartnerName = partner != null ? Utility.FormatName(partner.LastName, partner.FirstName) : null,
                 PartnerProfileImageUrl = partner?.ProfileImageUrl,
                 Opponents = opponents,
                 RoundType = match.RoundType,
@@ -418,7 +418,7 @@ public class PlayerHistoryController : ControllerBase
                 PlacementRank = a.PlacementRank,
                 AwardedAt = a.AwardedAt,
                 AwardedBySystem = a.AwardedBySystem,
-                AwardedByName = a.AwardedBy != null ? $"{a.AwardedBy.FirstName} {a.AwardedBy.LastName}".Trim() : null,
+                AwardedByName = a.AwardedBy != null ? Utility.FormatName(a.AwardedBy.LastName, a.AwardedBy.FirstName) : null,
                 ExpiresAt = a.ExpiresAt,
                 IsActive = a.IsActive,
                 Notes = a.Notes
@@ -525,7 +525,7 @@ public class PlayerHistoryController : ControllerBase
             PlacementRank = award.PlacementRank,
             AwardedAt = award.AwardedAt,
             AwardedBySystem = award.AwardedBySystem,
-            AwardedByName = award.AwardedBy != null ? $"{award.AwardedBy.FirstName} {award.AwardedBy.LastName}".Trim() : null,
+            AwardedByName = award.AwardedBy != null ? Utility.FormatName(award.AwardedBy.LastName, award.AwardedBy.FirstName) : null,
             ExpiresAt = award.ExpiresAt,
             IsActive = award.IsActive,
             Notes = award.Notes
@@ -594,7 +594,7 @@ public class PlayerHistoryController : ControllerBase
                 GameId = r.GameId,
                 EffectiveDate = r.EffectiveDate,
                 CalculatedBySystem = r.CalculatedBySystem,
-                UpdatedByName = r.UpdatedBy != null ? $"{r.UpdatedBy.FirstName} {r.UpdatedBy.LastName}".Trim() : null,
+                UpdatedByName = r.UpdatedBy != null ? Utility.FormatName(r.UpdatedBy.LastName, r.UpdatedBy.FirstName) : null,
                 Notes = r.Notes
             })
             .ToListAsync();
@@ -700,7 +700,7 @@ public class PlayerHistoryController : ControllerBase
             GameId = rating.GameId,
             EffectiveDate = rating.EffectiveDate,
             CalculatedBySystem = rating.CalculatedBySystem,
-            UpdatedByName = rating.UpdatedBy != null ? $"{rating.UpdatedBy.FirstName} {rating.UpdatedBy.LastName}".Trim() : null,
+            UpdatedByName = rating.UpdatedBy != null ? Utility.FormatName(rating.UpdatedBy.LastName, rating.UpdatedBy.FirstName) : null,
             Notes = rating.Notes
         };
 

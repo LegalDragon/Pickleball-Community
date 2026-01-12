@@ -97,10 +97,10 @@ const PublicProfile = () => {
   }
 
   const getFullName = () => {
-    if (profile?.firstName && profile?.lastName) {
-      return `${profile.firstName} ${profile.lastName}`
+    if (profile?.lastName && profile?.firstName) {
+      return `${profile.lastName}, ${profile.firstName}`
     }
-    return profile?.firstName || 'Player'
+    return profile?.lastName || profile?.firstName || 'Player'
   }
 
   const getLocation = () => {

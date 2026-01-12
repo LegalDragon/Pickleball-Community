@@ -738,7 +738,7 @@ const AdminDashboard = () => {
                                   {u.profileImageUrl ? (
                                     <img
                                       src={getSharedAssetUrl(u.profileImageUrl)}
-                                      alt={`${u.firstName} ${u.lastName}`}
+                                      alt={`${u.lastName}, ${u.firstName}`}
                                       className="w-full h-full object-cover"
                                     />
                                   ) : (
@@ -2233,7 +2233,7 @@ const AdminDashboard = () => {
                     {selectedUser.profileImageUrl ? (
                       <img
                         src={getSharedAssetUrl(selectedUser.profileImageUrl)}
-                        alt={`${selectedUser.firstName} ${selectedUser.lastName}`}
+                        alt={`${selectedUser.lastName}, ${selectedUser.firstName}`}
                         className="w-full h-full object-cover"
                       />
                     ) : (

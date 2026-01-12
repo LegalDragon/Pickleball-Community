@@ -74,7 +74,7 @@ public class FriendsController : ControllerBase
                 {
                     Id = f.Id,
                     FriendUserId = friendUser!.Id,
-                    Name = $"{friendUser.FirstName} {friendUser.LastName}".Trim(),
+                    Name = Utility.FormatName(friendUser.LastName, friendUser.FirstName),
                     ProfileImageUrl = friendUser.ProfileImageUrl,
                     ExperienceLevel = friendUser.ExperienceLevel,
                     PlayingStyle = friendUser.PlayingStyle,
@@ -193,7 +193,7 @@ public class FriendsController : ControllerBase
             var usersList = usersData.Select(u => new PlayerSearchResultDto
             {
                 Id = u.Id,
-                Name = $"{u.FirstName} {u.LastName}".Trim(),
+                Name = Utility.FormatName(u.LastName, u.FirstName),
                 ProfileImageUrl = u.ProfileImageUrl,
                 ExperienceLevel = u.ExperienceLevel,
                 Location = !string.IsNullOrEmpty(u.City) && !string.IsNullOrEmpty(u.State)
@@ -285,7 +285,7 @@ public class FriendsController : ControllerBase
                 Sender = new UserSummaryDto
                 {
                     Id = fr.Sender!.Id,
-                    Name = $"{fr.Sender.FirstName} {fr.Sender.LastName}".Trim(),
+                    Name = Utility.FormatName(fr.Sender.LastName, fr.Sender.FirstName),
                     ProfileImageUrl = fr.Sender.ProfileImageUrl,
                     ExperienceLevel = fr.Sender.ExperienceLevel,
                     PlayingStyle = fr.Sender.PlayingStyle,
@@ -377,7 +377,7 @@ public class FriendsController : ControllerBase
                 Recipient = new UserSummaryDto
                 {
                     Id = fr.Recipient!.Id,
-                    Name = $"{fr.Recipient.FirstName} {fr.Recipient.LastName}".Trim(),
+                    Name = Utility.FormatName(fr.Recipient.LastName, fr.Recipient.FirstName),
                     ProfileImageUrl = fr.Recipient.ProfileImageUrl,
                     ExperienceLevel = fr.Recipient.ExperienceLevel,
                     PlayingStyle = fr.Recipient.PlayingStyle,
@@ -484,7 +484,7 @@ public class FriendsController : ControllerBase
 
             // Get sender's name for notification
             var sender = await _context.Users.FindAsync(userId.Value);
-            var senderName = sender != null ? $"{sender.FirstName} {sender.LastName}".Trim() : "Someone";
+            var senderName = sender != null ? Utility.FormatName(sender.LastName, sender.FirstName) : "Someone";
 
             // Send notification to recipient
             await _notificationService.CreateAndSendAsync(
@@ -547,7 +547,7 @@ public class FriendsController : ControllerBase
 
             // Get acceptor's name for notification
             var acceptor = await _context.Users.FindAsync(userId.Value);
-            var acceptorName = acceptor != null ? $"{acceptor.FirstName} {acceptor.LastName}".Trim() : "Someone";
+            var acceptorName = acceptor != null ? Utility.FormatName(acceptor.LastName, acceptor.FirstName) : "Someone";
 
             // Send notification to original sender that their request was accepted
             await _notificationService.CreateAndSendAsync(

@@ -831,7 +831,7 @@ public class InstaGameService : IInstaGameService
     private static string? GetDisplayName(User? user)
     {
         if (user == null) return null;
-        var name = $"{user.FirstName} {user.LastName}".Trim();
+        var name = Utility.FormatName(user.LastName, user.FirstName);
         return string.IsNullOrEmpty(name) ? user.Email : name;
     }
 

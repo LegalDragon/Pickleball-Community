@@ -55,7 +55,7 @@ public class ClubsController : ControllerBase
         var user = await _context.Users.FindAsync(userId.Value);
         if (user == null) return false;
 
-        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        var fullName = Utility.FormatName(user.LastName, user.FirstName);
         return !fullName.Equals("New User", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -402,7 +402,7 @@ public class ClubsController : ControllerBase
                 MemberCount = club.Members.Count,
                 CreatedAt = club.CreatedAt,
                 CreatedByUserId = club.CreatedByUserId,
-                CreatedByUserName = club.CreatedBy != null ? $"{club.CreatedBy.FirstName} {club.CreatedBy.LastName}".Trim() : null,
+                CreatedByUserName = club.CreatedBy != null ? Utility.FormatName(club.CreatedBy.LastName, club.CreatedBy.FirstName) : null,
                 IsMember = membership != null,
                 IsAdmin = isAdmin,
                 IsModerator = isModerator,
@@ -418,7 +418,7 @@ public class ClubsController : ControllerBase
                     {
                         Id = m.Id,
                         UserId = m.UserId,
-                        Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "",
+                        Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "",
                         ProfileImageUrl = m.User?.ProfileImageUrl,
                         ExperienceLevel = m.User?.ExperienceLevel,
                         Location = GetUserLocation(m.User),
@@ -678,7 +678,7 @@ public class ClubsController : ControllerBase
 
             // Notify club admins about the new join request
             var requester = await _context.Users.FindAsync(userId.Value);
-            var requesterName = requester != null ? $"{requester.FirstName} {requester.LastName}".Trim() : "Someone";
+            var requesterName = requester != null ? Utility.FormatName(requester.LastName, requester.FirstName) : "Someone";
 
             var clubAdmins = await _context.ClubMembers
                 .Where(m => m.ClubId == id && m.Role == "Admin" && m.IsActive)
@@ -926,7 +926,7 @@ public class ClubsController : ControllerBase
             {
                 Id = membership.Id,
                 UserId = membership.UserId,
-                Name = membership.User != null ? $"{membership.User.FirstName} {membership.User.LastName}".Trim() : "",
+                Name = membership.User != null ? Utility.FormatName(membership.User.LastName, membership.User.FirstName) : "",
                 ProfileImageUrl = membership.User?.ProfileImageUrl,
                 ExperienceLevel = membership.User?.ExperienceLevel,
                 Location = GetUserLocation(membership.User),
@@ -1181,7 +1181,7 @@ public class ClubsController : ControllerBase
                     ClubId = notification.ClubId,
                     ClubName = club.Name,
                     SentByUserId = notification.SentByUserId,
-                    SentByUserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                    SentByUserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                     Title = notification.Title,
                     Message = notification.Message,
                     SentAt = notification.SentAt
@@ -1710,7 +1710,7 @@ public class ClubsController : ControllerBase
                     Visibility = document.Visibility,
                     SortOrder = document.SortOrder,
                     UploadedByUserId = document.UploadedByUserId,
-                    UploadedByUserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                    UploadedByUserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                     CreatedAt = document.CreatedAt,
                     UpdatedAt = document.UpdatedAt
                 },
@@ -1789,7 +1789,7 @@ public class ClubsController : ControllerBase
                     Visibility = document.Visibility,
                     SortOrder = document.SortOrder,
                     UploadedByUserId = document.UploadedByUserId,
-                    UploadedByUserName = document.UploadedBy != null ? $"{document.UploadedBy.FirstName} {document.UploadedBy.LastName}".Trim() : "",
+                    UploadedByUserName = document.UploadedBy != null ? Utility.FormatName(document.UploadedBy.LastName, document.UploadedBy.FirstName) : "",
                     CreatedAt = document.CreatedAt,
                     UpdatedAt = document.UpdatedAt
                 },

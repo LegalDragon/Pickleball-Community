@@ -138,7 +138,7 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.GivenName, user.FirstName),
             new Claim(ClaimTypes.Surname, user.LastName),
-            new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
+            new Claim(ClaimTypes.Name, Utility.FormatName(user.LastName, user.FirstName)),
             new Claim(ClaimTypes.Role, user.Role)  // Use ClaimTypes.Role for proper [Authorize(Roles=...)]
         };
 

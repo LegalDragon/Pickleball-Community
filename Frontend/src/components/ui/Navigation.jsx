@@ -235,11 +235,11 @@ const Navigation = () => {
   const getUserDisplayName = () => {
     if (!user) return 'User';
 
-    if (user.firstName && user.lastName) {
-      return `${user.firstName} ${user.lastName}`;
+    if (user.lastName && user.firstName) {
+      return `${user.lastName}, ${user.firstName}`;
     }
 
-    return user.name || user.email?.split('@')[0] || 'User';
+    return user.lastName || user.firstName || user.name || user.email?.split('@')[0] || 'User';
   };
 
   // Get user role safely

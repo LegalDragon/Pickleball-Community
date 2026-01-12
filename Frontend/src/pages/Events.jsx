@@ -1760,9 +1760,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               userId: member.userId,
               firstName: member.firstName,
               lastName: member.lastName,
-              userName: member.firstName && member.lastName
-                ? `${member.firstName} ${member.lastName}`
-                : member.firstName || 'Player',
+              userName: member.lastName && member.firstName
+                ? `${member.lastName}, ${member.firstName}`
+                : member.lastName || member.firstName || 'Player',
               userProfileImageUrl: member.profileImageUrl,
               unitId: unit.id,
               teamName: unit.name,

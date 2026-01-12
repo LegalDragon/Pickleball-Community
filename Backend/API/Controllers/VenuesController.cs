@@ -976,7 +976,7 @@ public class VenuesController : ControllerBase
             Id = vc.Id,
             VenueId = vc.VenueId,
             UserId = vc.UserId,
-            UserName = vc.User != null ? $"{vc.User.FirstName} {vc.User.LastName}".Trim() : null,
+            UserName = vc.User != null ? Utility.FormatName(vc.User.LastName, vc.User.FirstName) : null,
             UserProfileImageUrl = vc.User?.ProfileImageUrl,
             NameConfirmed = vc.NameConfirmed,
             SuggestedName = vc.SuggestedName,

@@ -273,7 +273,7 @@ public class LeaguesController : ControllerBase
                         IsActive = d.IsActive,
                         CreatedAt = d.CreatedAt,
                         UploadedByUserId = d.UploadedByUserId,
-                        UploadedByName = d.UploadedBy != null ? $"{d.UploadedBy.FirstName} {d.UploadedBy.LastName}".Trim() : null
+                        UploadedByName = d.UploadedBy != null ? Utility.FormatName(d.UploadedBy.LastName, d.UploadedBy.FirstName) : null
                     });
 
                 allDocuments.AddRange(sortedParentDocs);
@@ -299,7 +299,7 @@ public class LeaguesController : ControllerBase
                     IsActive = d.IsActive,
                     CreatedAt = d.CreatedAt,
                     UploadedByUserId = d.UploadedByUserId,
-                    UploadedByName = d.UploadedBy != null ? $"{d.UploadedBy.FirstName} {d.UploadedBy.LastName}".Trim() : null
+                    UploadedByName = d.UploadedBy != null ? Utility.FormatName(d.UploadedBy.LastName, d.UploadedBy.FirstName) : null
                 }));
 
             // Documents are already in correct order: parent docs (root first) then current league docs
@@ -343,13 +343,13 @@ public class LeaguesController : ControllerBase
                 }).ToList(),
                 Managers = league.Managers
                     .OrderBy(m => GetRoleSortOrder(m.Role))
-                    .ThenBy(m => $"{m.User?.FirstName} {m.User?.LastName}".Trim())
+                    .ThenBy(m => Utility.FormatName(m.User?.LastName, m.User?.FirstName))
                     .Select(m => new LeagueManagerDto
                 {
                     Id = m.Id,
                     LeagueId = m.LeagueId,
                     UserId = m.UserId,
-                    UserName = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                    UserName = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
                     UserProfileImageUrl = m.User?.ProfileImageUrl,
                     Role = m.Role,
                     Title = m.Title,
@@ -388,7 +388,7 @@ public class LeaguesController : ControllerBase
                     ClubCity = r.Club?.City,
                     ClubState = r.Club?.State,
                     RequestedByUserId = r.RequestedByUserId,
-                    RequestedByName = $"{r.RequestedBy?.FirstName} {r.RequestedBy?.LastName}".Trim(),
+                    RequestedByName = Utility.FormatName(r.RequestedBy?.LastName, r.RequestedBy?.FirstName),
                     Status = r.Status,
                     Message = r.Message,
                     CreatedAt = r.CreatedAt
@@ -717,7 +717,7 @@ public class LeaguesController : ControllerBase
                     Id = existing.Id,
                     LeagueId = existing.LeagueId,
                     UserId = existing.UserId,
-                    UserName = $"{user.FirstName} {user.LastName}".Trim(),
+                    UserName = Utility.FormatName(user.LastName, user.FirstName),
                     UserProfileImageUrl = user.ProfileImageUrl,
                     Role = existing.Role,
                     Title = existing.Title,
@@ -747,7 +747,7 @@ public class LeaguesController : ControllerBase
                 Id = manager.Id,
                 LeagueId = manager.LeagueId,
                 UserId = manager.UserId,
-                UserName = $"{user.FirstName} {user.LastName}".Trim(),
+                UserName = Utility.FormatName(user.LastName, user.FirstName),
                 UserProfileImageUrl = user.ProfileImageUrl,
                 Role = manager.Role,
                 Title = manager.Title,
@@ -792,7 +792,7 @@ public class LeaguesController : ControllerBase
                 Id = manager.Id,
                 LeagueId = manager.LeagueId,
                 UserId = manager.UserId,
-                UserName = $"{manager.User?.FirstName} {manager.User?.LastName}".Trim(),
+                UserName = Utility.FormatName(manager.User?.LastName, manager.User?.FirstName),
                 UserProfileImageUrl = manager.User?.ProfileImageUrl,
                 Role = manager.Role,
                 Title = manager.Title,
@@ -1495,7 +1495,7 @@ public class LeaguesController : ControllerBase
                 IsActive = document.IsActive,
                 CreatedAt = document.CreatedAt,
                 UploadedByUserId = document.UploadedByUserId,
-                UploadedByName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : null
+                UploadedByName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : null
             };
 
             return Ok(new ApiResponse<LeagueDocumentDto> { Success = true, Data = dto });
@@ -1551,7 +1551,7 @@ public class LeaguesController : ControllerBase
                 IsActive = document.IsActive,
                 CreatedAt = document.CreatedAt,
                 UploadedByUserId = document.UploadedByUserId,
-                UploadedByName = document.UploadedBy != null ? $"{document.UploadedBy.FirstName} {document.UploadedBy.LastName}".Trim() : null
+                UploadedByName = document.UploadedBy != null ? Utility.FormatName(document.UploadedBy.LastName, document.UploadedBy.FirstName) : null
             };
 
             return Ok(new ApiResponse<LeagueDocumentDto> { Success = true, Data = dto });

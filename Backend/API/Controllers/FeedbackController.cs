@@ -95,7 +95,7 @@ public class FeedbackController : ControllerBase
                 if (user != null)
                 {
                     userEmail = user.Email;
-                    userName = $"{user.FirstName} {user.LastName}".Trim();
+                    userName = Utility.FormatName(user.LastName, user.FirstName);
                 }
             }
 

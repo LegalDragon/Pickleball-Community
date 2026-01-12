@@ -447,7 +447,7 @@ public class PlayerCertificationService : IPlayerCertificationService
             return new InvitableUserDto
             {
                 UserId = friend.Id,
-                Name = $"{friend.FirstName} {friend.LastName}",
+                Name = Utility.FormatName(friend.LastName, friend.FirstName),
                 ProfileImageUrl = friend.ProfileImageUrl,
                 AlreadyInvited = invitedUserIds.Contains(friend.Id),
                 HasReviewed = reviewedUserIds.Contains(friend.Id)
@@ -475,7 +475,7 @@ public class PlayerCertificationService : IPlayerCertificationService
                     .Select(m => new InvitableUserDto
                     {
                         UserId = m.UserId,
-                        Name = $"{m.User.FirstName} {m.User.LastName}",
+                        Name = Utility.FormatName(m.User.LastName, m.User.FirstName),
                         ProfileImageUrl = m.User.ProfileImageUrl,
                         AlreadyInvited = invitedUserIds.Contains(m.UserId),
                         HasReviewed = reviewedUserIds.Contains(m.UserId)
@@ -515,7 +515,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             Id = i.Id,
             UserId = i.InvitedUserId,
-            UserName = $"{i.InvitedUser.FirstName} {i.InvitedUser.LastName}",
+            UserName = Utility.FormatName(i.InvitedUser.LastName, i.InvitedUser.FirstName),
             ProfileImageUrl = i.InvitedUser.ProfileImageUrl,
             HasReviewed = i.HasReviewed,
             InvitedAt = i.InvitedAt,
@@ -555,7 +555,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         if (newInvitedUserIds.Count > 0)
         {
             var studentName = request.Student != null
-                ? $"{request.Student.FirstName} {request.Student.LastName}".Trim()
+                ? Utility.FormatName(request.Student.LastName, request.Student.FirstName)
                 : "A player";
 
             await _notificationService.CreateAndSendToUsersAsync(
@@ -595,7 +595,7 @@ public class PlayerCertificationService : IPlayerCertificationService
             InvitationId = i.Id,
             RequestId = i.RequestId,
             StudentId = i.Request.StudentId,
-            StudentName = $"{i.Request.Student.FirstName} {i.Request.Student.LastName}",
+            StudentName = Utility.FormatName(i.Request.Student.LastName, i.Request.Student.FirstName),
             StudentProfileImageUrl = i.Request.Student.ProfileImageUrl,
             Message = i.Request.Message,
             ReviewToken = i.Request.Token,
@@ -667,7 +667,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             RequestId = request.Id,
             PlayerId = request.StudentId,
-            PlayerName = $"{request.Student.FirstName} {request.Student.LastName}",
+            PlayerName = Utility.FormatName(request.Student.LastName, request.Student.FirstName),
             PlayerProfileImageUrl = request.Student.ProfileImageUrl,
             Message = request.Message,
             Visibility = request.Visibility.ToString(),
@@ -902,7 +902,7 @@ public class PlayerCertificationService : IPlayerCertificationService
         {
             return new CertificateSummaryDto
             {
-                StudentName = $"{student.FirstName} {student.LastName}",
+                StudentName = Utility.FormatName(student.LastName, student.FirstName),
                 StudentProfileImageUrl = student.ProfileImageUrl,
                 TotalReviews = 0,
                 PeerReviewCount = 0,
@@ -961,7 +961,7 @@ public class PlayerCertificationService : IPlayerCertificationService
 
         return new CertificateSummaryDto
         {
-            StudentName = $"{student.FirstName} {student.LastName}",
+            StudentName = Utility.FormatName(student.LastName, student.FirstName),
             StudentProfileImageUrl = student.ProfileImageUrl,
             TotalReviews = allReviews.Count,
             PeerReviewCount = peerReviews.Count,
@@ -1123,7 +1123,7 @@ public class PlayerCertificationService : IPlayerCertificationService
     {
         Id = entity.Id,
         StudentId = entity.StudentId,
-        StudentName = $"{entity.Student.FirstName} {entity.Student.LastName}",
+        StudentName = Utility.FormatName(entity.Student.LastName, entity.Student.FirstName),
         StudentProfileImageUrl = entity.Student.ProfileImageUrl,
         Token = entity.Token,
         Message = entity.Message,

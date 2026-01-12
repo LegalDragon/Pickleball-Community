@@ -87,7 +87,7 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="font-medium text-gray-900">{unit.divisionName}</div>
             <div className="text-sm text-gray-500 mt-1">
-              {unit.members?.map(m => m.firstName ? `${m.firstName} ${m.lastName || ''}`.trim() : 'Player').join(' & ') || unit.userName}
+              {unit.members?.map(m => m.lastName && m.firstName ? `${m.lastName}, ${m.firstName}` : (m.lastName || m.firstName || 'Player')).join(' & ') || unit.userName}
             </div>
             <div className="text-xs text-gray-400 mt-1">
               Unit ID: {unit.unitId}

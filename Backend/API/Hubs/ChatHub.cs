@@ -145,7 +145,7 @@ public class ChatHub : Hub
         {
             ConversationId = conversationId,
             UserId = userId.Value,
-            UserName = participant.User != null ? $"{participant.User.FirstName} {participant.User.LastName}".Trim() : null,
+            UserName = participant.User != null ? Utility.FormatName(participant.User.LastName, participant.User.FirstName) : null,
             IsTyping = isTyping
         };
 
@@ -173,7 +173,7 @@ public class ChatHub : Hub
             ConversationId = conversationId,
             MessageId = 0, // All messages up to LastReadAt
             UserId = userId.Value,
-            UserName = participant.User != null ? $"{participant.User.FirstName} {participant.User.LastName}".Trim() : null,
+            UserName = participant.User != null ? Utility.FormatName(participant.User.LastName, participant.User.FirstName) : null,
             ReadAt = participant.LastReadAt.Value
         };
 

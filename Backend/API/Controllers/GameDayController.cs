@@ -124,7 +124,7 @@ public class GameDayController : ControllerBase
                     Members = u.Members.Where(m => m.InviteStatus == "Accepted").Select(m => new GameDayPlayerDto
                     {
                         UserId = m.UserId,
-                        Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                        Name = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
                         ProfileImageUrl = m.User?.ProfileImageUrl,
                         IsCheckedIn = m.IsCheckedIn
                     }).ToList()
@@ -719,7 +719,7 @@ public class GameDayController : ControllerBase
                 Members = m.Unit1.Members?.Where(mem => mem.InviteStatus == "Accepted").Select(mem => new GameDayPlayerDto
                 {
                     UserId = mem.UserId,
-                    Name = $"{mem.User?.FirstName} {mem.User?.LastName}".Trim(),
+                    Name = Utility.FormatName(mem.User?.LastName, mem.User?.FirstName),
                     ProfileImageUrl = mem.User?.ProfileImageUrl
                 }).ToList() ?? new List<GameDayPlayerDto>()
             } : null,
@@ -731,7 +731,7 @@ public class GameDayController : ControllerBase
                 Members = m.Unit2.Members?.Where(mem => mem.InviteStatus == "Accepted").Select(mem => new GameDayPlayerDto
                 {
                     UserId = mem.UserId,
-                    Name = $"{mem.User?.FirstName} {mem.User?.LastName}".Trim(),
+                    Name = Utility.FormatName(mem.User?.LastName, mem.User?.FirstName),
                     ProfileImageUrl = mem.User?.ProfileImageUrl
                 }).ToList() ?? new List<GameDayPlayerDto>()
             } : null,

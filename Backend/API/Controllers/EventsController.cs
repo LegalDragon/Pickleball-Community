@@ -54,7 +54,7 @@ public class EventsController : ControllerBase
         var user = await _context.Users.FindAsync(userId.Value);
         if (user == null) return false;
 
-        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        var fullName = Utility.FormatName(user.LastName, user.FirstName);
         return !fullName.Equals("New User", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -427,7 +427,7 @@ public class EventsController : ControllerBase
                         DivisionId = jr.Unit.DivisionId,
                         DivisionName = jr.Unit.Division != null ? jr.Unit.Division.Name : "",
                         TeamUnitName = jr.Unit.Division != null ? jr.Unit.Division.TeamUnit!.Name : null,
-                        CaptainName = jr.Unit.Captain != null ? $"{jr.Unit.Captain.FirstName} {jr.Unit.Captain.LastName}".Trim() : null,
+                        CaptainName = jr.Unit.Captain != null ? Utility.FormatName(jr.Unit.Captain.LastName, jr.Unit.Captain.FirstName) : null,
                         CaptainProfileImageUrl = jr.Unit.Captain != null ? jr.Unit.Captain.ProfileImageUrl : null,
                         Status = jr.Status,
                         CreatedAt = jr.CreatedAt
@@ -476,7 +476,7 @@ public class EventsController : ControllerBase
                 DivisionCount = evt.Divisions.Count(d => d.IsActive),
                 PrimaryTeamSize = evt.Divisions.Where(d => d.IsActive).GroupBy(d => d.TeamSize).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault(),
                 OrganizedByUserId = evt.OrganizedByUserId,
-                OrganizerName = evt.OrganizedBy != null ? $"{evt.OrganizedBy.FirstName} {evt.OrganizedBy.LastName}".Trim() : null,
+                OrganizerName = evt.OrganizedBy != null ? Utility.FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName) : null,
                 OrganizedByClubId = evt.OrganizedByClubId,
                 ClubName = evt.OrganizedByClub?.Name,
                 CreatedAt = evt.CreatedAt,
@@ -519,7 +519,7 @@ public class EventsController : ControllerBase
                                         .Select(m => new PartnerInfoDto
                                         {
                                             UserId = m.UserId,
-                                            Name = m.User != null ? $"{m.User.FirstName} {m.User.LastName}".Trim() : "Unknown",
+                                            Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "Unknown",
                                             ProfileImageUrl = m.User?.ProfileImageUrl,
                                             Role = m.Role,
                                             InviteStatus = m.InviteStatus
@@ -533,7 +533,7 @@ public class EventsController : ControllerBase
                                             {
                                                 RequestId = jr.Id,
                                                 UserId = jr.UserId,
-                                                UserName = jr.User != null ? $"{jr.User.FirstName} {jr.User.LastName}".Trim() : "Unknown",
+                                                UserName = jr.User != null ? Utility.FormatName(jr.User.LastName, jr.User.FirstName) : "Unknown",
                                                 ProfileImageUrl = jr.User?.ProfileImageUrl,
                                                 Message = jr.Message,
                                                 CreatedAt = jr.CreatedAt
@@ -1015,7 +1015,7 @@ public class EventsController : ControllerBase
             await _context.SaveChangesAsync();
 
             var user = await _context.Users.FindAsync(userId.Value);
-            var userName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "Someone";
+            var userName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "Someone";
 
             // Notify event organizer about new registration (don't notify self)
             if (evt.OrganizedByUserId != userId.Value)
@@ -1175,7 +1175,7 @@ public class EventsController : ControllerBase
                     EventId = request.EventId,
                     DivisionId = request.DivisionId,
                     UserId = request.UserId,
-                    UserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : "",
+                    UserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "",
                     UserProfileImageUrl = user?.ProfileImageUrl,
                     UserExperienceLevel = user?.ExperienceLevel,
                     Message = request.Message,
@@ -1999,7 +1999,7 @@ public class EventsController : ControllerBase
                     EventId = registration.EventId,
                     DivisionId = registration.DivisionId,
                     UserId = registration.UserId,
-                    UserName = registration.User != null ? $"{registration.User.FirstName} {registration.User.LastName}".Trim() : "",
+                    UserName = registration.User != null ? Utility.FormatName(registration.User.LastName, registration.User.FirstName) : "",
                     UserProfileImageUrl = registration.User?.ProfileImageUrl,
                     TeamId = registration.TeamId,
                     TeamName = registration.TeamName,
@@ -2080,7 +2080,7 @@ public class EventsController : ControllerBase
             PrimaryTeamSize = evt.Divisions?.Where(d => d.IsActive).GroupBy(d => d.TeamSize).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault() ?? 2,
             Distance = distance,
             OrganizedByUserId = evt.OrganizedByUserId,
-            OrganizerName = evt.OrganizedBy != null ? $"{evt.OrganizedBy.FirstName} {evt.OrganizedBy.LastName}".Trim() : null,
+            OrganizerName = evt.OrganizedBy != null ? Utility.FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName) : null,
             OrganizedByClubId = evt.OrganizedByClubId,
             ClubName = evt.OrganizedByClub?.Name,
             CreatedAt = evt.CreatedAt

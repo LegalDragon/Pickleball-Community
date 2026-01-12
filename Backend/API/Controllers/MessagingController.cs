@@ -81,7 +81,7 @@ public class MessagingController : ControllerBase
                     Type = c.Conversation.Type,
                     Name = c.Conversation.Name,
                     DisplayName = c.Conversation.Type == "Direct" && otherParticipant?.User != null
-                        ? $"{otherParticipant.User.FirstName} {otherParticipant.User.LastName}".Trim()
+                        ? Utility.FormatName(otherParticipant.User.LastName, otherParticipant.User.FirstName)
                         : c.Conversation.Type == "Club" && c.Conversation.Club != null
                             ? c.Conversation.Club.Name
                             : c.Conversation.Name,
@@ -99,7 +99,7 @@ public class MessagingController : ControllerBase
                             : lastMessage.Content
                         : null,
                     LastMessageSenderName = lastMessage?.Sender != null
-                        ? $"{lastMessage.Sender.FirstName} {lastMessage.Sender.LastName}".Trim()
+                        ? Utility.FormatName(lastMessage.Sender.LastName, lastMessage.Sender.FirstName)
                         : null,
                     ParticipantCount = c.Conversation.Participants.Count,
                     IsMuted = c.Participant.IsMuted
@@ -167,7 +167,7 @@ public class MessagingController : ControllerBase
                 Participants = conversation.Participants.Select(p => new ConversationParticipantDto
                 {
                     UserId = p.UserId,
-                    DisplayName = p.User != null ? $"{p.User.FirstName} {p.User.LastName}".Trim() : null,
+                    DisplayName = p.User != null ? Utility.FormatName(p.User.LastName, p.User.FirstName) : null,
                     Avatar = p.User?.ProfileImageUrl,
                     Role = p.Role,
                     JoinedAt = p.JoinedAt,
@@ -585,7 +585,7 @@ public class MessagingController : ControllerBase
                 ConversationId = id,
                 MessageId = 0, // All messages
                 UserId = userId.Value,
-                UserName = user != null ? $"{user.FirstName} {user.LastName}".Trim() : null,
+                UserName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : null,
                 ReadAt = participant.LastReadAt.Value
             };
             await _hubContext.Clients.Group($"conversation_{id}")
@@ -910,7 +910,7 @@ public class MessagingController : ControllerBase
             Id = message.Id,
             ConversationId = message.ConversationId,
             SenderId = message.SenderId,
-            SenderName = message.Sender != null ? $"{message.Sender.FirstName} {message.Sender.LastName}".Trim() : null,
+            SenderName = message.Sender != null ? Utility.FormatName(message.Sender.LastName, message.Sender.FirstName) : null,
             SenderAvatar = message.Sender?.ProfileImageUrl,
             Content = message.IsDeleted ? "[Message deleted]" : message.Content,
             MessageType = message.MessageType,
@@ -921,7 +921,7 @@ public class MessagingController : ControllerBase
                 ConversationId = message.ReplyToMessage.ConversationId,
                 SenderId = message.ReplyToMessage.SenderId,
                 SenderName = message.ReplyToMessage.Sender != null
-                    ? $"{message.ReplyToMessage.Sender.FirstName} {message.ReplyToMessage.Sender.LastName}".Trim()
+                    ? Utility.FormatName(message.ReplyToMessage.Sender.LastName, message.ReplyToMessage.Sender.FirstName)
                     : null,
                 Content = message.ReplyToMessage.IsDeleted ? "[Message deleted]" : message.ReplyToMessage.Content,
                 MessageType = message.ReplyToMessage.MessageType,
