@@ -1402,6 +1402,7 @@ export default function Events() {
           setSelectedPaymentEvent(null);
           loadMyEvents();
         }}
+        userId={user?.id}
       />
 
       {/* Profile Modal for My Events tab */}
@@ -5335,6 +5336,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             loadMyEvents();
           }
         }}
+        userId={user?.id}
       />
 
       {/* Admin Payment Modal */}

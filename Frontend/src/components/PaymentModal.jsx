@@ -3,7 +3,7 @@ import { X, DollarSign, Upload, CheckCircle, AlertCircle, Loader2, Image, Extern
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 
-export default function PaymentModal({ isOpen, onClose, registration, event, onPaymentUpdated }) {
+export default function PaymentModal({ isOpen, onClose, registration, event, onPaymentUpdated, userId }) {
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -24,7 +24,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
     }
   }, [registration]);
 
-  const referenceId = event && registration ? `E${event.id}-U${registration.unitId}` : '';
+  const referenceId = event && registration ? `E${event.id}-U${registration.unitId}-P${userId || 0}` : '';
 
   const handleCopyReferenceId = async () => {
     try {
