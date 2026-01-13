@@ -743,10 +743,10 @@ public class GameDayController : ControllerBase
         // Filter to only checked-in players if required
         if (dto.CheckedInOnly)
         {
-            var checkedInUserIds = await _context.EventUnitMembers
+            var checkedInUserIds = (await _context.EventUnitMembers
                 .Where(m => m.Unit!.EventId == eventId && m.IsCheckedIn)
                 .Select(m => m.UserId)
-                .ToHashSetAsync();
+                .ToListAsync()).ToHashSet();
 
             allPlayers = allPlayers.Where(p => checkedInUserIds.Contains(p.UserId)).ToList();
         }
@@ -768,7 +768,7 @@ public class GameDayController : ControllerBase
             {
                 var lastGame = await _context.EventMatches
                     .Where(m => m.TournamentCourtId == court.Id && m.Status == "Finished")
-                    .OrderByDescending(m => m.FinishedAt)
+                    .OrderByDescending(m => m.CompletedAt)
                     .FirstOrDefaultAsync();
 
                 if (lastGame?.WinnerUnitId != null)
@@ -994,15 +994,18 @@ public class GameDayController : ControllerBase
         }
 
         // Get players currently in active games
-        var playersInActiveGames = await _context.EventMatches
+        var activeMatches = await _context.EventMatches
             .Where(m => m.EventId == eventId && (m.Status == "InProgress" || m.Status == "Scheduled" || m.Status == "Queued"))
-            .Include(m => m.Unit1).ThenInclude(u => u.Members)
-            .Include(m => m.Unit2).ThenInclude(u => u.Members)
+            .Include(m => m.Unit1).ThenInclude(u => u!.Members)
+            .Include(m => m.Unit2).ThenInclude(u => u!.Members)
+            .ToListAsync();
+
+        var playersInActiveGames = activeMatches
             .SelectMany(m =>
-                m.Unit1!.Members.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId)
-                .Concat(m.Unit2!.Members.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId)))
+                (m.Unit1?.Members?.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId) ?? Enumerable.Empty<int>())
+                .Concat(m.Unit2?.Members?.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId) ?? Enumerable.Empty<int>()))
             .Distinct()
-            .ToHashSetAsync();
+            .ToHashSet();
 
         // Mark players who are available (not in active games)
         var playersWithAvailability = allPlayers.Select(p => new
@@ -1056,11 +1059,11 @@ public class GameDayController : ControllerBase
             return BadRequest(new { success = false, message = "A player cannot be on both teams" });
 
         // Verify all players are registered for this event
-        var registeredPlayers = await _context.EventUnitMembers
+        var registeredPlayers = (await _context.EventUnitMembers
             .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
             .Select(m => m.UserId)
             .Distinct()
-            .ToHashSetAsync();
+            .ToListAsync()).ToHashSet();
 
         var unregisteredPlayers = allPlayerIds.Where(id => !registeredPlayers.Contains(id)).ToList();
         if (unregisteredPlayers.Any())
@@ -1203,11 +1206,11 @@ public class GameDayController : ControllerBase
             return Ok(new { success = true, data = new List<object>() });
 
         // Get users already registered for this event
-        var registeredUserIds = await _context.EventUnitMembers
+        var registeredUserIds = (await _context.EventUnitMembers
             .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
             .Select(m => m.UserId)
             .Distinct()
-            .ToHashSetAsync();
+            .ToListAsync()).ToHashSet();
 
         // Search for users by name
         var queryLower = query.ToLower();
