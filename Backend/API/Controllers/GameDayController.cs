@@ -698,6 +698,255 @@ public class GameDayController : ControllerBase
     }
 
     // ==========================================
+    // Automated Scheduling (Popcorn/Gauntlet)
+    // ==========================================
+
+    /// <summary>
+    /// Generate a round of games using popcorn (random) or gauntlet (winners stay) scheduling
+    /// </summary>
+    [HttpPost("events/{eventId}/generate-round")]
+    public async Task<IActionResult> GenerateRound(int eventId, [FromBody] GenerateRoundDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, userId.Value))
+            return Forbid();
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new { success = false, message = "Event not found" });
+
+        // Get available players (checked-in members from specified division or all divisions)
+        var unitsQuery = _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.EventId == eventId && u.Status != "Cancelled");
+
+        if (dto.DivisionId.HasValue)
+        {
+            unitsQuery = unitsQuery.Where(u => u.DivisionId == dto.DivisionId.Value);
+        }
+
+        var units = await unitsQuery.ToListAsync();
+
+        // Get all players from units (for individual player scheduling)
+        var allPlayers = units
+            .SelectMany(u => u.Members.Where(m => m.InviteStatus == "Accepted"))
+            .Select(m => new { m.UserId, m.User, UnitId = m.UnitId })
+            .ToList();
+
+        // Filter to only checked-in players if required
+        if (dto.CheckedInOnly)
+        {
+            var checkedInUserIds = await _context.EventUnitMembers
+                .Where(m => m.Unit!.EventId == eventId && m.IsCheckedIn)
+                .Select(m => m.UserId)
+                .ToHashSetAsync();
+
+            allPlayers = allPlayers.Where(p => checkedInUserIds.Contains(p.UserId)).ToList();
+        }
+
+        // Get available courts
+        var availableCourts = await _context.TournamentCourts
+            .Where(c => c.EventId == eventId && c.IsActive && c.Status == "Available")
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+
+        if (availableCourts.Count == 0)
+            return BadRequest(new { success = false, message = "No available courts" });
+
+        // For gauntlet mode, get winners from last completed games on each court
+        Dictionary<int, int?> courtWinners = new();
+        if (dto.Method == "gauntlet")
+        {
+            foreach (var court in availableCourts)
+            {
+                var lastGame = await _context.EventMatches
+                    .Where(m => m.TournamentCourtId == court.Id && m.Status == "Finished")
+                    .OrderByDescending(m => m.FinishedAt)
+                    .FirstOrDefaultAsync();
+
+                if (lastGame?.WinnerUnitId != null)
+                {
+                    courtWinners[court.Id] = lastGame.WinnerUnitId;
+                }
+            }
+        }
+
+        // Get the team size from the division or default to 2 (doubles)
+        var teamSize = dto.TeamSize ?? 2;
+        var playersPerGame = teamSize * 2;
+
+        if (allPlayers.Count < playersPerGame)
+            return BadRequest(new { success = false, message = $"Not enough players. Need at least {playersPerGame} for a game." });
+
+        // Shuffle players for random assignment
+        var random = new Random();
+        var shuffledPlayers = allPlayers.OrderBy(_ => random.Next()).ToList();
+
+        // Create temporary units for ad-hoc games
+        var createdMatches = new List<EventMatch>();
+        var usedPlayerIds = new HashSet<int>();
+        var divisionId = dto.DivisionId ?? evt.Divisions.FirstOrDefault()?.Id ?? 0;
+
+        foreach (var court in availableCourts.Take(dto.MaxGames ?? availableCourts.Count))
+        {
+            // For gauntlet, try to keep winners on court
+            List<int> team1PlayerIds = new();
+            List<int> team2PlayerIds = new();
+
+            if (dto.Method == "gauntlet" && courtWinners.TryGetValue(court.Id, out var winnerUnitId) && winnerUnitId.HasValue)
+            {
+                // Get winner unit's players
+                var winnerUnit = await _context.EventUnits
+                    .Include(u => u.Members)
+                    .FirstOrDefaultAsync(u => u.Id == winnerUnitId.Value);
+
+                if (winnerUnit != null)
+                {
+                    var winnerPlayerIds = winnerUnit.Members
+                        .Where(m => m.InviteStatus == "Accepted")
+                        .Select(m => m.UserId)
+                        .Take(teamSize)
+                        .ToList();
+
+                    // Check if all winner players are still available
+                    if (winnerPlayerIds.All(id => shuffledPlayers.Any(p => p.UserId == id && !usedPlayerIds.Contains(id))))
+                    {
+                        team1PlayerIds = winnerPlayerIds;
+                        foreach (var id in team1PlayerIds) usedPlayerIds.Add(id);
+                    }
+                }
+            }
+
+            // Fill remaining spots from shuffled players
+            var availableForTeam1 = shuffledPlayers
+                .Where(p => !usedPlayerIds.Contains(p.UserId))
+                .Take(teamSize - team1PlayerIds.Count)
+                .ToList();
+
+            foreach (var p in availableForTeam1)
+            {
+                team1PlayerIds.Add(p.UserId);
+                usedPlayerIds.Add(p.UserId);
+            }
+
+            var availableForTeam2 = shuffledPlayers
+                .Where(p => !usedPlayerIds.Contains(p.UserId))
+                .Take(teamSize)
+                .ToList();
+
+            foreach (var p in availableForTeam2)
+            {
+                team2PlayerIds.Add(p.UserId);
+                usedPlayerIds.Add(p.UserId);
+            }
+
+            // Check if we have enough players for both teams
+            if (team1PlayerIds.Count < teamSize || team2PlayerIds.Count < teamSize)
+                break;
+
+            // Create temporary units for this game
+            var unit1 = new EventUnit
+            {
+                EventId = eventId,
+                DivisionId = divisionId,
+                Name = $"Team {createdMatches.Count * 2 + 1}",
+                Status = "Registered",
+                IsTemporary = true,
+                CreatedAt = DateTime.Now
+            };
+            _context.EventUnits.Add(unit1);
+            await _context.SaveChangesAsync();
+
+            foreach (var playerId in team1PlayerIds)
+            {
+                _context.EventUnitMembers.Add(new EventUnitMember
+                {
+                    UnitId = unit1.Id,
+                    UserId = playerId,
+                    Role = "Player",
+                    InviteStatus = "Accepted",
+                    CreatedAt = DateTime.Now
+                });
+            }
+
+            var unit2 = new EventUnit
+            {
+                EventId = eventId,
+                DivisionId = divisionId,
+                Name = $"Team {createdMatches.Count * 2 + 2}",
+                Status = "Registered",
+                IsTemporary = true,
+                CreatedAt = DateTime.Now
+            };
+            _context.EventUnits.Add(unit2);
+            await _context.SaveChangesAsync();
+
+            foreach (var playerId in team2PlayerIds)
+            {
+                _context.EventUnitMembers.Add(new EventUnitMember
+                {
+                    UnitId = unit2.Id,
+                    UserId = playerId,
+                    Role = "Player",
+                    InviteStatus = "Accepted",
+                    CreatedAt = DateTime.Now
+                });
+            }
+
+            // Create the match
+            var match = new EventMatch
+            {
+                EventId = eventId,
+                DivisionId = divisionId,
+                Unit1Id = unit1.Id,
+                Unit2Id = unit2.Id,
+                TournamentCourtId = court.Id,
+                Status = "Scheduled",
+                BestOf = dto.BestOf ?? 1,
+                CreatedAt = DateTime.Now
+            };
+            _context.EventMatches.Add(match);
+
+            // Update court status
+            court.Status = "InUse";
+
+            createdMatches.Add(match);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Load the created matches with all related data for response
+        var matchIds = createdMatches.Select(m => m.Id).ToList();
+        var loadedMatches = await _context.EventMatches
+            .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
+            .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
+            .Include(m => m.TournamentCourt)
+            .Include(m => m.Division)
+            .Include(m => m.Games)
+            .Where(m => matchIds.Contains(m.Id))
+            .ToListAsync();
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                gamesCreated = createdMatches.Count,
+                playersAssigned = usedPlayerIds.Count,
+                games = loadedMatches.Select(MapToGameDto).ToList()
+            },
+            message = $"Created {createdMatches.Count} games using {dto.Method} scheduling"
+        });
+    }
+
+    // ==========================================
     // Helper Methods
     // ==========================================
 
@@ -923,4 +1172,37 @@ public class CreateScoreFormatDto
 public class SetScoreFormatDto
 {
     public int? ScoreFormatId { get; set; }
+}
+
+public class GenerateRoundDto
+{
+    /// <summary>
+    /// Scheduling method: "popcorn" (random) or "gauntlet" (winners stay)
+    /// </summary>
+    public string Method { get; set; } = "popcorn";
+
+    /// <summary>
+    /// Division to schedule from (optional - uses all if not specified)
+    /// </summary>
+    public int? DivisionId { get; set; }
+
+    /// <summary>
+    /// Team size (1 = singles, 2 = doubles, etc.)
+    /// </summary>
+    public int? TeamSize { get; set; }
+
+    /// <summary>
+    /// Only include checked-in players
+    /// </summary>
+    public bool CheckedInOnly { get; set; } = false;
+
+    /// <summary>
+    /// Maximum number of games to create (defaults to number of available courts)
+    /// </summary>
+    public int? MaxGames { get; set; }
+
+    /// <summary>
+    /// Best of N games per match
+    /// </summary>
+    public int? BestOf { get; set; }
 }

@@ -43,6 +43,11 @@ public class EventUnit
     public string Status { get; set; } = "Registered";
 
     /// <summary>
+    /// Whether this unit was created temporarily for ad-hoc games (popcorn/gauntlet scheduling)
+    /// </summary>
+    public bool IsTemporary { get; set; } = false;
+
+    /// <summary>
     /// Position in waitlist (if waitlisted)
     /// </summary>
     public int? WaitlistPosition { get; set; }
