@@ -405,6 +405,9 @@ const PlayersTab = ({ data, selectedDivision, setSelectedDivision }) => {
 const CourtsTab = ({ data, onRefresh, eventId }) => {
   const [newCourtLabel, setNewCourtLabel] = useState('');
   const [adding, setAdding] = useState(false);
+  const [editingCourt, setEditingCourt] = useState(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [updating, setUpdating] = useState(null);
 
   const handleAddCourt = async () => {
     if (!newCourtLabel.trim()) return;
@@ -430,6 +433,49 @@ const CourtsTab = ({ data, onRefresh, eventId }) => {
     }
   };
 
+  const handleStartEdit = (court) => {
+    setEditingCourt(court.id);
+    setEditLabel(court.label);
+  };
+
+  const handleSaveEdit = async (courtId) => {
+    if (!editLabel.trim()) return;
+    setUpdating(courtId);
+    try {
+      await gamedayApi.updateCourt(courtId, { label: editLabel.trim() });
+      setEditingCourt(null);
+      onRefresh();
+    } catch (err) {
+      console.error('Error updating court:', err);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleToggleActive = async (court) => {
+    setUpdating(court.id);
+    try {
+      await gamedayApi.updateCourt(court.id, { isActive: !court.isActive });
+      onRefresh();
+    } catch (err) {
+      console.error('Error toggling court:', err);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleSetStatus = async (courtId, status) => {
+    setUpdating(courtId);
+    try {
+      await gamedayApi.updateCourt(courtId, { status });
+      onRefresh();
+    } catch (err) {
+      console.error('Error updating court status:', err);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Add Court */}
@@ -442,6 +488,7 @@ const CourtsTab = ({ data, onRefresh, eventId }) => {
             onChange={(e) => setNewCourtLabel(e.target.value)}
             placeholder="Court label (e.g., Court 1)"
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && handleAddCourt()}
           />
           <button
             onClick={handleAddCourt}
@@ -454,24 +501,114 @@ const CourtsTab = ({ data, onRefresh, eventId }) => {
       </div>
 
       {/* Courts List */}
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {data.courts.map(court => (
-          <div key={court.id} className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div className="font-medium text-gray-900">{court.label}</div>
-              <button
-                onClick={() => handleDeleteCourt(court.id)}
-                className="p-1 text-gray-400 hover:text-red-600 rounded"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+          <div
+            key={court.id}
+            className={`bg-white rounded-xl border p-4 transition-all ${
+              court.isActive === false
+                ? 'border-gray-300 bg-gray-50 opacity-60'
+                : court.status === 'InUse'
+                  ? 'border-blue-300 bg-blue-50'
+                  : court.status === 'Maintenance'
+                    ? 'border-yellow-300 bg-yellow-50'
+                    : 'border-gray-200'
+            }`}
+          >
+            {/* Court Header */}
+            <div className="flex items-center justify-between mb-3">
+              {editingCourt === court.id ? (
+                <div className="flex items-center gap-2 flex-1 mr-2">
+                  <input
+                    type="text"
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveEdit(court.id);
+                      if (e.key === 'Escape') setEditingCourt(null);
+                    }}
+                  />
+                  <button
+                    onClick={() => handleSaveEdit(court.id)}
+                    disabled={updating === court.id}
+                    className="p-1 text-green-600 hover:text-green-700"
+                  >
+                    <Save className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setEditingCourt(null)}
+                    className="p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="font-medium text-gray-900">{court.label}</div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleStartEdit(court)}
+                      className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                      title="Edit label"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCourt(court.id)}
+                      className="p-1 text-gray-400 hover:text-red-600 rounded"
+                      title="Delete court"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <div className={`mt-2 text-sm px-2 py-1 rounded inline-block ${
-              court.status === 'InUse' ? 'bg-blue-100 text-blue-700' :
-              court.status === 'Maintenance' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-green-100 text-green-700'
-            }`}>
-              {court.status}
+
+            {/* Status Badge */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`text-xs px-2 py-1 rounded font-medium ${
+                court.status === 'InUse' ? 'bg-blue-100 text-blue-700' :
+                court.status === 'Maintenance' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-green-100 text-green-700'
+              }`}>
+                {court.status === 'InUse' ? 'In Use' : court.status}
+              </div>
+              {court.isActive === false && (
+                <div className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-600 font-medium">
+                  Disabled
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleToggleActive(court)}
+                disabled={updating === court.id || court.status === 'InUse'}
+                className={`text-xs px-2 py-1 rounded transition-colors ${
+                  court.isActive === false
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {court.isActive === false ? 'Enable' : 'Disable'}
+              </button>
+              {court.status !== 'InUse' && court.isActive !== false && (
+                <button
+                  onClick={() => handleSetStatus(court.id, court.status === 'Maintenance' ? 'Available' : 'Maintenance')}
+                  disabled={updating === court.id}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    court.status === 'Maintenance'
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                  } disabled:opacity-50`}
+                >
+                  {court.status === 'Maintenance' ? 'Set Available' : 'Maintenance'}
+                </button>
+              )}
             </div>
           </div>
         ))}
