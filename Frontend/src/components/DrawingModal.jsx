@@ -298,61 +298,55 @@ function CardFlipDraw({ items, currentIndex, revealedIndices, assignedNumbers, o
 // Slot Machine animation component
 function SlotMachineDraw({ currentUnit, assignedNumber, isSpinning, onSpinEnd }) {
   const [displayName, setDisplayName] = useState('???');
-  const [displayNumber, setDisplayNumber] = useState('??');
   const names = ['Player A', 'Team X', 'Squad 1', 'Unit Z', 'Group B', 'Team Y'];
 
   useEffect(() => {
     if (isSpinning) {
-      // Spin names
+      // Spin names only - slot number is fixed (sequential)
       const nameInterval = setInterval(() => {
         setDisplayName(names[Math.floor(Math.random() * names.length)]);
       }, 80);
 
-      // Spin numbers
-      const numInterval = setInterval(() => {
-        setDisplayNumber(Math.floor(Math.random() * 32) + 1);
-      }, 50);
-
       // Stop after delay
       const timeout = setTimeout(() => {
         clearInterval(nameInterval);
-        clearInterval(numInterval);
         setDisplayName(currentUnit?.displayName || currentUnit?.name || 'Team');
-        setDisplayNumber(assignedNumber);
         setTimeout(() => onSpinEnd?.(), 300);
       }, 2000);
 
       return () => {
         clearInterval(nameInterval);
-        clearInterval(numInterval);
         clearTimeout(timeout);
       };
     }
-  }, [isSpinning, currentUnit, assignedNumber, onSpinEnd]);
+  }, [isSpinning, currentUnit, onSpinEnd]);
 
   return (
     <div className="flex flex-col items-center gap-6">
+      {/* Slot number being drawn */}
+      <div className="text-center">
+        <div className="text-sm text-gray-400 mb-1">Drawing for</div>
+        <div className="text-3xl font-bold text-orange-400">Slot #{assignedNumber}</div>
+      </div>
       {/* Slot Machine Frame */}
       <div className="bg-gradient-to-b from-yellow-600 to-yellow-800 p-2 rounded-2xl shadow-2xl">
         <div className="bg-gray-900 p-4 rounded-xl">
-          <div className="flex gap-4">
-            {/* Name Reel */}
-            <div className="bg-white rounded-lg p-3 min-w-[140px] overflow-hidden shadow-inner">
-              <div className={`text-center font-bold text-lg ${isSpinning ? 'animate-pulse' : ''}`}>
-                <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                  {displayName}
-                </span>
+          <div className="flex gap-4 items-center">
+            {/* Slot Number (fixed) */}
+            <div className="bg-gradient-to-br from-orange-400 to-red-500 rounded-lg p-3 min-w-[50px] shadow-lg">
+              <div className="text-center font-bold text-2xl text-white">
+                {assignedNumber}
               </div>
             </div>
             {/* Arrow */}
             <div className="flex items-center text-yellow-400">
               <ArrowRight className="w-6 h-6" />
             </div>
-            {/* Number Reel */}
-            <div className="bg-white rounded-lg p-3 min-w-[60px] overflow-hidden shadow-inner">
-              <div className={`text-center font-bold text-2xl ${isSpinning ? 'animate-pulse' : ''}`}>
-                <span className="bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
-                  {displayNumber}
+            {/* Name Reel (spinning) */}
+            <div className="bg-white rounded-lg p-3 min-w-[160px] overflow-hidden shadow-inner">
+              <div className={`text-center font-bold text-lg ${isSpinning ? 'animate-pulse' : ''}`}>
+                <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  {displayName}
                 </span>
               </div>
             </div>
@@ -622,18 +616,18 @@ export default function DrawingModal({
   const alreadyAssigned = registeredUnits.some(u => u.unitNumber != null);
 
   const handleStartDraw = async () => {
-    // Create shuffled slots
-    const slots = Array.from({ length: totalSlots }, (_, i) => i + 1);
-    const shuffledSlots = [...slots].sort(() => Math.random() - 0.5);
+    // Shuffle units to determine random order of selection
+    // Slots are assigned sequentially (1, 2, 3...) - the randomness is WHICH unit gets each slot
+    const shuffledUnits = [...registeredUnits].sort(() => Math.random() - 0.5);
 
-    // Create assignments
-    const assignments = registeredUnits.map((unit, idx) => ({
+    // Create assignments: slot 1 goes to first shuffled unit, slot 2 to second, etc.
+    const assignments = shuffledUnits.map((unit, idx) => ({
       unit,
-      assignedNumber: shuffledSlots[idx]
+      assignedNumber: idx + 1  // Sequential slots: 1, 2, 3, ...
     }));
 
-    // Set up units with display names
-    const unitsWithDisplayNames = registeredUnits.map(u => ({
+    // Set up units with display names for animation
+    const unitsWithDisplayNames = shuffledUnits.map(u => ({
       ...u,
       displayName: getUnitDisplayName(u, unitSize)
     }));
@@ -643,30 +637,32 @@ export default function DrawingModal({
 
     // Different animation timing based on style
     if (drawStyle === 'wheel') {
-      // Wheel animation - existing logic
+      // Wheel animation - draw slot 1, then slot 2, etc.
+      // Each spin determines which unit gets the current slot
+      let remainingForWheel = [...unitsWithDisplayNames];
+
       for (let i = 0; i < assignments.length; i++) {
         setCurrentDrawIndex(i);
+        setWheelUnits(remainingForWheel);
 
-        const remainingUnits = registeredUnits.filter((_, idx) =>
-          !assignments.slice(0, i).some(a => a.unit.id === registeredUnits[idx].id)
-        ).map(u => ({
-          ...u,
-          displayName: getUnitDisplayName(u, unitSize)
-        }));
-        setWheelUnits(remainingUnits);
-
-        const currentUnit = assignments[i].unit;
-        const wheelIndex = remainingUnits.findIndex(u => u.id === currentUnit.id);
+        // Find the unit that was assigned to this slot
+        const currentAssignment = assignments[i];
+        const wheelIndex = remainingForWheel.findIndex(u => u.id === currentAssignment.unit.id);
         setSelectedWheelIndex(wheelIndex);
 
         await new Promise(resolve => setTimeout(resolve, i === 0 ? 4500 : 2500));
-        setDrawnAssignments(prev => [...prev, assignments[i]]);
+
+        // Remove the selected unit from remaining
+        remainingForWheel = remainingForWheel.filter(u => u.id !== currentAssignment.unit.id);
+        setDrawnAssignments(prev => [...prev, currentAssignment]);
       }
     } else if (drawStyle === 'cards') {
-      // Card flip animation
+      // Card flip animation - cards represent units, reveal shows their slot number
       const assignmentMap = {};
-      assignments.forEach((a, idx) => {
-        assignmentMap[idx] = a.assignedNumber;
+      // Map by unit index in the shuffled array
+      shuffledUnits.forEach((unit, idx) => {
+        const originalIdx = unitsWithDisplayNames.findIndex(u => u.id === unit.id);
+        assignmentMap[originalIdx] = idx + 1; // Slot number
       });
       setCardAssignments(assignmentMap);
 
@@ -678,27 +674,29 @@ export default function DrawingModal({
         await new Promise(resolve => setTimeout(resolve, 400));
       }
     } else if (drawStyle === 'slots') {
-      // Slot machine animation
+      // Slot machine animation - shows "Drawing Slot X" then reveals which unit
       for (let i = 0; i < assignments.length; i++) {
         setCurrentDrawIndex(i);
+        const currentAssignment = assignments[i];
         const currentUnit = {
-          ...assignments[i].unit,
-          displayName: getUnitDisplayName(assignments[i].unit, unitSize)
+          ...currentAssignment.unit,
+          displayName: getUnitDisplayName(currentAssignment.unit, unitSize)
         };
         setCurrentSlotUnit(currentUnit);
-        setCurrentSlotNumber(assignments[i].assignedNumber);
+        setCurrentSlotNumber(currentAssignment.assignedNumber);
         setSlotSpinning(true);
 
         await new Promise(resolve => setTimeout(resolve, 2500));
         setSlotSpinning(false);
-        setDrawnAssignments(prev => [...prev, assignments[i]]);
+        setDrawnAssignments(prev => [...prev, currentAssignment]);
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     } else if (drawStyle === 'lottery') {
       // Lottery ball drop animation
       const assignmentMap = {};
-      assignments.forEach((a, idx) => {
-        assignmentMap[idx] = a.assignedNumber;
+      shuffledUnits.forEach((unit, idx) => {
+        const originalIdx = unitsWithDisplayNames.findIndex(u => u.id === unit.id);
+        assignmentMap[originalIdx] = idx + 1;
       });
       setCardAssignments(assignmentMap);
 
@@ -709,9 +707,8 @@ export default function DrawingModal({
       }
     }
 
-    // Sort final assignments by number
-    const sortedAssignments = [...assignments].sort((a, b) => a.assignedNumber - b.assignedNumber);
-    setDrawnAssignments(sortedAssignments);
+    // Final assignments are already in slot order (1, 2, 3...)
+    setDrawnAssignments(assignments);
     setPhase('complete');
     setShowConfetti(true);
   };
@@ -968,7 +965,7 @@ export default function DrawingModal({
               )}
 
               <div className="bg-gray-800 rounded-xl p-4 max-w-sm mx-auto">
-                <div className="text-sm text-gray-400 mb-2">Drawing {unitSize === 2 ? 'team' : unitSize === 1 ? 'player' : 'unit'} {currentDrawIndex + 1} of {registeredUnits.length}</div>
+                <div className="text-sm text-gray-400 mb-2">Drawing for Slot {currentDrawIndex + 1} of {registeredUnits.length}</div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
                   <div
                     className="bg-gradient-to-r from-orange-400 to-red-500 h-2 rounded-full transition-all duration-300"
