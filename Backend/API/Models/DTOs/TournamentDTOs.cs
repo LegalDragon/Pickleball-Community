@@ -623,3 +623,12 @@ public class MemberPaymentDto
     public string? ReferenceId { get; set; }
     public string? UnitPaymentStatus { get; set; }
 }
+
+public class UpdateMemberPaymentRequest
+{
+    public bool? HasPaid { get; set; }
+    public decimal? AmountPaid { get; set; }
+    public string? PaymentProofUrl { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? ReferenceId { get; set; }
+}

@@ -1369,6 +1369,113 @@ public class TournamentController : ControllerBase
     }
 
     /// <summary>
+    /// Update a member's payment info (organizer/admin only)
+    /// </summary>
+    [Authorize]
+    [HttpPut("events/{eventId}/units/{unitId}/members/{memberId}/payment")]
+    public async Task<ActionResult<ApiResponse<MemberPaymentDto>>> UpdateMemberPayment(
+        int eventId, int unitId, int memberId, [FromBody] UpdateMemberPaymentRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Unauthorized" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Event)
+            .Include(u => u.Division)
+            .Include(u => u.Members)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+
+        if (unit == null)
+            return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Registration not found" });
+
+        // Only organizer or site admin can update payment info
+        var isAdmin = await IsAdminAsync();
+        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+            return Forbid();
+
+        var member = unit.Members.FirstOrDefault(m => m.UserId == memberId);
+        if (member == null)
+            return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Member not found in unit" });
+
+        // Update member payment fields
+        if (request.PaymentReference != null)
+            member.PaymentReference = request.PaymentReference;
+        if (request.PaymentProofUrl != null)
+            member.PaymentProofUrl = request.PaymentProofUrl;
+        if (request.AmountPaid.HasValue)
+            member.AmountPaid = request.AmountPaid.Value;
+        if (request.ReferenceId != null)
+            member.ReferenceId = request.ReferenceId;
+
+        // If marking as paid
+        if (request.HasPaid.HasValue)
+        {
+            member.HasPaid = request.HasPaid.Value;
+            if (request.HasPaid.Value && !member.PaidAt.HasValue)
+            {
+                member.PaidAt = DateTime.Now;
+            }
+            else if (!request.HasPaid.Value)
+            {
+                member.PaidAt = null;
+            }
+        }
+
+        // Update unit-level payment status based on all members
+        var allMembersPaid = unit.Members.All(m => m.HasPaid);
+        var anyMemberPaid = unit.Members.Any(m => m.HasPaid);
+        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+
+        if (allMembersPaid)
+        {
+            unit.PaymentStatus = "Paid";
+            unit.AmountPaid = amountDue;
+            unit.PaidAt = DateTime.Now;
+        }
+        else if (anyMemberPaid)
+        {
+            unit.PaymentStatus = "Partial";
+            unit.AmountPaid = unit.Members.Where(m => m.HasPaid).Sum(m => m.AmountPaid);
+        }
+        else if (unit.Members.Any(m => !string.IsNullOrEmpty(m.PaymentProofUrl)))
+        {
+            unit.PaymentStatus = "PendingVerification";
+            unit.AmountPaid = 0;
+        }
+        else
+        {
+            unit.PaymentStatus = "Pending";
+            unit.AmountPaid = 0;
+        }
+        unit.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        // Get member user info
+        var memberUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == memberId);
+
+        return Ok(new ApiResponse<MemberPaymentDto>
+        {
+            Success = true,
+            Data = new MemberPaymentDto
+            {
+                UserId = member.UserId,
+                FirstName = memberUser?.FirstName,
+                LastName = memberUser?.LastName,
+                HasPaid = member.HasPaid,
+                PaidAt = member.PaidAt,
+                AmountPaid = member.AmountPaid,
+                PaymentProofUrl = member.PaymentProofUrl,
+                PaymentReference = member.PaymentReference,
+                ReferenceId = member.ReferenceId,
+                UnitPaymentStatus = unit.PaymentStatus
+            },
+            Message = "Payment info updated"
+        });
+    }
+
+    /// <summary>
     /// Remove a registration (organizer only) - removes member from unit, deletes unit if empty
     /// </summary>
     [Authorize]
