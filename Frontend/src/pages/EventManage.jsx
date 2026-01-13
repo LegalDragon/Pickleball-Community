@@ -4,7 +4,7 @@ import {
   ArrowLeft, Users, Calendar, Clock, MapPin, Play, Check,
   ChevronRight, AlertCircle, Loader2, Settings, FileText,
   LayoutGrid, UserCheck, DollarSign, Shuffle, Trophy, Zap,
-  UserPlus, X, Plus
+  UserPlus, X, Plus, Search, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -15,6 +15,8 @@ const schedulingApi = {
   generateRound: (eventId, data) => api.post(`/gameday/events/${eventId}/generate-round`, data),
   getPlayers: (eventId, checkedInOnly = false) => api.get(`/gameday/events/${eventId}/players?checkedInOnly=${checkedInOnly}`),
   createManualGame: (eventId, data) => api.post(`/gameday/events/${eventId}/manual-game`, data),
+  searchUsers: (eventId, query) => api.get(`/gameday/events/${eventId}/search-users?query=${encodeURIComponent(query)}`),
+  onSiteJoin: (eventId, data) => api.post(`/gameday/events/${eventId}/on-site-join`, data),
 };
 
 export default function EventManage() {
@@ -40,6 +42,13 @@ export default function EventManage() {
   const [team1Players, setTeam1Players] = useState([]);
   const [team2Players, setTeam2Players] = useState([]);
   const [manualCheckedInOnly, setManualCheckedInOnly] = useState(false);
+
+  // On-site join state
+  const [allowOnSiteJoin, setAllowOnSiteJoin] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(null);
 
   useEffect(() => {
     if (eventId) {
@@ -158,6 +167,53 @@ export default function EventManage() {
       setTeam1Players(team1Players.filter(p => p.userId !== playerId));
     } else {
       setTeam2Players(team2Players.filter(p => p.userId !== playerId));
+    }
+  };
+
+  // On-site join handlers
+  const handleSearchUsers = async (query) => {
+    setUserSearchQuery(query);
+    if (query.length < 2) {
+      setUserSearchResults([]);
+      return;
+    }
+
+    setSearchingUsers(true);
+    try {
+      const response = await schedulingApi.searchUsers(eventId, query);
+      if (response.success) {
+        setUserSearchResults(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error searching users:', err);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  const handleAddOnSitePlayer = async (userToAdd) => {
+    setAddingPlayer(userToAdd.userId);
+    try {
+      const response = await schedulingApi.onSiteJoin(eventId, {
+        userId: userToAdd.userId
+      });
+      if (response.success) {
+        toast.success(response.message || `${userToAdd.name} added to event`);
+        // Clear search and reload players
+        setUserSearchQuery('');
+        setUserSearchResults([]);
+        // Reload available players if in manual mode
+        if (schedulingMethod === 'manual') {
+          loadPlayers();
+        }
+      } else {
+        toast.error(response.message || 'Failed to add player');
+      }
+    } catch (err) {
+      console.error('Error adding player:', err);
+      toast.error(err.response?.data?.message || 'Failed to add player');
+    } finally {
+      setAddingPlayer(null);
     }
   };
 
@@ -367,6 +423,111 @@ export default function EventManage() {
               <ChevronRight className="w-5 h-5 text-gray-400" />
             </Link>
           </div>
+        </div>
+
+        {/* On-Site Join */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">On-Site Join</h2>
+            <button
+              onClick={() => setAllowOnSiteJoin(!allowOnSiteJoin)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                allowOnSiteJoin
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {allowOnSiteJoin ? (
+                <>
+                  <ToggleRight className="w-5 h-5" />
+                  Enabled
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-5 h-5" />
+                  Disabled
+                </>
+              )}
+            </button>
+          </div>
+
+          {allowOnSiteJoin && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Search for players to add them to this event. They will be automatically checked in.
+                </p>
+
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={userSearchQuery}
+                    onChange={(e) => handleSearchUsers(e.target.value)}
+                    placeholder="Search by name or email..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {searchingUsers && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+                  )}
+                </div>
+
+                {/* Search Results */}
+                {userSearchResults.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg max-h-60 overflow-y-auto">
+                    <div className="divide-y divide-gray-100">
+                      {userSearchResults.map(user => (
+                        <div key={user.userId} className="flex items-center justify-between p-3 hover:bg-gray-50">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                              {user.profileImageUrl ? (
+                                <img src={user.profileImageUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Users className="w-4 h-4 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{user.name}</div>
+                              {user.email && (
+                                <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                              )}
+                            </div>
+                          </div>
+                          {user.isAlreadyRegistered ? (
+                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                              Already registered
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleAddOnSitePlayer(user)}
+                              disabled={addingPlayer === user.userId}
+                              className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {addingPlayer === user.userId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Plus className="w-4 h-4" />
+                                  Add
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {userSearchQuery.length >= 2 && userSearchResults.length === 0 && !searchingUsers && (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    No users found matching "{userSearchQuery}"
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick Scheduling */}
@@ -678,10 +839,10 @@ export default function EventManage() {
             Quick Tips
           </h3>
           <ul className="text-sm text-blue-700 space-y-1">
+            <li>• <strong>On-Site Join</strong> - Add walk-in players who are automatically checked in</li>
             <li>• <strong>Popcorn</strong> is great for social play - everyone gets randomly matched</li>
             <li>• <strong>Gauntlet</strong> keeps winners playing - great for competitive sessions</li>
             <li>• <strong>Manual</strong> lets you pick exactly who plays - perfect for specific requests</li>
-            <li>• Use <strong>Game Day Manager</strong> for court management and scoring</li>
           </ul>
         </div>
       </div>

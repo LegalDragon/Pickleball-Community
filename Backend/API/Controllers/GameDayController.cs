@@ -1186,6 +1186,126 @@ public class GameDayController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Search for users to add as on-site players
+    /// </summary>
+    [HttpGet("events/{eventId}/search-users")]
+    public async Task<IActionResult> SearchUsersForOnSiteJoin(int eventId, [FromQuery] string query)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, userId.Value))
+            return Forbid();
+
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            return Ok(new { success = true, data = new List<object>() });
+
+        // Get users already registered for this event
+        var registeredUserIds = await _context.EventUnitMembers
+            .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToHashSetAsync();
+
+        // Search for users by name
+        var queryLower = query.ToLower();
+        var users = await _context.Users
+            .Where(u => (u.FirstName != null && u.FirstName.ToLower().Contains(queryLower)) ||
+                       (u.LastName != null && u.LastName.ToLower().Contains(queryLower)) ||
+                       (u.Email != null && u.Email.ToLower().Contains(queryLower)))
+            .Take(20)
+            .Select(u => new
+            {
+                userId = u.Id,
+                name = Utility.FormatName(u.LastName, u.FirstName),
+                email = u.Email,
+                profileImageUrl = u.ProfileImageUrl,
+                isAlreadyRegistered = registeredUserIds.Contains(u.Id)
+            })
+            .ToListAsync();
+
+        return Ok(new { success = true, data = users });
+    }
+
+    /// <summary>
+    /// Add a player on-site (quick registration for walk-ins)
+    /// </summary>
+    [HttpPost("events/{eventId}/on-site-join")]
+    public async Task<IActionResult> OnSiteJoin(int eventId, [FromBody] OnSiteJoinDto dto)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, organizerId.Value))
+            return Forbid();
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new { success = false, message = "Event not found" });
+
+        // Verify user exists
+        var user = await _context.Users.FindAsync(dto.UserId);
+        if (user == null)
+            return BadRequest(new { success = false, message = "User not found" });
+
+        // Check if already registered
+        var existingMembership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .FirstOrDefaultAsync(m => m.Unit!.EventId == eventId && m.UserId == dto.UserId && m.InviteStatus == "Accepted");
+
+        if (existingMembership != null)
+            return BadRequest(new { success = false, message = "User is already registered for this event" });
+
+        // Get or use first division
+        var divisionId = dto.DivisionId ?? evt.Divisions.FirstOrDefault()?.Id ?? 0;
+
+        // Create a single-player unit for this walk-in (marked as on-site)
+        var unit = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = divisionId,
+            Name = Utility.FormatName(user.LastName, user.FirstName) ?? "Walk-in",
+            Status = "Registered",
+            IsTemporary = false, // Real registration, not temporary for games
+            CreatedAt = DateTime.Now
+        };
+        _context.EventUnits.Add(unit);
+        await _context.SaveChangesAsync();
+
+        // Add the user as a member
+        var member = new EventUnitMember
+        {
+            UnitId = unit.Id,
+            UserId = dto.UserId,
+            Role = "Player",
+            InviteStatus = "Accepted",
+            IsCheckedIn = true, // Auto check-in for on-site players
+            CheckedInAt = DateTime.Now,
+            CreatedAt = DateTime.Now
+        };
+        _context.EventUnitMembers.Add(member);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                userId = dto.UserId,
+                name = Utility.FormatName(user.LastName, user.FirstName),
+                unitId = unit.Id,
+                isCheckedIn = true
+            },
+            message = $"{Utility.FormatName(user.LastName, user.FirstName)} has been added to the event"
+        });
+    }
+
     // ==========================================
     // Helper Methods
     // ==========================================
@@ -1483,4 +1603,17 @@ public class CreateManualGameDto
     /// Best of N games per match
     /// </summary>
     public int? BestOf { get; set; }
+}
+
+public class OnSiteJoinDto
+{
+    /// <summary>
+    /// User ID to add to the event
+    /// </summary>
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// Division ID (optional - uses first division if not specified)
+    /// </summary>
+    public int? DivisionId { get; set; }
 }
