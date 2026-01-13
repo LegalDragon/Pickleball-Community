@@ -116,29 +116,26 @@ public class ReleaseNotesController : ControllerBase
             // Check if user is admin (can see test releases)
             var isAdmin = await IsUserAdmin();
 
-            // Get dismissed release IDs for this user
-            var dismissedIds = await _context.UserDismissedReleases
-                .Where(d => d.UserId == userId.Value)
-                .Select(d => d.ReleaseNoteId)
-                .ToListAsync();
+            // Use left join to find unread releases (avoids Contains() issue with EF Core)
+            var query = from r in _context.ReleaseNotes
+                        join d in _context.UserDismissedReleases.Where(x => x.UserId == userId.Value)
+                            on r.Id equals d.ReleaseNoteId into dismissed
+                        from d in dismissed.DefaultIfEmpty()
+                        where r.IsActive && d == null && (isAdmin || !r.IsTest)
+                        orderby r.ReleaseDate descending
+                        select new UserReleaseNoteDto
+                        {
+                            Id = r.Id,
+                            Version = r.Version,
+                            Title = r.Title,
+                            Content = r.Content,
+                            ReleaseDate = r.ReleaseDate,
+                            IsMajor = r.IsMajor,
+                            IsTest = r.IsTest,
+                            IsDismissed = false
+                        };
 
-            // Get active releases that haven't been dismissed
-            // Test releases only shown to admins
-            var unread = await _context.ReleaseNotes
-                .Where(r => r.IsActive && !dismissedIds.Contains(r.Id) && (isAdmin || !r.IsTest))
-                .OrderByDescending(r => r.ReleaseDate)
-                .Select(r => new UserReleaseNoteDto
-                {
-                    Id = r.Id,
-                    Version = r.Version,
-                    Title = r.Title,
-                    Content = r.Content,
-                    ReleaseDate = r.ReleaseDate,
-                    IsMajor = r.IsMajor,
-                    IsTest = r.IsTest,
-                    IsDismissed = false
-                })
-                .ToListAsync();
+            var unread = await query.ToListAsync();
 
             return Ok(new ApiResponse<List<UserReleaseNoteDto>> { Success = true, Data = unread });
         }
