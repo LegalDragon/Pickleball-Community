@@ -1,0 +1,61 @@
+{
+  "title": "Profil",
+  "editProfile": "Modifier le Profil",
+  "viewProfile": "Voir le Profil",
+  "myProfile": "Mon Profil",
+  "publicProfile": "Profil Public",
+  "sections": {
+    "personalInfo": "Informations Personnelles",
+    "playStyle": "Style de Jeu",
+    "equipment": "Équipement",
+    "availability": "Disponibilité",
+    "certification": "Certification",
+    "stats": "Statistiques"
+  },
+  "fields": {
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "email": "E-mail",
+    "phone": "Téléphone",
+    "bio": "Biographie",
+    "location": "Emplacement",
+    "skillLevel": "Niveau de Compétence",
+    "playingSince": "Joue Depuis",
+    "preferredHand": "Main Préférée",
+    "paddle": "Raquette",
+    "playFrequency": "Fréquence de Jeu"
+  },
+  "playStyle": {
+    "singles": "Simple",
+    "doubles": "Double",
+    "mixed": "Double Mixte",
+    "competitive": "Compétitif",
+    "recreational": "Récréatif"
+  },
+  "hand": {
+    "right": "Droite",
+    "left": "Gauche",
+    "ambidextrous": "Ambidextre"
+  },
+  "frequency": {
+    "daily": "Quotidien",
+    "weekly": "Hebdomadaire",
+    "biweekly": "Bimensuel",
+    "monthly": "Mensuel",
+    "occasionally": "Occasionnellement"
+  },
+  "messages": {
+    "updateSuccess": "Profil mis à jour avec succès",
+    "updateError": "Échec de la mise à jour du profil",
+    "photoUpdateSuccess": "Photo de profil mise à jour",
+    "photoUpdateError": "Échec de la mise à jour de la photo de profil"
+  },
+  "certification": {
+    "title": "Certification de Compétence",
+    "level": "Niveau Certifié",
+    "verifiedBy": "Vérifié Par",
+    "lastUpdated": "Dernière Mise à Jour",
+    "requestReview": "Demander une Révision",
+    "viewCertificate": "Voir le Certificat"
+  }
+}

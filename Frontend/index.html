@@ -4,53 +4,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pickleball.College | Play Better Pickleball</title>
+  <title>Pickleball.Community | For all Pickleball fans</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Favicon -->
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-
-  <!-- For different devices -->
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-  <meta name="theme-color" content="#3a86ff" />
+  <link rel="apple-touch-icon" href="/logo-192.png" />
+  <meta name="theme-color" content="#3b82f6" />
 
   <!-- Manifest for PWA -->
   <link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#3b82f6" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Pickleball.College" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Pickleball.Community" />
 
 
 </head>
 
 <body>
   <div id="root"></div>
-  <script>
-    // Force clear stale service worker caches (one-time cleanup)
-    if ('serviceWorker' in navigator && 'caches' in window) {
-      const CACHE_VERSION = 'v2'; // Increment this to force cache clear
-      const versionKey = 'pb-cache-version';
-      const storedVersion = localStorage.getItem(versionKey);
-
-      if (storedVersion !== CACHE_VERSION) {
-        // Clear all caches
-        caches.keys().then(names => {
-          names.forEach(name => caches.delete(name));
-        });
-        // Unregister service workers
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          registrations.forEach(reg => reg.unregister());
-        });
-        localStorage.setItem(versionKey, CACHE_VERSION);
-        // Reload to get fresh content
-        if (storedVersion) window.location.reload();
-      }
-    }
-  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

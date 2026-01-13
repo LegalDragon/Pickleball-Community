@@ -2,17 +2,28 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Pickleball.College.Database;
-using Pickleball.College.Services; 
-using Pickleball.College.Models.Entities;
-using Pickleball.College.Models.Configuration;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Pickleball.Community.Database;
+using Pickleball.Community.Services;
+using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Models.Configuration;
+using Pickleball.Community.Hubs;
+using Pickleball.Community.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Don't convert DateTime to UTC - treat as local/unspecified time
+        options.JsonSerializerOptions.Converters.Add(new DateTimeConverterUsingDateTimeParse());
+        options.JsonSerializerOptions.Converters.Add(new NullableDateTimeConverterUsingDateTimeParse());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
 
 // Configuration
 builder.Services.Configure<FileStorageOptions>(
@@ -65,7 +76,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuers = validIssuers,
             ValidAudiences = validAudiences,
             // Accept multiple signing keys for shared auth compatibility
-            IssuerSigningKeys = signingKeys
+            IssuerSigningKeys = signingKeys,
+            // Map role claim for [Authorize(Roles = ...)] to work with shared auth tokens
+            // Use the full URI since shared auth uses Microsoft's claim type format
+            RoleClaimType = "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+            NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+        };
+
+        // Support SignalR authentication via query string
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                // If the request is for any SignalR hub
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    (path.StartsWithSegments("/hubs/chat") || path.StartsWithSegments("/hubs/notifications")))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -82,18 +115,16 @@ builder.Services.AddHttpClient("SharedAuth", client =>
 
 // Services
 builder.Services.AddScoped<IAssetService, AssetService>();
-builder.Services.AddScoped<IMaterialService, MaterialService>();
-builder.Services.AddScoped<ICourseService, CourseService>();
-builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IFileStorageService, AwsS3StorageService>();
-builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISharedAuthService, SharedAuthService>();
 builder.Services.AddScoped<IRatingService, RatingService>();
 builder.Services.AddScoped<ITagService, TagService>();
-builder.Services.AddScoped<IVideoReviewService, VideoReviewService>();
-builder.Services.AddScoped<IBlogService, BlogService>();
 builder.Services.AddScoped<IPlayerCertificationService, PlayerCertificationService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<IActivityAwardService, ActivityAwardService>();
+builder.Services.AddScoped<IInstaGameService, InstaGameService>();
 
 // CORS - Load allowed origins from configuration
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
@@ -136,8 +167,11 @@ app.UseSwaggerUI();
 app.UseCors("AllowConfiguredOrigins");
 app.UseStaticFiles(); // Enable serving static files from wwwroot
 app.UseAuthentication();
+app.UseUserAutoSync(); // Auto-create local user from shared auth token if not exists
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 // Initialize database
 using (var scope = app.Services.CreateScope())
@@ -182,3 +216,61 @@ using (var scope = app.Services.CreateScope())
 Utility.Initialize(app.Configuration);
 
 app.Run();
+
+/// <summary>
+/// Custom DateTime converter that preserves the date/time value without timezone conversion.
+/// Serializes DateTime without 'Z' suffix and deserializes without assuming UTC.
+/// </summary>
+public class DateTimeConverterUsingDateTimeParse : JsonConverter<DateTime>
+{
+    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var dateString = reader.GetString();
+        if (string.IsNullOrEmpty(dateString))
+            return default;
+
+        // Parse without assuming any timezone - treat as local/unspecified
+        if (DateTime.TryParse(dateString, out var result))
+        {
+            return DateTime.SpecifyKind(result, DateTimeKind.Unspecified);
+        }
+        return default;
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+    {
+        // Write without 'Z' suffix - just the date and time
+        writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss"));
+    }
+}
+
+/// <summary>
+/// Custom nullable DateTime converter
+/// </summary>
+public class NullableDateTimeConverterUsingDateTimeParse : JsonConverter<DateTime?>
+{
+    public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var dateString = reader.GetString();
+        if (string.IsNullOrEmpty(dateString))
+            return null;
+
+        if (DateTime.TryParse(dateString, out var result))
+        {
+            return DateTime.SpecifyKind(result, DateTimeKind.Unspecified);
+        }
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+        {
+            writer.WriteStringValue(value.Value.ToString("yyyy-MM-ddTHH:mm:ss"));
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
+}

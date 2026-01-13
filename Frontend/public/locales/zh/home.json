@@ -1,0 +1,27 @@
+{
+  "defaultTitle": "匹克球社区",
+  "defaultSubtitle": "首个100% AI打造的球员、俱乐部和赛事平台",
+  "heroTagline": "为整个匹克球社区打造的全面管理系统，完全由AI构建",
+  "findCourts": "查找球场",
+  "joinClub": "加入俱乐部",
+  "previousVideo": "上一个视频",
+  "nextVideo": "下一个视频",
+  "quickStats": {
+    "courts": {
+      "label": "本地球场",
+      "value": "附近查找"
+    },
+    "clubs": {
+      "label": "活跃俱乐部",
+      "value": "立即加入"
+    },
+    "certified": {
+      "label": "获得认证",
+      "value": "同行评审"
+    },
+    "events": {
+      "label": "本地赛事",
+      "value": "多多比赛"
+    }
+  }
+}

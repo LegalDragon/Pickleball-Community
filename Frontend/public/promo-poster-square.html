@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pickleball Community - Square Poster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .poster {
+      width: 1080px;
+      height: 1080px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+      border-radius: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .poster::before {
+      content: '';
+      position: absolute;
+      top: -100px;
+      right: -100px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(34, 197, 94, 0.4) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .poster::after {
+      content: '';
+      position: absolute;
+      bottom: -100px;
+      left: -100px;
+      width: 350px;
+      height: 350px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      padding: 50px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .logo-icon {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+    }
+
+    .logo-text {
+      font-size: 38px;
+      font-weight: 900;
+      color: white;
+    }
+
+    .logo-text span {
+      color: #22c55e;
+    }
+
+    .tagline {
+      font-size: 22px;
+      color: #94a3b8;
+    }
+
+    /* Main content */
+    .main {
+      text-align: center;
+    }
+
+    .main-title {
+      font-size: 52px;
+      font-weight: 900;
+      color: white;
+      line-height: 1.2;
+      margin-bottom: 30px;
+    }
+
+    .main-title span {
+      background: linear-gradient(135deg, #22c55e 0%, #4ade80 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .feature {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px 16px;
+      text-align: center;
+    }
+
+    .feature-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+    }
+
+    .feature-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: white;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: white;
+      font-size: 22px;
+      font-weight: 700;
+      padding: 18px 50px;
+      border-radius: 50px;
+      text-decoration: none;
+      box-shadow: 0 10px 40px rgba(34, 197, 94, 0.4);
+      margin-bottom: 20px;
+    }
+
+    .website {
+      font-size: 18px;
+      color: #64748b;
+    }
+
+    .website strong {
+      color: #22c55e;
+      font-size: 22px;
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <div class="content">
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">
+          <div class="logo-icon">🏓</div>
+          <div class="logo-text">Pickleball<span>.Community</span></div>
+        </div>
+        <p class="tagline">Connect. Play. Compete. Grow.</p>
+      </div>
+
+      <!-- Main -->
+      <div class="main">
+        <h1 class="main-title">
+          Your Complete<br>
+          <span>Pickleball Hub</span>
+        </h1>
+
+        <div class="features">
+          <div class="feature">
+            <div class="feature-icon">⭐</div>
+            <div class="feature-title">Skill Ratings</div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🏆</div>
+            <div class="feature-title">Game History</div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🏅</div>
+            <div class="feature-title">Awards</div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">👥</div>
+            <div class="feature-title">Find Players</div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🎾</div>
+            <div class="feature-title">Join Clubs</div>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">📅</div>
+            <div class="feature-title">Events</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <a href="#" class="cta-button">Join Free Today!</a>
+        <p class="website"><strong>pickleball.community</strong></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

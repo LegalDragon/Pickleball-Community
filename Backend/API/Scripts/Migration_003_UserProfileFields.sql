@@ -2,7 +2,7 @@
 -- Date: 2025-12-09
 -- Description: Adds basic info and pickleball profile fields to Users table
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

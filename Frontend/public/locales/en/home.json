@@ -1,0 +1,27 @@
+{
+  "defaultTitle": "Pickleball.Community",
+  "defaultSubtitle": "The First 100% AI-Built Platform for Players, Clubs & Events",
+  "heroTagline": "A fully comprehensive management system built entirely by AI for the whole Pickleball community",
+  "findCourts": "Find Courts",
+  "joinClub": "Join a Club",
+  "previousVideo": "Previous video",
+  "nextVideo": "Next video",
+  "quickStats": {
+    "courts": {
+      "label": "Local Courts",
+      "value": "Find Nearby"
+    },
+    "clubs": {
+      "label": "Active Clubs",
+      "value": "Join Today"
+    },
+    "certified": {
+      "label": "Get Certified",
+      "value": "Peer Reviews"
+    },
+    "events": {
+      "label": "Local Events",
+      "value": "Play More"
+    }
+  }
+}

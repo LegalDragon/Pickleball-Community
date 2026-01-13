@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pickleball Community - Feature Poster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .poster {
+      width: 1080px;
+      min-height: 1350px;
+      background: linear-gradient(180deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Decorative elements */
+    .poster::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      right: -200px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .poster::after {
+      content: '';
+      position: absolute;
+      bottom: -150px;
+      left: -150px;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      padding: 60px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .logo-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+
+    .logo-text {
+      font-size: 42px;
+      font-weight: 800;
+      color: white;
+    }
+
+    .logo-text span {
+      color: #22c55e;
+    }
+
+    .tagline {
+      font-size: 24px;
+      color: #94a3b8;
+      margin-top: 10px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 8px 20px;
+      border-radius: 50px;
+      margin-top: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Features Grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-bottom: 50px;
+    }
+
+    .feature-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+      transition: transform 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .feature-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+
+    .feature-icon.green { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+    .feature-icon.blue { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+    .feature-icon.purple { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+    .feature-icon.amber { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    .feature-icon.rose { background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%); }
+    .feature-icon.cyan { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
+
+    .feature-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .feature-desc {
+      font-size: 16px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Highlight Section */
+    .highlight {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      border-radius: 24px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .highlight-title {
+      font-size: 28px;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 16px;
+    }
+
+    .highlight-features {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .highlight-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .highlight-item span {
+      font-size: 24px;
+    }
+
+    /* CTA Section */
+    .cta {
+      text-align: center;
+    }
+
+    .cta-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 16px;
+    }
+
+    .cta-subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 30px;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: white;
+      font-size: 20px;
+      font-weight: 700;
+      padding: 18px 50px;
+      border-radius: 50px;
+      text-decoration: none;
+      box-shadow: 0 10px 30px rgba(34, 197, 94, 0.4);
+    }
+
+    .website {
+      margin-top: 30px;
+      font-size: 20px;
+      color: #64748b;
+    }
+
+    .website strong {
+      color: #22c55e;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      margin-top: 40px;
+      padding-top: 40px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 800;
+      color: #22c55e;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <div class="content">
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">
+          <div class="logo-icon">🏓</div>
+          <div class="logo-text">Pickleball<span>.Community</span></div>
+        </div>
+        <p class="tagline">Connect. Play. Compete. Grow.</p>
+        <div class="badge">Now Available</div>
+      </div>
+
+      <!-- Features Grid -->
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon green">⭐</div>
+          <h3 class="feature-title">Skill Certification</h3>
+          <p class="feature-desc">Get your skill level certified through peer reviews from players you've competed against</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon blue">👥</div>
+          <h3 class="feature-title">Find Players</h3>
+          <p class="feature-desc">Connect with players at your skill level and build your pickleball network</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon purple">🏆</div>
+          <h3 class="feature-title">Track Your History</h3>
+          <p class="feature-desc">View your complete game history, awards, achievements, and rating progression</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon amber">🏅</div>
+          <h3 class="feature-title">Join Clubs</h3>
+          <p class="feature-desc">Find local clubs, manage memberships, and participate in club events</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon rose">📅</div>
+          <h3 class="feature-title">Events & Leagues</h3>
+          <p class="feature-desc">Discover tournaments, leagues, and social play events in your area</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon cyan">📊</div>
+          <h3 class="feature-title">Rating System</h3>
+          <p class="feature-desc">Track your rating changes over time with detailed analytics and trends</p>
+        </div>
+      </div>
+
+      <!-- Highlight Section -->
+      <div class="highlight">
+        <h2 class="highlight-title">Everything You Need in One App</h2>
+        <div class="highlight-features">
+          <div class="highlight-item"><span>✓</span> Player Profiles</div>
+          <div class="highlight-item"><span>✓</span> Game Tracking</div>
+          <div class="highlight-item"><span>✓</span> Awards & Badges</div>
+          <div class="highlight-item"><span>✓</span> Club Management</div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta">
+        <h2 class="cta-title">Ready to Level Up Your Game?</h2>
+        <p class="cta-subtitle">Join the community of passionate pickleball players today!</p>
+        <a href="#" class="cta-button">Join Now - It's Free!</a>
+        <p class="website">Visit us at <strong>pickleball.community</strong></p>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-value">100%</div>
+            <div class="stat-label">Free to Use</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">PWA</div>
+            <div class="stat-label">Install on Mobile</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">24/7</div>
+            <div class="stat-label">Access Anywhere</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

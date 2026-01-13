@@ -2,7 +2,7 @@
 -- Date: 2025-12-10
 -- Description: Adds Ratings table to support 5-star ratings for Materials, Coaches, and Courses
 
-USE PickleballCollege;
+USE PickleballCommunity;
 GO
 
 -- =============================================

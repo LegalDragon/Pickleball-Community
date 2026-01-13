@@ -1,7 +1,7 @@
-# Pickleball College
+# Pickleball Community
 
 ## Overview
-Full-stack web application for pickleball training, coaching, and player certification.
+Full-stack web application for the pickleball community. Users can connect with friends, join clubs, and get player skill certifications through peer reviews.
 
 ## Tech Stack
 - **Backend**: ASP.NET Core 8, Entity Framework Core, SQL Server
@@ -20,24 +20,68 @@ Store all database migration scripts in `/Backend/API/Scripts/` with naming conv
 - Include `IF NOT EXISTS` checks for tables and columns
 - Use `PRINT` statements for progress logging
 
+## Database Best Practices
+- **Prefer stored procedures** over complex inline EF Core queries whenever possible
+- Stored procedures avoid EF Core query generation issues (e.g., SQL syntax errors with CTEs, `Contains()` on lists)
+- Stored procedures provide better performance for complex operations
+- Create stored procedures in migration scripts with `CREATE OR ALTER PROCEDURE`
+- Call stored procedures from C# using `_context.Database.ExecuteSqlRawAsync()` or `FromSqlRaw()`
+- Use stored procedures especially for:
+  - Bulk operations (merge, delete multiple records)
+  - Complex joins or subqueries
+  - Operations with multiple steps that should be atomic
+  - Queries with dynamic filtering on lists of IDs
+
 ## Commands
 - Backend: `dotnet run` in `/Backend/API`
 - Frontend: `npm run dev` in `/Frontend`
 - Build Frontend: `npm run build` in `/Frontend`
 
+## Deployment
+- **Production URL**: https://pickleball.community
+- **Backend**: Deployed as IIS virtual application at `/api` path
+  - Controllers use `[Route("[controller]")]` without `/api` prefix
+  - IIS virtual application provides the `/api` prefix automatically
+  - Frontend calls `/api/agegroups` → IIS routes to virtual app → controller handles `/agegroups`
+- **Frontend**: Static files served from IIS root
+
+## Mobile-First PWA Design
+This app is designed to be installed as a Progressive Web App (PWA) on mobile devices:
+
+### Design Requirements:
+- **Mobile-first**: Design for mobile screens first, then scale up to desktop
+- **Touch-friendly**: Large tap targets (min 44x44px), proper spacing between interactive elements
+- **Responsive**: Use TailwindCSS responsive classes (`sm:`, `md:`, `lg:`) appropriately
+- **Fast loading**: Minimize bundle size, lazy load where possible
+- **Offline-capable**: Service worker handles caching (configured in VitePWA)
+
+### UI Guidelines:
+- Bottom navigation for primary actions on mobile
+- Swipe gestures where appropriate
+- Pull-to-refresh patterns
+- Native-like transitions and animations
+- Avoid hover-only interactions (touch devices don't have hover)
+- Use `min-h-screen` and proper viewport handling
+
+### PWA Configuration:
+- Manifest configured in `vite.config.js` (VitePWA plugin)
+- Icons: `/public/icon-192.png` and `/public/icon-512.png`
+- Theme color: `#3b82f6` (blue)
+- Display mode: `standalone` (appears like native app)
+
 ## Key Features
-- Coach training materials (Video, Audio, Document, Image, Link)
-- Player certification with weighted skill groups
-- Course management
-- Marketplace for materials
-- Rating and tagging system
+- **Player Certification**: Peer-reviewed skill ratings with weighted skill groups
+- **User Profiles**: Detailed pickleball player profiles with equipment, experience, and play style
+- **Rating & Tagging**: General purpose rating and tagging system (BlogPost, Club, Court, Event, Player, Coach)
+- **Blog System**: Community blog with categories, posts, comments, and ratings
+- **Community Features** (planned): Friends, clubs, events, messaging
 
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:
 - **UserId**: All Users.Id values come from the shared auth service (no local IDENTITY)
 - **JWT Tokens**: Tokens are issued by shared auth and validated locally with `sites[]` claim
 - **Cross-site tracking**: Same UserId across pickleball.college, pickleball.date, pickleball.community, pickleball.jobs, pickleball.casino
-- **Site-specific roles**: Each site maintains its own Role (Student/Coach/Admin)
+- **Site-specific roles**: Each site maintains its own Role (User/Admin)
 
 ### Auth Flow:
 1. Frontend calls shared auth API for login/register
@@ -69,11 +113,6 @@ Reference: https://github.com/LegalDragon/Funtime-Shared (branch: `claude/debug-
 3. Import shared styles and initialize before app renders
 4. Use hooks: `useAuth()`, `useSites()`, `usePayments()`
 5. Use components: Button, Input, AuthForm, Avatar, SkillBadge, SiteBadge
-
-#### Payment Processing:
-- Stripe integration via `PaymentModal` component
-- Supports saved payment methods and new card entry
-- Shared API handles payment intents, subscriptions, webhooks
 
 #### API Endpoints (AuthController):
 - Registration and login (public)
