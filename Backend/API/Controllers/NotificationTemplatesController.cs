@@ -579,10 +579,11 @@ public class NotificationTemplatesController : ControllerBase
             }
 
             var currentUserId = GetCurrentUserId();
+            var content = defaultContent.Value;
 
-            template.Subject = defaultContent.Subject;
-            template.Body = defaultContent.Body;
-            template.Placeholders = defaultContent.Placeholders;
+            template.Subject = content.Subject;
+            template.Body = content.Body;
+            template.Placeholders = content.Placeholders;
             template.UpdatedAt = DateTime.UtcNow;
             template.UpdatedByUserId = currentUserId;
 
