@@ -859,6 +859,7 @@ public class GameDayController : ControllerBase
                 Name = $"Team {createdMatches.Count * 2 + 1}",
                 Status = "Registered",
                 IsTemporary = true,
+                CaptainUserId = team1PlayerIds.First(),
                 CreatedAt = DateTime.Now
             };
             _context.EventUnits.Add(unit1);
@@ -883,6 +884,7 @@ public class GameDayController : ControllerBase
                 Name = $"Team {createdMatches.Count * 2 + 2}",
                 Status = "Registered",
                 IsTemporary = true,
+                CaptainUserId = team2PlayerIds.First(),
                 CreatedAt = DateTime.Now
             };
             _context.EventUnits.Add(unit2);
@@ -1089,6 +1091,7 @@ public class GameDayController : ControllerBase
             Name = dto.Team1Name ?? "Team A",
             Status = "Registered",
             IsTemporary = true,
+            CaptainUserId = dto.Team1PlayerIds.First(),
             CreatedAt = DateTime.Now
         };
         _context.EventUnits.Add(unit1);
@@ -1113,6 +1116,7 @@ public class GameDayController : ControllerBase
             Name = dto.Team2Name ?? "Team B",
             Status = "Registered",
             IsTemporary = true,
+            CaptainUserId = dto.Team2PlayerIds.First(),
             CreatedAt = DateTime.Now
         };
         _context.EventUnits.Add(unit2);
@@ -1276,6 +1280,7 @@ public class GameDayController : ControllerBase
             Name = Utility.FormatName(user.LastName, user.FirstName) ?? "Walk-in",
             Status = "Registered",
             IsTemporary = false, // Real registration, not temporary for games
+            CaptainUserId = dto.UserId,
             CreatedAt = DateTime.Now
         };
         _context.EventUnits.Add(unit);
