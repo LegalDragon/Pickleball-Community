@@ -1366,7 +1366,8 @@ public class EventsController : ControllerBase
                                     InviteStatus = mem.InviteStatus,
                                     IsCurrentUser = mem.UserId == userId.Value,
                                     HasPaid = mem.HasPaid,
-                                    PaidAt = mem.PaidAt
+                                    PaidAt = mem.PaidAt,
+                                    PaymentProofUrl = mem.PaymentProofUrl
                                 }).ToList()
                         };
                     }).ToList();

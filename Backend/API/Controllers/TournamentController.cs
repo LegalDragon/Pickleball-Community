@@ -1042,6 +1042,7 @@ public class TournamentController : ControllerBase
         {
             memberRecord.HasPaid = true;
             memberRecord.PaidAt = DateTime.Now;
+            memberRecord.PaymentProofUrl = unit.PaymentProofUrl;
         }
 
         unit.UpdatedAt = DateTime.Now;

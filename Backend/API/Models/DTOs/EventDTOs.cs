@@ -458,6 +458,7 @@ public class TeamMemberDto
     public bool IsCurrentUser { get; set; }
     public bool HasPaid { get; set; } = false;
     public DateTime? PaidAt { get; set; }
+    public string? PaymentProofUrl { get; set; }
 }
 
 // Featured events for home page

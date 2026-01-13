@@ -144,6 +144,7 @@ public class EventUnitMember
     /// </summary>
     public bool HasPaid { get; set; } = false;
     public DateTime? PaidAt { get; set; }
+    public string? PaymentProofUrl { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
