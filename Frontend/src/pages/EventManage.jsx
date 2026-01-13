@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Calendar, Clock, MapPin, Play, Check,
   ChevronRight, AlertCircle, Loader2, Settings, FileText,
-  LayoutGrid, UserCheck, DollarSign, Shuffle, Trophy, Zap
+  LayoutGrid, UserCheck, DollarSign, Shuffle, Trophy, Zap,
+  UserPlus, X, Plus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -12,6 +13,8 @@ import api, { eventsApi, getSharedAssetUrl } from '../services/api';
 // Scheduling API
 const schedulingApi = {
   generateRound: (eventId, data) => api.post(`/gameday/events/${eventId}/generate-round`, data),
+  getPlayers: (eventId, checkedInOnly = false) => api.get(`/gameday/events/${eventId}/players?checkedInOnly=${checkedInOnly}`),
+  createManualGame: (eventId, data) => api.post(`/gameday/events/${eventId}/manual-game`, data),
 };
 
 export default function EventManage() {
@@ -31,11 +34,40 @@ export default function EventManage() {
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState(null);
 
+  // Manual scheduling state
+  const [availablePlayers, setAvailablePlayers] = useState([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [team1Players, setTeam1Players] = useState([]);
+  const [team2Players, setTeam2Players] = useState([]);
+  const [manualCheckedInOnly, setManualCheckedInOnly] = useState(false);
+
   useEffect(() => {
     if (eventId) {
       loadEvent();
     }
   }, [eventId]);
+
+  // Load players when manual mode is selected
+  useEffect(() => {
+    if (schedulingMethod === 'manual' && eventId) {
+      loadPlayers();
+    }
+  }, [schedulingMethod, eventId, manualCheckedInOnly]);
+
+  const loadPlayers = async () => {
+    setLoadingPlayers(true);
+    try {
+      const response = await schedulingApi.getPlayers(eventId, manualCheckedInOnly);
+      if (response.success) {
+        setAvailablePlayers(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading players:', err);
+      toast.error('Failed to load players');
+    } finally {
+      setLoadingPlayers(false);
+    }
+  };
 
   const loadEvent = async () => {
     try {
@@ -76,6 +108,63 @@ export default function EventManage() {
       setGenerating(false);
     }
   };
+
+  const handleCreateManualGame = async () => {
+    if (team1Players.length === 0 || team2Players.length === 0) {
+      toast.error('Please select players for both teams');
+      return;
+    }
+
+    setGenerating(true);
+    setLastResult(null);
+    try {
+      const response = await schedulingApi.createManualGame(eventId, {
+        team1PlayerIds: team1Players.map(p => p.userId),
+        team2PlayerIds: team2Players.map(p => p.userId),
+        bestOf: 1
+      });
+      if (response.success) {
+        setLastResult({ gamesCreated: 1, playersAssigned: team1Players.length + team2Players.length });
+        toast.success('Game created successfully');
+        // Clear selections and reload players
+        setTeam1Players([]);
+        setTeam2Players([]);
+        loadPlayers();
+      } else {
+        toast.error(response.message || 'Failed to create game');
+      }
+    } catch (err) {
+      console.error('Error creating game:', err);
+      toast.error(err.response?.data?.message || 'Failed to create game');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const addPlayerToTeam = (player, team) => {
+    if (team === 1) {
+      if (!team1Players.find(p => p.userId === player.userId)) {
+        setTeam1Players([...team1Players, player]);
+      }
+    } else {
+      if (!team2Players.find(p => p.userId === player.userId)) {
+        setTeam2Players([...team2Players, player]);
+      }
+    }
+  };
+
+  const removePlayerFromTeam = (playerId, team) => {
+    if (team === 1) {
+      setTeam1Players(team1Players.filter(p => p.userId !== playerId));
+    } else {
+      setTeam2Players(team2Players.filter(p => p.userId !== playerId));
+    }
+  };
+
+  // Get players not yet assigned to any team
+  const unassignedPlayers = availablePlayers.filter(
+    p => !team1Players.find(t => t.userId === p.userId) && !team2Players.find(t => t.userId === p.userId)
+  );
 
   if (loading) {
     return (
@@ -289,7 +378,7 @@ export default function EventManage() {
               {/* Scheduling Method */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Scheduling Method</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => setSchedulingMethod('popcorn')}
                     className={`p-4 rounded-lg border-2 transition-all ${
@@ -298,13 +387,13 @@ export default function EventManage() {
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Shuffle className={`w-6 h-6 ${schedulingMethod === 'popcorn' ? 'text-orange-600' : 'text-gray-400'}`} />
+                    <div className="flex items-center gap-2">
+                      <Shuffle className={`w-5 h-5 ${schedulingMethod === 'popcorn' ? 'text-orange-600' : 'text-gray-400'}`} />
                       <div className="text-left">
-                        <div className={`font-medium ${schedulingMethod === 'popcorn' ? 'text-orange-900' : 'text-gray-900'}`}>
+                        <div className={`font-medium text-sm ${schedulingMethod === 'popcorn' ? 'text-orange-900' : 'text-gray-900'}`}>
                           Popcorn
                         </div>
-                        <div className="text-xs text-gray-500">Random player pairing</div>
+                        <div className="text-xs text-gray-500">Random</div>
                       </div>
                     </div>
                   </button>
@@ -316,65 +405,236 @@ export default function EventManage() {
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Trophy className={`w-6 h-6 ${schedulingMethod === 'gauntlet' ? 'text-purple-600' : 'text-gray-400'}`} />
+                    <div className="flex items-center gap-2">
+                      <Trophy className={`w-5 h-5 ${schedulingMethod === 'gauntlet' ? 'text-purple-600' : 'text-gray-400'}`} />
                       <div className="text-left">
-                        <div className={`font-medium ${schedulingMethod === 'gauntlet' ? 'text-purple-900' : 'text-gray-900'}`}>
+                        <div className={`font-medium text-sm ${schedulingMethod === 'gauntlet' ? 'text-purple-900' : 'text-gray-900'}`}>
                           Gauntlet
                         </div>
-                        <div className="text-xs text-gray-500">Winners stay on court</div>
+                        <div className="text-xs text-gray-500">Winners stay</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setSchedulingMethod('manual')}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      schedulingMethod === 'manual'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <UserPlus className={`w-5 h-5 ${schedulingMethod === 'manual' ? 'text-blue-600' : 'text-gray-400'}`} />
+                      <div className="text-left">
+                        <div className={`font-medium text-sm ${schedulingMethod === 'manual' ? 'text-blue-900' : 'text-gray-900'}`}>
+                          Manual
+                        </div>
+                        <div className="text-xs text-gray-500">Pick players</div>
                       </div>
                     </div>
                   </button>
                 </div>
               </div>
 
-              {/* Options */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Team Size</label>
-                  <select
-                    value={teamSize}
-                    onChange={(e) => setTeamSize(parseInt(e.target.value))}
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                  >
-                    <option value={1}>Singles (1v1)</option>
-                    <option value={2}>Doubles (2v2)</option>
-                    <option value={3}>Triples (3v3)</option>
-                    <option value={4}>Quads (4v4)</option>
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 p-2">
-                    <input
-                      type="checkbox"
-                      checked={checkedInOnly}
-                      onChange={(e) => setCheckedInOnly(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Checked-in only</span>
-                  </label>
-                </div>
-              </div>
+              {/* Automatic Scheduling Options (Popcorn/Gauntlet) */}
+              {schedulingMethod !== 'manual' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Team Size</label>
+                      <select
+                        value={teamSize}
+                        onChange={(e) => setTeamSize(parseInt(e.target.value))}
+                        className="w-full border border-gray-300 rounded-lg p-2"
+                      >
+                        <option value={1}>Singles (1v1)</option>
+                        <option value={2}>Doubles (2v2)</option>
+                        <option value={3}>Triples (3v3)</option>
+                        <option value={4}>Quads (4v4)</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 p-2">
+                        <input
+                          type="checkbox"
+                          checked={checkedInOnly}
+                          onChange={(e) => setCheckedInOnly(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span className="text-sm text-gray-700">Checked-in only</span>
+                      </label>
+                    </div>
+                  </div>
 
-              {/* Generate Button */}
-              <button
-                onClick={handleGenerateRound}
-                disabled={generating}
-                className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-5 h-5" />
-                    Generate Round
-                  </>
-                )}
-              </button>
+                  <button
+                    onClick={handleGenerateRound}
+                    disabled={generating}
+                    className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5" />
+                        Generate Round
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+
+              {/* Manual Scheduling - Player Selection */}
+              {schedulingMethod === 'manual' && (
+                <div className="space-y-4">
+                  {/* Checked-in filter */}
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={manualCheckedInOnly}
+                        onChange={(e) => setManualCheckedInOnly(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Show checked-in only</span>
+                    </label>
+                    <button
+                      onClick={loadPlayers}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+
+                  {loadingPlayers ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Team Selection */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Team 1 */}
+                        <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
+                          <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                            <Users className="w-4 h-4" />
+                            Team 1 ({team1Players.length})
+                          </h4>
+                          <div className="space-y-1 min-h-[60px]">
+                            {team1Players.map(player => (
+                              <div key={player.userId} className="flex items-center justify-between bg-white rounded px-2 py-1 text-sm">
+                                <span className="truncate">{player.name}</span>
+                                <button
+                                  onClick={() => removePlayerFromTeam(player.userId, 1)}
+                                  className="text-red-500 hover:text-red-700 ml-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {team1Players.length === 0 && (
+                              <div className="text-xs text-blue-600 italic">Click players below to add</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Team 2 */}
+                        <div className="border border-orange-200 rounded-lg p-3 bg-orange-50">
+                          <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
+                            <Users className="w-4 h-4" />
+                            Team 2 ({team2Players.length})
+                          </h4>
+                          <div className="space-y-1 min-h-[60px]">
+                            {team2Players.map(player => (
+                              <div key={player.userId} className="flex items-center justify-between bg-white rounded px-2 py-1 text-sm">
+                                <span className="truncate">{player.name}</span>
+                                <button
+                                  onClick={() => removePlayerFromTeam(player.userId, 2)}
+                                  className="text-red-500 hover:text-red-700 ml-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {team2Players.length === 0 && (
+                              <div className="text-xs text-orange-600 italic">Click players below to add</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Available Players */}
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">
+                          Available Players ({unassignedPlayers.length})
+                        </h4>
+                        <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                          {unassignedPlayers.length === 0 ? (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              {availablePlayers.length === 0 ? 'No players registered' : 'All players assigned'}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {unassignedPlayers.map(player => (
+                                <div key={player.userId} className="flex items-center justify-between p-2 hover:bg-gray-50">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`text-sm truncate ${!player.isAvailable ? 'text-gray-400' : ''}`}>
+                                      {player.name}
+                                    </span>
+                                    {player.isCheckedIn && (
+                                      <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">In</span>
+                                    )}
+                                    {!player.isAvailable && (
+                                      <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Playing</span>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => addPlayerToTeam(player, 1)}
+                                      disabled={!player.isAvailable}
+                                      className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      T1
+                                    </button>
+                                    <button
+                                      onClick={() => addPlayerToTeam(player, 2)}
+                                      disabled={!player.isAvailable}
+                                      className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      T2
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Create Game Button */}
+                      <button
+                        onClick={handleCreateManualGame}
+                        disabled={generating || team1Players.length === 0 || team2Players.length === 0}
+                        className="w-full py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {generating ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-5 h-5" />
+                            Create Game
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Result */}
               {lastResult && (
@@ -382,7 +642,7 @@ export default function EventManage() {
                   <div className="flex items-center gap-2 text-green-800">
                     <Check className="w-5 h-5" />
                     <span className="font-medium">
-                      Created {lastResult.gamesCreated} games with {lastResult.playersAssigned} players
+                      Created {lastResult.gamesCreated} game{lastResult.gamesCreated !== 1 ? 's' : ''} with {lastResult.playersAssigned} players
                     </span>
                   </div>
                   <Link
@@ -397,10 +657,14 @@ export default function EventManage() {
 
               {/* Method Description */}
               <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
-                {schedulingMethod === 'popcorn' ? (
+                {schedulingMethod === 'popcorn' && (
                   <p><strong>Popcorn:</strong> Players are randomly shuffled and paired into teams for each round. Everyone gets a fresh matchup.</p>
-                ) : (
+                )}
+                {schedulingMethod === 'gauntlet' && (
                   <p><strong>Gauntlet:</strong> Winning teams stay on their court while losing teams rotate out. New challengers are randomly assigned.</p>
+                )}
+                {schedulingMethod === 'manual' && (
+                  <p><strong>Manual:</strong> Select players individually for each team. Great for setting up specific matchups or accommodating player requests.</p>
                 )}
               </div>
             </div>
@@ -414,10 +678,10 @@ export default function EventManage() {
             Quick Tips
           </h3>
           <ul className="text-sm text-blue-700 space-y-1">
-            <li>• Use <strong>Quick Scheduling</strong> to automatically create games for all players</li>
             <li>• <strong>Popcorn</strong> is great for social play - everyone gets randomly matched</li>
             <li>• <strong>Gauntlet</strong> keeps winners playing - great for competitive sessions</li>
-            <li>• Use <strong>Game Day Manager</strong> for manual game creation and scoring</li>
+            <li>• <strong>Manual</strong> lets you pick exactly who plays - perfect for specific requests</li>
+            <li>• Use <strong>Game Day Manager</strong> for court management and scoring</li>
           </ul>
         </div>
       </div>

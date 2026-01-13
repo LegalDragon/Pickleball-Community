@@ -946,6 +946,246 @@ public class GameDayController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get available players for manual game scheduling
+    /// </summary>
+    [HttpGet("events/{eventId}/players")]
+    public async Task<IActionResult> GetAvailablePlayers(int eventId, [FromQuery] int? divisionId = null, [FromQuery] bool checkedInOnly = false)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, userId.Value))
+            return Forbid();
+
+        // Get all units for this event (optionally filtered by division)
+        var unitsQuery = _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.EventId == eventId && u.Status != "Cancelled" && !u.IsTemporary);
+
+        if (divisionId.HasValue)
+        {
+            unitsQuery = unitsQuery.Where(u => u.DivisionId == divisionId.Value);
+        }
+
+        var units = await unitsQuery.ToListAsync();
+
+        // Get all accepted members from units
+        var allPlayers = units
+            .SelectMany(u => u.Members.Where(m => m.InviteStatus == "Accepted"))
+            .Select(m => new
+            {
+                userId = m.UserId,
+                name = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
+                profileImageUrl = m.User?.ProfileImageUrl,
+                isCheckedIn = m.IsCheckedIn,
+                unitId = m.UnitId,
+                unitName = units.FirstOrDefault(u => u.Id == m.UnitId)?.Name
+            })
+            .DistinctBy(p => p.userId)
+            .ToList();
+
+        // Filter to checked-in only if required
+        if (checkedInOnly)
+        {
+            allPlayers = allPlayers.Where(p => p.isCheckedIn).ToList();
+        }
+
+        // Get players currently in active games
+        var playersInActiveGames = await _context.EventMatches
+            .Where(m => m.EventId == eventId && (m.Status == "InProgress" || m.Status == "Scheduled" || m.Status == "Queued"))
+            .Include(m => m.Unit1).ThenInclude(u => u.Members)
+            .Include(m => m.Unit2).ThenInclude(u => u.Members)
+            .SelectMany(m =>
+                m.Unit1!.Members.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId)
+                .Concat(m.Unit2!.Members.Where(mem => mem.InviteStatus == "Accepted").Select(mem => mem.UserId)))
+            .Distinct()
+            .ToHashSetAsync();
+
+        // Mark players who are available (not in active games)
+        var playersWithAvailability = allPlayers.Select(p => new
+        {
+            p.userId,
+            p.name,
+            p.profileImageUrl,
+            p.isCheckedIn,
+            p.unitId,
+            p.unitName,
+            isAvailable = !playersInActiveGames.Contains(p.userId)
+        }).OrderBy(p => p.name).ToList();
+
+        return Ok(new
+        {
+            success = true,
+            data = playersWithAvailability
+        });
+    }
+
+    /// <summary>
+    /// Create a manual game with specific players
+    /// </summary>
+    [HttpPost("events/{eventId}/manual-game")]
+    public async Task<IActionResult> CreateManualGame(int eventId, [FromBody] CreateManualGameDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, userId.Value))
+            return Forbid();
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new { success = false, message = "Event not found" });
+
+        // Validate player lists
+        if (dto.Team1PlayerIds == null || dto.Team1PlayerIds.Count == 0)
+            return BadRequest(new { success = false, message = "Team 1 must have at least one player" });
+
+        if (dto.Team2PlayerIds == null || dto.Team2PlayerIds.Count == 0)
+            return BadRequest(new { success = false, message = "Team 2 must have at least one player" });
+
+        // Check for duplicate players
+        var allPlayerIds = dto.Team1PlayerIds.Concat(dto.Team2PlayerIds).ToList();
+        if (allPlayerIds.Count != allPlayerIds.Distinct().Count())
+            return BadRequest(new { success = false, message = "A player cannot be on both teams" });
+
+        // Verify all players are registered for this event
+        var registeredPlayers = await _context.EventUnitMembers
+            .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToHashSetAsync();
+
+        var unregisteredPlayers = allPlayerIds.Where(id => !registeredPlayers.Contains(id)).ToList();
+        if (unregisteredPlayers.Any())
+            return BadRequest(new { success = false, message = "Some players are not registered for this event" });
+
+        // Get or assign court
+        TournamentCourt? court = null;
+        if (dto.CourtId.HasValue)
+        {
+            court = await _context.TournamentCourts.FindAsync(dto.CourtId.Value);
+            if (court == null || court.EventId != eventId)
+                return BadRequest(new { success = false, message = "Invalid court" });
+        }
+
+        // Get division
+        var divisionId = dto.DivisionId ?? evt.Divisions.FirstOrDefault()?.Id ?? 0;
+
+        // Create temporary units for this game
+        var unit1 = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = divisionId,
+            Name = dto.Team1Name ?? "Team A",
+            Status = "Registered",
+            IsTemporary = true,
+            CreatedAt = DateTime.Now
+        };
+        _context.EventUnits.Add(unit1);
+        await _context.SaveChangesAsync();
+
+        foreach (var playerId in dto.Team1PlayerIds)
+        {
+            _context.EventUnitMembers.Add(new EventUnitMember
+            {
+                UnitId = unit1.Id,
+                UserId = playerId,
+                Role = "Player",
+                InviteStatus = "Accepted",
+                CreatedAt = DateTime.Now
+            });
+        }
+
+        var unit2 = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = divisionId,
+            Name = dto.Team2Name ?? "Team B",
+            Status = "Registered",
+            IsTemporary = true,
+            CreatedAt = DateTime.Now
+        };
+        _context.EventUnits.Add(unit2);
+        await _context.SaveChangesAsync();
+
+        foreach (var playerId in dto.Team2PlayerIds)
+        {
+            _context.EventUnitMembers.Add(new EventUnitMember
+            {
+                UnitId = unit2.Id,
+                UserId = playerId,
+                Role = "Player",
+                InviteStatus = "Accepted",
+                CreatedAt = DateTime.Now
+            });
+        }
+
+        // Create the match
+        var match = new EventMatch
+        {
+            EventId = eventId,
+            DivisionId = divisionId,
+            Unit1Id = unit1.Id,
+            Unit2Id = unit2.Id,
+            TournamentCourtId = dto.CourtId,
+            Status = dto.CourtId.HasValue ? "Scheduled" : "Pending",
+            BestOf = dto.BestOf ?? 1,
+            RoundType = "GameDay",
+            RoundNumber = 1,
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+        _context.EventMatches.Add(match);
+
+        // Update court status if assigned
+        if (court != null)
+        {
+            court.Status = "InUse";
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Create game(s) based on BestOf
+        for (int i = 1; i <= match.BestOf; i++)
+        {
+            var game = new EventGame
+            {
+                MatchId = match.Id,
+                GameNumber = i,
+                TournamentCourtId = i == 1 ? dto.CourtId : null,
+                Status = i == 1 && dto.CourtId.HasValue ? "Queued" : "New",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EventGames.Add(game);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Load the created match with all related data
+        var loadedMatch = await _context.EventMatches
+            .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
+            .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
+            .Include(m => m.TournamentCourt)
+            .Include(m => m.Division)
+            .Include(m => m.Games)
+            .FirstOrDefaultAsync(m => m.Id == match.Id);
+
+        return Ok(new
+        {
+            success = true,
+            data = MapToGameDto(loadedMatch!),
+            message = "Game created successfully"
+        });
+    }
+
     // ==========================================
     // Helper Methods
     // ==========================================
@@ -1200,6 +1440,44 @@ public class GenerateRoundDto
     /// Maximum number of games to create (defaults to number of available courts)
     /// </summary>
     public int? MaxGames { get; set; }
+
+    /// <summary>
+    /// Best of N games per match
+    /// </summary>
+    public int? BestOf { get; set; }
+}
+
+public class CreateManualGameDto
+{
+    /// <summary>
+    /// Player IDs for Team 1
+    /// </summary>
+    public List<int> Team1PlayerIds { get; set; } = new();
+
+    /// <summary>
+    /// Player IDs for Team 2
+    /// </summary>
+    public List<int> Team2PlayerIds { get; set; } = new();
+
+    /// <summary>
+    /// Optional name for Team 1
+    /// </summary>
+    public string? Team1Name { get; set; }
+
+    /// <summary>
+    /// Optional name for Team 2
+    /// </summary>
+    public string? Team2Name { get; set; }
+
+    /// <summary>
+    /// Division ID (optional - uses first division if not specified)
+    /// </summary>
+    public int? DivisionId { get; set; }
+
+    /// <summary>
+    /// Court ID to assign the game to (optional)
+    /// </summary>
+    public int? CourtId { get; set; }
 
     /// <summary>
     /// Best of N games per match
