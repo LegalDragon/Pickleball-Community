@@ -3892,12 +3892,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             )}
                                           </button>
                                           {/* Payment status indicator - $ icon (per-member) */}
-                                          {member.hasPaid && (
+                                          {/* Show for: 1) members who paid, 2) admin can click gray $ to add payment for any member */}
+                                          {(member.hasPaid || isOrganizer) && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (isOrganizer) {
-                                                  // Admin: open AdminPaymentModal to review/verify specific member
+                                                  // Admin: open AdminPaymentModal to review/verify or add payment for specific member
                                                   setSelectedAdminPaymentUnit({
                                                     ...unit,
                                                     unitId: unit.id,
@@ -3915,9 +3916,18 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                                 }
                                               }}
                                               className="p-0.5 rounded transition-colors hover:bg-gray-100 cursor-pointer"
-                                              title={`${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`}
+                                              title={member.hasPaid
+                                                ? `${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`
+                                                : 'Add payment info'
+                                              }
                                             >
-                                              <DollarSign className={`w-4 h-4 ${isPaymentVerified ? 'text-green-600' : 'text-orange-500'}`} />
+                                              <DollarSign className={`w-4 h-4 ${
+                                                isPaymentVerified
+                                                  ? 'text-green-600'
+                                                  : member.hasPaid
+                                                    ? 'text-orange-500'
+                                                    : 'text-gray-400'
+                                              }`} />
                                             </button>
                                           )}
                                           {/* Trash icon - only if no payment submitted */}

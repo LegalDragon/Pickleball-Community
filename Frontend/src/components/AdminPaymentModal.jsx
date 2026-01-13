@@ -76,7 +76,7 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
   };
 
   const memberProofUrl = getProofUrl(member.paymentProofUrl);
-  const isPdf = isPdfUrl(member.paymentProofUrl);
+  const isPdf = isPdfUrl(memberProofUrl);
   const isImage = isImageUrl(memberProofUrl);
 
   const handleMarkAsPaid = async () => {
