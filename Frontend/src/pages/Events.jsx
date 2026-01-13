@@ -2158,7 +2158,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         toast.success('Division updated successfully');
         setShowEditDivision(false);
         setEditingDivision(null);
-        onUpdate(); // Reload event to get updated divisions
+        // Reload full event to get updated divisions and pass to onUpdate
+        const eventResponse = await eventsApi.getById(event.id);
+        if (eventResponse.success) {
+          onUpdate(eventResponse.data);
+        } else {
+          onUpdate(); // Fallback to just reloading lists
+        }
       } else {
         toast.error(response.message || 'Failed to update division');
       }
