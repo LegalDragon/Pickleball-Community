@@ -2,12 +2,16 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { userApi, materialApi, themeApi, notificationTemplateApi, getAssetUrl } from '../services/api'
 import { userApi, themeApi, sharedAssetApi, getAssetUrl, getSharedAssetUrl, SHARED_AUTH_URL, notificationsApi } from '../services/api'
 import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown, Bell, Send, Megaphone
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Bell,
+  Mail, Plus, RotateCcw, ToggleLeft, ToggleRight, Copy, AlertCircle
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown, Bell, Send
 } from 'lucide-react'
 import VideoUploadModal from '../components/ui/VideoUploadModal'
 import PublicProfileModal from '../components/ui/PublicProfileModal'
@@ -72,6 +76,18 @@ const AdminDashboard = () => {
   const [sendingNotification, setSendingNotification] = useState(false)
   const [notifTestResult, setNotifTestResult] = useState(null)
 
+  // Notification Templates state
+  const [templates, setTemplates] = useState([])
+  const [templateCategories, setTemplateCategories] = useState([])
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState('all')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
+  const [previewContent, setPreviewContent] = useState({ subject: '', body: '' })
+  const [isNewTemplate, setIsNewTemplate] = useState(false)
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -109,6 +125,8 @@ const AdminDashboard = () => {
       fetchUsers()
     } else if (activeTab === 'theme') {
       fetchTheme()
+    } else if (activeTab === 'notifications') {
+      fetchTemplates()
     }
   }, [activeTab])
 
@@ -327,6 +345,174 @@ const AdminDashboard = () => {
     }
   }
 
+  // Fetch notification templates
+  const fetchTemplates = async () => {
+    setLoading(true)
+    try {
+      const [templatesResponse, categoriesResponse] = await Promise.all([
+        notificationTemplateApi.getTemplates(),
+        notificationTemplateApi.getCategories()
+      ])
+
+      if (templatesResponse.success && templatesResponse.data) {
+        setTemplates(templatesResponse.data)
+      }
+      if (categoriesResponse.success && categoriesResponse.data) {
+        setTemplateCategories(categoriesResponse.data)
+      }
+    } catch (error) {
+      console.error('Error fetching notification templates:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle edit template
+  const handleEditTemplate = (template) => {
+    setSelectedTemplate({ ...template })
+    setIsNewTemplate(false)
+    setIsTemplateModalOpen(true)
+  }
+
+  // Handle new template
+  const handleNewTemplate = () => {
+    setSelectedTemplate({
+      templateKey: '',
+      name: '',
+      description: '',
+      category: 'General',
+      subject: '',
+      body: '',
+      placeholders: [],
+      isActive: true
+    })
+    setIsNewTemplate(true)
+    setIsTemplateModalOpen(true)
+  }
+
+  // Handle save template
+  const handleSaveTemplate = async () => {
+    if (!selectedTemplate) return
+    setSavingTemplate(true)
+    try {
+      let response
+      if (isNewTemplate) {
+        response = await notificationTemplateApi.createTemplate(selectedTemplate)
+      } else {
+        response = await notificationTemplateApi.updateTemplate(selectedTemplate.id, selectedTemplate)
+      }
+
+      if (response.success) {
+        await fetchTemplates()
+        setIsTemplateModalOpen(false)
+        setSelectedTemplate(null)
+        alert(isNewTemplate ? 'Template created successfully!' : 'Template updated successfully!')
+      } else {
+        throw new Error(response.message || 'Failed to save template')
+      }
+    } catch (error) {
+      console.error('Error saving template:', error)
+      alert('Failed to save template: ' + (error.message || 'Unknown error'))
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  // Handle toggle template active
+  const handleToggleTemplateActive = async (template) => {
+    try {
+      const response = await notificationTemplateApi.toggleActive(template.id)
+      if (response.success) {
+        await fetchTemplates()
+      }
+    } catch (error) {
+      console.error('Error toggling template:', error)
+      alert('Failed to toggle template status')
+    }
+  }
+
+  // Handle reset template
+  const handleResetTemplate = async (template) => {
+    if (!template.isSystem) {
+      alert('Only system templates can be reset to defaults')
+      return
+    }
+    if (!confirm('Are you sure you want to reset this template to its default content?')) {
+      return
+    }
+    try {
+      const response = await notificationTemplateApi.resetTemplate(template.id)
+      if (response.success) {
+        await fetchTemplates()
+        alert('Template reset to default!')
+      }
+    } catch (error) {
+      console.error('Error resetting template:', error)
+      alert('Failed to reset template')
+    }
+  }
+
+  // Handle delete template
+  const handleDeleteTemplate = async (template) => {
+    if (template.isSystem) {
+      alert('System templates cannot be deleted')
+      return
+    }
+    if (!confirm('Are you sure you want to delete this template?')) {
+      return
+    }
+    try {
+      const response = await notificationTemplateApi.deleteTemplate(template.id)
+      if (response.success) {
+        await fetchTemplates()
+        alert('Template deleted!')
+      }
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      alert('Failed to delete template')
+    }
+  }
+
+  // Handle preview template
+  const handlePreviewTemplate = async () => {
+    if (!selectedTemplate) return
+    try {
+      // Create sample data from placeholders
+      const sampleData = {}
+      selectedTemplate.placeholders?.forEach(p => {
+        sampleData[p] = `[${p}]`
+      })
+      // Add common sample values
+      sampleData['OrganizationName'] = 'Pickleball College'
+      sampleData['FirstName'] = 'John'
+      sampleData['LastName'] = 'Doe'
+      sampleData['Email'] = 'john.doe@example.com'
+
+      const response = await notificationTemplateApi.previewTemplate(
+        selectedTemplate.subject,
+        selectedTemplate.body,
+        sampleData
+      )
+
+      if (response.success && response.data) {
+        setPreviewContent({
+          subject: response.data.renderedSubject,
+          body: response.data.renderedBody
+        })
+        setIsPreviewModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Error previewing template:', error)
+      alert('Failed to preview template')
+    }
+  }
+
+  // Handle placeholder input
+  const handlePlaceholderChange = (value) => {
+    const placeholders = value.split(',').map(p => p.trim()).filter(p => p)
+    setSelectedTemplate(prev => ({ ...prev, placeholders }))
+  }
+
   // Handle hero video save from modal (supports both URL and file upload)
   const handleHeroVideoSave = async ({ url, type }) => {
     try {
@@ -495,6 +681,22 @@ const AdminDashboard = () => {
     return matchesSearch && matchesRole
   })
 
+  // Filter materials
+  const filteredMaterials = materials.filter(m => {
+    return (m.title?.toLowerCase() || '').includes(materialSearch.toLowerCase()) ||
+           (m.description?.toLowerCase() || '').includes(materialSearch.toLowerCase())
+  })
+
+  // Filter templates
+  const filteredTemplates = templates.filter(t => {
+    const matchesSearch =
+      (t.name?.toLowerCase() || '').includes(templateSearch.toLowerCase()) ||
+      (t.templateKey?.toLowerCase() || '').includes(templateSearch.toLowerCase()) ||
+      (t.subject?.toLowerCase() || '').includes(templateSearch.toLowerCase())
+    const matchesCategory = templateCategoryFilter === 'all' || t.category === templateCategoryFilter
+    return matchesSearch && matchesCategory
+  })
+
   // Pagination logic
   const getPaginatedData = (data) => {
     const startIndex = (currentPage - 1) * itemsPerPage
@@ -550,6 +752,15 @@ const AdminDashboard = () => {
     }
   }
 
+  // Sidebar navigation items
+  const navItems = [
+    { id: 'users', label: 'Users', icon: Users, count: users.length },
+    { id: 'materials', label: 'Materials', icon: BookOpen, count: materials.length },
+    { id: 'theme', label: 'Theme', icon: Palette },
+    { id: 'notifications', label: 'Notifications', icon: Bell, count: templates.length },
+    { id: 'certification', label: 'Certification', icon: Award, link: '/admin/certification' },
+    { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
+    { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
   // Sidebar navigation items - all render inline now
   const navGroups = [
     {
@@ -1929,6 +2140,193 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Notification Templates</h2>
+                <button
+                  onClick={handleNewTemplate}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Template
+                </button>
+              </div>
+
+              {/* Search and Filters */}
+              <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search templates..."
+                      value={templateSearch}
+                      onChange={(e) => setTemplateSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Filter className="w-5 h-5 text-gray-400" />
+                    <select
+                      value={templateCategoryFilter}
+                      onChange={(e) => setTemplateCategoryFilter(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Categories</option>
+                      {templateCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Templates Table */}
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                {loading ? (
+                  <div className="p-12 text-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-500">Loading templates...</p>
+                  </div>
+                ) : (
+                  <>
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {getPaginatedData(filteredTemplates).map(template => (
+                          <tr key={template.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <Mail className="w-5 h-5 text-blue-600" />
+                                </div>
+                                <div className="ml-4">
+                                  <div className="font-medium text-gray-900">{template.name}</div>
+                                  <div className="text-sm text-gray-500">{template.templateKey}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                {template.category}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {template.isActive ? (
+                                <span className="inline-flex items-center text-green-600">
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Active
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-gray-500">
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Inactive
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {template.isSystem ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                  <Shield className="w-3 h-3 mr-1" />
+                                  System
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                  Custom
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end space-x-1">
+                                <button
+                                  onClick={() => handleEditTemplate(template)}
+                                  className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleToggleTemplateActive(template)}
+                                  className={`p-2 rounded-lg ${template.isActive ? 'text-orange-600 hover:bg-orange-50' : 'text-green-600 hover:bg-green-50'}`}
+                                  title={template.isActive ? 'Deactivate' : 'Activate'}
+                                >
+                                  {template.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                                </button>
+                                {template.isSystem && (
+                                  <button
+                                    onClick={() => handleResetTemplate(template)}
+                                    className="text-purple-600 hover:text-purple-800 p-2 rounded-lg hover:bg-purple-50"
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {!template.isSystem && (
+                                  <button
+                                    onClick={() => handleDeleteTemplate(template)}
+                                    className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* Pagination */}
+                    {filteredTemplates.length > itemsPerPage && (
+                      <div className="px-6 py-4 border-t flex items-center justify-between">
+                        <p className="text-sm text-gray-500">
+                          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTemplates.length)} of {filteredTemplates.length} templates
+                        </p>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="p-2 rounded-lg border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="px-3 py-1 text-sm">
+                            Page {currentPage} of {totalPages(filteredTemplates)}
+                          </span>
+                          <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages(filteredTemplates), p + 1))}
+                            disabled={currentPage === totalPages(filteredTemplates)}
+                            className="p-2 rounded-lg border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {filteredTemplates.length === 0 && (
+                      <div className="p-12 text-center">
+                        <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                        <p className="text-gray-500">No templates found</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Events Tab (Coming Soon) */}
           {activeTab === 'events' && (
             <div className="bg-white rounded-xl shadow-sm p-12 text-center">
@@ -2334,6 +2732,284 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {/* Template Edit Modal */}
+      {isTemplateModalOpen && selectedTemplate && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setIsTemplateModalOpen(false)}
+            />
+
+            <div className="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center px-6 py-4 border-b sticky top-0 bg-white z-10">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {isNewTemplate ? 'Create New Template' : 'Edit Template'}
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handlePreviewTemplate}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 flex items-center text-sm"
+                  >
+                    <Eye className="w-4 h-4 mr-1" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => setIsTemplateModalOpen(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 space-y-4">
+                {/* Template Key (only for new templates) */}
+                {isNewTemplate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Template Key <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedTemplate.templateKey || ''}
+                      onChange={(e) => setSelectedTemplate({ ...selectedTemplate, templateKey: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., custom_notification"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Unique identifier for this template (lowercase, underscores)</p>
+                  </div>
+                )}
+
+                {/* Template Key display (for existing templates) */}
+                {!isNewTemplate && (
+                  <div className="flex items-center space-x-2 text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+                    <span className="font-medium">Key:</span>
+                    <code className="bg-gray-200 px-2 py-0.5 rounded">{selectedTemplate.templateKey}</code>
+                    {selectedTemplate.isSystem && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 ml-2">
+                        <Shield className="w-3 h-3 mr-1" />
+                        System Template
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedTemplate.name || ''}
+                      onChange={(e) => setSelectedTemplate({ ...selectedTemplate, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Template display name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select
+                      value={selectedTemplate.category || 'General'}
+                      onChange={(e) => setSelectedTemplate({ ...selectedTemplate, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="General">General</option>
+                      <option value="Account">Account</option>
+                      <option value="Sessions">Sessions</option>
+                      <option value="Purchases">Purchases</option>
+                      <option value="Video Reviews">Video Reviews</option>
+                      <option value="Certification">Certification</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={selectedTemplate.description || ''}
+                    onChange={(e) => setSelectedTemplate({ ...selectedTemplate, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="When is this template used?"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Subject <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedTemplate.subject || ''}
+                    onChange={(e) => setSelectedTemplate({ ...selectedTemplate, subject: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Email subject line (supports {{placeholders}})"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Body <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={selectedTemplate.body || ''}
+                    onChange={(e) => setSelectedTemplate({ ...selectedTemplate, body: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    rows={12}
+                    placeholder="Email body content (supports {{placeholders}} and {{#if Condition}}...{{/if}})"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Available Placeholders
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedTemplate.placeholders?.join(', ') || ''}
+                    onChange={(e) => handlePlaceholderChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="FirstName, LastName, Email (comma-separated)"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    List of placeholder names available in this template. Use {'{{PlaceholderName}}'} in subject/body.
+                  </p>
+                </div>
+
+                {/* Placeholder Tags Display */}
+                {selectedTemplate.placeholders?.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTemplate.placeholders.map(p => (
+                      <span
+                        key={p}
+                        className="inline-flex items-center px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-mono cursor-pointer hover:bg-blue-100"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`{{${p}}}`)
+                        }}
+                        title="Click to copy"
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        {`{{${p}}}`}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between py-2">
+                  <label className="text-sm font-medium text-gray-700">Active Status</label>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemplate({ ...selectedTemplate, isActive: !selectedTemplate.isActive })}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      selectedTemplate.isActive ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        selectedTemplate.isActive ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Help Section */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Template Syntax Help
+                  </h4>
+                  <ul className="text-xs text-blue-700 space-y-1">
+                    <li><strong>Placeholders:</strong> Use {'{{PlaceholderName}}'} to insert dynamic values</li>
+                    <li><strong>Conditionals:</strong> Use {'{{#if Condition}}content{{/if}}'} to show content only when the condition has a value</li>
+                    <li><strong>Common placeholders:</strong> OrganizationName, FirstName, LastName, Email</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3 sticky bottom-0">
+                <button
+                  onClick={() => setIsTemplateModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveTemplate}
+                  disabled={savingTemplate || !selectedTemplate.name || !selectedTemplate.subject || !selectedTemplate.body || (isNewTemplate && !selectedTemplate.templateKey)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                >
+                  {savingTemplate ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {isNewTemplate ? 'Create Template' : 'Save Changes'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {isPreviewModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setIsPreviewModalOpen(false)}
+            />
+
+            <div className="relative inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="flex justify-between items-center px-6 py-4 border-b">
+                <h3 className="text-lg font-semibold text-gray-900">Template Preview</h3>
+                <button
+                  onClick={() => setIsPreviewModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-6 py-4">
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Subject</label>
+                  <div className="p-3 bg-gray-50 rounded-lg text-gray-900 font-medium">
+                    {previewContent.subject}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Body</label>
+                  <div className="p-4 bg-gray-50 rounded-lg text-gray-700 whitespace-pre-wrap font-mono text-sm max-h-96 overflow-y-auto">
+                    {previewContent.body}
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-4">
+                  Note: Placeholders are shown as [PlaceholderName] in this preview. They will be replaced with actual values when the notification is sent.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 px-6 py-4 flex justify-end">
+                <button
+                  onClick={() => setIsPreviewModalOpen(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       {/* Hero Video Upload Modal (Legacy single video) */}
       <VideoUploadModal
         isOpen={isHeroVideoModalOpen}

@@ -617,6 +617,58 @@ export const certificationApi = {
     api.get('/playercertification/certificate')
 }
 
+// Notification Templates API (Admin)
+export const notificationTemplateApi = {
+  // Get all templates
+  getTemplates: (activeOnly = false, category = null) => {
+    const params = new URLSearchParams()
+    if (activeOnly) params.append('activeOnly', 'true')
+    if (category) params.append('category', category)
+    return api.get(`/notificationtemplates?${params.toString()}`)
+  },
+
+  // Get templates grouped by category
+  getTemplatesGrouped: (activeOnly = false) =>
+    api.get(`/notificationtemplates/grouped?activeOnly=${activeOnly}`),
+
+  // Get all categories
+  getCategories: () =>
+    api.get('/notificationtemplates/categories'),
+
+  // Get a single template by ID
+  getTemplate: (id) =>
+    api.get(`/notificationtemplates/${id}`),
+
+  // Get a template by key
+  getTemplateByKey: (templateKey) =>
+    api.get(`/notificationtemplates/key/${templateKey}`),
+
+  // Create a new template
+  createTemplate: (data) =>
+    api.post('/notificationtemplates', data),
+
+  // Update a template
+  updateTemplate: (id, data) =>
+    api.put(`/notificationtemplates/${id}`, data),
+
+  // Delete a template
+  deleteTemplate: (id) =>
+    api.delete(`/notificationtemplates/${id}`),
+
+  // Preview a template with sample data
+  previewTemplate: (subject, body, sampleData) =>
+    api.post('/notificationtemplates/preview', { subject, body, sampleData }),
+
+  // Toggle template active status
+  toggleActive: (id) =>
+    api.post(`/notificationtemplates/${id}/toggle-active`),
+
+  // Reset a system template to defaults
+  resetTemplate: (id) =>
+    api.post(`/notificationtemplates/${id}/reset`)
+}
+
+export default api
 // Venues API (formerly Courts - places with pickleball courts)
 export const venuesApi = {
   // Search venues with filters
