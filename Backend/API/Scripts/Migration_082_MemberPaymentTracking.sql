@@ -21,13 +21,15 @@ END
 ELSE
     PRINT 'PaidAt column already exists'
 
--- Backfill: If unit is marked as Paid, mark all members as paid
+-- Backfill: If unit has any payment submitted (Paid, PendingVerification, or Partial), mark all members as paid
 UPDATE m
-SET m.HasPaid = 1, m.PaidAt = u.PaidAt
+SET m.HasPaid = 1, m.PaidAt = COALESCE(u.PaidAt, u.UpdatedAt, GETDATE())
 FROM EventUnitMembers m
 INNER JOIN EventUnits u ON m.UnitId = u.Id
-WHERE u.PaymentStatus = 'Paid' AND m.HasPaid = 0
+WHERE u.PaymentStatus IN ('Paid', 'PendingVerification', 'Partial')
+  AND m.HasPaid = 0
 
-PRINT 'Backfilled payment status for members in paid units'
+DECLARE @BackfilledCount INT = @@ROWCOUNT
+PRINT CONCAT('Backfilled ', @BackfilledCount, ' members from units with payment submitted')
 
 PRINT 'Migration 082 completed successfully'
