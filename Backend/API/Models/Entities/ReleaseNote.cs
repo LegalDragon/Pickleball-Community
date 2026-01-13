@@ -1,4 +1,4 @@
-namespace API.Models.Entities;
+namespace Pickleball.Community.Models.Entities;
 
 public class ReleaseNote
 {

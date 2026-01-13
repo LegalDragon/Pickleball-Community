@@ -69,6 +69,7 @@ BEGIN
 END
 
 -- Stored procedure to log score changes
+GO
 CREATE OR ALTER PROCEDURE sp_LogGameScoreChange
     @GameId INT,
     @ChangeType NVARCHAR(50),
@@ -121,6 +122,7 @@ GO
 PRINT 'Created stored procedure sp_LogGameScoreChange'
 
 -- Stored procedure to get score history for a game
+GO
 CREATE OR ALTER PROCEDURE sp_GetGameScoreHistory
     @GameId INT
 AS
@@ -151,5 +153,4 @@ END
 GO
 
 PRINT 'Created stored procedure sp_GetGameScoreHistory'
-
 PRINT 'Migration 077 completed successfully'
