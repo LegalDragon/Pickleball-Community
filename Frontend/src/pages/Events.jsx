@@ -3805,7 +3805,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                               return (
                                 <div
                                   key={unit.id || visibleIndex}
-                                  className={`px-4 py-3 flex items-center gap-3 ${
+                                  className={`px-2 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-3 ${
                                     isComplete
                                       ? 'bg-white'
                                       : 'bg-amber-50/50'
@@ -3868,16 +3868,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                                 {(member.firstName || 'P')[0].toUpperCase()}
                                               </div>
                                             )}
-                                            <span className={`text-sm max-w-[150px] truncate ${isJoinRequest ? 'text-blue-700' : 'text-gray-700'}`}>
+                                            <span className={`text-sm max-w-[80px] sm:max-w-[150px] truncate ${isJoinRequest ? 'text-blue-700' : 'text-gray-700'}`}>
                                               {member.lastName && member.firstName
                                                 ? `${member.lastName}, ${member.firstName}`
                                                 : member.lastName || member.firstName || 'Player'}
                                             </span>
                                             {isPendingInvite && (
-                                              <span className="text-xs text-amber-600">(pending)</span>
+                                              <span className="hidden sm:inline text-xs text-amber-600">(pending)</span>
                                             )}
                                             {isJoinRequest && (
-                                              <span className="text-xs text-blue-600">(requested)</span>
+                                              <span className="hidden sm:inline text-xs text-blue-600">(requested)</span>
                                             )}
                                           </button>
                                           {/* Payment status indicator - $ icon */}
@@ -3920,9 +3920,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
                                     {/* Empty slots for incomplete units */}
                                     {!isComplete && Array.from({ length: Math.max(0, requiredPlayers - (unit.members?.length || 0)) }).map((_, i) => (
-                                      <div key={`empty-${i}`} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 border border-dashed border-gray-300 shrink-0">
+                                      <div key={`empty-${i}`} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-100 border border-dashed border-gray-300 shrink-0" title="Needed">
                                         <div className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 text-xs">?</div>
-                                        <span className="text-sm text-gray-400">Needed</span>
+                                        <span className="hidden sm:inline text-sm text-gray-400">Needed</span>
                                       </div>
                                     ))}
                                   </div>
@@ -3933,30 +3933,30 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       const regStatus = unit.registrationStatus || (isComplete ? 'Team Complete' : 'Looking for Partner');
                                       if (regStatus === 'Team Complete') {
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded-full" title="Team Complete">
                                             <Check className="w-3 h-3" />
-                                            Team Complete
+                                            <span className="hidden sm:inline">Team Complete</span>
                                           </span>
                                         );
                                       } else if (regStatus === 'Waiting for Captain Accept' || hasJoinRequest) {
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded-full" title="Waiting for Captain Accept">
                                             <Clock className="w-3 h-3" />
-                                            Waiting for Captain Accept
+                                            <span className="hidden sm:inline">Waiting for Captain Accept</span>
                                           </span>
                                         );
                                       } else if (hasPendingInvite) {
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-full">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded-full" title="Pending Acceptance">
                                             <Clock className="w-3 h-3" />
-                                            Pending Acceptance
+                                            <span className="hidden sm:inline">Pending Acceptance</span>
                                           </span>
                                         );
                                       } else {
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-full">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-full" title="Looking for Partner">
                                             <UserPlus className="w-3 h-3" />
-                                            Looking for Partner
+                                            <span className="hidden sm:inline">Looking for Partner</span>
                                           </span>
                                         );
                                       }
