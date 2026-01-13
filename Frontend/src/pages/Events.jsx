@@ -3506,25 +3506,25 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            {/* Payment status/button - now allowed even before team is complete */}
-                            {reg.amountDue > 0 && (
-                              <button
-                                onClick={() => setSelectedPaymentReg(reg)}
-                                className={`px-2 py-1 text-sm rounded-lg flex items-center gap-1 ${
-                                  reg.paymentStatus === 'Paid'
-                                    ? 'bg-green-100 text-green-700'
-                                    : reg.paymentStatus === 'Partial' || reg.paymentStatus === 'PendingVerification'
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                }`}
-                                title={reg.paymentStatus === 'Paid' ? 'Payment complete' : `$${reg.amountDue - reg.amountPaid} remaining`}
-                              >
-                                <DollarSign className="w-4 h-4" />
-                                {reg.paymentStatus === 'Paid' ? 'Paid' :
-                                 reg.paymentStatus === 'PendingVerification' ? 'Pending' :
-                                 reg.paymentStatus === 'Partial' ? 'Partial' : 'Pay'}
-                              </button>
-                            )}
+                            {/* Payment status/button - shows current user's payment status */}
+                            {reg.amountDue > 0 && (() => {
+                              const myMember = reg.members?.find(m => m.userId === user?.id);
+                              const myHasPaid = myMember?.hasPaid || false;
+                              return (
+                                <button
+                                  onClick={() => setSelectedPaymentReg(reg)}
+                                  className={`px-2 py-1 text-sm rounded-lg flex items-center gap-1 ${
+                                    myHasPaid
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                  }`}
+                                  title={myHasPaid ? 'View your payment' : 'Submit payment'}
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                  {myHasPaid ? 'Paid' : 'Pay'}
+                                </button>
+                              );
+                            })()}
                             {/* Cancel button */}
                             {canRegister() && (
                               <button
