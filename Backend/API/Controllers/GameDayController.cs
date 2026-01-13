@@ -723,9 +723,10 @@ public class GameDayController : ControllerBase
 
         // Get available players (checked-in members from specified division or all divisions)
         var unitsQuery = _context.EventUnits
+            .AsNoTracking()
             .Include(u => u.Members)
                 .ThenInclude(m => m.User)
-            .Where(u => u.EventId == eventId && u.Status != "Cancelled");
+            .Where(u => u.EventId == eventId && u.Status != "Cancelled" && !u.IsTemporary);
 
         if (dto.DivisionId.HasValue)
         {
