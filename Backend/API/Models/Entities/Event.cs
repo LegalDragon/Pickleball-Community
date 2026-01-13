@@ -205,6 +205,9 @@ public class EventDivision
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
     // Legacy fields (kept for backward compatibility during migration)
     public int TeamSize { get; set; } = 1; // 1 for singles, 2 for doubles
 

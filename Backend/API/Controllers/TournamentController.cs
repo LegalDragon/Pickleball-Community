@@ -1512,16 +1512,61 @@ public class TournamentController : ControllerBase
     {
         var division = await _context.EventDivisions
             .Include(d => d.Event)
+            .Include(d => d.TeamUnit)
             .FirstOrDefaultAsync(d => d.Id == divisionId);
 
         if (division == null)
             return NotFound(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Division not found" });
 
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Event not found" });
+
+        // Validation: Check if registration is closed (unless using placeholder units)
+        var now = DateTime.Now;
+        var isRegistrationOpen = evt.TournamentStatus == "RegistrationOpen" ||
+            (evt.RegistrationOpenDate <= now && (evt.RegistrationCloseDate == null || evt.RegistrationCloseDate > now));
+
+        // Allow schedule generation with placeholders even during registration
+        // But warn if actual units are being assigned while registration is open
+        if (isRegistrationOpen && request.TargetUnits == null)
+        {
+            return BadRequest(new ApiResponse<List<EventMatchDto>>
+            {
+                Success = false,
+                Message = "Cannot generate final schedule while registration is still open. Either close registration first, or use TargetUnits to generate a template schedule."
+            });
+        }
+
         var units = await _context.EventUnits
+            .Include(u => u.Members)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
             .OrderBy(u => u.Seed ?? 999)
             .ThenBy(u => u.Id)
             .ToListAsync();
+
+        // Validation: Check if all units are complete (have required members)
+        if (request.TargetUnits == null && units.Any())
+        {
+            var requiredMembers = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
+            var incompleteUnits = units.Where(u =>
+                u.Members.Count(m => m.InviteStatus == "Accepted") < requiredMembers).ToList();
+
+            if (incompleteUnits.Any())
+            {
+                var unitNames = string.Join(", ", incompleteUnits.Take(5).Select(u => u.Name));
+                var message = incompleteUnits.Count > 5
+                    ? $"Units not complete: {unitNames} and {incompleteUnits.Count - 5} more"
+                    : $"Units not complete: {unitNames}";
+                return BadRequest(new ApiResponse<List<EventMatchDto>>
+                {
+                    Success = false,
+                    Message = $"Cannot generate schedule. {message}. Each unit needs {requiredMembers} accepted member(s)."
+                });
+            }
+        }
 
         // Use targetUnits if provided, otherwise use actual unit count
         var targetUnitCount = request.TargetUnits ?? units.Count;
@@ -1658,12 +1703,67 @@ public class TournamentController : ControllerBase
     [HttpPost("divisions/{divisionId}/assign-unit-numbers")]
     public async Task<ActionResult<ApiResponse<List<EventUnitDto>>>> AssignUnitNumbers(int divisionId, [FromBody] AssignUnitNumbersRequest? request = null)
     {
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .Include(d => d.TeamUnit)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "Division not found" });
+
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "Event not found" });
+
+        // Validation: Check if registration is closed before drawing
+        var now = DateTime.Now;
+        var isRegistrationOpen = evt.TournamentStatus == "RegistrationOpen" ||
+            (evt.RegistrationOpenDate <= now && (evt.RegistrationCloseDate == null || evt.RegistrationCloseDate > now));
+
+        if (isRegistrationOpen)
+        {
+            return BadRequest(new ApiResponse<List<EventUnitDto>>
+            {
+                Success = false,
+                Message = "Cannot assign unit numbers while registration is still open. Close registration first."
+            });
+        }
+
+        // Concurrency check: Verify schedule status to prevent race conditions
+        if (division.ScheduleStatus == "Finalized")
+        {
+            return BadRequest(new ApiResponse<List<EventUnitDto>>
+            {
+                Success = false,
+                Message = "Schedule is already finalized. Clear the schedule first if you need to redraw."
+            });
+        }
+
         var units = await _context.EventUnits
+            .Include(u => u.Members)
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
             .ToListAsync();
 
         if (!units.Any())
             return BadRequest(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "No units to assign" });
+
+        // Validation: Check if all units are complete
+        var requiredMembers = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
+        var incompleteUnits = units.Where(u =>
+            u.Members.Count(m => m.InviteStatus == "Accepted") < requiredMembers).ToList();
+
+        if (incompleteUnits.Any())
+        {
+            var unitNames = string.Join(", ", incompleteUnits.Take(5).Select(u => u.Name));
+            var message = incompleteUnits.Count > 5
+                ? $"Units not complete: {unitNames} and {incompleteUnits.Count - 5} more"
+                : $"Units not complete: {unitNames}";
+            return BadRequest(new ApiResponse<List<EventUnitDto>>
+            {
+                Success = false,
+                Message = $"Cannot draw units. {message}. Each unit needs {requiredMembers} accepted member(s)."
+            });
+        }
 
         // If specific assignments provided (from drawing), use them
         if (request?.Assignments != null && request.Assignments.Any())
@@ -1717,6 +1817,10 @@ public class TournamentController : ControllerBase
                 match.Status = "Bye";
             }
         }
+
+        // Update division schedule status to reflect units have been assigned
+        division.ScheduleStatus = "UnitsAssigned";
+        division.UpdatedAt = DateTime.Now;
 
         await _context.SaveChangesAsync();
 
@@ -2616,21 +2720,63 @@ public class TournamentController : ControllerBase
             }
         }
 
-        // Assign first round matchups using target unit numbers
+        // Assign first round matchups using seeded bracket positions
         var firstRoundMatches = matches.Where(m => m.RoundNumber == 1).OrderBy(m => m.BracketPosition).ToList();
+        var seedPositions = GetSeededBracketPositions(bracketSize);
 
         for (int i = 0; i < firstRoundMatches.Count; i++)
         {
-            var unit1Num = i * 2 + 1;
-            var unit2Num = i * 2 + 2;
+            var matchup = seedPositions[i];
+            var seed1 = matchup.Item1;
+            var seed2 = matchup.Item2;
 
-            if (unit1Num <= targetUnitCount)
-                firstRoundMatches[i].Unit1Number = unit1Num;
-            if (unit2Num <= targetUnitCount)
-                firstRoundMatches[i].Unit2Number = unit2Num;
+            // Only assign if within target unit count (handle byes for non-power-of-2)
+            if (seed1 <= targetUnitCount)
+                firstRoundMatches[i].Unit1Number = seed1;
+            if (seed2 <= targetUnitCount)
+                firstRoundMatches[i].Unit2Number = seed2;
         }
 
         return matches;
+    }
+
+    /// <summary>
+    /// Generate seeded bracket positions for standard tournament seeding.
+    /// This ensures top seeds are placed to meet as late as possible.
+    /// E.g., for 8 teams: (1,8), (4,5), (3,6), (2,7) so that 1 vs 2 can only happen in finals.
+    /// </summary>
+    private List<(int, int)> GetSeededBracketPositions(int bracketSize)
+    {
+        // Standard seeding algorithm:
+        // Start with [1] and recursively split for each round
+        // Round 1: [1]
+        // Round 2: [1, 2] -> matches: 1 vs 2
+        // Round 3: [1, 4, 3, 2] -> matches: 1 vs 4, 3 vs 2
+        // Round 4: [1, 8, 5, 4, 3, 6, 7, 2] -> matches: 1 vs 8, 5 vs 4, 3 vs 6, 7 vs 2
+
+        var seeds = new List<int> { 1 };
+
+        while (seeds.Count < bracketSize)
+        {
+            var nextSeeds = new List<int>();
+            var sum = seeds.Count * 2 + 1;
+
+            foreach (var seed in seeds)
+            {
+                nextSeeds.Add(seed);
+                nextSeeds.Add(sum - seed);
+            }
+            seeds = nextSeeds;
+        }
+
+        // Convert to matchups (pairs)
+        var matchups = new List<(int, int)>();
+        for (int i = 0; i < seeds.Count; i += 2)
+        {
+            matchups.Add((seeds[i], seeds[i + 1]));
+        }
+
+        return matchups;
     }
 
     private List<EventMatch> GenerateDoubleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
@@ -2718,18 +2864,21 @@ public class TournamentController : ControllerBase
             UpdatedAt = DateTime.Now
         });
 
-        // Assign first round matchups
+        // Assign first round matchups using seeded bracket positions
         var firstRoundMatches = matches.Where(m => m.RoundType == "Winners" && m.RoundNumber == 1).OrderBy(m => m.BracketPosition).ToList();
+        var seedPositions = GetSeededBracketPositions(bracketSize);
 
         for (int i = 0; i < firstRoundMatches.Count; i++)
         {
-            var unit1Num = i * 2 + 1;
-            var unit2Num = i * 2 + 2;
+            var matchup = seedPositions[i];
+            var seed1 = matchup.Item1;
+            var seed2 = matchup.Item2;
 
-            if (unit1Num <= targetUnitCount)
-                firstRoundMatches[i].Unit1Number = unit1Num;
-            if (unit2Num <= targetUnitCount)
-                firstRoundMatches[i].Unit2Number = unit2Num;
+            // Only assign if within target unit count (handle byes for non-power-of-2)
+            if (seed1 <= targetUnitCount)
+                firstRoundMatches[i].Unit1Number = seed1;
+            if (seed2 <= targetUnitCount)
+                firstRoundMatches[i].Unit2Number = seed2;
         }
 
         return matches;

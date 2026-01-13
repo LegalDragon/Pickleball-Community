@@ -1771,4 +1771,61 @@ export const playerHistoryApi = {
   getRatingTypes: () => api.get('/api/player-history/rating-types')
 }
 
+// Release Notes API
+export const releaseNotesApi = {
+  // Public - Get all active release notes
+  getAll: () => api.get('/releasenotes'),
+
+  // Public - Get latest release
+  getLatest: () => api.get('/releasenotes/latest'),
+
+  // User - Get unread releases for current user
+  getUnread: () => api.get('/releasenotes/unread'),
+
+  // User - Dismiss a single release (never show again)
+  dismiss: (id) => api.post(`/releasenotes/${id}/dismiss`),
+
+  // User - Dismiss all current releases
+  dismissAll: () => api.post('/releasenotes/dismiss-all'),
+
+  // Admin - Get all releases including inactive
+  getAllAdmin: () => api.get('/releasenotes/admin'),
+
+  // Admin - Create a new release note
+  create: (data) => api.post('/releasenotes', data),
+
+  // Admin - Update a release note
+  update: (id, data) => api.put(`/releasenotes/${id}`, data),
+
+  // Admin - Delete a release note
+  delete: (id) => api.delete(`/releasenotes/${id}`)
+}
+
+// Event Notification Templates API
+export const notificationTemplatesApi = {
+  // Get all notification types with placeholders
+  getTypes: () => api.get('/eventnotificationtemplates/types'),
+
+  // Get default templates
+  getDefaults: () => api.get('/eventnotificationtemplates'),
+
+  // Get templates for a specific event (includes defaults for missing types)
+  getForEvent: (eventId) => api.get(`/eventnotificationtemplates/event/${eventId}`),
+
+  // Create a new template
+  create: (data) => api.post('/eventnotificationtemplates', data),
+
+  // Update a template
+  update: (id, data) => api.put(`/eventnotificationtemplates/${id}`, data),
+
+  // Delete a template (event-specific only)
+  delete: (id) => api.delete(`/eventnotificationtemplates/${id}`),
+
+  // Preview a notification with sample data
+  preview: (data) => api.post('/eventnotificationtemplates/preview', data),
+
+  // Copy default templates to an event for customization
+  copyDefaultsToEvent: (eventId) => api.post(`/eventnotificationtemplates/event/${eventId}/copy-defaults`)
+}
+
 export default api

@@ -82,6 +82,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventMatch> EventMatches { get; set; }
     public DbSet<EventGame> EventGames { get; set; }
     public DbSet<EventGamePlayer> EventGamePlayers { get; set; }
+    public DbSet<EventGameScoreHistory> EventGameScoreHistories { get; set; }
     public DbSet<TournamentCourt> TournamentCourts { get; set; }
     public DbSet<EventDocument> EventDocuments { get; set; }
 
@@ -149,6 +150,13 @@ public class ApplicationDbContext : DbContext
     public DbSet<InstaGamePlayer> InstaGamePlayers { get; set; }
     public DbSet<InstaGameMatch> InstaGameMatches { get; set; }
     public DbSet<InstaGameQueue> InstaGameQueues { get; set; }
+
+    // Release Notes
+    public DbSet<ReleaseNote> ReleaseNotes { get; set; }
+    public DbSet<UserDismissedRelease> UserDismissedReleases { get; set; }
+
+    // Event Notification Templates
+    public DbSet<EventNotificationTemplate> EventNotificationTemplates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -861,6 +869,32 @@ public class ApplicationDbContext : DbContext
                   .OnDelete(DeleteBehavior.NoAction);
         });
 
+        // Event Game Score History configuration (audit trail)
+        modelBuilder.Entity<EventGameScoreHistory>(entity =>
+        {
+            entity.Property(h => h.ChangeType).IsRequired().HasMaxLength(50);
+            entity.Property(h => h.Reason).HasMaxLength(500);
+            entity.Property(h => h.IpAddress).HasMaxLength(45);
+            entity.HasIndex(h => h.GameId);
+            entity.HasIndex(h => h.ChangedByUserId);
+            entity.HasIndex(h => h.CreatedAt);
+
+            entity.HasOne(h => h.Game)
+                  .WithMany()
+                  .HasForeignKey(h => h.GameId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(h => h.ChangedByUser)
+                  .WithMany()
+                  .HasForeignKey(h => h.ChangedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(h => h.ChangedByUnit)
+                  .WithMany()
+                  .HasForeignKey(h => h.ChangedByUnitId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
         // Blog Category configuration
         modelBuilder.Entity<BlogCategory>(entity =>
         {
@@ -1349,6 +1383,43 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(q => q.InstaGame)
                   .WithMany(g => g.Queue)
                   .HasForeignKey(q => q.InstaGameId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ReleaseNote configuration
+        modelBuilder.Entity<ReleaseNote>(entity =>
+        {
+            entity.Property(r => r.Version).IsRequired().HasMaxLength(50);
+            entity.Property(r => r.Title).IsRequired().HasMaxLength(200);
+            entity.Property(r => r.Content).IsRequired();
+            entity.HasIndex(r => r.ReleaseDate);
+            entity.HasIndex(r => r.IsActive);
+
+            entity.HasOne(r => r.CreatedBy)
+                  .WithMany()
+                  .HasForeignKey(r => r.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.UpdatedBy)
+                  .WithMany()
+                  .HasForeignKey(r => r.UpdatedByUserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // UserDismissedRelease configuration
+        modelBuilder.Entity<UserDismissedRelease>(entity =>
+        {
+            entity.HasIndex(d => d.UserId);
+            entity.HasIndex(d => new { d.UserId, d.ReleaseNoteId }).IsUnique();
+
+            entity.HasOne(d => d.User)
+                  .WithMany()
+                  .HasForeignKey(d => d.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.ReleaseNote)
+                  .WithMany(r => r.DismissedByUsers)
+                  .HasForeignKey(d => d.ReleaseNoteId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -8,6 +8,7 @@ import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
   Shield, GraduationCap, User, CheckCircle, XCircle, Save,
+  Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown, Bell, Send, Megaphone
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Bell,
   Mail, Plus, RotateCcw, ToggleLeft, ToggleRight, Copy, AlertCircle
   Palette, Upload, RefreshCw, Image, Layers, Check, Award, Tags, UserCog, Video, Building2, HelpCircle, MessageSquare, MapPin, Network, Plus, Play, ArrowUp, ArrowDown, Bell, Send
@@ -27,6 +28,7 @@ import TeamUnitsAdmin from './TeamUnitsAdmin'
 import SkillLevelsAdmin from './SkillLevelsAdmin'
 import LeagueAdmin from './LeagueAdmin'
 import LeagueRolesAdmin from './LeagueRolesAdmin'
+import ReleaseNotesAdmin from './ReleaseNotesAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -775,7 +777,8 @@ const AdminDashboard = () => {
         { id: 'blog', label: 'Blog', icon: BookOpen },
         { id: 'faq', label: 'FAQ', icon: HelpCircle },
         { id: 'feedback', label: 'Feedback', icon: MessageSquare },
-        { id: 'certification', label: 'Certification', icon: Award }
+        { id: 'certification', label: 'Certification', icon: Award },
+        { id: 'releaseNotes', label: 'Release Notes', icon: Megaphone }
       ]
     },
     {
@@ -2374,6 +2377,8 @@ const AdminDashboard = () => {
 
           {/* League Roles Admin */}
           {activeTab === 'leagueRoles' && <LeagueRolesAdmin embedded />}
+
+          {activeTab === 'releaseNotes' && <ReleaseNotesAdmin embedded />}
 
           {/* Notification Testing */}
           {activeTab === 'notifications' && (

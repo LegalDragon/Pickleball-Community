@@ -242,6 +242,102 @@ public class EventRunningController : ControllerBase
     }
 
     /// <summary>
+    /// Check in unit as captain (checks in all team members)
+    /// </summary>
+    [HttpPost("player/{eventId}/unit/{unitId}/check-in")]
+    public async Task<IActionResult> CheckInUnitAsCaptain(int eventId, int unitId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Members)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId && u.Status != "Cancelled");
+
+        if (unit == null)
+            return NotFound(new { success = false, message = "Unit not found" });
+
+        // Verify user is the captain of this unit
+        if (unit.CaptainUserId != userId.Value)
+        {
+            return Forbid();
+        }
+
+        var now = DateTime.Now;
+
+        // Check in all accepted members
+        foreach (var member in unit.Members.Where(m => m.InviteStatus == "Accepted"))
+        {
+            member.IsCheckedIn = true;
+            member.CheckedInAt = now;
+        }
+
+        // Update unit status to CheckedIn
+        unit.Status = "CheckedIn";
+        unit.UpdatedAt = now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            success = true,
+            message = "Team checked in successfully",
+            checkedInCount = unit.Members.Count(m => m.InviteStatus == "Accepted")
+        });
+    }
+
+    /// <summary>
+    /// Get check-in status for a unit
+    /// </summary>
+    [HttpGet("player/{eventId}/unit/{unitId}/check-in-status")]
+    public async Task<IActionResult> GetUnitCheckInStatus(int eventId, int unitId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+
+        if (unit == null)
+            return NotFound(new { success = false, message = "Unit not found" });
+
+        // Verify user is a member of this unit
+        var isMember = unit.Members.Any(m => m.UserId == userId.Value && m.InviteStatus == "Accepted");
+        if (!isMember)
+            return Forbid();
+
+        var members = unit.Members
+            .Where(m => m.InviteStatus == "Accepted")
+            .Select(m => new
+            {
+                UserId = m.UserId,
+                Name = Utility.FormatName(m.User?.LastName, m.User?.FirstName),
+                ProfileImageUrl = m.User?.ProfileImageUrl,
+                IsCheckedIn = m.IsCheckedIn,
+                CheckedInAt = m.CheckedInAt
+            }).ToList();
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                UnitId = unit.Id,
+                UnitName = unit.Name,
+                UnitStatus = unit.Status,
+                IsCaptain = unit.CaptainUserId == userId.Value,
+                Members = members,
+                AllCheckedIn = members.All(m => m.IsCheckedIn),
+                CheckedInCount = members.Count(m => m.IsCheckedIn),
+                TotalMembers = members.Count
+            }
+        });
+    }
+
+    /// <summary>
     /// Submit or verify game score (player)
     /// </summary>
     [HttpPost("player/games/{gameId}/score")]
@@ -282,6 +378,9 @@ public class EventRunningController : ControllerBase
         // If this is a score submission
         if (!game.ScoreSubmittedByUnitId.HasValue)
         {
+            var prevUnit1Score = game.Unit1Score;
+            var prevUnit2Score = game.Unit2Score;
+
             game.Unit1Score = dto.Unit1Score;
             game.Unit2Score = dto.Unit2Score;
             game.ScoreSubmittedByUnitId = userUnitId;
@@ -289,6 +388,17 @@ public class EventRunningController : ControllerBase
             game.UpdatedAt = now;
 
             await _context.SaveChangesAsync();
+
+            // Log score submission to audit trail
+            await LogScoreChangeAsync(
+                game.Id,
+                ScoreChangeType.ScoreSubmitted,
+                dto.Unit1Score,
+                dto.Unit2Score,
+                prevUnit1Score,
+                prevUnit2Score,
+                userId.Value,
+                userUnitId);
 
             // Notify the other team to verify
             var otherUnitId = userUnitId == match.Unit1Id ? match.Unit2Id : match.Unit1Id;
@@ -329,6 +439,17 @@ public class EventRunningController : ControllerBase
 
                 await _context.SaveChangesAsync();
 
+                // Log score confirmation to audit trail
+                await LogScoreChangeAsync(
+                    game.Id,
+                    ScoreChangeType.ScoreConfirmed,
+                    game.Unit1Score,
+                    game.Unit2Score,
+                    null,
+                    null,
+                    userId.Value,
+                    userUnitId);
+
                 return Ok(new { success = true, message = "Score confirmed. Game completed." });
             }
             else
@@ -338,6 +459,18 @@ public class EventRunningController : ControllerBase
                 game.UpdatedAt = now;
 
                 await _context.SaveChangesAsync();
+
+                // Log score dispute to audit trail
+                await LogScoreChangeAsync(
+                    game.Id,
+                    ScoreChangeType.ScoreDisputed,
+                    game.Unit1Score,
+                    game.Unit2Score,
+                    null,
+                    null,
+                    userId.Value,
+                    userUnitId,
+                    dto.DisputeReason);
 
                 // Notify TD about dispute
                 var evt = await _context.Events.FindAsync(match.EventId);
@@ -787,6 +920,9 @@ public class EventRunningController : ControllerBase
             return NotFound(new { success = false, message = "Game not found" });
 
         var now = DateTime.Now;
+        var prevUnit1Score = game.Unit1Score;
+        var prevUnit2Score = game.Unit2Score;
+
         game.Unit1Score = dto.Unit1Score;
         game.Unit2Score = dto.Unit2Score;
         game.UpdatedAt = now;
@@ -809,6 +945,19 @@ public class EventRunningController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Log score edit to audit trail
+        await LogScoreChangeAsync(
+            game.Id,
+            dto.IsFinished == true ? ScoreChangeType.AdminOverride : ScoreChangeType.ScoreEdited,
+            dto.Unit1Score,
+            dto.Unit2Score,
+            prevUnit1Score,
+            prevUnit2Score,
+            userId.Value,
+            null,
+            "TD override",
+            true);
+
         // Notify players about score edit
         if (dto.NotifyPlayers != false)
         {
@@ -828,6 +977,50 @@ public class EventRunningController : ControllerBase
         }
 
         return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Get score history for a game (admin only)
+    /// </summary>
+    [HttpGet("{eventId}/games/{gameId}/history")]
+    public async Task<IActionResult> GetGameScoreHistory(int eventId, int gameId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizerAsync(eventId, userId.Value) && !await IsAdminAsync())
+            return Forbid();
+
+        var game = await _context.EventGames
+            .Include(g => g.Match)
+            .FirstOrDefaultAsync(g => g.Id == gameId && g.Match!.EventId == eventId);
+
+        if (game == null)
+            return NotFound(new { success = false, message = "Game not found" });
+
+        var history = await _context.EventGameScoreHistories
+            .Include(h => h.ChangedByUser)
+            .Where(h => h.GameId == gameId)
+            .OrderByDescending(h => h.CreatedAt)
+            .Select(h => new ScoreHistoryDto
+            {
+                Id = h.Id,
+                ChangeType = h.ChangeType,
+                Unit1Score = h.Unit1Score,
+                Unit2Score = h.Unit2Score,
+                PreviousUnit1Score = h.PreviousUnit1Score,
+                PreviousUnit2Score = h.PreviousUnit2Score,
+                ChangedByUserId = h.ChangedByUserId,
+                ChangedByName = Utility.FormatName(h.ChangedByUser!.LastName, h.ChangedByUser.FirstName),
+                ChangedByUnitId = h.ChangedByUnitId,
+                Reason = h.Reason,
+                IsAdminOverride = h.IsAdminOverride,
+                CreatedAt = h.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new { success = true, data = history });
     }
 
     /// <summary>
@@ -965,6 +1158,43 @@ public class EventRunningController : ControllerBase
     // ==========================================
     // Helper Methods
     // ==========================================
+
+    /// <summary>
+    /// Log a score change to the audit trail
+    /// </summary>
+    private async Task LogScoreChangeAsync(
+        int gameId,
+        string changeType,
+        int unit1Score,
+        int unit2Score,
+        int? previousUnit1Score,
+        int? previousUnit2Score,
+        int changedByUserId,
+        int? changedByUnitId = null,
+        string? reason = null,
+        bool isAdminOverride = false)
+    {
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        var history = new EventGameScoreHistory
+        {
+            GameId = gameId,
+            ChangeType = changeType,
+            Unit1Score = unit1Score,
+            Unit2Score = unit2Score,
+            PreviousUnit1Score = previousUnit1Score,
+            PreviousUnit2Score = previousUnit2Score,
+            ChangedByUserId = changedByUserId,
+            ChangedByUnitId = changedByUnitId,
+            Reason = reason,
+            IsAdminOverride = isAdminOverride,
+            IpAddress = ipAddress,
+            CreatedAt = DateTime.Now
+        };
+
+        _context.EventGameScoreHistories.Add(history);
+        await _context.SaveChangesAsync();
+    }
 
     private async Task UpdateMatchAfterGameComplete(EventGame game)
     {
@@ -1425,4 +1655,20 @@ public class BroadcastMessageDto
 {
     public string? Title { get; set; }
     public string Message { get; set; } = string.Empty;
+}
+
+public class ScoreHistoryDto
+{
+    public int Id { get; set; }
+    public string ChangeType { get; set; } = string.Empty;
+    public int Unit1Score { get; set; }
+    public int Unit2Score { get; set; }
+    public int? PreviousUnit1Score { get; set; }
+    public int? PreviousUnit2Score { get; set; }
+    public int ChangedByUserId { get; set; }
+    public string ChangedByName { get; set; } = string.Empty;
+    public int? ChangedByUnitId { get; set; }
+    public string? Reason { get; set; }
+    public bool IsAdminOverride { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

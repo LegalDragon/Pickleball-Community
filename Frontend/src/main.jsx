@@ -9,6 +9,7 @@ import { LanguageProvider } from './contexts/LanguageContext'
 import Navigation from './components/ui/Navigation' // Import here
 import PWAInstallPrompt from './components/ui/PWAInstallPrompt'
 import RunningEventPopup from './components/RunningEventPopup'
+import ReleaseAnnouncementModal from './components/ReleaseAnnouncementModal'
 
 import Footer from './components/landing/Footer'; // Make sure this is imported
 import App from './App'
@@ -38,6 +39,13 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 const queryClient = new QueryClient()
 
+// Wrapper to provide auth state to ReleaseAnnouncementModal
+import { useAuth } from './contexts/AuthContext'
+function AuthenticatedReleaseModal() {
+  const { isAuthenticated } = useAuth()
+  return <ReleaseAnnouncementModal isAuthenticated={isAuthenticated} />
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
@@ -52,6 +60,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   <Footer /> {/* Footer added here */}
                   <PWAInstallPrompt />
                   <RunningEventPopup />
+                  <AuthenticatedReleaseModal />
                 </ToastProvider>
               </AuthProvider>
             </LanguageProvider>

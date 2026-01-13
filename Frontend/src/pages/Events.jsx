@@ -2158,7 +2158,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         toast.success('Division updated successfully');
         setShowEditDivision(false);
         setEditingDivision(null);
-        onUpdate(); // Reload event to get updated divisions
+        // Reload full event to get updated divisions and pass to onUpdate
+        const eventResponse = await eventsApi.getEvent(event.id);
+        if (eventResponse.success) {
+          onUpdate(eventResponse.data);
+        } else {
+          onUpdate(); // Fallback to just reloading lists
+        }
       } else {
         toast.error(response.message || 'Failed to update division');
       }
@@ -3835,8 +3841,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     {originalIndex + 1}
                                   </div>
 
-                                  {/* Members - Horizontal Layout (includes accepted, pending invites, and join requests via UNION) */}
-                                  <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto">
+                                  {/* Members - Responsive Layout: wraps on mobile, horizontal on desktop */}
+                                  <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
                                     {unit.members?.map((member, mIdx) => {
                                       // Different styling for join requests (InviteStatus = "Requested")
                                       const isJoinRequest = member.inviteStatus === 'Requested';
