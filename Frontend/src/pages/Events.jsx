@@ -10,6 +10,7 @@ import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
 import PaymentModal from '../components/PaymentModal';
 import AdminPaymentModal from '../components/AdminPaymentModal';
+import MemberPaymentModal from '../components/MemberPaymentModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Events() {
@@ -1638,6 +1639,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
   // Admin payment modal state
   const [selectedAdminPaymentUnit, setSelectedAdminPaymentUnit] = useState(null);
+
+  // Member payment view state (for viewing individual member payment details)
+  const [selectedMemberPayment, setSelectedMemberPayment] = useState(null);
 
   // Registration filters state
   const [regFilterDivision, setRegFilterDivision] = useState('');
@@ -3891,17 +3895,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (isOrganizer) {
-                                                  setSelectedAdminPaymentUnit({
-                                                    ...unit,
-                                                    unitId: unit.id,
-                                                    divisionName: division.name
-                                                  });
-                                                }
+                                                setSelectedMemberPayment({
+                                                  member,
+                                                  unit,
+                                                  division,
+                                                  event
+                                                });
                                               }}
-                                              className={`p-0.5 rounded transition-colors ${
-                                                isOrganizer ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
-                                              }`}
+                                              className="p-0.5 rounded transition-colors hover:bg-gray-100 cursor-pointer"
                                               title={`${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`}
                                             >
                                               <DollarSign className={`w-4 h-4 ${isPaymentVerified ? 'text-green-600' : 'text-orange-500'}`} />
@@ -5396,6 +5397,13 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             } : r)
           );
         }}
+      />
+
+      {/* Member Payment Modal - View individual member payment details */}
+      <MemberPaymentModal
+        isOpen={!!selectedMemberPayment}
+        onClose={() => setSelectedMemberPayment(null)}
+        memberPayment={selectedMemberPayment}
       />
 
       {/* Public Profile Modal */}
