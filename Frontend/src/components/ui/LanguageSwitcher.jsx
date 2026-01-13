@@ -26,6 +26,45 @@ export const LanguageSwitcher = ({ variant = 'default' }) => {
     setIsOpen(false);
   };
 
+  // Hero variant - highly visible over video/image backgrounds
+  if (variant === 'hero') {
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/20 transition-all text-white shadow-lg"
+          aria-label="Select language"
+          aria-expanded={isOpen}
+        >
+          <Globe className="w-4 h-4" />
+          <span className="text-base">{currentLang.flag}</span>
+          <span className="text-sm font-medium hidden sm:inline">{currentLang.name}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 mt-2 w-44 bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
+            {languages.map(lang => (
+              <button
+                key={lang.code}
+                onClick={() => handleLanguageChange(lang.code)}
+                className={`w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-gray-100 transition-colors ${
+                  currentLanguage === lang.code ? 'bg-green-50 text-green-700' : 'text-gray-700'
+                }`}
+              >
+                <span className="text-lg">{lang.flag}</span>
+                <span className="text-sm font-medium">{lang.name}</span>
+                {currentLanguage === lang.code && (
+                  <span className="ml-auto text-green-600">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Compact variant for mobile/tight spaces
   if (variant === 'compact') {
     return (

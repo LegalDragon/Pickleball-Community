@@ -207,7 +207,7 @@ const Header = () => {
 
       {/* Language Switcher - top right corner */}
       <div className="absolute top-4 right-4 z-20">
-        <LanguageSwitcher variant="compact" />
+        <LanguageSwitcher variant="hero" />
       </div>
 
       {/* Content */}
