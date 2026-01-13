@@ -12,6 +12,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
   const [previewImage, setPreviewImage] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [copied, setCopied] = useState(false);
+  const [proofUrlCopied, setProofUrlCopied] = useState(false);
 
   // Helper to check if URL is a PDF
   const isPdfUrl = (url) => {
@@ -41,6 +42,17 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       setCopied(true);
       toast.success('Reference ID copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy');
+    }
+  };
+
+  const handleCopyProofUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(paymentProofUrl);
+      setProofUrlCopied(true);
+      toast.success('Proof URL copied to clipboard');
+      setTimeout(() => setProofUrlCopied(false), 2000);
     } catch (err) {
       toast.error('Failed to copy');
     }
