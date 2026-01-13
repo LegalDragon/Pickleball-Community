@@ -40,15 +40,6 @@ public class ApplicationDbContext : DbContext
     // Notification Templates
     public DbSet<NotificationTemplate> NotificationTemplates { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<User>(entity =>
-        {
-            // UserId comes from shared auth service - not auto-generated
-            entity.Property(u => u.Id).ValueGeneratedNever();
-            entity.HasIndex(u => u.Email).IsUnique();
-            entity.Property(u => u.Role).HasConversion<string>();
-        });
     // Friends
     public DbSet<FriendRequest> FriendRequests { get; set; }
     public DbSet<Friendship> Friendships { get; set; }
