@@ -3854,7 +3854,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       // Payment status at unit level
                                       const unitPaymentStatus = unit.paymentStatus;
                                       const hasPaymentSubmitted = unitPaymentStatus === 'PendingVerification' || unitPaymentStatus === 'Paid' || unitPaymentStatus === 'Partial';
-                                      const isPaymentVerified = unitPaymentStatus === 'Paid';
+                                      // Member's payment is verified if unit is fully Paid, or if Partial and this member has been verified
+                                      const isPaymentVerified = unitPaymentStatus === 'Paid' || (unitPaymentStatus === 'Partial' && member.hasPaid);
                                       // Can remove only if no payment has been submitted
                                       const canRemove = isOrganizer && !hasPaymentSubmitted;
 
