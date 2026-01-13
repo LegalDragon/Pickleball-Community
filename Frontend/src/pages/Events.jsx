@@ -3890,9 +3890,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                               <span className="hidden sm:inline text-xs text-blue-600">(requested)</span>
                                             )}
                                           </button>
-                                          {/* Payment status indicator - $ icon */}
-                                          {/* Show if member has paid OR unit has payment (fallback for legacy data) */}
-                                          {(member.hasPaid || hasPaymentSubmitted) && (
+                                          {/* Payment status indicator - $ icon (per-member) */}
+                                          {member.hasPaid && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -3903,8 +3902,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                                     unitId: unit.id,
                                                     divisionName: division.name
                                                   });
-                                                } else if (member.hasPaid) {
-                                                  // Non-admin with member payment data: show member payment details
+                                                } else {
+                                                  // Non-admin: show member payment details
                                                   setSelectedMemberPayment({
                                                     member,
                                                     unit,
@@ -3913,13 +3912,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                                   });
                                                 }
                                               }}
-                                              className={`p-0.5 rounded transition-colors ${
-                                                isOrganizer || member.hasPaid ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
-                                              }`}
-                                              title={member.hasPaid
-                                                ? `${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`
-                                                : isOrganizer ? 'Click to review payment' : 'Payment submitted'
-                                              }
+                                              className="p-0.5 rounded transition-colors hover:bg-gray-100 cursor-pointer"
+                                              title={`${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`}
                                             >
                                               <DollarSign className={`w-4 h-4 ${isPaymentVerified ? 'text-green-600' : 'text-orange-500'}`} />
                                             </button>

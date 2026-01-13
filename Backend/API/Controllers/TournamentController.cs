@@ -1045,7 +1045,8 @@ public class TournamentController : ControllerBase
             memberRecord.AmountPaid = request.AmountPaid ?? 0;
             memberRecord.PaymentProofUrl = unit.PaymentProofUrl;
             memberRecord.PaymentReference = unit.PaymentReference;
-            memberRecord.ReferenceId = unit.ReferenceId;
+            // Generate member-specific ReferenceId (not copied from unit)
+            memberRecord.ReferenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
         }
 
         unit.UpdatedAt = DateTime.Now;
