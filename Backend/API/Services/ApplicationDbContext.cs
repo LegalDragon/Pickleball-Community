@@ -37,6 +37,18 @@ public class ApplicationDbContext : DbContext
     public DbSet<PlayerCertificationScore> PlayerCertificationScores { get; set; }
     public DbSet<PlayerCertificationInvitation> PlayerCertificationInvitations { get; set; }
 
+    // Notification Templates
+    public DbSet<NotificationTemplate> NotificationTemplates { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>(entity =>
+        {
+            // UserId comes from shared auth service - not auto-generated
+            entity.Property(u => u.Id).ValueGeneratedNever();
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.Role).HasConversion<string>();
+        });
     // Friends
     public DbSet<FriendRequest> FriendRequests { get; set; }
     public DbSet<Friendship> Friendships { get; set; }
@@ -384,6 +396,30 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(s => new { s.ReviewId, s.SkillAreaId }).IsUnique();
         });
 
+        // Notification Template configuration
+        modelBuilder.Entity<NotificationTemplate>(entity =>
+        {
+            entity.Property(t => t.TemplateKey).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(200);
+            entity.Property(t => t.Description).HasMaxLength(500);
+            entity.Property(t => t.Category).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.Subject).IsRequired().HasMaxLength(500);
+            entity.Property(t => t.Body).IsRequired();
+
+            entity.HasIndex(t => t.TemplateKey).IsUnique();
+            entity.HasIndex(t => t.Category);
+            entity.HasIndex(t => t.IsActive);
+
+            entity.HasOne(t => t.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(t => t.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(t => t.UpdatedByUser)
+                  .WithMany()
+                  .HasForeignKey(t => t.UpdatedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
         // Friend Request configuration
         modelBuilder.Entity<FriendRequest>(entity =>
         {
