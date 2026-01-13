@@ -456,6 +456,8 @@ public class TeamMemberDto
     public string Role { get; set; } = "Player"; // Captain or Player
     public string InviteStatus { get; set; } = "Accepted"; // Pending, Accepted, Declined
     public bool IsCurrentUser { get; set; }
+    public bool HasPaid { get; set; } = false;
+    public DateTime? PaidAt { get; set; }
 }
 
 // Featured events for home page

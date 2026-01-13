@@ -139,6 +139,12 @@ public class EventUnitMember
     public bool IsCheckedIn { get; set; } = false;
     public DateTime? CheckedInAt { get; set; }
 
+    /// <summary>
+    /// Whether this member has paid their portion
+    /// </summary>
+    public bool HasPaid { get; set; } = false;
+    public DateTime? PaidAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation

@@ -1364,7 +1364,9 @@ public class EventsController : ControllerBase
                                     ProfileImageUrl = mem.User?.ProfileImageUrl,
                                     Role = mem.Role,
                                     InviteStatus = mem.InviteStatus,
-                                    IsCurrentUser = mem.UserId == userId.Value
+                                    IsCurrentUser = mem.UserId == userId.Value,
+                                    HasPaid = mem.HasPaid,
+                                    PaidAt = mem.PaidAt
                                 }).ToList()
                         };
                     }).ToList();

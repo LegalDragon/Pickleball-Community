@@ -3886,8 +3886,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                               <span className="hidden sm:inline text-xs text-blue-600">(requested)</span>
                                             )}
                                           </button>
-                                          {/* Payment status indicator - $ icon */}
-                                          {hasPaymentSubmitted && (
+                                          {/* Payment status indicator - $ icon (per-member) */}
+                                          {member.hasPaid && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -3902,7 +3902,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                               className={`p-0.5 rounded transition-colors ${
                                                 isOrganizer ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
                                               }`}
-                                              title={isPaymentVerified ? 'Payment verified' : 'Payment submitted - click to verify'}
+                                              title={`${member.firstName || 'Member'} paid${member.paidAt ? ` on ${new Date(member.paidAt).toLocaleDateString()}` : ''}`}
                                             >
                                               <DollarSign className={`w-4 h-4 ${isPaymentVerified ? 'text-green-600' : 'text-orange-500'}`} />
                                             </button>

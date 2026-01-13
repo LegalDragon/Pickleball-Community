@@ -1036,6 +1036,14 @@ public class TournamentController : ControllerBase
             unit.PaymentStatus = "PendingVerification";
         }
 
+        // Mark the submitting user's member record as paid
+        var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId.Value);
+        if (memberRecord != null)
+        {
+            memberRecord.HasPaid = true;
+            memberRecord.PaidAt = DateTime.Now;
+        }
+
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
@@ -1071,6 +1079,7 @@ public class TournamentController : ControllerBase
         var unit = await _context.EventUnits
             .Include(u => u.Event)
             .Include(u => u.Division)
+            .Include(u => u.Members)
             .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
 
         if (unit == null)
@@ -1087,6 +1096,13 @@ public class TournamentController : ControllerBase
         unit.AmountPaid = amountDue;
         unit.PaidAt = DateTime.Now;
         unit.UpdatedAt = DateTime.Now;
+
+        // Mark all members as paid when organizer marks the whole unit as paid
+        foreach (var member in unit.Members)
+        {
+            member.HasPaid = true;
+            member.PaidAt = DateTime.Now;
+        }
 
         await _context.SaveChangesAsync();
 
@@ -1122,6 +1138,7 @@ public class TournamentController : ControllerBase
         var unit = await _context.EventUnits
             .Include(u => u.Event)
             .Include(u => u.Division)
+            .Include(u => u.Members)
             .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
 
         if (unit == null)
@@ -1146,6 +1163,13 @@ public class TournamentController : ControllerBase
         unit.AmountPaid = 0;
         unit.PaidAt = null;
         unit.UpdatedAt = DateTime.Now;
+
+        // Reset all member payment status
+        foreach (var member in unit.Members)
+        {
+            member.HasPaid = false;
+            member.PaidAt = null;
+        }
 
         await _context.SaveChangesAsync();
 
