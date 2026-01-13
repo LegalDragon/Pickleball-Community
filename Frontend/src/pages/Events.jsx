@@ -4074,7 +4074,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             <div className="space-y-6">
               {/* Management Dashboard Link - conditional based on event type */}
               <div className="grid gap-3">
-                {event.eventTypeName?.toLowerCase() === 'tournament' ? (
+                {event.eventTypeName?.toLowerCase() === 'tournament' && (
                   // Tournament events get the full Tournament Dashboard
                   <Link
                     to={`/tournament/${event.id}/manage`}
@@ -4089,22 +4089,29 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                     </div>
                     <ChevronRight className="w-5 h-5" />
                   </Link>
-                ) : (
-                  // Non-tournament events get a simpler Event Management Dashboard
-                  <Link
-                    to={`/event/${event.id}/manage`}
-                    className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Play className="w-5 h-5" />
-                      <div>
-                        <div className="font-medium">{event.eventTypeName || 'Event'} Dashboard</div>
-                        <div className="text-sm text-blue-600">Manage games, courts, and scoring</div>
+                )}
+                {/* Event Management Dashboard - available for all event types */}
+                <Link
+                  to={`/event/${event.id}/manage`}
+                  className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Play className="w-5 h-5" />
+                    <div>
+                      <div className="font-medium">
+                        {event.eventTypeName?.toLowerCase() === 'tournament'
+                          ? 'Quick Scheduling'
+                          : `${event.eventTypeName || 'Event'} Dashboard`}
+                      </div>
+                      <div className="text-sm text-blue-600">
+                        {event.eventTypeName?.toLowerCase() === 'tournament'
+                          ? 'Popcorn & gauntlet scheduling for casual play'
+                          : 'Manage games, courts, and scoring'}
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5" />
-                  </Link>
-                )}
+                  </div>
+                  <ChevronRight className="w-5 h-5" />
+                </Link>
               </div>
 
               {/* Event Documents Section */}
