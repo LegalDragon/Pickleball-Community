@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { HelpCircle, X, Loader2 } from 'lucide-react';
 import { helpApi } from '../../services/api';
 
@@ -20,6 +21,7 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
   const [loading, setLoading] = useState(false);
   const [topic, setTopic] = useState(null);
   const [error, setError] = useState(null);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const popoverRef = useRef(null);
   const buttonRef = useRef(null);
 
@@ -32,6 +34,26 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
   };
 
   const iconSize = sizeClasses[size] || sizeClasses.sm;
+
+  // Calculate position when opening
+  const updatePosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const popoverWidth = 288; // w-72 = 18rem = 288px
+
+      // Center horizontally on button, position above
+      let left = rect.left + rect.width / 2 - popoverWidth / 2;
+      let top = rect.top - 8; // 8px margin below popover
+
+      // Keep within viewport horizontally
+      if (left < 16) left = 16;
+      if (left + popoverWidth > window.innerWidth - 16) {
+        left = window.innerWidth - popoverWidth - 16;
+      }
+
+      setPosition({ top, left });
+    }
+  };
 
   // Fetch help topic when opened
   const fetchTopic = async () => {
@@ -65,6 +87,7 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
     e.stopPropagation();
     if (!isOpen) {
       fetchTopic();
+      updatePosition();
     }
     setIsOpen(!isOpen);
   };
@@ -88,7 +111,7 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
     }
   }, [isOpen]);
 
-  // Close on escape key
+  // Close on escape key and update position on scroll/resize
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
@@ -96,9 +119,21 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
       }
     };
 
+    const handleScrollOrResize = () => {
+      if (isOpen) {
+        updatePosition();
+      }
+    };
+
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+        window.removeEventListener('resize', handleScrollOrResize);
+      };
     }
   }, [isOpen]);
 
@@ -177,6 +212,62 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
     return parts;
   };
 
+  // Popover content rendered via portal
+  const popoverContent = isOpen && createPortal(
+    <div
+      ref={popoverRef}
+      className="fixed z-[9999] w-72"
+      style={{
+        top: position.top,
+        left: position.left,
+        transform: 'translateY(-100%)'
+      }}
+      role="tooltip"
+    >
+      <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+          <span className="text-sm font-medium text-gray-700">
+            {loading ? 'Loading...' : (topic?.title || 'Help')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-3 py-2 max-h-64 overflow-y-auto">
+          {loading && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          )}
+
+          {error && !loading && (
+            <p className="text-sm text-gray-500 italic">{error}</p>
+          )}
+
+          {topic && !loading && (
+            <div className="text-gray-600">
+              {renderContent(topic.content)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Arrow pointing down */}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white"
+        style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.1))' }}
+      />
+    </div>,
+    document.body
+  );
+
   return (
     <div className={`relative inline-flex ${className}`}>
       <button
@@ -190,51 +281,7 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
         <HelpCircle className={iconSize} />
       </button>
 
-      {isOpen && (
-        <div
-          ref={popoverRef}
-          className="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[calc(100vw-2rem)]"
-          role="tooltip"
-        >
-          <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
-              <span className="text-sm font-medium text-gray-700">
-                {loading ? 'Loading...' : (topic?.title || 'Help')}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="px-3 py-2 max-h-64 overflow-y-auto">
-              {loading && (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                </div>
-              )}
-
-              {error && !loading && (
-                <p className="text-sm text-gray-500 italic">{error}</p>
-              )}
-
-              {topic && !loading && (
-                <div className="text-gray-600">
-                  {renderContent(topic.content)}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Arrow */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.1))' }} />
-        </div>
-      )}
+      {popoverContent}
     </div>
   );
 }
