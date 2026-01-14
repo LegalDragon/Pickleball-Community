@@ -1654,6 +1654,15 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   const [loadingAvailableUnits, setLoadingAvailableUnits] = useState(false);
   const [joiningUnitId, setJoiningUnitId] = useState(null);
 
+  // Change division state (player self-move)
+  const [changingDivisionReg, setChangingDivisionReg] = useState(null);
+  const [changeDivisionStep, setChangeDivisionStep] = useState('select-division'); // 'select-division' | 'select-action'
+  const [selectedNewDivision, setSelectedNewDivision] = useState(null);
+  const [joinableUnitsInNewDivision, setJoinableUnitsInNewDivision] = useState([]);
+  const [loadingJoinableUnits, setLoadingJoinableUnits] = useState(false);
+  const [movingToDivision, setMovingToDivision] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+
   // Court selection for editing
   const [topCourts, setTopCourts] = useState([]);
   const [courtsLoading, setCourtsLoading] = useState(false);
@@ -2917,6 +2926,71 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Start change division flow
+  const handleStartChangeDivision = (reg) => {
+    setChangingDivisionReg(reg);
+    setChangeDivisionStep('select-division');
+    setSelectedNewDivision(null);
+    setJoinableUnitsInNewDivision([]);
+    setNewUnitName('');
+  };
+
+  // When user selects a new division, load joinable units
+  const handleSelectNewDivision = async (divisionId) => {
+    const division = event.divisions?.find(d => d.id === divisionId);
+    setSelectedNewDivision(division);
+    setChangeDivisionStep('select-action');
+    setLoadingJoinableUnits(true);
+    try {
+      const response = await tournamentApi.getJoinableUnits(event.id, divisionId);
+      if (response.success) {
+        setJoinableUnitsInNewDivision(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading joinable units:', err);
+    } finally {
+      setLoadingJoinableUnits(false);
+    }
+  };
+
+  // Execute the division change
+  const handleConfirmChangeDivision = async (joinUnitId = null) => {
+    if (!selectedNewDivision) return;
+
+    setMovingToDivision(true);
+    try {
+      const response = await tournamentApi.selfMoveToDivision(
+        event.id,
+        selectedNewDivision.id,
+        joinUnitId,
+        joinUnitId ? null : (newUnitName || null)
+      );
+      if (response.success) {
+        toast.success(joinUnitId
+          ? 'Successfully moved to new division and joined team!'
+          : 'Successfully moved to new division!');
+        // Close modal and refresh
+        setChangingDivisionReg(null);
+        // Invalidate division cache
+        setDivisionRegistrationsCache({});
+        // Refetch event data
+        const updatedEventResponse = await eventsApi.getEvent(event.id);
+        if (updatedEventResponse.success) {
+          onUpdate(updatedEventResponse.data);
+        } else {
+          onUpdate();
+        }
+      } else {
+        toast.error(response.message || 'Failed to change division');
+      }
+    } catch (err) {
+      console.error('Error changing division:', err);
+      toast.error(err.message || 'Failed to change division');
+    } finally {
+      setMovingToDivision(false);
+    }
+  };
+
   // Load available units for partner finding
   const loadAvailableUnits = async (reg) => {
     setFindingPartnerForReg(reg);
@@ -3605,6 +3679,17 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 </button>
                               );
                             })()}
+                            {/* Change Division button - only show if multiple divisions available */}
+                            {canRegister() && event.divisions?.filter(d => d.id !== reg.divisionId && d.isActive).length > 0 && (
+                              <button
+                                onClick={() => handleStartChangeDivision(reg)}
+                                className="px-2 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1"
+                                title="Move to a different division"
+                              >
+                                <ArrowRightLeft className="w-4 h-4" />
+                                Change
+                              </button>
+                            )}
                             {/* Cancel button */}
                             {canRegister() && (
                               <button
@@ -5614,6 +5699,159 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Change Division Modal - Player self-move */}
+      {changingDivisionReg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1100]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Change Division</h2>
+              </div>
+              <button
+                onClick={() => setChangingDivisionReg(null)}
+                disabled={movingToDivision}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {/* Current registration info */}
+              <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                <div className="text-sm text-gray-500">Currently registered in:</div>
+                <div className="font-medium text-gray-900">{changingDivisionReg.divisionName}</div>
+                {changingDivisionReg.partners?.length > 0 && (
+                  <div className="mt-2 text-sm text-orange-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    You will leave your current team if you change divisions
+                  </div>
+                )}
+              </div>
+
+              {/* Step 1: Select new division */}
+              {changeDivisionStep === 'select-division' && (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-3">Select your new division:</div>
+                  <div className="space-y-2">
+                    {event.divisions?.filter(d => d.id !== changingDivisionReg.divisionId && d.isActive).map(div => (
+                      <button
+                        key={div.id}
+                        onClick={() => handleSelectNewDivision(div.id)}
+                        className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-medium text-gray-900">{div.name}</div>
+                          {div.description && <div className="text-sm text-gray-500">{div.description}</div>}
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Choose to create new unit or join existing */}
+              {changeDivisionStep === 'select-action' && selectedNewDivision && (
+                <div>
+                  <button
+                    onClick={() => setChangeDivisionStep('select-division')}
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 mb-3"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back
+                  </button>
+
+                  <div className="text-sm text-gray-500 mb-1">Moving to:</div>
+                  <div className="font-medium text-gray-900 mb-4">{selectedNewDivision.name}</div>
+
+                  {/* Option 1: Create new team */}
+                  <div className="mb-4">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Option 1: Create a new team</div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newUnitName}
+                        onChange={(e) => setNewUnitName(e.target.value)}
+                        placeholder="Team name (optional)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <button
+                        onClick={() => handleConfirmChangeDivision(null)}
+                        disabled={movingToDivision}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {movingToDivision ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        Create
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Join existing team */}
+                  <div>
+                    <div className="text-sm font-medium text-gray-700 mb-2">
+                      Option 2: Join an existing team
+                      {loadingJoinableUnits && <Loader2 className="w-4 h-4 animate-spin inline ml-2" />}
+                    </div>
+                    {!loadingJoinableUnits && joinableUnitsInNewDivision.length === 0 ? (
+                      <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3 text-center">
+                        No teams looking for partners in this division
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {joinableUnitsInNewDivision.map(unit => (
+                          <div
+                            key={unit.id}
+                            className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                          >
+                            <div className="flex items-center gap-2">
+                              {unit.members?.map(member => (
+                                <div key={member.id} className="flex items-center gap-1.5">
+                                  {member.profileImageUrl ? (
+                                    <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
+                                      {member.firstName?.charAt(0) || '?'}
+                                    </div>
+                                  )}
+                                  <span className="text-sm text-gray-700">{member.firstName} {member.lastName}</span>
+                                </div>
+                              ))}
+                              {unit.name && <span className="text-xs text-gray-400">({unit.name})</span>}
+                            </div>
+                            <button
+                              onClick={() => handleConfirmChangeDivision(unit.id)}
+                              disabled={movingToDivision}
+                              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              {movingToDivision ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                              Join
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
+              <button
+                onClick={() => setChangingDivisionReg(null)}
+                disabled={movingToDivision}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

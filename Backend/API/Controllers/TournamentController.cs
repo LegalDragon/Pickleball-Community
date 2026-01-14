@@ -1647,6 +1647,209 @@ public class TournamentController : ControllerBase
     }
 
     /// <summary>
+    /// Allow a player to move themselves to a different division.
+    /// Handles leaving current unit and either creating new unit or joining existing one.
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/self-move-division")]
+    public async Task<ActionResult<ApiResponse<EventUnitDto>>> SelfMoveToDivision(int eventId, [FromBody] SelfMoveDivisionRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventUnitDto> { Success = false, Message = "Unauthorized" });
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+                .ThenInclude(d => d.TeamUnit)
+            .FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
+        if (evt == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Event not found" });
+
+        // Verify target division exists
+        var targetDivision = evt.Divisions.FirstOrDefault(d => d.Id == request.NewDivisionId && d.IsActive);
+        if (targetDivision == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Target division not found" });
+
+        // Find user's current unit in this event
+        var currentMembership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u.Members)
+            .FirstOrDefaultAsync(m => m.UserId == userId.Value &&
+                m.Unit!.EventId == eventId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+
+        if (currentMembership == null)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are not registered for this event" });
+
+        var currentUnit = currentMembership.Unit!;
+
+        // Check if already in target division
+        if (currentUnit.DivisionId == request.NewDivisionId)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are already in this division" });
+
+        // Check if already registered in target division
+        var alreadyInTarget = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .AnyAsync(m => m.UserId == userId.Value &&
+                m.Unit!.DivisionId == request.NewDivisionId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+        if (alreadyInTarget)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are already registered in the target division" });
+
+        EventUnit? targetUnit = null;
+        var teamSize = targetDivision.TeamUnit?.Size ?? 2;
+
+        // Option 1: Join an existing unit
+        if (request.JoinUnitId.HasValue)
+        {
+            targetUnit = await _context.EventUnits
+                .Include(u => u.Members)
+                .Include(u => u.Division)
+                    .ThenInclude(d => d!.TeamUnit)
+                .FirstOrDefaultAsync(u => u.Id == request.JoinUnitId.Value &&
+                    u.DivisionId == request.NewDivisionId &&
+                    u.Status != "Cancelled");
+
+            if (targetUnit == null)
+                return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Target unit not found in that division" });
+
+            var targetTeamSize = targetUnit.Division?.TeamUnit?.Size ?? 2;
+            var acceptedMembers = targetUnit.Members.Count(m => m.InviteStatus == "Accepted");
+            if (acceptedMembers >= targetTeamSize)
+                return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "Target unit is already full" });
+        }
+
+        // Remove player from current unit
+        _context.EventUnitMembers.Remove(currentMembership);
+
+        // Handle current unit after player leaves
+        var remainingMembers = currentUnit.Members.Where(m => m.Id != currentMembership.Id && m.InviteStatus == "Accepted").ToList();
+        if (remainingMembers.Count == 0)
+        {
+            // No members left - delete the unit
+            currentUnit.Status = "Cancelled";
+        }
+        else if (currentUnit.CaptainUserId == userId.Value)
+        {
+            // Player was captain - assign new captain to first remaining member
+            currentUnit.CaptainUserId = remainingMembers.First().UserId;
+        }
+
+        // Option 1: Join existing unit
+        if (targetUnit != null)
+        {
+            var newMembership = new EventUnitMember
+            {
+                UnitId = targetUnit.Id,
+                UserId = userId.Value,
+                Role = "Player",
+                InviteStatus = "Accepted",
+                CreatedAt = DateTime.Now
+            };
+            _context.EventUnitMembers.Add(newMembership);
+
+            await _context.SaveChangesAsync();
+
+            // Reload for response
+            targetUnit = await _context.EventUnits
+                .Include(u => u.Members).ThenInclude(m => m.User)
+                .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+                .Include(u => u.Captain)
+                .Include(u => u.Event)
+                .FirstOrDefaultAsync(u => u.Id == targetUnit.Id);
+
+            return Ok(new ApiResponse<EventUnitDto>
+            {
+                Success = true,
+                Data = MapToUnitDto(targetUnit!),
+                Message = "Successfully moved to new division and joined existing team"
+            });
+        }
+
+        // Option 2: Create a new unit
+        var newUnit = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = request.NewDivisionId,
+            Name = request.NewUnitName,
+            CaptainUserId = userId.Value,
+            Status = "Registered",
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+        _context.EventUnits.Add(newUnit);
+        await _context.SaveChangesAsync();
+
+        // Add player as member
+        var captainMembership = new EventUnitMember
+        {
+            UnitId = newUnit.Id,
+            UserId = userId.Value,
+            Role = "Captain",
+            InviteStatus = "Accepted",
+            CreatedAt = DateTime.Now
+        };
+        _context.EventUnitMembers.Add(captainMembership);
+        await _context.SaveChangesAsync();
+
+        // Reload for response
+        newUnit = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .Include(u => u.Event)
+            .FirstOrDefaultAsync(u => u.Id == newUnit.Id);
+
+        return Ok(new ApiResponse<EventUnitDto>
+        {
+            Success = true,
+            Data = MapToUnitDto(newUnit!),
+            Message = "Successfully moved to new division with new team"
+        });
+    }
+
+    /// <summary>
+    /// Get incomplete units in a division that a player can join
+    /// </summary>
+    [Authorize]
+    [HttpGet("events/{eventId}/divisions/{divisionId}/joinable-units")]
+    public async Task<ActionResult<ApiResponse<List<EventUnitDto>>>> GetJoinableUnits(int eventId, int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.TeamUnit)
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId && d.IsActive);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "Division not found" });
+
+        var teamSize = division.TeamUnit?.Size ?? 2;
+
+        // Find units that are incomplete (fewer accepted members than team size)
+        var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .Where(u => u.DivisionId == divisionId &&
+                u.EventId == eventId &&
+                u.Status != "Cancelled" &&
+                u.Members.Count(m => m.InviteStatus == "Accepted") < teamSize)
+            .OrderBy(u => u.CreatedAt)
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<EventUnitDto>>
+        {
+            Success = true,
+            Data = units.Select(MapToUnitDto).ToList()
+        });
+    }
+
+    /// <summary>
     /// Merge two registrations in the same division (organizer only)
     /// Moves members from source unit to target unit, then removes source unit
     /// </summary>

@@ -220,6 +220,13 @@ public class MoveRegistrationRequest
     public int NewDivisionId { get; set; }
 }
 
+public class SelfMoveDivisionRequest
+{
+    public int NewDivisionId { get; set; }
+    public int? JoinUnitId { get; set; } // If set, join this existing unit; otherwise create new
+    public string? NewUnitName { get; set; } // Optional name for new unit if creating
+}
+
 public class MergeRegistrationsRequest
 {
     public int TargetUnitId { get; set; }

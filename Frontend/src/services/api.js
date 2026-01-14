@@ -1379,6 +1379,12 @@ export const tournamentApi = {
   mergeRegistrations: (eventId, targetUnitId, sourceUnitId) =>
     api.post(`/tournament/events/${eventId}/registrations/merge`, { targetUnitId, sourceUnitId }),
 
+  // Player self-move to different division
+  selfMoveToDivision: (eventId, newDivisionId, joinUnitId = null, newUnitName = null) =>
+    api.post(`/tournament/events/${eventId}/self-move-division`, { newDivisionId, joinUnitId, newUnitName }),
+  getJoinableUnits: (eventId, divisionId) =>
+    api.get(`/tournament/events/${eventId}/divisions/${divisionId}/joinable-units`),
+
   // Payment
   uploadPaymentProof: (eventId, unitId, data) =>
     api.post(`/tournament/events/${eventId}/units/${unitId}/payment`, data),
