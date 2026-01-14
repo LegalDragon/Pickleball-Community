@@ -186,7 +186,7 @@ public class TournamentGameDayController : ControllerBase
                 .ThenInclude(g => g!.TournamentCourt)
             .OrderBy(p => p.Game!.Match!.RoundNumber)
             .ThenBy(p => p.Game!.Match!.MatchNumber)
-            .Select(p => new PlayerGameDayDto
+            .Select(p => new PlayerGameInfoDto
             {
                 GameId = p.GameId,
                 GameNumber = p.Game!.GameNumber,
@@ -971,9 +971,9 @@ public class PlayerGameDayDto
     public DateTime? CheckedInAt { get; set; }
     public bool WaiverSigned { get; set; }
     public List<PlayerDivisionDto> MyDivisions { get; set; } = new();
-    public List<PlayerGameDayDto> MyGames { get; set; } = new();
-    public PlayerGameDayDto? UpcomingGame { get; set; }
-    public PlayerGameDayDto? NextGame { get; set; }
+    public List<PlayerGameInfoDto> MyGames { get; set; } = new();
+    public PlayerGameInfoDto? UpcomingGame { get; set; }
+    public PlayerGameInfoDto? NextGame { get; set; }
 }
 
 public class PlayerDivisionDto
@@ -984,7 +984,7 @@ public class PlayerDivisionDto
     public string UnitName { get; set; } = string.Empty;
 }
 
-public class PlayerGameDayDto
+public class PlayerGameInfoDto
 {
     public int GameId { get; set; }
     public int GameNumber { get; set; }
