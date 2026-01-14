@@ -179,7 +179,10 @@ GO
 -- =====================================================
 -- 8. Create stored procedure for getting game day dashboard data
 -- =====================================================
-CREATE OR ALTER PROCEDURE sp_GetGameDayDashboard
+IF OBJECT_ID('sp_GetGameDayDashboard', 'P') IS NOT NULL
+    DROP PROCEDURE sp_GetGameDayDashboard;
+GO
+CREATE PROCEDURE sp_GetGameDayDashboard
     @EventId INT,
     @UserId INT = NULL,
     @Role NVARCHAR(20) = 'TD' -- TD, Player, Spectator
@@ -206,7 +209,7 @@ BEGIN
 
     -- Courts with current games
     SELECT
-        tc.Id, tc.Name, tc.CourtNumber, tc.Status,
+        tc.Id, tc.CourtLabel, tc.SortOrder, tc.Status,
         g.Id AS CurrentGameId,
         g.Status AS CurrentGameStatus,
         m.RoundName,
@@ -220,7 +223,7 @@ BEGIN
     LEFT JOIN EventUnits u1 ON m.Unit1Id = u1.Id
     LEFT JOIN EventUnits u2 ON m.Unit2Id = u2.Id
     WHERE tc.EventId = @EventId AND tc.IsActive = 1
-    ORDER BY tc.CourtNumber;
+    ORDER BY tc.SortOrder;
 
     -- If Player, get their specific games
     IF @Role = 'Player' AND @UserId IS NOT NULL
@@ -232,8 +235,8 @@ BEGIN
             g.Unit1Score,
             g.Unit2Score,
             g.TournamentCourtId,
-            tc.Name AS CourtName,
-            tc.CourtNumber,
+            tc.CourtLabel AS CourtName,
+            tc.SortOrder,
             m.Id AS MatchId,
             m.RoundType,
             m.RoundName,
@@ -284,7 +287,10 @@ GO
 -- =====================================================
 -- 9. Create stored procedure for getting games ready to play
 -- =====================================================
-CREATE OR ALTER PROCEDURE sp_GetGamesReadyToPlay
+IF OBJECT_ID('sp_GetGamesReadyToPlay', 'P') IS NOT NULL
+    DROP PROCEDURE sp_GetGamesReadyToPlay;
+GO
+CREATE PROCEDURE sp_GetGamesReadyToPlay
     @EventId INT,
     @DivisionId INT = NULL
 AS
@@ -318,8 +324,8 @@ BEGIN
         (SELECT COUNT(*) FROM EventUnitMembers um
          WHERE um.UnitId = u2.Id AND um.InviteStatus = 'Accepted') AS Unit2TotalPlayers,
         g.TournamentCourtId,
-        tc.Name AS CourtName,
-        tc.CourtNumber
+        tc.CourtLabel AS CourtName,
+        tc.SortOrder
     FROM EventGames g
     INNER JOIN EventMatches m ON g.MatchId = m.Id
     INNER JOIN EventDivisions d ON m.DivisionId = d.Id
@@ -341,7 +347,10 @@ GO
 -- =====================================================
 -- 10. Create stored procedure for scoreboard
 -- =====================================================
-CREATE OR ALTER PROCEDURE sp_GetScoreboard
+IF OBJECT_ID('sp_GetScoreboard', 'P') IS NOT NULL
+    DROP PROCEDURE sp_GetScoreboard;
+GO
+CREATE PROCEDURE sp_GetScoreboard
     @EventId INT,
     @DivisionId INT = NULL,
     @RoundType NVARCHAR(20) = NULL, -- Pool, Bracket, Final
@@ -384,8 +393,8 @@ BEGIN
         u2.Name AS Unit2Name,
         u2.Seed AS Unit2Seed,
         m.WinnerUnitId,
-        tc.Name AS CourtName,
-        tc.CourtNumber,
+        tc.CourtLabel AS CourtName,
+        tc.SortOrder,
         -- Game scores as JSON
         (SELECT g.GameNumber, g.Unit1Score, g.Unit2Score, g.Status, g.WinnerUnitId
          FROM EventGames g WHERE g.MatchId = m.Id
@@ -418,7 +427,10 @@ GO
 -- =====================================================
 -- 11. Create stored procedure for event results
 -- =====================================================
-CREATE OR ALTER PROCEDURE sp_GetEventResults
+IF OBJECT_ID('sp_GetEventResults', 'P') IS NOT NULL
+    DROP PROCEDURE sp_GetEventResults;
+GO
+CREATE PROCEDURE sp_GetEventResults
     @EventId INT,
     @DivisionId INT = NULL
 AS
@@ -467,7 +479,10 @@ GO
 -- =====================================================
 -- 12. Create stored procedure for player game history
 -- =====================================================
-CREATE OR ALTER PROCEDURE sp_GetPlayerGameHistory
+IF OBJECT_ID('sp_GetPlayerGameHistory', 'P') IS NOT NULL
+    DROP PROCEDURE sp_GetPlayerGameHistory;
+GO
+CREATE PROCEDURE sp_GetPlayerGameHistory
     @UserId INT,
     @PageNumber INT = 1,
     @PageSize INT = 20
@@ -506,7 +521,7 @@ BEGIN
         u2.Name AS Unit2Name,
         gp.UnitId AS PlayerUnitId,
         CASE WHEN g.WinnerUnitId = gp.UnitId THEN 1 ELSE 0 END AS IsWin,
-        tc.Name AS CourtName
+        tc.CourtLabel AS CourtName
     FROM EventGamePlayers gp
     INNER JOIN EventGames g ON gp.GameId = g.Id
     INNER JOIN EventMatches m ON g.MatchId = m.Id
