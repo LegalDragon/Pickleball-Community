@@ -361,8 +361,6 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
-
     -- Get total count
     SELECT COUNT(*) AS TotalCount
     FROM EventMatches m
@@ -371,56 +369,57 @@ BEGIN
         AND (@RoundType IS NULL OR m.RoundType = @RoundType)
         AND (@Status IS NULL OR m.Status = @Status);
 
-    -- Get matches with game scores
-    SELECT
-        m.Id AS MatchId,
-        m.RoundType,
-        m.RoundNumber,
-        m.RoundName,
-        m.MatchNumber,
-        m.BracketPosition,
-        m.BestOf,
-        m.Status,
-        m.ScheduledTime,
-        m.StartedAt,
-        m.CompletedAt,
-        d.Id AS DivisionId,
-        d.Name AS DivisionName,
-        u1.Id AS Unit1Id,
-        u1.Name AS Unit1Name,
-        u1.Seed AS Unit1Seed,
-        u2.Id AS Unit2Id,
-        u2.Name AS Unit2Name,
-        u2.Seed AS Unit2Seed,
-        m.WinnerUnitId,
-        tc.CourtLabel AS CourtName,
-        tc.SortOrder,
-        -- Game scores as JSON
-        (SELECT g.GameNumber, g.Unit1Score, g.Unit2Score, g.Status, g.WinnerUnitId
-         FROM EventGames g WHERE g.MatchId = m.Id
-         ORDER BY g.GameNumber
-         FOR JSON PATH) AS GameScores
-    FROM EventMatches m
-    INNER JOIN EventDivisions d ON m.DivisionId = d.Id
-    LEFT JOIN EventUnits u1 ON m.Unit1Id = u1.Id
-    LEFT JOIN EventUnits u2 ON m.Unit2Id = u2.Id
-    LEFT JOIN TournamentCourts tc ON m.TournamentCourtId = tc.Id
-    WHERE m.EventId = @EventId
-        AND (@DivisionId IS NULL OR m.DivisionId = @DivisionId)
-        AND (@RoundType IS NULL OR m.RoundType = @RoundType)
-        AND (@Status IS NULL OR m.Status = @Status)
-    ORDER BY
-        CASE m.Status
-            WHEN 'InProgress' THEN 1
-            WHEN 'Ready' THEN 2
-            WHEN 'Scheduled' THEN 3
-            WHEN 'Completed' THEN 4
-            ELSE 5
-        END,
-        m.ScheduledTime,
-        m.RoundNumber,
-        m.MatchNumber
-    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+    -- Get matches (without JSON, games fetched separately)
+    ;WITH MatchesCTE AS (
+        SELECT
+            m.Id AS MatchId,
+            m.RoundType,
+            m.RoundNumber,
+            m.RoundName,
+            m.MatchNumber,
+            m.BracketPosition,
+            m.BestOf,
+            m.Status,
+            m.ScheduledTime,
+            m.StartedAt,
+            m.CompletedAt,
+            d.Id AS DivisionId,
+            d.Name AS DivisionName,
+            u1.Id AS Unit1Id,
+            u1.Name AS Unit1Name,
+            u1.Seed AS Unit1Seed,
+            u2.Id AS Unit2Id,
+            u2.Name AS Unit2Name,
+            u2.Seed AS Unit2Seed,
+            m.WinnerUnitId,
+            tc.CourtLabel AS CourtName,
+            tc.SortOrder,
+            ROW_NUMBER() OVER (ORDER BY
+                CASE m.Status
+                    WHEN 'InProgress' THEN 1
+                    WHEN 'Ready' THEN 2
+                    WHEN 'Scheduled' THEN 3
+                    WHEN 'Completed' THEN 4
+                    ELSE 5
+                END,
+                m.ScheduledTime,
+                m.RoundNumber,
+                m.MatchNumber) AS RowNum
+        FROM EventMatches m
+        INNER JOIN EventDivisions d ON m.DivisionId = d.Id
+        LEFT JOIN EventUnits u1 ON m.Unit1Id = u1.Id
+        LEFT JOIN EventUnits u2 ON m.Unit2Id = u2.Id
+        LEFT JOIN TournamentCourts tc ON m.TournamentCourtId = tc.Id
+        WHERE m.EventId = @EventId
+            AND (@DivisionId IS NULL OR m.DivisionId = @DivisionId)
+            AND (@RoundType IS NULL OR m.RoundType = @RoundType)
+            AND (@Status IS NULL OR m.Status = @Status)
+    )
+    SELECT MatchId, RoundType, RoundNumber, RoundName, MatchNumber, BracketPosition, BestOf, Status,
+           ScheduledTime, StartedAt, CompletedAt, DivisionId, DivisionName, Unit1Id, Unit1Name, Unit1Seed,
+           Unit2Id, Unit2Name, Unit2Seed, WinnerUnitId, CourtName, SortOrder
+    FROM MatchesCTE
+    WHERE RowNum > ((@PageNumber - 1) * @PageSize) AND RowNum <= (@PageNumber * @PageSize);
 END
 GO
 
@@ -457,11 +456,12 @@ BEGIN
         u.PointsScored,
         u.PointsAgainst,
         u.PointsScored - u.PointsAgainst AS PointDifferential,
-        -- Member names
-        (SELECT STRING_AGG(CONCAT(usr.FirstName, ' ', usr.LastName), ' / ')
-         FROM EventUnitMembers um
-         INNER JOIN Users usr ON um.UserId = usr.Id
-         WHERE um.UnitId = u.Id AND um.InviteStatus = 'Accepted') AS PlayerNames
+        -- Member names (using STUFF/FOR XML PATH for compatibility)
+        STUFF((SELECT ' / ' + usr.FirstName + ' ' + usr.LastName
+               FROM EventUnitMembers um
+               INNER JOIN Users usr ON um.UserId = usr.Id
+               WHERE um.UnitId = u.Id AND um.InviteStatus = 'Accepted'
+               FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 3, '') AS PlayerNames
     FROM EventUnits u
     INNER JOIN EventDivisions d ON u.DivisionId = d.Id
     WHERE d.EventId = @EventId
@@ -490,49 +490,53 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @Offset INT = (@PageNumber - 1) * @PageSize;
-
     -- Get total count
     SELECT COUNT(*) AS TotalCount
     FROM EventGamePlayers gp
     INNER JOIN EventGames g ON gp.GameId = g.Id
     WHERE gp.UserId = @UserId AND g.Status = 'Finished';
 
-    -- Get game history
-    SELECT
-        g.Id AS GameId,
-        g.GameNumber,
-        g.Unit1Score,
-        g.Unit2Score,
-        g.WinnerUnitId,
-        g.StartedAt,
-        g.FinishedAt,
-        m.Id AS MatchId,
-        m.RoundType,
-        m.RoundName,
-        d.Id AS DivisionId,
-        d.Name AS DivisionName,
-        e.Id AS EventId,
-        e.Name AS EventName,
-        e.StartDate AS EventDate,
-        u1.Id AS Unit1Id,
-        u1.Name AS Unit1Name,
-        u2.Id AS Unit2Id,
-        u2.Name AS Unit2Name,
-        gp.UnitId AS PlayerUnitId,
-        CASE WHEN g.WinnerUnitId = gp.UnitId THEN 1 ELSE 0 END AS IsWin,
-        tc.CourtLabel AS CourtName
-    FROM EventGamePlayers gp
-    INNER JOIN EventGames g ON gp.GameId = g.Id
-    INNER JOIN EventMatches m ON g.MatchId = m.Id
-    INNER JOIN EventDivisions d ON m.DivisionId = d.Id
-    INNER JOIN Events e ON m.EventId = e.Id
-    LEFT JOIN EventUnits u1 ON m.Unit1Id = u1.Id
-    LEFT JOIN EventUnits u2 ON m.Unit2Id = u2.Id
-    LEFT JOIN TournamentCourts tc ON g.TournamentCourtId = tc.Id
-    WHERE gp.UserId = @UserId AND g.Status = 'Finished'
-    ORDER BY g.FinishedAt DESC
-    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+    -- Get game history using ROW_NUMBER for pagination
+    ;WITH GameHistoryCTE AS (
+        SELECT
+            g.Id AS GameId,
+            g.GameNumber,
+            g.Unit1Score,
+            g.Unit2Score,
+            g.WinnerUnitId,
+            g.StartedAt,
+            g.FinishedAt,
+            m.Id AS MatchId,
+            m.RoundType,
+            m.RoundName,
+            d.Id AS DivisionId,
+            d.Name AS DivisionName,
+            e.Id AS EventId,
+            e.Name AS EventName,
+            e.StartDate AS EventDate,
+            u1.Id AS Unit1Id,
+            u1.Name AS Unit1Name,
+            u2.Id AS Unit2Id,
+            u2.Name AS Unit2Name,
+            gp.UnitId AS PlayerUnitId,
+            CASE WHEN g.WinnerUnitId = gp.UnitId THEN 1 ELSE 0 END AS IsWin,
+            tc.CourtLabel AS CourtName,
+            ROW_NUMBER() OVER (ORDER BY g.FinishedAt DESC) AS RowNum
+        FROM EventGamePlayers gp
+        INNER JOIN EventGames g ON gp.GameId = g.Id
+        INNER JOIN EventMatches m ON g.MatchId = m.Id
+        INNER JOIN EventDivisions d ON m.DivisionId = d.Id
+        INNER JOIN Events e ON m.EventId = e.Id
+        LEFT JOIN EventUnits u1 ON m.Unit1Id = u1.Id
+        LEFT JOIN EventUnits u2 ON m.Unit2Id = u2.Id
+        LEFT JOIN TournamentCourts tc ON g.TournamentCourtId = tc.Id
+        WHERE gp.UserId = @UserId AND g.Status = 'Finished'
+    )
+    SELECT GameId, GameNumber, Unit1Score, Unit2Score, WinnerUnitId, StartedAt, FinishedAt,
+           MatchId, RoundType, RoundName, DivisionId, DivisionName, EventId, EventName, EventDate,
+           Unit1Id, Unit1Name, Unit2Id, Unit2Name, PlayerUnitId, IsWin, CourtName
+    FROM GameHistoryCTE
+    WHERE RowNum > ((@PageNumber - 1) * @PageSize) AND RowNum <= (@PageNumber * @PageSize);
 END
 GO
 
