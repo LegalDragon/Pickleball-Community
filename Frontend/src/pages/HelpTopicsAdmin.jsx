@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { helpApi } from '../services/api';
-import { clearHelpCache } from '../components/ui/HelpIcon';
+import HelpIcon, { clearHelpCache } from '../components/ui/HelpIcon';
 
 export default function HelpTopicsAdmin({ embedded = false }) {
   const { user } = useAuth();
@@ -553,7 +553,10 @@ export default function HelpTopicsAdmin({ embedded = false }) {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Help Topics</h1>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  Help Topics
+                  <HelpIcon topicCode="admin.helpTopics" size="sm" />
+                </h1>
                 <p className="text-sm text-gray-500">Manage contextual help content throughout the app</p>
               </div>
             </div>

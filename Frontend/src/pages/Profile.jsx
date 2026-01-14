@@ -13,6 +13,7 @@ import {
   MessageCircle, Shield, Eye, Mail, Link, Plus, Trash2,
   Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, ExternalLink
 } from 'lucide-react'
+import HelpIcon from '../components/ui/HelpIcon'
 
 const Profile = () => {
   const { user, updateUser } = useAuth()
@@ -1052,6 +1053,7 @@ const Profile = () => {
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <Target className="w-5 h-5 mr-2 text-purple-500" />
                     Pickleball Information
+                    <HelpIcon topicCode="profile.skillRating" size="sm" className="ml-2" />
                   </h3>
                   {!isEditingPickleballInfo ? (
                     <button
@@ -1121,7 +1123,10 @@ const Profile = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Playing Style</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        Playing Style
+                        <HelpIcon topicCode="profile.playStyle" size="sm" className="ml-1" />
+                      </label>
                       <select
                         {...pickleballForm.register('playingStyle')}
                         disabled={!isEditingPickleballInfo}
@@ -1160,7 +1165,10 @@ const Profile = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Paddle Brand</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        Paddle Brand
+                        <HelpIcon topicCode="profile.equipment" size="sm" className="ml-1" />
+                      </label>
                       <input
                         {...pickleballForm.register('paddleBrand')}
                         type="text"

@@ -173,7 +173,10 @@ const GameDayManage = () => {
               </button>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">{data.eventName}</h1>
-                <p className="text-sm text-gray-500">Game Day Management</p>
+                <p className="text-sm text-gray-500 flex items-center gap-1">
+                  Game Day Management
+                  <HelpIcon topicCode="gameday.overview" size="sm" />
+                </p>
               </div>
             </div>
             <button
@@ -293,7 +296,7 @@ const OverviewTab = ({ data, onGameClick }) => {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Players" value={stats.totalPlayers} sub={`${stats.checkedInPlayers} checked in`} />
+        <StatCard label="Players" value={stats.totalPlayers} sub={`${stats.checkedInPlayers} checked in`} helpTopicCode="gameday.checkIn" />
         <StatCard label="Courts" value={stats.totalCourts} sub={`${stats.activeCourts} in use`} />
         <StatCard label="Games" value={stats.totalGames} sub={`${stats.completedGames} completed`} />
         <StatCard label="In Progress" value={stats.inProgressGames} color="blue" />
@@ -661,13 +664,16 @@ const GamesTab = ({
             <option value="by-court">By Court</option>
           </select>
         </div>
-        <button
-          onClick={onNewGame}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          New Game
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onNewGame}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            New Game
+          </button>
+          <HelpIcon topicCode="gameday.rotation" size="sm" />
+        </div>
       </div>
 
       {/* Games */}
@@ -770,12 +776,15 @@ const SettingsTab = ({ data, onNewFormat, onRefresh, eventId }) => {
 // Shared Components
 // ==========================================
 
-const StatCard = ({ label, value, sub, color = 'gray' }) => (
+const StatCard = ({ label, value, sub, color = 'gray', helpTopicCode }) => (
   <div className="bg-white rounded-xl border border-gray-200 p-4">
     <div className={`text-2xl font-bold ${color === 'blue' ? 'text-blue-600' : 'text-gray-900'}`}>
       {value}
     </div>
-    <div className="text-sm font-medium text-gray-700">{label}</div>
+    <div className="text-sm font-medium text-gray-700 flex items-center gap-1">
+      {label}
+      {helpTopicCode && <HelpIcon topicCode={helpTopicCode} size="sm" />}
+    </div>
     {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
   </div>
 );

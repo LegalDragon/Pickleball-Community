@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, Trash2, RotateCcw, Save, X, Award } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { skillLevelsApi } from '../services/api';
+import HelpIcon from '../components/ui/HelpIcon';
 
 export default function SkillLevelsAdmin({ embedded = false }) {
   const { user } = useAuth();
@@ -385,7 +386,10 @@ export default function SkillLevelsAdmin({ embedded = false }) {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Skill Levels</h1>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  Skill Levels
+                  <HelpIcon topicCode="admin.skillLevels" size="sm" />
+                </h1>
                 <p className="text-sm text-gray-500">Manage skill levels for event divisions (e.g., 3.0, 3.5, 4.0)</p>
               </div>
             </div>

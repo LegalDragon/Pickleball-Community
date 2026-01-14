@@ -2401,11 +2401,12 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                       </div>
                       {isAdmin && member.userId !== currentUserId && (
                         <div className="flex items-center gap-2">
-                          <select
-                            value={member.role}
-                            onChange={(e) => handleUpdateRole(member.id, e.target.value)}
-                            className="text-sm border border-gray-300 rounded px-2 py-1"
-                          >
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={member.role}
+                              onChange={(e) => handleUpdateRole(member.id, e.target.value)}
+                              className="text-sm border border-gray-300 rounded px-2 py-1"
+                            >
                             {memberRoles.length > 0 ? (
                               memberRoles.map(role => (
                                 <option key={role.id} value={role.name}>{role.name}</option>
@@ -2417,7 +2418,9 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                                 <option value="Admin">Admin</option>
                               </>
                             )}
-                          </select>
+                            </select>
+                            <HelpIcon topicCode="club.roles" size="sm" />
+                          </div>
                           <button
                             onClick={() => setEditingMember(member)}
                             className="p-1 text-purple-500 hover:bg-purple-50 rounded"
@@ -4141,7 +4144,10 @@ function CreateClubModal({ onClose, onCreate }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1000] overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-6 py-4 border-b flex items-center justify-between z-10">
-          <h2 className="text-xl font-semibold text-gray-900">Create New Club</h2>
+          <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+            Create New Club
+            <HelpIcon topicCode="club.create" size="sm" className="ml-2" />
+          </h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
             <X className="w-5 h-5" />
           </button>

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventTypesApi } from '../services/api';
+import HelpIcon from '../components/ui/HelpIcon';
 
 // Comprehensive icon mapping for event types
 const ICON_OPTIONS = [
@@ -667,7 +668,10 @@ export default function EventTypesAdmin({ embedded = false }) {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Event Types</h1>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  Event Types
+                  <HelpIcon topicCode="admin.eventTypes" size="sm" />
+                </h1>
                 <p className="text-sm text-gray-500">Manage event categories for scheduling</p>
               </div>
             </div>
