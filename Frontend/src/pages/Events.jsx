@@ -2350,9 +2350,19 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         amountPaid: (event.registrationFee || 0) + (event.perDivisionFee || 0)
       });
       if (response.success) {
-        setAllRegistrations(prev =>
-          prev.map(r => r.id === registration.id ? { ...r, paymentStatus: 'Paid' } : r)
-        );
+        const updatePaymentStatus = (r) =>
+          (r.id === registration.id || r.unitId === registration.unitId) ? { ...r, paymentStatus: 'Paid' } : r;
+
+        setAllRegistrations(prev => prev.map(updatePaymentStatus));
+
+        // Also update divisionRegistrationsCache
+        setDivisionRegistrationsCache(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(divId => {
+            updated[divId] = updated[divId].map(updatePaymentStatus);
+          });
+          return updated;
+        });
       }
     } catch (err) {
       console.error('Error updating registration:', err);
@@ -2367,9 +2377,19 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     try {
       const response = await eventsApi.updateRegistration(event.id, registration.id, { teamName });
       if (response.success) {
-        setAllRegistrations(prev =>
-          prev.map(r => r.id === registration.id ? { ...r, teamName } : r)
-        );
+        const updateTeamName = (r) =>
+          (r.id === registration.id || r.unitId === registration.unitId) ? { ...r, teamName } : r;
+
+        setAllRegistrations(prev => prev.map(updateTeamName));
+
+        // Also update divisionRegistrationsCache
+        setDivisionRegistrationsCache(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(divId => {
+            updated[divId] = updated[divId].map(updateTeamName);
+          });
+          return updated;
+        });
       }
     } catch (err) {
       console.error('Error updating registration:', err);
@@ -2404,6 +2424,15 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         setAllRegistrations(prev =>
           prev.map(r => r.id === registration.id ? { ...r, divisionId: newDivisionId, divisionName: newDivision?.name || 'Unknown' } : r)
         );
+
+        // Invalidate cache for both old and new divisions so they get refetched
+        setDivisionRegistrationsCache(prev => {
+          const updated = { ...prev };
+          delete updated[registration.divisionId];
+          delete updated[newDivisionId];
+          return updated;
+        });
+
         toast.success('Registration moved to new division');
       } else {
         toast.error(response.message || 'Failed to move registration');
@@ -2425,6 +2454,14 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       const response = await tournamentApi.removeRegistration(event.id, registration.unitId, registration.userId);
       if (response.success) {
         setAllRegistrations(prev => prev.filter(r => r.id !== registration.id));
+
+        // Invalidate cache for the division so it gets refetched
+        setDivisionRegistrationsCache(prev => {
+          const updated = { ...prev };
+          delete updated[registration.divisionId];
+          return updated;
+        });
+
         toast.success('Registration removed');
         onUpdate();
       } else {
@@ -5483,31 +5520,41 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         unit={selectedAdminPaymentUnit}
         event={event}
         onPaymentUpdated={(unitId, paymentInfo) => {
-          // Update the member's payment status in allRegistrations
-          setAllRegistrations(prev =>
-            prev.map(r => {
-              if (r.id !== unitId && r.unitId !== unitId) return r;
-              // Update the specific member's payment data
-              const updatedMembers = r.members?.map(m =>
-                m.userId === paymentInfo.userId
-                  ? {
-                      ...m,
-                      hasPaid: paymentInfo.hasPaid,
-                      paidAt: paymentInfo.paidAt,
-                      amountPaid: paymentInfo.amountPaid,
-                      paymentProofUrl: paymentInfo.paymentProofUrl,
-                      paymentReference: paymentInfo.paymentReference,
-                      referenceId: paymentInfo.referenceId
-                    }
-                  : m
-              );
-              return {
-                ...r,
-                members: updatedMembers,
-                paymentStatus: paymentInfo.unitPaymentStatus || r.paymentStatus
-              };
-            })
-          );
+          // Helper function to update unit with payment info
+          const updateUnit = (unit) => {
+            if (unit.id !== unitId && unit.unitId !== unitId) return unit;
+            const updatedMembers = unit.members?.map(m =>
+              m.userId === paymentInfo.userId
+                ? {
+                    ...m,
+                    hasPaid: paymentInfo.hasPaid,
+                    paidAt: paymentInfo.paidAt,
+                    amountPaid: paymentInfo.amountPaid,
+                    paymentProofUrl: paymentInfo.paymentProofUrl,
+                    paymentReference: paymentInfo.paymentReference,
+                    referenceId: paymentInfo.referenceId
+                  }
+                : m
+            );
+            return {
+              ...unit,
+              members: updatedMembers,
+              paymentStatus: paymentInfo.unitPaymentStatus || unit.paymentStatus
+            };
+          };
+
+          // Update allRegistrations
+          setAllRegistrations(prev => prev.map(updateUnit));
+
+          // Update divisionRegistrationsCache so the UI reflects changes immediately
+          setDivisionRegistrationsCache(prev => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach(divId => {
+              updated[divId] = updated[divId].map(updateUnit);
+            });
+            return updated;
+          });
+
           // Refresh from server to ensure consistency
           onUpdate();
         }}
