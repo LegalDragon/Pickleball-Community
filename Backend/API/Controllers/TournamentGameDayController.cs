@@ -111,7 +111,7 @@ public class TournamentGameDayController : ControllerBase
                 Unit2Id = g.Match.Unit2Id,
                 Unit2Name = g.Match.Unit2!.Name,
                 CourtId = g.TournamentCourtId,
-                CourtName = g.TournamentCourt != null ? g.TournamentCourt.Name : null,
+                CourtName = g.TournamentCourt != null ? g.TournamentCourt.CourtLabel : null,
                 CourtNumber = g.TournamentCourt != null ? g.TournamentCourt.SortOrder : null,
                 QueuedAt = g.QueuedAt,
                 StartedAt = g.StartedAt
@@ -202,7 +202,7 @@ public class TournamentGameDayController : ControllerBase
                 Unit1Name = p.Game.Match.Unit1!.Name,
                 Unit2Id = p.Game.Match.Unit2Id,
                 Unit2Name = p.Game.Match.Unit2!.Name,
-                CourtName = p.Game.TournamentCourt != null ? p.Game.TournamentCourt.Name : null,
+                CourtName = p.Game.TournamentCourt != null ? p.Game.TournamentCourt.CourtLabel : null,
                 CourtNumber = p.Game.TournamentCourt != null ? p.Game.TournamentCourt.SortOrder : null,
                 ScheduledTime = p.Game.Match.ScheduledTime,
                 QueuedAt = p.Game.QueuedAt,
@@ -671,16 +671,15 @@ public class TournamentGameDayController : ControllerBase
 
         foreach (var targetUserId in userIds)
         {
-            await _notificationService.CreateAndSendAsync(new Notification
-            {
-                UserId = targetUserId,
-                Type = NotificationType.EventUpdate,
-                Title = request.Title,
-                Message = request.Message,
-                ActionUrl = $"/events/{eventId}/gameday",
-                ReferenceType = "Event",
-                ReferenceId = eventId
-            });
+            await _notificationService.CreateAndSendAsync(
+                targetUserId,
+                "EventUpdate",
+                request.Title,
+                request.Message,
+                $"/events/{eventId}/gameday",
+                "Event",
+                eventId
+            );
         }
 
         return Ok(new ApiResponse<object>
@@ -710,16 +709,15 @@ public class TournamentGameDayController : ControllerBase
 
         foreach (var playerId in playerIds)
         {
-            await _notificationService.CreateAndSendAsync(new Notification
-            {
-                UserId = playerId,
-                Type = NotificationType.GameReady,
-                Title = "Game Queued",
-                Message = $"Your game is queued on {court.Name}. Please proceed to the court.",
-                ActionUrl = $"/events/{match.EventId}/gameday",
-                ReferenceType = "Game",
-                ReferenceId = game.Id
-            });
+            await _notificationService.CreateAndSendAsync(
+                playerId,
+                "GameReady",
+                "Game Queued",
+                $"Your game is queued on {court.CourtLabel}. Please proceed to the court.",
+                $"/events/{match.EventId}/gameday",
+                "Game",
+                game.Id
+            );
         }
     }
 
@@ -742,16 +740,15 @@ public class TournamentGameDayController : ControllerBase
 
         foreach (var playerId in playerIds)
         {
-            await _notificationService.CreateAndSendAsync(new Notification
-            {
-                UserId = playerId,
-                Type = NotificationType.GameReady,
-                Title = "Game Started",
-                Message = "Your game has started. Good luck!",
-                ActionUrl = $"/events/{match.EventId}/gameday",
-                ReferenceType = "Game",
-                ReferenceId = game.Id
-            });
+            await _notificationService.CreateAndSendAsync(
+                playerId,
+                "GameReady",
+                "Game Started",
+                "Your game has started. Good luck!",
+                $"/events/{match.EventId}/gameday",
+                "Game",
+                game.Id
+            );
         }
     }
 
@@ -771,16 +768,15 @@ public class TournamentGameDayController : ControllerBase
 
         foreach (var spectatorId in subscriptions)
         {
-            await _notificationService.CreateAndSendAsync(new Notification
-            {
-                UserId = spectatorId,
-                Type = NotificationType.EventUpdate,
-                Title = "Score Update",
-                Message = $"Score: {game.Unit1Score} - {game.Unit2Score}",
-                ActionUrl = $"/events/{game.Match!.EventId}/scoreboard",
-                ReferenceType = "Game",
-                ReferenceId = game.Id
-            });
+            await _notificationService.CreateAndSendAsync(
+                spectatorId,
+                "EventUpdate",
+                "Score Update",
+                $"Score: {game.Unit1Score} - {game.Unit2Score}",
+                $"/events/{game.Match!.EventId}/scoreboard",
+                "Game",
+                game.Id
+            );
         }
     }
 
