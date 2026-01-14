@@ -933,6 +933,22 @@ public class GameDayController : ControllerBase
                 CreatedAt = DateTime.Now
             };
             _context.EventMatches.Add(match);
+            await _context.SaveChangesAsync(); // Save to get match.Id
+
+            // Create game(s) based on BestOf
+            for (int i = 1; i <= match.BestOf; i++)
+            {
+                var game = new EventGame
+                {
+                    MatchId = match.Id,
+                    GameNumber = i,
+                    TournamentCourtId = i == 1 ? court.Id : null,
+                    Status = i == 1 ? "Scheduled" : "New",
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+                _context.EventGames.Add(game);
+            }
 
             // Update court status
             court.Status = "InUse";
