@@ -174,6 +174,7 @@ public class EventDivisionDto
     public decimal? DivisionFee { get; set; }
     public int SortOrder { get; set; }
     public int RegisteredCount { get; set; }
+    public int RegisteredPlayerCount { get; set; }
     public int LookingForPartnerCount { get; set; }
     public int WaitlistedCount { get; set; }
 

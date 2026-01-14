@@ -592,6 +592,7 @@ public class EventsController : ControllerBase
                         DivisionFee = d.DivisionFee,
                         SortOrder = d.SortOrder,
                         RegisteredCount = d.Units.Count(u => u.Status != "Cancelled"),
+                        RegisteredPlayerCount = d.Units.Where(u => u.Status != "Cancelled").SelectMany(u => u.Members).Count(m => m.InviteStatus == "Accepted"),
                         LookingForPartnerCount = d.PartnerRequests.Count(p => p.IsLookingForPartner && p.Status == "Open"),
                         Rewards = d.Rewards.Where(r => r.IsActive).OrderBy(r => r.Placement).Select(r => new DivisionRewardDto
                         {
@@ -1000,6 +1001,22 @@ public class EventsController : ControllerBase
             var division = await _context.EventDivisions.FindAsync(dto.DivisionId);
             if (division == null || division.EventId != id || !division.IsActive)
                 return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Division not found" });
+
+            // Check MaxPlayers capacity
+            if (division.MaxPlayers.HasValue)
+            {
+                var currentPlayerCount = await _context.EventRegistrations
+                    .CountAsync(r => r.DivisionId == dto.DivisionId && r.Status != "Cancelled");
+
+                if (currentPlayerCount >= division.MaxPlayers.Value)
+                {
+                    return BadRequest(new ApiResponse<EventRegistrationDto>
+                    {
+                        Success = false,
+                        Message = $"Division '{division.Name}' has reached its maximum capacity of {division.MaxPlayers.Value} players."
+                    });
+                }
+            }
 
             // Check if already registered for this division
             var existingReg = await _context.EventRegistrations
@@ -1539,6 +1556,7 @@ public class EventsController : ControllerBase
                     DivisionFee = division.DivisionFee,
                     SortOrder = division.SortOrder,
                     RegisteredCount = 0,
+                    RegisteredPlayerCount = 0,
                     LookingForPartnerCount = 0,
                     Rewards = dto.Rewards.Select((r, i) => new DivisionRewardDto
                     {
@@ -1621,6 +1639,9 @@ public class EventsController : ControllerBase
             var registeredCount = await _context.EventUnits
                 .CountAsync(u => u.DivisionId == division.Id && u.Status != "Cancelled");
 
+            var registeredPlayerCount = await _context.EventUnitMembers
+                .CountAsync(m => m.Unit != null && m.Unit.DivisionId == division.Id && m.Unit.Status != "Cancelled" && m.InviteStatus == "Accepted");
+
             return Ok(new ApiResponse<EventDivisionDto>
             {
                 Success = true,
@@ -1641,6 +1662,7 @@ public class EventsController : ControllerBase
                     DivisionFee = division.DivisionFee,
                     SortOrder = division.SortOrder,
                     RegisteredCount = registeredCount,
+                    RegisteredPlayerCount = registeredPlayerCount,
                     // Tournament structure
                     DefaultScoreFormatId = division.DefaultScoreFormatId,
                     PoolCount = division.PoolCount,

@@ -3635,7 +3635,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                       <option value="all">All Divisions</option>
                       {event.divisions.map(div => (
                         <option key={div.id} value={div.id}>
-                          {div.name} ({div.registeredCount || 0} registered{div.maxUnits ? ` / ${div.maxUnits}` : ''})
+                          {div.name} ({div.registeredCount || 0} registered{div.maxUnits ? ` / ${div.maxUnits}` : ''}{div.maxPlayers ? `, ${div.registeredPlayerCount || 0}/${div.maxPlayers} players` : ''})
                         </option>
                       ))}
                     </select>
@@ -3708,7 +3708,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 const renderDivisionSection = (division, showDivisionHeader = false) => {
                   const teamUnit = division.teamUnitId ? teamUnits.find(t => t.id === division.teamUnitId) : null;
                   const teamSize = teamUnit?.totalPlayers || division.teamSize || 1;
-                  const isFull = division.maxUnits && division.registeredCount >= division.maxUnits;
+                  const isFullByUnits = division.maxUnits && division.registeredCount >= division.maxUnits;
+                  const isFullByPlayers = division.maxPlayers && division.registeredPlayerCount >= division.maxPlayers;
+                  const isFull = isFullByUnits || isFullByPlayers;
                   const canRegisterForThisDivision = canRegisterForDivision(division.id) && isAuthenticated && canRegister();
 
                   // Get all units, then filter, then sort
@@ -3765,7 +3767,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                         <div className="px-4 py-3 border-b bg-gray-50/50 flex items-center justify-between">
                           <h5 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                             <Users className="w-4 h-4" />
-                            {division.registeredCount || 0} {teamSize > 2 ? 'Teams' : teamSize === 2 ? 'Pairs' : 'Players'} Registered
+                            {division.registeredCount || 0}{division.maxUnits ? `/${division.maxUnits}` : ''} {teamSize > 2 ? 'Teams' : teamSize === 2 ? 'Pairs' : 'Players'} Registered
+                            {division.maxPlayers && <span className="text-gray-500 ml-1">({division.registeredPlayerCount || 0}/{division.maxPlayers} players)</span>}
+                            {isFull && <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">FULL</span>}
                             {division.waitlistedCount > 0 && <span className="text-yellow-600">(+{division.waitlistedCount} waitlisted)</span>}
                             {(regTabSearchQuery || regTabStatusFilter) && sortedUnits.length !== allUnits.length && (
                               <span className="text-gray-500">({sortedUnits.length} shown)</span>
