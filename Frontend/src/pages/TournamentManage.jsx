@@ -3,10 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
   ChevronDown, ChevronUp, RefreshCw, Shuffle, Settings, Target,
-  AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid
+  AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
+  Award, ArrowRight, Lock, Unlock, Save
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { tournamentApi, eventsApi, getSharedAssetUrl } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
+import { tournamentApi, tournamentGameDayApi, eventsApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DrawingModal from '../components/DrawingModal';
 
@@ -14,9 +16,17 @@ export default function TournamentManage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
+
+  // Pool management state
+  const [poolStandings, setPoolStandings] = useState(null);
+  const [calculatingRankings, setCalculatingRankings] = useState(false);
+  const [finalizingPools, setFinalizingPools] = useState(false);
+  const [editingRank, setEditingRank] = useState(null);
+  const [showAdvancementPreview, setShowAdvancementPreview] = useState(false);
   const [event, setEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDivision, setSelectedDivision] = useState(null);
@@ -94,6 +104,93 @@ export default function TournamentManage() {
       console.error('Error loading schedule:', err);
     } finally {
       setLoadingSchedule(false);
+    }
+  };
+
+  // Pool management functions
+  const handleCalculateRankings = async () => {
+    if (!selectedDivision) return;
+
+    setCalculatingRankings(true);
+    try {
+      const response = await tournamentGameDayApi.calculatePoolRankings(eventId, selectedDivision.id);
+      if (response.success) {
+        setPoolStandings(response.data);
+        toast.success('Pool rankings calculated');
+        loadSchedule(selectedDivision.id);
+      } else {
+        toast.error(response.message || 'Failed to calculate rankings');
+      }
+    } catch (err) {
+      console.error('Error calculating rankings:', err);
+      toast.error('Failed to calculate rankings');
+    } finally {
+      setCalculatingRankings(false);
+    }
+  };
+
+  const handleFinalizePools = async () => {
+    if (!selectedDivision) return;
+
+    const advanceCount = selectedDivision.playoffFromPools || 2;
+    if (!confirm(`This will finalize pool play and advance the top ${advanceCount} team(s) from each pool to playoffs. Continue?`)) {
+      return;
+    }
+
+    setFinalizingPools(true);
+    try {
+      const response = await tournamentGameDayApi.finalizePools(eventId, selectedDivision.id);
+      if (response.success) {
+        toast.success(`${response.data?.advancedCount || 0} teams advanced to playoffs`);
+        setShowAdvancementPreview(false);
+        loadDashboard();
+        loadSchedule(selectedDivision.id);
+      } else {
+        toast.error(response.message || 'Failed to finalize pools');
+      }
+    } catch (err) {
+      console.error('Error finalizing pools:', err);
+      toast.error('Failed to finalize pools');
+    } finally {
+      setFinalizingPools(false);
+    }
+  };
+
+  const handleResetPools = async () => {
+    if (!selectedDivision) return;
+
+    if (!confirm('This will reset pool finalization and clear playoff assignments. Continue?')) {
+      return;
+    }
+
+    try {
+      const response = await tournamentGameDayApi.resetPools(eventId, selectedDivision.id);
+      if (response.success) {
+        toast.success('Pool finalization reset');
+        loadDashboard();
+        loadSchedule(selectedDivision.id);
+      } else {
+        toast.error(response.message || 'Failed to reset pools');
+      }
+    } catch (err) {
+      console.error('Error resetting pools:', err);
+      toast.error('Failed to reset pools');
+    }
+  };
+
+  const handleOverrideRank = async (unitId, poolRank) => {
+    try {
+      const response = await tournamentGameDayApi.overrideRank(unitId, { poolRank });
+      if (response.success) {
+        toast.success('Rank updated');
+        setEditingRank(null);
+        loadSchedule(selectedDivision.id);
+      } else {
+        toast.error(response.message || 'Failed to update rank');
+      }
+    } catch (err) {
+      console.error('Error updating rank:', err);
+      toast.error('Failed to update rank');
     }
   };
 
@@ -765,55 +862,192 @@ export default function TournamentManage() {
                     </div>
                   ))}
 
-                  {/* Pool Standings */}
+                  {/* Pool Standings Management */}
                   {schedule.poolStandings?.length > 0 && (
                     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                      <div className="px-4 py-3 bg-gray-50 border-b">
-                        <h3 className="font-medium text-gray-900">Pool Standings</h3>
+                      <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-gray-900">Pool Standings</h3>
+                          {selectedDivision?.scheduleStatus === 'PoolsFinalized' && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              Finalized
+                            </span>
+                          )}
+                        </div>
+                        {isOrganizer && (
+                          <div className="flex items-center gap-2">
+                            {selectedDivision?.scheduleStatus !== 'PoolsFinalized' ? (
+                              <>
+                                <button
+                                  onClick={handleCalculateRankings}
+                                  disabled={calculatingRankings}
+                                  className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                  {calculatingRankings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                  Calculate Rankings
+                                </button>
+                                <button
+                                  onClick={handleFinalizePools}
+                                  disabled={finalizingPools}
+                                  className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5 disabled:opacity-50"
+                                >
+                                  {finalizingPools ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
+                                  Finalize & Advance
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={handleResetPools}
+                                className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
+                              >
+                                <Unlock className="w-4 h-4" />
+                                Reset Finalization
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
+
+                      {/* Advancement Info */}
+                      {selectedDivision?.playoffFromPools && selectedDivision?.scheduleStatus !== 'PoolsFinalized' && (
+                        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-sm text-blue-700 flex items-center gap-2">
+                          <ArrowRight className="w-4 h-4" />
+                          Top {selectedDivision.playoffFromPools} from each pool will advance to playoffs
+                        </div>
+                      )}
+
                       <div className="p-4 space-y-6">
                         {schedule.poolStandings.map((pool, poolIdx) => (
                           <div key={poolIdx}>
-                            <h4 className="font-medium text-gray-700 mb-2">
+                            <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
                               {pool.poolName || `Pool ${pool.poolNumber}`}
+                              <span className="text-xs text-gray-400">({pool.standings?.length || 0} teams)</span>
                             </h4>
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
-                                <thead className="text-gray-500 border-b">
+                                <thead className="text-gray-500 border-b bg-gray-50">
                                   <tr>
-                                    <th className="text-left py-2 pr-4">#</th>
-                                    <th className="text-left py-2 pr-4">Team</th>
-                                    <th className="text-center py-2 px-2">W</th>
-                                    <th className="text-center py-2 px-2">L</th>
-                                    <th className="text-center py-2 px-2">GW</th>
-                                    <th className="text-center py-2 px-2">GL</th>
-                                    <th className="text-center py-2 px-2">+/-</th>
+                                    <th className="text-left py-2 px-2 w-12">#</th>
+                                    <th className="text-left py-2 px-2">Team</th>
+                                    <th className="text-center py-2 px-2" title="Matches Won">MW</th>
+                                    <th className="text-center py-2 px-2" title="Matches Lost">ML</th>
+                                    <th className="text-center py-2 px-2" title="Games Won">GW</th>
+                                    <th className="text-center py-2 px-2" title="Games Lost">GL</th>
+                                    <th className="text-center py-2 px-2" title="Game Differential">G+/-</th>
+                                    <th className="text-center py-2 px-2" title="Points For">PF</th>
+                                    <th className="text-center py-2 px-2" title="Points Against">PA</th>
+                                    <th className="text-center py-2 px-2" title="Point Differential">P+/-</th>
+                                    {isOrganizer && selectedDivision?.scheduleStatus !== 'PoolsFinalized' && (
+                                      <th className="text-center py-2 px-2 w-16">Edit</th>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {pool.standings?.map((standing, idx) => (
-                                    <tr key={idx} className="border-b last:border-0">
-                                      <td className="py-2 pr-4 font-medium text-gray-400">{standing.rank}</td>
-                                      <td className="py-2 pr-4 text-gray-900">
-                                        {standing.unitName || `Unit #${standing.unitNumber}`}
-                                      </td>
-                                      <td className="py-2 px-2 text-center text-green-600">{standing.matchesWon}</td>
-                                      <td className="py-2 px-2 text-center text-red-600">{standing.matchesLost}</td>
-                                      <td className="py-2 px-2 text-center text-gray-600">{standing.gamesWon}</td>
-                                      <td className="py-2 px-2 text-center text-gray-600">{standing.gamesLost}</td>
-                                      <td className={`py-2 px-2 text-center ${
-                                        standing.pointDifferential > 0 ? 'text-green-600' :
-                                        standing.pointDifferential < 0 ? 'text-red-600' : 'text-gray-400'
-                                      }`}>
-                                        {standing.pointDifferential > 0 ? '+' : ''}{standing.pointDifferential}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {pool.standings?.map((standing, idx) => {
+                                    const willAdvance = selectedDivision?.playoffFromPools &&
+                                      standing.rank <= selectedDivision.playoffFromPools;
+                                    const isEditing = editingRank?.unitId === standing.unitId;
+
+                                    return (
+                                      <tr
+                                        key={idx}
+                                        className={`border-b last:border-0 ${
+                                          willAdvance ? 'bg-green-50' : ''
+                                        } ${standing.advancedToPlayoff ? 'bg-green-100' : ''}`}
+                                      >
+                                        <td className="py-2 px-2">
+                                          {isEditing ? (
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              value={editingRank.rank}
+                                              onChange={(e) => setEditingRank({ ...editingRank, rank: parseInt(e.target.value) || 1 })}
+                                              className="w-12 px-1 py-0.5 text-center border border-gray-300 rounded"
+                                              autoFocus
+                                            />
+                                          ) : (
+                                            <span className={`font-medium ${willAdvance ? 'text-green-600' : 'text-gray-400'}`}>
+                                              {standing.rank}
+                                              {standing.advancedToPlayoff && <Award className="w-3 h-3 inline ml-1 text-green-600" />}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                          <div className="text-gray-900 font-medium">
+                                            {standing.unitName || `Unit #${standing.unitNumber}`}
+                                          </div>
+                                          {standing.players && (
+                                            <div className="text-xs text-gray-500">{standing.players}</div>
+                                          )}
+                                        </td>
+                                        <td className="py-2 px-2 text-center font-medium text-green-600">{standing.matchesWon}</td>
+                                        <td className="py-2 px-2 text-center text-red-600">{standing.matchesLost}</td>
+                                        <td className="py-2 px-2 text-center text-gray-600">{standing.gamesWon}</td>
+                                        <td className="py-2 px-2 text-center text-gray-600">{standing.gamesLost}</td>
+                                        <td className={`py-2 px-2 text-center font-medium ${
+                                          (standing.gamesWon - standing.gamesLost) > 0 ? 'text-green-600' :
+                                          (standing.gamesWon - standing.gamesLost) < 0 ? 'text-red-600' : 'text-gray-400'
+                                        }`}>
+                                          {(standing.gamesWon - standing.gamesLost) > 0 ? '+' : ''}{standing.gamesWon - standing.gamesLost}
+                                        </td>
+                                        <td className="py-2 px-2 text-center text-gray-600">{standing.pointsFor || 0}</td>
+                                        <td className="py-2 px-2 text-center text-gray-600">{standing.pointsAgainst || 0}</td>
+                                        <td className={`py-2 px-2 text-center font-medium ${
+                                          standing.pointDifferential > 0 ? 'text-green-600' :
+                                          standing.pointDifferential < 0 ? 'text-red-600' : 'text-gray-400'
+                                        }`}>
+                                          {standing.pointDifferential > 0 ? '+' : ''}{standing.pointDifferential}
+                                        </td>
+                                        {isOrganizer && selectedDivision?.scheduleStatus !== 'PoolsFinalized' && (
+                                          <td className="py-2 px-2 text-center">
+                                            {isEditing ? (
+                                              <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                  onClick={() => handleOverrideRank(standing.unitId, editingRank.rank)}
+                                                  className="p-1 text-green-600 hover:bg-green-100 rounded"
+                                                  title="Save"
+                                                >
+                                                  <Save className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                  onClick={() => setEditingRank(null)}
+                                                  className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                                  title="Cancel"
+                                                >
+                                                  <X className="w-4 h-4" />
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                onClick={() => setEditingRank({ unitId: standing.unitId, rank: standing.rank })}
+                                                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                                                title="Edit rank"
+                                              >
+                                                <Edit2 className="w-4 h-4" />
+                                              </button>
+                                            )}
+                                          </td>
+                                        )}
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
                           </div>
                         ))}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500 flex items-center gap-4">
+                        <span>MW = Matches Won</span>
+                        <span>GW = Games Won</span>
+                        <span>PF = Points For</span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 rounded bg-green-100 border border-green-200"></span>
+                          Will advance to playoffs
+                        </span>
                       </div>
                     </div>
                   )}

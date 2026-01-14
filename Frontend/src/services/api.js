@@ -1961,6 +1961,16 @@ export const gameDayApi = {
   // Override rank (TD only)
   overrideRank: (unitId, data) => api.post(`/tournament-gameday/override-rank/${unitId}`, data),
 
+  // Pool management
+  calculatePoolRankings: (eventId, divisionId) =>
+    api.post(`/tournament-gameday/calculate-pool-rankings/${eventId}/${divisionId}`),
+
+  finalizePools: (eventId, divisionId, advancePerPool = null) =>
+    api.post(`/tournament-gameday/finalize-pools/${eventId}/${divisionId}`, { advancePerPool }),
+
+  resetPools: (eventId, divisionId) =>
+    api.post(`/tournament-gameday/reset-pools/${eventId}/${divisionId}`),
+
   // Send notification
   sendNotification: (eventId, data) => api.post(`/tournament-gameday/notify/${eventId}`, data)
 }

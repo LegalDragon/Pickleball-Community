@@ -624,6 +624,383 @@ public class TournamentGameDayController : ControllerBase
     }
 
     /// <summary>
+    /// Calculate and assign pool rankings based on current statistics
+    /// </summary>
+    [HttpPost("calculate-pool-rankings/{eventId}/{divisionId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<PoolStandingsResultDto>>>> CalculatePoolRankings(int eventId, int divisionId)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var division = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<PoolStandingsResultDto>> { Success = false, Message = "Division not found" });
+
+        // Get all units in this division grouped by pool
+        var units = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .ToListAsync();
+
+        // Get head-to-head results for tiebreakers
+        var poolMatches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool" && m.Status == "Completed")
+            .ToListAsync();
+
+        var poolStandings = new List<PoolStandingsResultDto>();
+
+        // Group by pool and calculate rankings
+        var pools = units.GroupBy(u => u.PoolNumber ?? 0).OrderBy(g => g.Key);
+
+        foreach (var pool in pools)
+        {
+            var poolUnits = pool.ToList();
+
+            // Sort by: Matches Won, then Game Diff, then Point Diff, then Head-to-Head
+            var rankedUnits = poolUnits
+                .OrderByDescending(u => u.MatchesWon)
+                .ThenByDescending(u => u.GamesWon - u.GamesLost)
+                .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
+                .ToList();
+
+            // Handle tiebreakers with head-to-head
+            rankedUnits = ApplyHeadToHeadTiebreaker(rankedUnits, poolMatches);
+
+            // Assign pool ranks
+            for (int i = 0; i < rankedUnits.Count; i++)
+            {
+                rankedUnits[i].PoolRank = i + 1;
+                rankedUnits[i].UpdatedAt = DateTime.Now;
+            }
+
+            poolStandings.Add(new PoolStandingsResultDto
+            {
+                PoolNumber = pool.Key,
+                PoolName = poolUnits.FirstOrDefault()?.PoolName ?? $"Pool {pool.Key}",
+                Units = rankedUnits.Select(u => new PoolUnitRankDto
+                {
+                    UnitId = u.Id,
+                    UnitName = u.Name,
+                    PoolRank = u.PoolRank ?? 0,
+                    MatchesWon = u.MatchesWon,
+                    MatchesLost = u.MatchesLost,
+                    GamesWon = u.GamesWon,
+                    GamesLost = u.GamesLost,
+                    GameDiff = u.GamesWon - u.GamesLost,
+                    PointsFor = u.PointsScored,
+                    PointsAgainst = u.PointsAgainst,
+                    PointDiff = u.PointsScored - u.PointsAgainst,
+                    Players = u.Members
+                        .Where(m => m.InviteStatus == "Accepted")
+                        .Select(m => Utility.FormatName(m.User?.LastName, m.User?.FirstName) ?? "")
+                        .ToList()
+                }).ToList()
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<List<PoolStandingsResultDto>>
+        {
+            Success = true,
+            Data = poolStandings,
+            Message = "Pool rankings calculated"
+        });
+    }
+
+    /// <summary>
+    /// Finalize pool play and advance teams to playoffs
+    /// </summary>
+    [HttpPost("finalize-pools/{eventId}/{divisionId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<AdvancementResultDto>>> FinalizePools(int eventId, int divisionId, [FromBody] FinalizePoolsRequest? request = null)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var division = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<AdvancementResultDto> { Success = false, Message = "Division not found" });
+
+        // Check if pools already finalized
+        if (division.ScheduleStatus == "PoolsFinalized")
+            return BadRequest(new ApiResponse<AdvancementResultDto> { Success = false, Message = "Pools have already been finalized" });
+
+        var advanceCount = request?.AdvancePerPool ?? division.PlayoffFromPools ?? 2;
+
+        // Get units with their current pool rankings
+        var units = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
+            .OrderBy(u => u.PoolNumber)
+            .ThenBy(u => u.PoolRank)
+            .ToListAsync();
+
+        // Group by pool and select top N from each
+        var pools = units.GroupBy(u => u.PoolNumber ?? 0).OrderBy(g => g.Key).ToList();
+        var advancingUnits = new List<EventUnit>();
+
+        foreach (var pool in pools)
+        {
+            var poolUnits = pool.OrderBy(u => u.PoolRank ?? 999).Take(advanceCount).ToList();
+            foreach (var unit in poolUnits)
+            {
+                unit.AdvancedToPlayoff = true;
+                advancingUnits.Add(unit);
+            }
+        }
+
+        // Assign overall rankings for seeding (Pool A #1, Pool B #1, Pool A #2, Pool B #2, etc.)
+        var overallRank = 1;
+        for (int rank = 1; rank <= advanceCount; rank++)
+        {
+            foreach (var pool in pools)
+            {
+                var unit = pool.FirstOrDefault(u => u.PoolRank == rank);
+                if (unit != null && unit.AdvancedToPlayoff)
+                {
+                    unit.OverallRank = overallRank++;
+                }
+            }
+        }
+
+        // Update division status
+        division.ScheduleStatus = "PoolsFinalized";
+
+        // Get playoff matches and assign units based on seeding
+        var playoffMatches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
+            .OrderBy(m => m.BracketPosition)
+            .ToListAsync();
+
+        var assignedMatches = new List<PlayoffMatchAssignmentDto>();
+
+        if (playoffMatches.Any())
+        {
+            // Standard seeding: 1v8, 4v5, 3v6, 2v7 for 8 teams
+            var bracketSize = playoffMatches.Count * 2;
+            var seedPositions = GetSeededBracketPositions(bracketSize);
+
+            for (int i = 0; i < playoffMatches.Count && i < seedPositions.Count; i++)
+            {
+                var match = playoffMatches[i];
+                var (seed1, seed2) = seedPositions[i];
+
+                var unit1 = advancingUnits.FirstOrDefault(u => u.OverallRank == seed1);
+                var unit2 = advancingUnits.FirstOrDefault(u => u.OverallRank == seed2);
+
+                if (unit1 != null)
+                {
+                    match.Unit1Id = unit1.Id;
+                    match.Unit1Number = seed1;
+                }
+                if (unit2 != null)
+                {
+                    match.Unit2Id = unit2.Id;
+                    match.Unit2Number = seed2;
+                }
+
+                match.UpdatedAt = DateTime.Now;
+
+                assignedMatches.Add(new PlayoffMatchAssignmentDto
+                {
+                    MatchId = match.Id,
+                    BracketPosition = match.BracketPosition ?? 0,
+                    Unit1Seed = seed1,
+                    Unit1Name = unit1?.Name,
+                    Unit2Seed = seed2,
+                    Unit2Name = unit2?.Name
+                });
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("TD {UserId} finalized pools for division {DivisionId}, {Count} teams advancing",
+            userId, divisionId, advancingUnits.Count);
+
+        return Ok(new ApiResponse<AdvancementResultDto>
+        {
+            Success = true,
+            Data = new AdvancementResultDto
+            {
+                AdvancedCount = advancingUnits.Count,
+                AdvancedUnits = advancingUnits.Select(u => new AdvancedUnitDto
+                {
+                    UnitId = u.Id,
+                    UnitName = u.Name,
+                    PoolNumber = u.PoolNumber ?? 0,
+                    PoolRank = u.PoolRank ?? 0,
+                    OverallSeed = u.OverallRank ?? 0
+                }).OrderBy(u => u.OverallSeed).ToList(),
+                PlayoffMatches = assignedMatches
+            },
+            Message = $"{advancingUnits.Count} teams advanced to playoffs"
+        });
+    }
+
+    /// <summary>
+    /// Reset pool finalization (allows re-editing of pool rankings)
+    /// </summary>
+    [HttpPost("reset-pools/{eventId}/{divisionId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> ResetPools(int eventId, int divisionId)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var division = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Division not found" });
+
+        // Check if any playoff matches have been played
+        var playedPlayoffMatches = await _context.EventMatches
+            .AnyAsync(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.Status == "Completed");
+
+        if (playedPlayoffMatches)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Cannot reset pools after playoff matches have been played" });
+
+        // Reset units
+        var units = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId)
+            .ToListAsync();
+
+        foreach (var unit in units)
+        {
+            unit.AdvancedToPlayoff = false;
+            unit.ManuallyAdvanced = false;
+            unit.OverallRank = null;
+            unit.UpdatedAt = DateTime.Now;
+        }
+
+        // Clear playoff match assignments
+        var playoffMatches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
+            .ToListAsync();
+
+        foreach (var match in playoffMatches)
+        {
+            match.Unit1Id = null;
+            match.Unit2Id = null;
+            match.UpdatedAt = DateTime.Now;
+        }
+
+        // Reset division status
+        division.ScheduleStatus = "UnitsAssigned";
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object> { Success = true, Message = "Pool finalization reset" });
+    }
+
+    private List<EventUnit> ApplyHeadToHeadTiebreaker(List<EventUnit> units, List<EventMatch> matches)
+    {
+        // Simple implementation: when two teams are tied, check head-to-head
+        var result = new List<EventUnit>();
+        var remaining = units.ToList();
+
+        while (remaining.Any())
+        {
+            var current = remaining.First();
+            remaining.RemoveAt(0);
+
+            // Find teams tied with current
+            var tied = remaining.Where(u =>
+                u.MatchesWon == current.MatchesWon &&
+                (u.GamesWon - u.GamesLost) == (current.GamesWon - current.GamesLost) &&
+                (u.PointsScored - u.PointsAgainst) == (current.PointsScored - current.PointsAgainst)
+            ).ToList();
+
+            if (tied.Any())
+            {
+                // Check head-to-head between tied teams
+                var tiedGroup = new List<EventUnit> { current };
+                tiedGroup.AddRange(tied);
+                remaining = remaining.Except(tied).ToList();
+
+                // Sort tied group by head-to-head wins against each other
+                var sortedTied = tiedGroup.OrderByDescending(u =>
+                {
+                    var h2hWins = 0;
+                    foreach (var opponent in tiedGroup.Where(o => o.Id != u.Id))
+                    {
+                        var h2hMatch = matches.FirstOrDefault(m =>
+                            (m.Unit1Id == u.Id && m.Unit2Id == opponent.Id) ||
+                            (m.Unit2Id == u.Id && m.Unit1Id == opponent.Id));
+                        if (h2hMatch?.WinnerUnitId == u.Id)
+                            h2hWins++;
+                    }
+                    return h2hWins;
+                }).ToList();
+
+                result.AddRange(sortedTied);
+            }
+            else
+            {
+                result.Add(current);
+            }
+        }
+
+        return result;
+    }
+
+    private List<(int, int)> GetSeededBracketPositions(int bracketSize)
+    {
+        // Standard tournament seeding positions
+        // For 8 teams: (1,8), (4,5), (3,6), (2,7)
+        // For 4 teams: (1,4), (2,3)
+        var positions = new List<(int, int)>();
+
+        if (bracketSize == 2)
+        {
+            positions.Add((1, 2));
+        }
+        else if (bracketSize == 4)
+        {
+            positions.Add((1, 4));
+            positions.Add((2, 3));
+        }
+        else if (bracketSize == 8)
+        {
+            positions.Add((1, 8));
+            positions.Add((4, 5));
+            positions.Add((3, 6));
+            positions.Add((2, 7));
+        }
+        else if (bracketSize == 16)
+        {
+            positions.Add((1, 16));
+            positions.Add((8, 9));
+            positions.Add((4, 13));
+            positions.Add((5, 12));
+            positions.Add((3, 14));
+            positions.Add((6, 11));
+            positions.Add((7, 10));
+            positions.Add((2, 15));
+        }
+        else
+        {
+            // Generic fallback for other sizes
+            for (int i = 0; i < bracketSize / 2; i++)
+            {
+                positions.Add((i + 1, bracketSize - i));
+            }
+        }
+
+        return positions;
+    }
+
+    /// <summary>
     /// Send notification to players in event
     /// </summary>
     [HttpPost("notify/{eventId}")]
@@ -1060,4 +1437,59 @@ public class SendNotificationRequest
     public int? TargetId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+}
+
+// Pool Standings DTOs
+public class PoolStandingsResultDto
+{
+    public int PoolNumber { get; set; }
+    public string PoolName { get; set; } = string.Empty;
+    public List<PoolUnitRankDto> Units { get; set; } = new();
+}
+
+public class PoolUnitRankDto
+{
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int PoolRank { get; set; }
+    public int MatchesWon { get; set; }
+    public int MatchesLost { get; set; }
+    public int GamesWon { get; set; }
+    public int GamesLost { get; set; }
+    public int GameDiff { get; set; }
+    public int PointsFor { get; set; }
+    public int PointsAgainst { get; set; }
+    public int PointDiff { get; set; }
+    public List<string> Players { get; set; } = new();
+}
+
+public class FinalizePoolsRequest
+{
+    public int? AdvancePerPool { get; set; }
+}
+
+public class AdvancementResultDto
+{
+    public int AdvancedCount { get; set; }
+    public List<AdvancedUnitDto> AdvancedUnits { get; set; } = new();
+    public List<PlayoffMatchAssignmentDto> PlayoffMatches { get; set; } = new();
+}
+
+public class AdvancedUnitDto
+{
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int PoolNumber { get; set; }
+    public int PoolRank { get; set; }
+    public int OverallSeed { get; set; }
+}
+
+public class PlayoffMatchAssignmentDto
+{
+    public int MatchId { get; set; }
+    public int BracketPosition { get; set; }
+    public int Unit1Seed { get; set; }
+    public string? Unit1Name { get; set; }
+    public int Unit2Seed { get; set; }
+    public string? Unit2Name { get; set; }
 }
