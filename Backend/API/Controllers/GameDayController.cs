@@ -926,15 +926,18 @@ public class GameDayController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Load the created matches with all related data for response
-        var matchIds = createdMatches.Select(m => m.Id).ToList();
-        var loadedMatches = await _context.EventMatches
+        // Use HashSet for efficient Contains check in memory (avoids EF Core CTE generation issues)
+        var matchIdSet = createdMatches.Select(m => m.Id).ToHashSet();
+        var loadedMatches = (await _context.EventMatches
             .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Division)
             .Include(m => m.Games)
-            .Where(m => matchIds.Contains(m.Id))
-            .ToListAsync();
+            .Where(m => m.EventId == eventId)
+            .ToListAsync())
+            .Where(m => matchIdSet.Contains(m.Id))
+            .ToList();
 
         return Ok(new
         {
