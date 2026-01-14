@@ -21,7 +21,15 @@ const gamedayApi = {
   assignCourt: (matchId, data) => api.put(`/gameday/games/${matchId}/court`, data),
   deleteGame: (matchId) => api.delete(`/gameday/games/${matchId}`),
   createScoreFormat: (eventId, data) => api.post(`/gameday/events/${eventId}/score-formats`, data),
-  setDivisionScoreFormat: (divisionId, data) => api.put(`/gameday/divisions/${divisionId}/score-format`, data)
+  setDivisionScoreFormat: (divisionId, data) => api.put(`/gameday/divisions/${divisionId}/score-format`, data),
+  generateRound: (eventId, data) => api.post(`/gameday/events/${eventId}/generate-round`, data),
+  getAvailablePlayers: (eventId, divisionId, checkedInOnly) =>
+    api.get(`/gameday/events/${eventId}/players`, { params: { divisionId, checkedInOnly } }),
+  createManualGame: (eventId, data) => api.post(`/gameday/events/${eventId}/manual-game`, data),
+  checkInPlayer: (eventId, userId) => api.post(`/gameday/events/${eventId}/check-in`, { userId }),
+  bulkCheckIn: (eventId, userIds) => api.post(`/gameday/events/${eventId}/bulk-check-in`, { userIds }),
+  checkInAll: (eventId) => api.post(`/gameday/events/${eventId}/check-in-all`),
+  undoCheckIn: (eventId, userId) => api.post(`/gameday/events/${eventId}/undo-check-in`, { userId })
 };
 
 const TABS = [
@@ -220,6 +228,8 @@ const GameDayManage = () => {
             data={data}
             selectedDivision={selectedDivision}
             setSelectedDivision={setSelectedDivision}
+            eventId={eventId}
+            onRefresh={loadData}
           />
         )}
         {activeTab === 'courts' && (
@@ -239,6 +249,7 @@ const GameDayManage = () => {
             onNewGame={() => setShowNewGame(true)}
             onGameClick={(g) => setShowScoreEdit(g)}
             onRefresh={loadData}
+            eventId={eventId}
           />
         )}
         {activeTab === 'settings' && (
@@ -349,24 +360,98 @@ const OverviewTab = ({ data, onGameClick }) => {
   );
 };
 
-const PlayersTab = ({ data, selectedDivision, setSelectedDivision }) => {
+const PlayersTab = ({ data, selectedDivision, setSelectedDivision, eventId, onRefresh }) => {
+  const [checkingIn, setCheckingIn] = useState(null);
+  const [bulkCheckingIn, setBulkCheckingIn] = useState(false);
+
+  // Calculate stats
+  const selectedDivisionData = data.divisions.find(d => d.id === selectedDivision);
+  const allPlayers = selectedDivisionData?.units.flatMap(u => u.members) || [];
+  const checkedInCount = allPlayers.filter(m => m.isCheckedIn).length;
+  const totalCount = allPlayers.length;
+
+  const handleToggleCheckIn = async (userId, isCurrentlyCheckedIn) => {
+    setCheckingIn(userId);
+    try {
+      if (isCurrentlyCheckedIn) {
+        await gamedayApi.undoCheckIn(eventId, userId);
+      } else {
+        await gamedayApi.checkInPlayer(eventId, userId);
+      }
+      onRefresh?.();
+    } catch (err) {
+      console.error('Error toggling check-in:', err);
+    } finally {
+      setCheckingIn(null);
+    }
+  };
+
+  const handleBulkCheckIn = async () => {
+    const uncheckedPlayers = allPlayers.filter(m => !m.isCheckedIn);
+    if (uncheckedPlayers.length === 0) return;
+
+    setBulkCheckingIn(true);
+    try {
+      await gamedayApi.checkInAll(eventId);
+      onRefresh?.();
+    } catch (err) {
+      console.error('Error bulk checking in:', err);
+    } finally {
+      setBulkCheckingIn(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Check-in Stats */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-2xl font-bold text-gray-900">
+              {checkedInCount} / {totalCount}
+            </div>
+            <div className="text-sm text-gray-500">Players checked in</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-32 h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 transition-all"
+                style={{ width: `${totalCount > 0 ? (checkedInCount / totalCount) * 100 : 0}%` }}
+              />
+            </div>
+            {checkedInCount < totalCount && (
+              <button
+                onClick={handleBulkCheckIn}
+                disabled={bulkCheckingIn}
+                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+              >
+                {bulkCheckingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Check In All
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Division Selector */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {data.divisions.map(div => (
-          <button
-            key={div.id}
-            onClick={() => setSelectedDivision(div.id)}
-            className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-              selectedDivision === div.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            {div.name} ({div.units.length})
-          </button>
-        ))}
+        {data.divisions.map(div => {
+          const divPlayers = div.units.flatMap(u => u.members);
+          const divCheckedIn = divPlayers.filter(m => m.isCheckedIn).length;
+          return (
+            <button
+              key={div.id}
+              onClick={() => setSelectedDivision(div.id)}
+              className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                selectedDivision === div.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {div.name} ({divCheckedIn}/{divPlayers.length})
+            </button>
+          );
+        })}
       </div>
 
       {/* Units/Players List */}
@@ -374,32 +459,60 @@ const PlayersTab = ({ data, selectedDivision, setSelectedDivision }) => {
         .filter(d => d.id === selectedDivision)
         .map(division => (
           <div key={division.id} className="space-y-3">
-            {division.units.map(unit => (
-              <div key={unit.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="font-medium text-gray-900 mb-2">{unit.name}</div>
-                <div className="flex flex-wrap gap-3">
-                  {unit.members.map(member => (
-                    <div key={member.userId} className="flex items-center gap-2">
-                      {member.profileImageUrl ? (
-                        <img
-                          src={getSharedAssetUrl(member.profileImageUrl)}
-                          alt={member.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
-                          {member.name?.charAt(0) || '?'}
-                        </div>
-                      )}
-                      <span className="text-sm text-gray-700">{member.name}</span>
-                      {member.isCheckedIn && (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      )}
+            {division.units.map(unit => {
+              const unitCheckedIn = unit.members.filter(m => m.isCheckedIn).length;
+              const allCheckedIn = unitCheckedIn === unit.members.length;
+              return (
+                <div key={unit.id} className={`bg-white rounded-xl border p-4 ${allCheckedIn ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-medium text-gray-900 flex items-center gap-2">
+                      {unit.name}
+                      {allCheckedIn && <CheckCircle className="w-4 h-4 text-green-500" />}
                     </div>
-                  ))}
+                    <span className="text-xs text-gray-500">{unitCheckedIn}/{unit.members.length} checked in</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {unit.members.map(member => (
+                      <div
+                        key={member.userId}
+                        className={`flex items-center gap-2 p-2 rounded-lg ${member.isCheckedIn ? 'bg-green-100' : 'bg-gray-100'}`}
+                      >
+                        {member.profileImageUrl ? (
+                          <img
+                            src={getSharedAssetUrl(member.profileImageUrl)}
+                            alt={member.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium text-gray-600">
+                            {member.name?.charAt(0) || '?'}
+                          </div>
+                        )}
+                        <span className="text-sm text-gray-700">{member.name}</span>
+                        <button
+                          onClick={() => handleToggleCheckIn(member.userId, member.isCheckedIn)}
+                          disabled={checkingIn === member.userId}
+                          className={`p-1 rounded transition ${
+                            member.isCheckedIn
+                              ? 'text-green-600 hover:bg-green-200'
+                              : 'text-blue-600 hover:bg-blue-100'
+                          }`}
+                          title={member.isCheckedIn ? "Undo check-in" : "Check in"}
+                        >
+                          {checkingIn === member.userId ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : member.isCheckedIn ? (
+                            <CheckCircle className="w-4 h-4" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
     </div>
@@ -629,10 +742,67 @@ const CourtsTab = ({ data, onRefresh, eventId }) => {
 
 const GamesTab = ({
   data, filteredGames, gamesByCourt, selectedDivision, setSelectedDivision,
-  gameFilter, setGameFilter, viewMode, setViewMode, onNewGame, onGameClick, onRefresh
+  gameFilter, setGameFilter, viewMode, setViewMode, onNewGame, onGameClick, onRefresh, eventId
 }) => {
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+
+  const scheduleType = data.scheduleType || 'Manual Only';
+  const canGenerateRounds = scheduleType === 'Dynamic';
+  const canCreateManual = scheduleType !== 'None';
+
+  const handleGenerateRound = async (method) => {
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const response = await gamedayApi.generateRound(eventId, {
+        method, // 'popcorn' or 'gauntlet'
+        divisionId: selectedDivision,
+        teamSize: data.divisions.find(d => d.id === selectedDivision)?.teamSize || 2,
+        checkedInOnly: true,
+        maxGames: data.courts?.length || 4
+      });
+      if (response.success) {
+        onRefresh();
+      } else {
+        setGenerateError(response.message || 'Failed to generate round');
+      }
+    } catch (err) {
+      console.error('Error generating round:', err);
+      setGenerateError(err.response?.data?.message || 'Failed to generate round');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Schedule Type Banner */}
+      {scheduleType && (
+        <div className={`p-3 rounded-lg flex items-center gap-3 ${
+          scheduleType === 'Dynamic' ? 'bg-green-50 border border-green-200' :
+          scheduleType === 'PrePlanned' ? 'bg-blue-50 border border-blue-200' :
+          scheduleType === 'None' ? 'bg-gray-50 border border-gray-200' :
+          'bg-yellow-50 border border-yellow-200'
+        }`}>
+          <Info className="w-5 h-5 text-gray-600 flex-shrink-0" />
+          <div className="text-sm">
+            <span className="font-medium">{scheduleType} Scheduling:</span>{' '}
+            {scheduleType === 'Dynamic' && 'Use Popcorn (random) or Gauntlet (winners stay) to auto-generate rounds'}
+            {scheduleType === 'PrePlanned' && 'Schedule is set up before the event. Use manual adjustments if needed.'}
+            {scheduleType === 'Manual Only' && 'Create games manually by selecting players'}
+            {scheduleType === 'None' && 'No scheduling required for this event type'}
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {generateError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {generateError}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2 overflow-x-auto">
@@ -664,17 +834,50 @@ const GamesTab = ({
             <option value="by-court">By Court</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onNewGame}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            New Game
-          </button>
+
+        {/* Action Buttons based on ScheduleType */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {canGenerateRounds && (
+            <>
+              <button
+                onClick={() => handleGenerateRound('popcorn')}
+                disabled={generating || !selectedDivision}
+                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Random player matchups"
+              >
+                {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Popcorn
+              </button>
+              <button
+                onClick={() => handleGenerateRound('gauntlet')}
+                disabled={generating || !selectedDivision}
+                className="flex items-center gap-2 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Winners stay on court"
+              >
+                {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                Gauntlet
+              </button>
+            </>
+          )}
+          {canCreateManual && (
+            <button
+              onClick={onNewGame}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+              Manual Game
+            </button>
+          )}
           <HelpIcon topicCode="gameday.rotation" size="sm" />
         </div>
       </div>
+
+      {/* Generate Round Help Text */}
+      {canGenerateRounds && !selectedDivision && (
+        <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded-lg">
+          Select a division to enable automatic round generation
+        </div>
+      )}
 
       {/* Games */}
       {viewMode === 'list' ? (
@@ -684,7 +887,7 @@ const GamesTab = ({
           ))}
           {filteredGames.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No games found. Create a new game to get started.
+              No games found. {canGenerateRounds ? 'Generate a round or create a manual game to get started.' : 'Create a new game to get started.'}
             </div>
           )}
         </div>
@@ -1106,6 +1309,18 @@ const ScoreEditModal = ({ game, data, onClose, onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
 
   const availableCourts = data.courts.filter(c => c.status === 'Available' || c.id === game.courtId);
+  const isCompleted = game.status === 'Completed';
+  const isInProgress = game.status === 'InProgress';
+  const hasBestOf = game.bestOf > 1;
+
+  // Quick score adjustment
+  const adjustScore = (team, delta) => {
+    if (team === 1) {
+      setUnit1Score(prev => Math.max(0, prev + delta));
+    } else {
+      setUnit2Score(prev => Math.max(0, prev + delta));
+    }
+  };
 
   const handleSaveScore = async (finish = false) => {
     setSubmitting(true);
@@ -1142,58 +1357,168 @@ const ScoreEditModal = ({ game, data, onClose, onSuccess }) => {
     }
   };
 
+  const handleStartGame = async () => {
+    try {
+      await gamedayApi.updateGameStatus(game.id, { status: 'InProgress' });
+      onSuccess();
+    } catch (err) {
+      console.error('Error starting game:', err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-lg w-full p-6">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Edit Game</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Edit Game</h2>
+            {game.courtLabel && (
+              <span className="text-sm text-gray-500">{game.courtLabel}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[game.status] || 'bg-gray-100 text-gray-600'}`}>
+              {game.status}
+            </span>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Teams */}
-        <div className="flex items-center justify-between mb-6 text-center">
-          <div className="flex-1">
+        {/* Teams with winner highlight */}
+        <div className="flex items-center justify-between mb-4 text-center">
+          <div className={`flex-1 p-2 rounded-lg ${isCompleted && game.winnerUnitId === game.unit1?.id ? 'bg-green-100 ring-2 ring-green-500' : ''}`}>
             <div className="font-medium text-gray-900">{game.unit1?.name}</div>
-            <div className="text-sm text-gray-500">
+            <div className="text-xs text-gray-500">
               {game.unit1?.members?.map(m => m.name).join(', ')}
             </div>
+            {isCompleted && game.winnerUnitId === game.unit1?.id && (
+              <div className="text-xs text-green-600 font-medium mt-1">WINNER</div>
+            )}
           </div>
-          <div className="px-4 text-gray-400">vs</div>
-          <div className="flex-1">
+          <div className="px-4 text-gray-400 text-sm">vs</div>
+          <div className={`flex-1 p-2 rounded-lg ${isCompleted && game.winnerUnitId === game.unit2?.id ? 'bg-green-100 ring-2 ring-green-500' : ''}`}>
             <div className="font-medium text-gray-900">{game.unit2?.name}</div>
-            <div className="text-sm text-gray-500">
+            <div className="text-xs text-gray-500">
               {game.unit2?.members?.map(m => m.name).join(', ')}
+            </div>
+            {isCompleted && game.winnerUnitId === game.unit2?.id && (
+              <div className="text-xs text-green-600 font-medium mt-1">WINNER</div>
+            )}
+          </div>
+        </div>
+
+        {/* Best-of series info */}
+        {hasBestOf && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="text-center text-sm text-gray-600 mb-2">
+              Best of {game.bestOf} • Game {game.currentGameNumber}
+            </div>
+            <div className="flex justify-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{game.unit1Wins}</div>
+                <div className="text-xs text-gray-500">Games Won</div>
+              </div>
+              <div className="text-xl text-gray-300 self-center">-</div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{game.unit2Wins}</div>
+                <div className="text-xs text-gray-500">Games Won</div>
+              </div>
+            </div>
+            {/* Previous game scores */}
+            {game.games?.length > 1 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="text-xs text-gray-500 mb-1">Previous Games:</div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {game.games.filter(g => g.status === 'Finished').map(g => (
+                    <span key={g.gameNumber} className="px-2 py-1 bg-white rounded text-xs">
+                      G{g.gameNumber}: {g.unit1Score}-{g.unit2Score}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Score Input with +/- buttons */}
+        <div className="mb-6">
+          <div className="text-sm font-medium text-gray-700 mb-2 text-center">
+            {hasBestOf ? `Game ${game.currentGameNumber} Score` : 'Score'}
+          </div>
+          <div className="flex items-center justify-center gap-4">
+            <div className="text-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => adjustScore(1, -1)}
+                  disabled={isCompleted || unit1Score === 0}
+                  className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-xl font-bold"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  min="0"
+                  value={unit1Score}
+                  onChange={(e) => setUnit1Score(parseInt(e.target.value) || 0)}
+                  disabled={isCompleted}
+                  className="w-16 h-14 text-3xl font-bold text-center border border-gray-300 rounded-lg disabled:bg-gray-100"
+                />
+                <button
+                  onClick={() => adjustScore(1, 1)}
+                  disabled={isCompleted}
+                  className="w-10 h-10 rounded-lg bg-blue-100 hover:bg-blue-200 disabled:opacity-50 text-xl font-bold text-blue-700"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <span className="text-2xl text-gray-400">-</span>
+            <div className="text-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => adjustScore(2, -1)}
+                  disabled={isCompleted || unit2Score === 0}
+                  className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-xl font-bold"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  min="0"
+                  value={unit2Score}
+                  onChange={(e) => setUnit2Score(parseInt(e.target.value) || 0)}
+                  disabled={isCompleted}
+                  className="w-16 h-14 text-3xl font-bold text-center border border-gray-300 rounded-lg disabled:bg-gray-100"
+                />
+                <button
+                  onClick={() => adjustScore(2, 1)}
+                  disabled={isCompleted}
+                  className="w-10 h-10 rounded-lg bg-blue-100 hover:bg-blue-200 disabled:opacity-50 text-xl font-bold text-blue-700"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Score Input */}
-        <div className="flex items-center justify-center gap-4 mb-6">
-          <div className="text-center">
-            <input
-              type="number"
-              min="0"
-              value={unit1Score}
-              onChange={(e) => setUnit1Score(parseInt(e.target.value) || 0)}
-              className="w-20 h-16 text-3xl font-bold text-center border border-gray-300 rounded-lg"
-            />
+        {/* Quick Start Button */}
+        {!isInProgress && !isCompleted && game.courtId && (
+          <div className="mb-6">
+            <button
+              onClick={handleStartGame}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-lg font-medium"
+            >
+              <Play className="w-5 h-5" />
+              Start Game
+            </button>
           </div>
-          <span className="text-2xl text-gray-400">-</span>
-          <div className="text-center">
-            <input
-              type="number"
-              min="0"
-              value={unit2Score}
-              onChange={(e) => setUnit2Score(parseInt(e.target.value) || 0)}
-              className="w-20 h-16 text-3xl font-bold text-center border border-gray-300 rounded-lg"
-            />
-          </div>
-        </div>
+        )}
 
         {/* Court Assignment */}
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Court</label>
           <div className="flex gap-2">
             <select
@@ -1220,7 +1545,7 @@ const ScoreEditModal = ({ game, data, onClose, onSuccess }) => {
         {/* Status */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {['Pending', 'Queued', 'InProgress', 'Completed'].map(status => (
               <button
                 key={status}
@@ -1238,29 +1563,32 @@ const ScoreEditModal = ({ game, data, onClose, onSuccess }) => {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between gap-3">
+        <div className="flex justify-between gap-3 pt-4 border-t border-gray-200">
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
           >
             Close
           </button>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSaveScore(false)}
-              disabled={submitting}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-            >
-              Save Score
-            </button>
-            <button
-              onClick={() => handleSaveScore(true)}
-              disabled={submitting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Finish Game
-            </button>
-          </div>
+          {!isCompleted && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSaveScore(false)}
+                disabled={submitting}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => handleSaveScore(true)}
+                disabled={submitting}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Finish Game
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -108,6 +108,8 @@ public class GameDayController : ControllerBase
             EventId = evt.Id,
             EventName = evt.Name,
             EventTypeName = evt.EventType?.Name,
+            ScheduleType = evt.EventType?.ScheduleType,
+            DivisionMax = evt.EventType?.DivisionMax,
             StartDate = evt.StartDate,
             IsOrganizer = isOrganizer,
             Divisions = evt.Divisions.Select(d => new GameDayDivisionDto
@@ -1230,6 +1232,205 @@ public class GameDayController : ControllerBase
         });
     }
 
+    // ==========================================
+    // Check-In Management
+    // ==========================================
+
+    /// <summary>
+    /// Check in a single player to the event
+    /// </summary>
+    [HttpPost("events/{eventId}/check-in")]
+    public async Task<IActionResult> CheckInPlayer(int eventId, [FromBody] CheckInPlayerDto dto)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, organizerId.Value))
+            return Forbid();
+
+        // Find the player's membership in this event
+        var membership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .Include(m => m.User)
+            .FirstOrDefaultAsync(m => m.Unit!.EventId == eventId &&
+                                      m.UserId == dto.UserId &&
+                                      m.InviteStatus == "Accepted");
+
+        if (membership == null)
+            return NotFound(new { success = false, message = "Player not found in this event" });
+
+        if (membership.IsCheckedIn)
+            return Ok(new {
+                success = true,
+                message = "Player is already checked in",
+                data = new {
+                    userId = membership.UserId,
+                    name = Utility.FormatName(membership.User?.LastName, membership.User?.FirstName),
+                    isCheckedIn = true,
+                    checkedInAt = membership.CheckedInAt
+                }
+            });
+
+        membership.IsCheckedIn = true;
+        membership.CheckedInAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            success = true,
+            message = $"{Utility.FormatName(membership.User?.LastName, membership.User?.FirstName)} has been checked in",
+            data = new {
+                userId = membership.UserId,
+                name = Utility.FormatName(membership.User?.LastName, membership.User?.FirstName),
+                isCheckedIn = true,
+                checkedInAt = membership.CheckedInAt
+            }
+        });
+    }
+
+    /// <summary>
+    /// Bulk check-in multiple players
+    /// </summary>
+    [HttpPost("events/{eventId}/bulk-check-in")]
+    public async Task<IActionResult> BulkCheckIn(int eventId, [FromBody] BulkCheckInDto dto)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, organizerId.Value))
+            return Forbid();
+
+        if (dto.UserIds == null || dto.UserIds.Count == 0)
+            return BadRequest(new { success = false, message = "No players specified" });
+
+        var userIdSet = dto.UserIds.ToHashSet();
+
+        // Find all matching memberships
+        var memberships = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .Include(m => m.User)
+            .Where(m => m.Unit!.EventId == eventId &&
+                        userIdSet.Contains(m.UserId) &&
+                        m.InviteStatus == "Accepted")
+            .ToListAsync();
+
+        var checkedInCount = 0;
+        var alreadyCheckedIn = 0;
+        var now = DateTime.Now;
+
+        foreach (var membership in memberships)
+        {
+            if (membership.IsCheckedIn)
+            {
+                alreadyCheckedIn++;
+            }
+            else
+            {
+                membership.IsCheckedIn = true;
+                membership.CheckedInAt = now;
+                checkedInCount++;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        var notFound = dto.UserIds.Count - memberships.Count;
+
+        return Ok(new {
+            success = true,
+            message = $"Checked in {checkedInCount} player(s)" +
+                      (alreadyCheckedIn > 0 ? $", {alreadyCheckedIn} already checked in" : "") +
+                      (notFound > 0 ? $", {notFound} not found" : ""),
+            data = new {
+                checkedIn = checkedInCount,
+                alreadyCheckedIn,
+                notFound,
+                total = memberships.Count
+            }
+        });
+    }
+
+    /// <summary>
+    /// Check in all players (useful for events where everyone present should be checked in)
+    /// </summary>
+    [HttpPost("events/{eventId}/check-in-all")]
+    public async Task<IActionResult> CheckInAll(int eventId)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, organizerId.Value))
+            return Forbid();
+
+        var memberships = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .Where(m => m.Unit!.EventId == eventId &&
+                        m.InviteStatus == "Accepted" &&
+                        !m.IsCheckedIn)
+            .ToListAsync();
+
+        var now = DateTime.Now;
+        foreach (var membership in memberships)
+        {
+            membership.IsCheckedIn = true;
+            membership.CheckedInAt = now;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            success = true,
+            message = $"Checked in {memberships.Count} player(s)",
+            data = new {
+                checkedIn = memberships.Count
+            }
+        });
+    }
+
+    /// <summary>
+    /// Undo check-in for a player
+    /// </summary>
+    [HttpPost("events/{eventId}/undo-check-in")]
+    public async Task<IActionResult> UndoCheckIn(int eventId, [FromBody] CheckInPlayerDto dto)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        if (!await IsEventOrganizer(eventId, organizerId.Value))
+            return Forbid();
+
+        var membership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .Include(m => m.User)
+            .FirstOrDefaultAsync(m => m.Unit!.EventId == eventId &&
+                                      m.UserId == dto.UserId &&
+                                      m.InviteStatus == "Accepted");
+
+        if (membership == null)
+            return NotFound(new { success = false, message = "Player not found in this event" });
+
+        membership.IsCheckedIn = false;
+        membership.CheckedInAt = null;
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            success = true,
+            message = $"{Utility.FormatName(membership.User?.LastName, membership.User?.FirstName)} check-in has been undone",
+            data = new {
+                userId = membership.UserId,
+                name = Utility.FormatName(membership.User?.LastName, membership.User?.FirstName),
+                isCheckedIn = false
+            }
+        });
+    }
+
+    // ==========================================
+    // User Search & On-Site Registration
+    // ==========================================
+
     /// <summary>
     /// Search for users to add as on-site players
     /// </summary>
@@ -1421,6 +1622,8 @@ public class GameDayOverviewDto
     public int EventId { get; set; }
     public string EventName { get; set; } = string.Empty;
     public string? EventTypeName { get; set; }
+    public string? ScheduleType { get; set; }
+    public int? DivisionMax { get; set; }
     public DateTime StartDate { get; set; }
     public bool IsOrganizer { get; set; }
     public List<GameDayDivisionDto> Divisions { get; set; } = new();
@@ -1661,4 +1864,20 @@ public class OnSiteJoinDto
     /// Division ID (optional - uses first division if not specified)
     /// </summary>
     public int? DivisionId { get; set; }
+}
+
+public class CheckInPlayerDto
+{
+    /// <summary>
+    /// User ID of the player to check in
+    /// </summary>
+    public int UserId { get; set; }
+}
+
+public class BulkCheckInDto
+{
+    /// <summary>
+    /// List of user IDs to check in
+    /// </summary>
+    public List<int> UserIds { get; set; } = new();
 }
