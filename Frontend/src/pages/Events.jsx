@@ -2170,6 +2170,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       const response = await eventsApi.updateDivision(event.id, editingDivision.id, updateData);
       if (response.success) {
         toast.success('Division updated successfully');
+
+        // Also update editDivisions if we're in edit mode, so changes aren't lost when saving the main form
+        if (editDivisions.length > 0) {
+          setEditDivisions(prev => prev.map(d =>
+            d.id === editingDivision.id
+              ? { ...d, ...editingDivision, ...response.data }
+              : d
+          ));
+        }
+
         setShowEditDivision(false);
         setEditingDivision(null);
         // Reload full event to get updated divisions and pass to onUpdate
