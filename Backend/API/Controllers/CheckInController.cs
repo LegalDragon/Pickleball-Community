@@ -120,7 +120,7 @@ public class CheckInController : ControllerBase
             .FirstOrDefaultAsync(w => w.Id == request.WaiverId && w.EventId == eventId && w.IsActive);
 
         if (waiver == null)
-            return NotFound(new ApiResponse<object> { Success = false, Error = "Waiver not found" });
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
@@ -128,7 +128,7 @@ public class CheckInController : ControllerBase
             .ToListAsync();
 
         if (!registrations.Any())
-            return BadRequest(new ApiResponse<object> { Success = false, Error = "Not registered for this event" });
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Not registered for this event" });
 
         // Sign waiver for all registrations
         foreach (var reg in registrations)
@@ -165,7 +165,7 @@ public class CheckInController : ControllerBase
             .ToListAsync();
 
         if (!registrations.Any())
-            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Error = "Not registered for this event" });
+            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
 
         // Check if waiver is required but not signed
         var pendingWaivers = await _context.EventWaivers
@@ -178,7 +178,7 @@ public class CheckInController : ControllerBase
             return BadRequest(new ApiResponse<CheckInResultDto>
             {
                 Success = false,
-                Error = "Please sign the waiver before checking in"
+                Message = "Please sign the waiver before checking in"
             });
         }
 
@@ -272,10 +272,10 @@ public class CheckInController : ControllerBase
         // Verify current user is TD/organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
-            return NotFound(new ApiResponse<CheckInResultDto> { Success = false, Error = "Event not found" });
+            return NotFound(new ApiResponse<CheckInResultDto> { Success = false, Message = "Event not found" });
 
         var currentUser = await _context.Users.FindAsync(currentUserId);
-        var isOrganizer = evt.OrganizedByUserId == currentUserId || currentUser?.Role == UserRole.Admin;
+        var isOrganizer = evt.OrganizedByUserId == currentUserId || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
@@ -287,7 +287,7 @@ public class CheckInController : ControllerBase
             .ToListAsync();
 
         if (!registrations.Any())
-            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Error = "User is not registered for this event" });
+            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "User is not registered for this event" });
 
         // Create event check-in record
         var existingCheckIn = await _context.EventCheckIns
@@ -348,10 +348,10 @@ public class CheckInController : ControllerBase
         // Verify user is TD/organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
-            return NotFound(new ApiResponse<EventCheckInSummaryDto> { Success = false, Error = "Event not found" });
+            return NotFound(new ApiResponse<EventCheckInSummaryDto> { Success = false, Message = "Event not found" });
 
         var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == UserRole.Admin;
+        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
@@ -368,7 +368,7 @@ public class CheckInController : ControllerBase
                 FirstName = m.User!.FirstName,
                 LastName = m.User.LastName,
                 Email = m.User.Email,
-                AvatarUrl = m.User.AvatarUrl,
+                AvatarUrl = m.User.ProfileImageUrl,
                 UnitId = m.UnitId,
                 UnitName = m.Unit!.Name,
                 DivisionId = m.Unit.DivisionId,
@@ -439,10 +439,10 @@ public class CheckInController : ControllerBase
         // Verify user is organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
-            return NotFound(new ApiResponse<WaiverDto> { Success = false, Error = "Event not found" });
+            return NotFound(new ApiResponse<WaiverDto> { Success = false, Message = "Event not found" });
 
         var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == UserRole.Admin;
+        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
