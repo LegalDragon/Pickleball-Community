@@ -31,6 +31,8 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/auth/, /^\/api/, /^\/asset/],
         // Exclude manifest.webmanifest since we use manifest.json from public folder
         globPatterns: ['**/*.{js,css,html}'],
+        // Increase limit for larger bundles (default is 2 MiB)
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MiB
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.(js|css)$/,
