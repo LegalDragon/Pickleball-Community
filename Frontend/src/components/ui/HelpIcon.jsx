@@ -193,7 +193,7 @@ export default function HelpIcon({ topicCode, className = '', size = 'sm' }) {
       {isOpen && (
         <div
           ref={popoverRef}
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[calc(100vw-2rem)]"
+          className="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 max-w-[calc(100vw-2rem)]"
           role="tooltip"
         >
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
