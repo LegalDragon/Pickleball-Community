@@ -62,7 +62,21 @@ public class UsersController : ControllerBase
                 });
             }
 
-            var profileDto = MapToProfileDto(user);
+            // Load social links
+            var socialLinks = await _context.UserSocialLinks
+                .Where(s => s.UserId == userId.Value && s.IsActive)
+                .OrderBy(s => s.SortOrder)
+                .Select(s => new SocialLinkDto
+                {
+                    Id = s.Id,
+                    Platform = s.Platform,
+                    Url = s.Url,
+                    DisplayName = s.DisplayName,
+                    SortOrder = s.SortOrder
+                })
+                .ToListAsync();
+
+            var profileDto = MapToProfileDto(user, socialLinks);
 
             return Ok(new ApiResponse<UserProfileDto>
             {
@@ -102,6 +116,20 @@ public class UsersController : ControllerBase
                 });
             }
 
+            // Load social links for public profile
+            var socialLinks = await _context.UserSocialLinks
+                .Where(s => s.UserId == id && s.IsActive)
+                .OrderBy(s => s.SortOrder)
+                .Select(s => new SocialLinkDto
+                {
+                    Id = s.Id,
+                    Platform = s.Platform,
+                    Url = s.Url,
+                    DisplayName = s.DisplayName,
+                    SortOrder = s.SortOrder
+                })
+                .ToListAsync();
+
             var publicProfile = new PublicProfileDto
             {
                 Id = user.Id,
@@ -123,7 +151,8 @@ public class UsersController : ControllerBase
                 IntroVideo = user.IntroVideo,
                 CreatedAt = user.CreatedAt,
                 FriendshipStatus = "none",
-                FriendRequestId = null
+                FriendRequestId = null,
+                SocialLinks = socialLinks
             };
 
             // Check friendship status if user is logged in and viewing someone else's profile
@@ -714,7 +743,7 @@ public class UsersController : ControllerBase
     }
 
     // Helper method to map User entity to UserProfileDto
-    private static UserProfileDto MapToProfileDto(User user)
+    private static UserProfileDto MapToProfileDto(User user, List<SocialLinkDto>? socialLinks = null)
     {
         return new UserProfileDto
         {
@@ -743,7 +772,371 @@ public class UsersController : ControllerBase
             FavoriteShot = user.FavoriteShot,
             IntroVideo = user.IntroVideo,
             CreatedAt = user.CreatedAt,
-            IsActive = user.IsActive
+            IsActive = user.IsActive,
+            SocialLinks = socialLinks
         };
+    }
+
+    // ==================== Social Links Endpoints ====================
+
+    // GET: api/Users/social-links
+    [HttpGet("social-links")]
+    public async Task<ActionResult<ApiResponse<List<SocialLinkDto>>>> GetSocialLinks()
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new ApiResponse<List<SocialLinkDto>>
+                {
+                    Success = false,
+                    Message = "User not authenticated"
+                });
+            }
+
+            var links = await _context.UserSocialLinks
+                .Where(s => s.UserId == userId.Value && s.IsActive)
+                .OrderBy(s => s.SortOrder)
+                .Select(s => new SocialLinkDto
+                {
+                    Id = s.Id,
+                    Platform = s.Platform,
+                    Url = s.Url,
+                    DisplayName = s.DisplayName,
+                    SortOrder = s.SortOrder
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<SocialLinkDto>>
+            {
+                Success = true,
+                Data = links
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching social links");
+            return StatusCode(500, new ApiResponse<List<SocialLinkDto>>
+            {
+                Success = false,
+                Message = "An error occurred while fetching social links"
+            });
+        }
+    }
+
+    // POST: api/Users/social-links
+    [HttpPost("social-links")]
+    public async Task<ActionResult<ApiResponse<SocialLinkDto>>> AddSocialLink([FromBody] CreateSocialLinkRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new ApiResponse<SocialLinkDto>
+                {
+                    Success = false,
+                    Message = "User not authenticated"
+                });
+            }
+
+            // Validate platform
+            if (!SocialPlatforms.IsValid(request.Platform))
+            {
+                return BadRequest(new ApiResponse<SocialLinkDto>
+                {
+                    Success = false,
+                    Message = $"Invalid platform. Valid platforms are: {string.Join(", ", SocialPlatforms.All)}"
+                });
+            }
+
+            // Check if platform already exists for this user
+            var existingLink = await _context.UserSocialLinks
+                .FirstOrDefaultAsync(s => s.UserId == userId.Value && s.Platform == request.Platform && s.IsActive);
+
+            if (existingLink != null)
+            {
+                return BadRequest(new ApiResponse<SocialLinkDto>
+                {
+                    Success = false,
+                    Message = $"You already have a {request.Platform} link. Please update or remove it first."
+                });
+            }
+
+            // Get max sort order
+            var maxSortOrder = await _context.UserSocialLinks
+                .Where(s => s.UserId == userId.Value && s.IsActive)
+                .MaxAsync(s => (int?)s.SortOrder) ?? -1;
+
+            var link = new UserSocialLink
+            {
+                UserId = userId.Value,
+                Platform = request.Platform,
+                Url = request.Url,
+                DisplayName = request.DisplayName,
+                SortOrder = request.SortOrder ?? (maxSortOrder + 1),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.UserSocialLinks.Add(link);
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<SocialLinkDto>
+            {
+                Success = true,
+                Message = "Social link added successfully",
+                Data = new SocialLinkDto
+                {
+                    Id = link.Id,
+                    Platform = link.Platform,
+                    Url = link.Url,
+                    DisplayName = link.DisplayName,
+                    SortOrder = link.SortOrder
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding social link");
+            return StatusCode(500, new ApiResponse<SocialLinkDto>
+            {
+                Success = false,
+                Message = "An error occurred while adding social link"
+            });
+        }
+    }
+
+    // PUT: api/Users/social-links/{id}
+    [HttpPut("social-links/{id}")]
+    public async Task<ActionResult<ApiResponse<SocialLinkDto>>> UpdateSocialLink(int id, [FromBody] UpdateSocialLinkRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new ApiResponse<SocialLinkDto>
+                {
+                    Success = false,
+                    Message = "User not authenticated"
+                });
+            }
+
+            var link = await _context.UserSocialLinks
+                .FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId.Value);
+
+            if (link == null)
+            {
+                return NotFound(new ApiResponse<SocialLinkDto>
+                {
+                    Success = false,
+                    Message = "Social link not found"
+                });
+            }
+
+            if (request.Url != null)
+                link.Url = request.Url;
+            if (request.DisplayName != null)
+                link.DisplayName = request.DisplayName;
+            if (request.SortOrder.HasValue)
+                link.SortOrder = request.SortOrder.Value;
+
+            link.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<SocialLinkDto>
+            {
+                Success = true,
+                Message = "Social link updated successfully",
+                Data = new SocialLinkDto
+                {
+                    Id = link.Id,
+                    Platform = link.Platform,
+                    Url = link.Url,
+                    DisplayName = link.DisplayName,
+                    SortOrder = link.SortOrder
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating social link");
+            return StatusCode(500, new ApiResponse<SocialLinkDto>
+            {
+                Success = false,
+                Message = "An error occurred while updating social link"
+            });
+        }
+    }
+
+    // DELETE: api/Users/social-links/{id}
+    [HttpDelete("social-links/{id}")]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteSocialLink(int id)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not authenticated"
+                });
+            }
+
+            var link = await _context.UserSocialLinks
+                .FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId.Value);
+
+            if (link == null)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Social link not found"
+                });
+            }
+
+            // Soft delete
+            link.IsActive = false;
+            link.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Social link deleted successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting social link");
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while deleting social link"
+            });
+        }
+    }
+
+    // PUT: api/Users/social-links/bulk
+    [HttpPut("social-links/bulk")]
+    public async Task<ActionResult<ApiResponse<List<SocialLinkDto>>>> BulkUpdateSocialLinks([FromBody] BulkUpdateSocialLinksRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new ApiResponse<List<SocialLinkDto>>
+                {
+                    Success = false,
+                    Message = "User not authenticated"
+                });
+            }
+
+            // Validate all platforms
+            foreach (var link in request.Links)
+            {
+                if (!SocialPlatforms.IsValid(link.Platform))
+                {
+                    return BadRequest(new ApiResponse<List<SocialLinkDto>>
+                    {
+                        Success = false,
+                        Message = $"Invalid platform: {link.Platform}. Valid platforms are: {string.Join(", ", SocialPlatforms.All)}"
+                    });
+                }
+            }
+
+            // Check for duplicate platforms in request
+            var duplicates = request.Links
+                .GroupBy(l => l.Platform)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            if (duplicates.Any())
+            {
+                return BadRequest(new ApiResponse<List<SocialLinkDto>>
+                {
+                    Success = false,
+                    Message = $"Duplicate platforms in request: {string.Join(", ", duplicates)}"
+                });
+            }
+
+            // Soft delete all existing active links
+            var existingLinks = await _context.UserSocialLinks
+                .Where(s => s.UserId == userId.Value && s.IsActive)
+                .ToListAsync();
+
+            foreach (var existing in existingLinks)
+            {
+                existing.IsActive = false;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Add new links
+            var newLinks = new List<UserSocialLink>();
+            for (int i = 0; i < request.Links.Count; i++)
+            {
+                var linkRequest = request.Links[i];
+                var link = new UserSocialLink
+                {
+                    UserId = userId.Value,
+                    Platform = linkRequest.Platform,
+                    Url = linkRequest.Url,
+                    DisplayName = linkRequest.DisplayName,
+                    SortOrder = linkRequest.SortOrder ?? i,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                newLinks.Add(link);
+                _context.UserSocialLinks.Add(link);
+            }
+
+            await _context.SaveChangesAsync();
+
+            var result = newLinks.Select(l => new SocialLinkDto
+            {
+                Id = l.Id,
+                Platform = l.Platform,
+                Url = l.Url,
+                DisplayName = l.DisplayName,
+                SortOrder = l.SortOrder
+            }).ToList();
+
+            return Ok(new ApiResponse<List<SocialLinkDto>>
+            {
+                Success = true,
+                Message = "Social links updated successfully",
+                Data = result
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error bulk updating social links");
+            return StatusCode(500, new ApiResponse<List<SocialLinkDto>>
+            {
+                Success = false,
+                Message = "An error occurred while updating social links"
+            });
+        }
+    }
+
+    // GET: api/Users/social-platforms
+    [HttpGet("social-platforms")]
+    [AllowAnonymous]
+    public ActionResult<ApiResponse<string[]>> GetSocialPlatforms()
+    {
+        return Ok(new ApiResponse<string[]>
+        {
+            Success = true,
+            Data = SocialPlatforms.All
+        });
     }
 }

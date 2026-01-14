@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { userApi, friendsApi, messagingApi, getSharedAssetUrl, getAssetUrl } from '../../services/api'
 import {
   User, MapPin, Calendar, UserPlus, UserCheck, Clock,
-  Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle
+  Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle,
+  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink
 } from 'lucide-react'
 
 export default function PublicProfileModal({ userId, onClose, onFriendshipChange }) {
@@ -152,6 +153,33 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
       return `https://player.vimeo.com/video/${videoId}`
     }
     return null
+  }
+
+  // Get icon for social platform
+  const getSocialIcon = (platform) => {
+    const iconClass = "w-4 h-4"
+    switch (platform?.toLowerCase()) {
+      case 'twitter':
+        return <Twitter className={iconClass} />
+      case 'instagram':
+        return <Instagram className={iconClass} />
+      case 'facebook':
+        return <Facebook className={iconClass} />
+      case 'linkedin':
+        return <Linkedin className={iconClass} />
+      case 'youtube':
+        return <Youtube className={iconClass} />
+      case 'tiktok':
+        return <span className={iconClass}>TT</span>
+      case 'twitch':
+        return <span className={iconClass}>TV</span>
+      case 'discord':
+        return <span className={iconClass}>DC</span>
+      case 'website':
+        return <Globe className={iconClass} />
+      default:
+        return <LinkIcon className={iconClass} />
+    }
   }
 
   return (
@@ -375,6 +403,34 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                   </div>
                 </div>
               </div>
+
+              {/* Social Links */}
+              {profile.socialLinks && profile.socialLinks.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4 text-blue-600" />
+                    Social Links
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.socialLinks.map((link) => (
+                      <a
+                        key={link.id}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-gray-700 text-sm"
+                        title={link.displayName || link.platform}
+                      >
+                        <span className="text-gray-600">{getSocialIcon(link.platform)}</span>
+                        <span className="font-medium">
+                          {link.displayName || link.platform}
+                        </span>
+                        <ExternalLink className="w-3 h-3 text-gray-400" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Intro Video */}
               {profile.introVideo && (

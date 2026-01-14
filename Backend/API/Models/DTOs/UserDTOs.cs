@@ -33,6 +33,9 @@ public class UserProfileDto
 
     public DateTime? CreatedAt { get; set; }
     public bool IsActive { get; set; }
+
+    // Social media links
+    public List<SocialLinkDto>? SocialLinks { get; set; }
 }
 
 public class UpdateProfileRequest
@@ -108,6 +111,9 @@ public class PublicProfileDto
     // Friendship status (for logged-in users)
     public string? FriendshipStatus { get; set; } // "friends", "pending_sent", "pending_received", "none"
     public int? FriendRequestId { get; set; }
+
+    // Social media links (public)
+    public List<SocialLinkDto>? SocialLinks { get; set; }
 }
 
 // Lightweight DTO for recently joined players marquee
@@ -120,4 +126,37 @@ public class RecentPlayerDto
     public string? City { get; set; }
     public string? State { get; set; }
     public DateTime JoinedAt { get; set; }
+}
+
+// Social media link DTO
+public class SocialLinkDto
+{
+    public int Id { get; set; }
+    public string Platform { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public int SortOrder { get; set; }
+}
+
+// DTO for creating a social link
+public class CreateSocialLinkRequest
+{
+    public string Platform { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public int? SortOrder { get; set; }
+}
+
+// DTO for updating a social link
+public class UpdateSocialLinkRequest
+{
+    public string? Url { get; set; }
+    public string? DisplayName { get; set; }
+    public int? SortOrder { get; set; }
+}
+
+// DTO for bulk updating social links (reorder or replace all)
+public class BulkUpdateSocialLinksRequest
+{
+    public List<CreateSocialLinkRequest> Links { get; set; } = new();
 }

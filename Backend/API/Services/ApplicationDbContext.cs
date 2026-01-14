@@ -10,6 +10,7 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<User> Users { get; set; }
+    public DbSet<UserSocialLink> UserSocialLinks { get; set; }
 
     // Theme and Asset Management
     public DbSet<ThemeSettings> ThemeSettings { get; set; }
@@ -166,6 +167,21 @@ public class ApplicationDbContext : DbContext
             entity.Property(u => u.Id).ValueGeneratedNever();
             entity.HasIndex(u => u.Email).IsUnique();
             entity.Property(u => u.Role).HasConversion<string>();
+        });
+
+        // User Social Links configuration
+        modelBuilder.Entity<UserSocialLink>(entity =>
+        {
+            entity.Property(s => s.Platform).IsRequired().HasMaxLength(50);
+            entity.Property(s => s.Url).IsRequired().HasMaxLength(500);
+            entity.Property(s => s.DisplayName).HasMaxLength(100);
+            entity.HasIndex(s => s.UserId);
+            entity.HasIndex(s => new { s.UserId, s.SortOrder });
+
+            entity.HasOne(s => s.User)
+                  .WithMany()
+                  .HasForeignKey(s => s.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Theme and Asset Management configuration

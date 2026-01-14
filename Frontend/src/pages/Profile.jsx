@@ -10,7 +10,8 @@ import {
   User, Camera, Video, MapPin, Phone, Calendar,
   Edit2, Save, Upload, X, Play, Award, Target,
   Zap, Heart, Activity, TrendingUp, ChevronRight,
-  MessageCircle, Shield, Eye, Mail
+  MessageCircle, Shield, Eye, Mail, Link, Plus, Trash2,
+  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, ExternalLink
 } from 'lucide-react'
 
 const Profile = () => {
@@ -48,6 +49,14 @@ const Profile = () => {
   const [allowDirectMessages, setAllowDirectMessages] = useState(true)
   const [allowClubMessages, setAllowClubMessages] = useState(true)
   const [savingMessagingSettings, setSavingMessagingSettings] = useState(false)
+
+  // Social links state
+  const [socialLinks, setSocialLinks] = useState([])
+  const [socialLinksLoading, setSocialLinksLoading] = useState(false)
+  const [addingSocialLink, setAddingSocialLink] = useState(false)
+  const [newSocialLink, setNewSocialLink] = useState({ platform: '', url: '', displayName: '' })
+  const [editingSocialLinkId, setEditingSocialLinkId] = useState(null)
+  const [editingSocialLinkData, setEditingSocialLinkData] = useState({ url: '', displayName: '' })
 
   // Separate forms for each section
   const basicInfoForm = useForm({
@@ -155,8 +164,32 @@ const Profile = () => {
         const isExternal = externalPatterns.some(pattern => user.introVideo.includes(pattern))
         setVideoPreview(isExternal ? user.introVideo : getSharedAssetUrl(user.introVideo))
       }
+
+      // Load social links from user data if available
+      if (user.socialLinks) {
+        setSocialLinks(user.socialLinks)
+      }
     }
   }, [user])
+
+  // Fetch social links
+  useEffect(() => {
+    const fetchSocialLinks = async () => {
+      if (!user?.id) return
+      try {
+        setSocialLinksLoading(true)
+        const response = await userApi.getSocialLinks()
+        if (response.success && response.data) {
+          setSocialLinks(response.data)
+        }
+      } catch (error) {
+        console.error('Error fetching social links:', error)
+      } finally {
+        setSocialLinksLoading(false)
+      }
+    }
+    fetchSocialLinks()
+  }, [user?.id])
 
   // Handle avatar upload directly (no edit mode needed)
   const handleAvatarChange = async (e) => {
@@ -376,6 +409,89 @@ const Profile = () => {
       setSavingMessagingSettings(false)
     }
   }
+
+  // Social link handlers
+  const handleAddSocialLink = async () => {
+    if (!newSocialLink.platform || !newSocialLink.url) {
+      toast.error('Please select a platform and enter a URL')
+      return
+    }
+    try {
+      const response = await userApi.addSocialLink(newSocialLink)
+      if (response.success && response.data) {
+        setSocialLinks([...socialLinks, response.data])
+        setNewSocialLink({ platform: '', url: '', displayName: '' })
+        setAddingSocialLink(false)
+        toast.success('Social link added')
+      }
+    } catch (error) {
+      console.error('Error adding social link:', error)
+      toast.error('Failed to add social link')
+    }
+  }
+
+  const handleUpdateSocialLink = async (id) => {
+    try {
+      const response = await userApi.updateSocialLink(id, editingSocialLinkData)
+      if (response.success && response.data) {
+        setSocialLinks(socialLinks.map(link => link.id === id ? response.data : link))
+        setEditingSocialLinkId(null)
+        setEditingSocialLinkData({ url: '', displayName: '' })
+        toast.success('Social link updated')
+      }
+    } catch (error) {
+      console.error('Error updating social link:', error)
+      toast.error('Failed to update social link')
+    }
+  }
+
+  const handleDeleteSocialLink = async (id) => {
+    try {
+      await userApi.deleteSocialLink(id)
+      setSocialLinks(socialLinks.filter(link => link.id !== id))
+      toast.success('Social link removed')
+    } catch (error) {
+      console.error('Error deleting social link:', error)
+      toast.error('Failed to remove social link')
+    }
+  }
+
+  const startEditingSocialLink = (link) => {
+    setEditingSocialLinkId(link.id)
+    setEditingSocialLinkData({ url: link.url, displayName: link.displayName || '' })
+  }
+
+  // Get icon for social platform
+  const getSocialIcon = (platform) => {
+    const iconClass = "w-5 h-5"
+    switch (platform?.toLowerCase()) {
+      case 'twitter':
+        return <Twitter className={iconClass} />
+      case 'instagram':
+        return <Instagram className={iconClass} />
+      case 'facebook':
+        return <Facebook className={iconClass} />
+      case 'linkedin':
+        return <Linkedin className={iconClass} />
+      case 'youtube':
+        return <Youtube className={iconClass} />
+      case 'tiktok':
+        return <span className={iconClass}>TT</span>
+      case 'twitch':
+        return <span className={iconClass}>TV</span>
+      case 'discord':
+        return <span className={iconClass}>DC</span>
+      case 'website':
+        return <Globe className={iconClass} />
+      default:
+        return <Link className={iconClass} />
+    }
+  }
+
+  const socialPlatforms = [
+    'Twitter', 'Instagram', 'Facebook', 'LinkedIn', 'YouTube',
+    'TikTok', 'Twitch', 'Discord', 'Website', 'Other'
+  ]
 
   // Save Basic Info
   const handleSaveBasicInfo = async (data) => {
@@ -1133,6 +1249,181 @@ const Profile = () => {
                     <div className="flex items-center justify-center text-sm text-gray-500 pt-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
                       Saving...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Social Links Section */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Link className="w-5 h-5 mr-2 text-blue-500" />
+                    Social Links
+                  </h3>
+                  {!addingSocialLink && (
+                    <button
+                      onClick={() => setAddingSocialLink(true)}
+                      className="flex items-center space-x-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Link</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Add new social link form */}
+                  {addingSocialLink && (
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+                          <select
+                            value={newSocialLink.platform}
+                            onChange={(e) => setNewSocialLink({ ...newSocialLink, platform: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select platform</option>
+                            {socialPlatforms.map(platform => (
+                              <option key={platform} value={platform}>{platform}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                          <input
+                            type="url"
+                            value={newSocialLink.url}
+                            onChange={(e) => setNewSocialLink({ ...newSocialLink, url: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="https://..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Display Name (optional)</label>
+                          <input
+                            type="text"
+                            value={newSocialLink.displayName}
+                            onChange={(e) => setNewSocialLink({ ...newSocialLink, displayName: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="@username or custom label"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            onClick={() => {
+                              setAddingSocialLink(false)
+                              setNewSocialLink({ platform: '', url: '', displayName: '' })
+                            }}
+                            className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleAddSocialLink}
+                            className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Social links list */}
+                  {socialLinksLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : socialLinks.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Globe className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No social links added yet</p>
+                      <p className="text-sm mt-1">Add links to your social profiles so others can connect with you</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {socialLinks.map((link) => (
+                        <div key={link.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          {editingSocialLinkId === link.id ? (
+                            <div className="flex-1 space-y-2">
+                              <div>
+                                <input
+                                  type="url"
+                                  value={editingSocialLinkData.url}
+                                  onChange={(e) => setEditingSocialLinkData({ ...editingSocialLinkData, url: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  placeholder="URL"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  type="text"
+                                  value={editingSocialLinkData.displayName}
+                                  onChange={(e) => setEditingSocialLinkData({ ...editingSocialLinkData, displayName: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  placeholder="Display Name (optional)"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingSocialLinkId(null)
+                                    setEditingSocialLinkData({ url: '', displayName: '' })
+                                  }}
+                                  className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateSocialLink(link.id)}
+                                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-gray-200 text-gray-600">
+                                  {getSocialIcon(link.platform)}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-gray-900">{link.platform}</p>
+                                  <a
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    {link.displayName || link.url.substring(0, 40) + (link.url.length > 40 ? '...' : '')}
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => startEditingSocialLink(link)}
+                                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteSocialLink(link.id)}
+                                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { userApi, friendsApi, getSharedAssetUrl, getAssetUrl } from '../services/api'
 import {
   User, MapPin, Calendar, ArrowLeft, UserPlus, UserCheck, Clock,
-  Award, Target, Zap, Heart, Activity, Play, X, Check
+  Award, Target, Zap, Heart, Activity, Play, X, Check,
+  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink
 } from 'lucide-react'
 
 const PublicProfile = () => {
@@ -133,6 +134,33 @@ const PublicProfile = () => {
       return `https://player.vimeo.com/video/${videoId}`
     }
     return null
+  }
+
+  // Get icon for social platform
+  const getSocialIcon = (platform) => {
+    const iconClass = "w-5 h-5"
+    switch (platform?.toLowerCase()) {
+      case 'twitter':
+        return <Twitter className={iconClass} />
+      case 'instagram':
+        return <Instagram className={iconClass} />
+      case 'facebook':
+        return <Facebook className={iconClass} />
+      case 'linkedin':
+        return <Linkedin className={iconClass} />
+      case 'youtube':
+        return <Youtube className={iconClass} />
+      case 'tiktok':
+        return <span className={iconClass}>TT</span>
+      case 'twitch':
+        return <span className={iconClass}>TV</span>
+      case 'discord':
+        return <span className={iconClass}>DC</span>
+      case 'website':
+        return <Globe className={iconClass} />
+      default:
+        return <LinkIcon className={iconClass} />
+    }
   }
 
   if (loading) {
@@ -365,6 +393,34 @@ const PublicProfile = () => {
                     <p className="font-medium text-gray-900">{profile.paddleModel}</p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Social Links */}
+          {profile.socialLinks && profile.socialLinks.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <LinkIcon className="w-5 h-5 text-blue-600" />
+                Social Links
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                {profile.socialLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-gray-700"
+                    title={link.displayName || link.platform}
+                  >
+                    <span className="text-gray-600">{getSocialIcon(link.platform)}</span>
+                    <span className="text-sm font-medium">
+                      {link.displayName || link.platform}
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-gray-400" />
+                  </a>
+                ))}
               </div>
             </div>
           )}
