@@ -131,3 +131,10 @@ Reference: https://github.com/LegalDragon/Funtime-Shared (branch: `claude/debug-
 ## Related Repositories
 @https://github.com/LegalDragon/Funtime-Shared
 @https://github.com/LegalDragon/Casec-project
+
+## Release Notes Checkpoints
+Track when release notes were last generated to avoid duplicates.
+
+| Date | Commit | Notes |
+|------|--------|-------|
+| 2026-01-14 | e2b491f | Initial 24-hour release notes covering: Help Topics system, Social Links, Game Day execution, Admin enhancements, Event management improvements, and numerous bug fixes |
