@@ -759,7 +759,24 @@ public class GameDayController : ControllerBase
             .ToListAsync();
 
         if (availableCourts.Count == 0)
-            return BadRequest(new { success = false, message = "No available courts" });
+        {
+            // Provide more helpful error message
+            var totalCourts = await _context.TournamentCourts.CountAsync(c => c.EventId == eventId);
+            var activeCourts = await _context.TournamentCourts.CountAsync(c => c.EventId == eventId && c.IsActive);
+            var inUseCourts = await _context.TournamentCourts.CountAsync(c => c.EventId == eventId && c.IsActive && c.Status == "InUse");
+
+            string message;
+            if (totalCourts == 0)
+                message = "No courts configured for this event. Please add courts first.";
+            else if (activeCourts == 0)
+                message = $"All {totalCourts} courts are inactive.";
+            else if (inUseCourts == activeCourts)
+                message = $"All {activeCourts} courts are currently in use.";
+            else
+                message = $"No available courts. {inUseCourts} of {activeCourts} courts in use.";
+
+            return BadRequest(new { success = false, message });
+        }
 
         // For gauntlet mode, get winners from last completed games on each court
         Dictionary<int, int?> courtWinners = new();
