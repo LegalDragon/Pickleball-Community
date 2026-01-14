@@ -1699,7 +1699,7 @@ public class TournamentController : ControllerBase
             return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are already registered in the target division" });
 
         EventUnit? targetUnit = null;
-        var teamSize = targetDivision.TeamUnit?.Size ?? 2;
+        var teamSize = targetDivision.TeamUnit?.TotalPlayers ?? 2;
 
         // Option 1: Join an existing unit
         if (request.JoinUnitId.HasValue)
@@ -1715,7 +1715,7 @@ public class TournamentController : ControllerBase
             if (targetUnit == null)
                 return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Target unit not found in that division" });
 
-            var targetTeamSize = targetUnit.Division?.TeamUnit?.Size ?? 2;
+            var targetTeamSize = targetUnit.Division?.TeamUnit?.TotalPlayers ?? 2;
             var acceptedMembers = targetUnit.Members.Count(m => m.InviteStatus == "Accepted");
             if (acceptedMembers >= targetTeamSize)
                 return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "Target unit is already full" });
@@ -1828,7 +1828,7 @@ public class TournamentController : ControllerBase
         if (division == null)
             return NotFound(new ApiResponse<List<EventUnitDto>> { Success = false, Message = "Division not found" });
 
-        var teamSize = division.TeamUnit?.Size ?? 2;
+        var teamSize = division.TeamUnit?.TotalPlayers ?? 2;
 
         // Find units that are incomplete (fewer accepted members than team size)
         var units = await _context.EventUnits
