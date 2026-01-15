@@ -1326,6 +1326,21 @@ public class TournamentController : ControllerBase
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
 
+        // Update EventPayments status to Pending for all members in this unit
+        var eventPayments = await _context.EventPayments
+            .Where(p => p.EventId == eventId && p.UnitId == unitId && p.Status == "Verified")
+            .ToListAsync();
+
+        foreach (var payment in eventPayments)
+        {
+            payment.Status = !string.IsNullOrEmpty(payment.PaymentProofUrl) ? "PendingVerification" : "Pending";
+            payment.IsApplied = false;
+            payment.AppliedAt = null;
+            payment.VerifiedAt = null;
+            payment.VerifiedByUserId = null;
+            payment.UpdatedAt = DateTime.Now;
+        }
+
         // Reset payment status based on what's still present
         if (!string.IsNullOrEmpty(unit.PaymentProofUrl))
         {
@@ -1514,6 +1529,20 @@ public class TournamentController : ControllerBase
         var member = unit.Members.FirstOrDefault(m => m.UserId == memberId);
         if (member == null)
             return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Member not found in unit" });
+
+        // Update EventPayment status for this member
+        var eventPayment = await _context.EventPayments
+            .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == memberId && p.Status == "Verified");
+
+        if (eventPayment != null)
+        {
+            eventPayment.Status = !string.IsNullOrEmpty(eventPayment.PaymentProofUrl) ? "PendingVerification" : "Pending";
+            eventPayment.IsApplied = false;
+            eventPayment.AppliedAt = null;
+            eventPayment.VerifiedAt = null;
+            eventPayment.VerifiedByUserId = null;
+            eventPayment.UpdatedAt = DateTime.Now;
+        }
 
         // Reset this member's payment
         member.HasPaid = false;

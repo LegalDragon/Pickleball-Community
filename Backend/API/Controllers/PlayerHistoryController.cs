@@ -130,6 +130,15 @@ public class PlayerHistoryController : ControllerBase
             })
             .ToListAsync();
 
+        // Payment summary
+        var payments = await _context.EventPayments
+            .Where(p => p.UserId == userId)
+            .ToListAsync();
+
+        var totalPayments = payments.Count;
+        var totalAmountPaid = payments.Where(p => p.Status == "Verified").Sum(p => p.Amount);
+        var pendingPayments = payments.Count(p => p.Status == "Pending" || p.Status == "PendingVerification");
+
         var summary = new PlayerHistorySummaryDto
         {
             TotalGamesPlayed = totalGames,
@@ -146,7 +155,10 @@ public class PlayerHistoryController : ControllerBase
             CurrentRatingType = latestRating?.RatingType,
             HighestRating = highestRating,
             RatingTrend = ratingTrend,
-            RecentRatings = recentRatings
+            RecentRatings = recentRatings,
+            TotalPayments = totalPayments,
+            TotalAmountPaid = totalAmountPaid,
+            PendingPayments = pendingPayments
         };
 
         return Ok(new ApiResponse<PlayerHistorySummaryDto> { Success = true, Data = summary });
@@ -705,6 +717,132 @@ public class PlayerHistoryController : ControllerBase
         };
 
         return Ok(new ApiResponse<PlayerRatingHistoryDto> { Success = true, Data = result });
+    }
+
+    // =====================================================
+    // Payment History Endpoints
+    // =====================================================
+
+    /// <summary>
+    /// Get player's payment history
+    /// </summary>
+    [HttpGet("{userId}/payments")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<PaymentHistoryPagedResponse>>> GetPayments(
+        int userId,
+        [FromQuery] PaymentHistorySearchRequest? request = null)
+    {
+        request ??= new PaymentHistorySearchRequest();
+
+        var currentUserId = GetUserId();
+        if (!currentUserId.HasValue)
+            return Unauthorized(new ApiResponse<PaymentHistoryPagedResponse> { Success = false, Message = "Unauthorized" });
+
+        // Users can only view their own payment history, unless they're admin
+        var currentUser = await _context.Users.FindAsync(currentUserId.Value);
+        var isAdmin = currentUser?.Role == "Admin";
+        if (userId != currentUserId.Value && !isAdmin)
+            return Forbid();
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+            return NotFound(new ApiResponse<PaymentHistoryPagedResponse> { Success = false, Message = "User not found" });
+
+        var query = _context.EventPayments
+            .Include(p => p.Event)
+            .Include(p => p.Unit)
+                .ThenInclude(u => u!.Division)
+            .Include(p => p.VerifiedByUser)
+            .Where(p => p.UserId == userId);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(request.Status))
+        {
+            query = query.Where(p => p.Status == request.Status);
+        }
+
+        if (request.EventId.HasValue)
+        {
+            query = query.Where(p => p.EventId == request.EventId.Value);
+        }
+
+        if (request.DateFrom.HasValue)
+        {
+            query = query.Where(p => p.CreatedAt >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo.HasValue)
+        {
+            query = query.Where(p => p.CreatedAt <= request.DateTo.Value);
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var payments = await query
+            .OrderByDescending(p => p.CreatedAt)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(p => new PlayerPaymentHistoryDto
+            {
+                Id = p.Id,
+                EventId = p.EventId,
+                EventName = p.Event != null ? p.Event.Name : "Unknown Event",
+                EventDate = p.Event != null ? p.Event.StartDate : null,
+                UnitId = p.UnitId,
+                UnitName = p.Unit != null ? p.Unit.Name : null,
+                DivisionName = p.Unit != null && p.Unit.Division != null ? p.Unit.Division.Name : null,
+                Amount = p.Amount,
+                PaymentMethod = p.PaymentMethod,
+                PaymentReference = p.PaymentReference,
+                PaymentProofUrl = p.PaymentProofUrl,
+                ReferenceId = p.ReferenceId,
+                Status = p.Status,
+                IsApplied = p.IsApplied,
+                AppliedAt = p.AppliedAt,
+                VerifiedAt = p.VerifiedAt,
+                VerifiedByName = p.VerifiedByUser != null
+                    ? Utility.FormatName(p.VerifiedByUser.LastName, p.VerifiedByUser.FirstName)
+                    : null,
+                Notes = p.Notes,
+                CreatedAt = p.CreatedAt
+            })
+            .ToListAsync();
+
+        // Calculate summary stats for all payments (not just current page)
+        var allPayments = await _context.EventPayments
+            .Where(p => p.UserId == userId)
+            .ToListAsync();
+
+        var response = new PaymentHistoryPagedResponse
+        {
+            Payments = payments,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            TotalAmountPaid = allPayments.Where(p => p.Status == "Verified").Sum(p => p.Amount),
+            TotalVerified = allPayments.Count(p => p.Status == "Verified"),
+            TotalPending = allPayments.Count(p => p.Status == "Pending" || p.Status == "PendingVerification")
+        };
+
+        return Ok(new ApiResponse<PaymentHistoryPagedResponse> { Success = true, Data = response });
+    }
+
+    /// <summary>
+    /// Get payment status types for filtering
+    /// </summary>
+    [HttpGet("payment-statuses")]
+    public ActionResult<ApiResponse<List<string>>> GetPaymentStatuses()
+    {
+        var statuses = new List<string>
+        {
+            "Pending",
+            "Verified",
+            "Rejected",
+            "Refunded",
+            "Cancelled"
+        };
+
+        return Ok(new ApiResponse<List<string>> { Success = true, Data = statuses });
     }
 
     // =====================================================

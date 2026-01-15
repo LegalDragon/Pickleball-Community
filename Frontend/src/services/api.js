@@ -1814,10 +1814,24 @@ export const playerHistoryApi = {
   },
   createRating: (data) => api.post('/api/player-history/ratings', data),
 
+  // Payments
+  getPayments: (userId, params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.eventId) queryParams.append('eventId', params.eventId);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const queryString = queryParams.toString();
+    return api.get(`/api/player-history/${userId}/payments${queryString ? `?${queryString}` : ''}`);
+  },
+
   // Helpers
   getEventTypes: () => api.get('/api/player-history/event-types'),
   getAwardTypes: () => api.get('/api/player-history/award-types'),
-  getRatingTypes: () => api.get('/api/player-history/rating-types')
+  getRatingTypes: () => api.get('/api/player-history/rating-types'),
+  getPaymentStatuses: () => api.get('/api/player-history/payment-statuses')
 }
 
 // Help Topics API (dynamic contextual help)
