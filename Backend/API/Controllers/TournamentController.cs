@@ -1090,7 +1090,34 @@ public class TournamentController : ControllerBase
         if (!isMember && !isOrganizer)
             return Forbid();
 
-        // Update payment info
+        // Generate reference ID for this payment
+        var referenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
+
+        // Get the member record for linking
+        var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId.Value);
+
+        // STEP 1: Save payment to EventPayments table FIRST (preserves payment data independently)
+        var eventPayment = new EventPayment
+        {
+            EventId = eventId,
+            UserId = userId.Value,
+            UnitId = unitId,
+            MemberId = memberRecord?.Id,
+            Amount = request.AmountPaid ?? 0,
+            PaymentProofUrl = request.PaymentProofUrl,
+            PaymentReference = request.PaymentReference,
+            PaymentMethod = request.PaymentMethod,
+            ReferenceId = referenceId,
+            Status = "Pending",
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+
+        _context.EventPayments.Add(eventPayment);
+        await _context.SaveChangesAsync(); // Save payment record first
+
+        // STEP 2: Apply payment to registration records
+        // Update unit payment info
         if (!string.IsNullOrEmpty(request.PaymentProofUrl))
         {
             unit.PaymentProofUrl = request.PaymentProofUrl;
@@ -1106,10 +1133,10 @@ public class TournamentController : ControllerBase
             unit.AmountPaid = request.AmountPaid.Value;
         }
 
-        // Generate reference ID if not already set (for matching payments)
+        // Set reference ID on unit if not already set
         if (string.IsNullOrEmpty(unit.ReferenceId))
         {
-            unit.ReferenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
+            unit.ReferenceId = referenceId;
         }
 
         // Calculate amount due
@@ -1132,7 +1159,6 @@ public class TournamentController : ControllerBase
         }
 
         // Mark the submitting user's member record as paid and copy payment details
-        var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId.Value);
         if (memberRecord != null)
         {
             memberRecord.HasPaid = true;
@@ -1140,9 +1166,13 @@ public class TournamentController : ControllerBase
             memberRecord.AmountPaid = request.AmountPaid ?? 0;
             memberRecord.PaymentProofUrl = unit.PaymentProofUrl;
             memberRecord.PaymentReference = unit.PaymentReference;
-            // Generate member-specific ReferenceId (not copied from unit)
-            memberRecord.ReferenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
+            memberRecord.ReferenceId = referenceId;
         }
+
+        // Mark payment as applied to registration
+        eventPayment.IsApplied = true;
+        eventPayment.AppliedAt = DateTime.Now;
+        eventPayment.UpdatedAt = DateTime.Now;
 
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
@@ -1191,7 +1221,51 @@ public class TournamentController : ControllerBase
             return Forbid();
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+        var memberCount = unit.Members.Count;
+        var perMemberAmount = memberCount > 0 ? amountDue / memberCount : amountDue;
 
+        // STEP 1: Save payment records to EventPayments for each member
+        foreach (var member in unit.Members)
+        {
+            var referenceId = $"E{eventId}-U{unitId}-P{member.UserId}";
+
+            // Check if payment record already exists
+            var existingPayment = await _context.EventPayments
+                .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == member.UserId);
+
+            if (existingPayment == null)
+            {
+                var eventPayment = new EventPayment
+                {
+                    EventId = eventId,
+                    UserId = member.UserId,
+                    UnitId = unitId,
+                    MemberId = member.Id,
+                    Amount = perMemberAmount,
+                    ReferenceId = referenceId,
+                    Status = "Verified",
+                    VerifiedByUserId = userId.Value,
+                    VerifiedAt = DateTime.Now,
+                    Notes = "Marked as paid by organizer",
+                    IsApplied = true,
+                    AppliedAt = DateTime.Now,
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+                _context.EventPayments.Add(eventPayment);
+            }
+            else
+            {
+                existingPayment.Status = "Verified";
+                existingPayment.VerifiedByUserId = userId.Value;
+                existingPayment.VerifiedAt = DateTime.Now;
+                existingPayment.IsApplied = true;
+                existingPayment.AppliedAt = DateTime.Now;
+                existingPayment.UpdatedAt = DateTime.Now;
+            }
+        }
+
+        // STEP 2: Update registration records
         unit.PaymentStatus = "Paid";
         unit.AmountPaid = amountDue;
         unit.PaidAt = DateTime.Now;
@@ -1202,6 +1276,7 @@ public class TournamentController : ControllerBase
         {
             member.HasPaid = true;
             member.PaidAt = DateTime.Now;
+            member.AmountPaid = perMemberAmount;
         }
 
         await _context.SaveChangesAsync();
@@ -1323,14 +1398,50 @@ public class TournamentController : ControllerBase
         var memberCount = unit.Members.Count;
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
         var perMemberAmount = memberCount > 0 ? amountDue / memberCount : amountDue;
+        var referenceId = $"E{eventId}-U{unitId}-P{memberId}";
 
-        // Mark this specific member as paid
+        // STEP 1: Save payment record to EventPayments first
+        var existingPayment = await _context.EventPayments
+            .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == memberId);
+
+        if (existingPayment == null)
+        {
+            var eventPayment = new EventPayment
+            {
+                EventId = eventId,
+                UserId = memberId,
+                UnitId = unitId,
+                MemberId = member.Id,
+                Amount = perMemberAmount,
+                ReferenceId = referenceId,
+                Status = "Verified",
+                VerifiedByUserId = userId.Value,
+                VerifiedAt = DateTime.Now,
+                Notes = "Marked as paid by organizer",
+                IsApplied = true,
+                AppliedAt = DateTime.Now,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EventPayments.Add(eventPayment);
+        }
+        else
+        {
+            existingPayment.Status = "Verified";
+            existingPayment.VerifiedByUserId = userId.Value;
+            existingPayment.VerifiedAt = DateTime.Now;
+            existingPayment.IsApplied = true;
+            existingPayment.AppliedAt = DateTime.Now;
+            existingPayment.UpdatedAt = DateTime.Now;
+        }
+
+        // STEP 2: Mark this specific member as paid
         member.HasPaid = true;
         member.PaidAt = DateTime.Now;
         member.AmountPaid = perMemberAmount;
         if (string.IsNullOrEmpty(member.ReferenceId))
         {
-            member.ReferenceId = $"E{eventId}-U{unitId}-P{memberId}";
+            member.ReferenceId = referenceId;
         }
 
         // Update unit-level payment status based on all members

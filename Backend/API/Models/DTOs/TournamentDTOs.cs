@@ -653,6 +653,10 @@ public class UploadPaymentProofRequest
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
     public decimal? AmountPaid { get; set; }
+    /// <summary>
+    /// Payment method: Cash, Zelle, Venmo, PayPal, CreditCard, Check, Other
+    /// </summary>
+    public string? PaymentMethod { get; set; }
 }
 
 public class PaymentInfoDto
