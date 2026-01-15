@@ -190,6 +190,36 @@ public class EventUnitMember
     /// </summary>
     public int? WaiverDocumentId { get; set; }
 
+    /// <summary>
+    /// Digital signature (typed full name)
+    /// </summary>
+    [MaxLength(200)]
+    public string? WaiverSignature { get; set; }
+
+    /// <summary>
+    /// Who signed: Participant, Parent, Guardian
+    /// </summary>
+    [MaxLength(20)]
+    public string? WaiverSignerRole { get; set; }
+
+    /// <summary>
+    /// Parent/Guardian name for minors
+    /// </summary>
+    [MaxLength(200)]
+    public string? ParentGuardianName { get; set; }
+
+    /// <summary>
+    /// Emergency contact phone number
+    /// </summary>
+    [MaxLength(30)]
+    public string? EmergencyPhone { get; set; }
+
+    /// <summary>
+    /// Chinese name for tournaments that require it
+    /// </summary>
+    [MaxLength(100)]
+    public string? ChineseName { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation

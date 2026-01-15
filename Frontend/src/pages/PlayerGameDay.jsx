@@ -63,13 +63,13 @@ export default function PlayerGameDay() {
     }
   }
 
-  const handleSignWaiver = async (waiverId) => {
+  const handleSignWaiver = async (waiverId, signatureData) => {
     try {
-      await checkInApi.signWaiver(eventId, waiverId)
+      await checkInApi.signWaiver(eventId, waiverId, signatureData)
       setShowWaiverModal(false)
       loadData()
     } catch (err) {
-      alert('Failed to sign waiver: ' + (err.message || 'Unknown error'))
+      alert('Failed to sign waiver: ' + (err.response?.data?.message || err.message || 'Unknown error'))
     }
   }
 
@@ -365,50 +365,199 @@ function GameCard({ game, onSubmitScore }) {
 function WaiverModal({ waivers, onSign, onClose }) {
   const [currentWaiver, setCurrentWaiver] = useState(waivers[0])
   const [agreed, setAgreed] = useState(false)
+  const [signature, setSignature] = useState('')
+  const [signerRole, setSignerRole] = useState('Participant')
+  const [parentGuardianName, setParentGuardianName] = useState('')
+  const [emergencyPhone, setEmergencyPhone] = useState('')
+  const [chineseName, setChineseName] = useState('')
+  const [signing, setSigning] = useState(false)
+
+  const isMinorWaiver = signerRole === 'Parent' || signerRole === 'Guardian'
+
+  const handleSign = async () => {
+    if (!signature.trim()) {
+      alert('Please enter your signature (full legal name)')
+      return
+    }
+    if (isMinorWaiver && !parentGuardianName.trim()) {
+      alert('Please enter your name as parent/guardian')
+      return
+    }
+    if (isMinorWaiver && !emergencyPhone.trim()) {
+      alert('Please enter an emergency phone number')
+      return
+    }
+
+    setSigning(true)
+    try {
+      await onSign(currentWaiver.id, {
+        signature: signature.trim(),
+        signerRole,
+        parentGuardianName: isMinorWaiver ? parentGuardianName.trim() : null,
+        emergencyPhone: emergencyPhone.trim() || null,
+        chineseName: chineseName.trim() || null
+      })
+    } finally {
+      setSigning(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50">
-      <div className="bg-white rounded-t-2xl md:rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="font-semibold">Sign Waiver</h3>
+      <div className="bg-white rounded-t-2xl md:rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 border-b flex justify-between items-center flex-shrink-0">
+          <h3 className="font-semibold">Release Waiver</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <XCircle className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 overflow-auto max-h-[60vh]">
+        <div className="p-4 overflow-auto flex-1">
           <h4 className="font-medium mb-2">{currentWaiver.title}</h4>
-          <div className="prose prose-sm text-gray-600 whitespace-pre-wrap">
+          <div className="prose prose-sm text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border max-h-48 overflow-auto text-xs">
             {currentWaiver.content}
+          </div>
+
+          {/* Signature Section */}
+          <div className="mt-4 space-y-3">
+            {/* Signer Role Selection */}
+            {currentWaiver.requiresMinorWaiver && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Who is signing?
+                </label>
+                <div className="flex gap-2">
+                  {['Participant', 'Parent', 'Guardian'].map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => setSignerRole(role)}
+                      className={`flex-1 py-2 text-sm rounded-lg border ${
+                        signerRole === role
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Parent/Guardian Info for minors */}
+            {isMinorWaiver && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800 mb-3">
+                  For participants under {currentWaiver.minorAgeThreshold || 18} years old:
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Parent/Guardian Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={parentGuardianName}
+                      onChange={(e) => setParentGuardianName(e.target.value)}
+                      placeholder="Your full legal name"
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Emergency Phone # *
+                    </label>
+                    <input
+                      type="tel"
+                      value={emergencyPhone}
+                      onChange={(e) => setEmergencyPhone(e.target.value)}
+                      placeholder="(555) 123-4567"
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Chinese Name (Optional) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Chinese Name <span className="text-gray-400">(if applicable)</span>
+              </label>
+              <input
+                type="text"
+                value={chineseName}
+                onChange={(e) => setChineseName(e.target.value)}
+                placeholder="Your Chinese name"
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+
+            {/* Digital Signature */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isMinorWaiver ? "Participant's Full Legal Name *" : 'Digital Signature (Full Legal Name) *'}
+              </label>
+              <input
+                type="text"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                placeholder="Type your full legal name"
+                className="w-full px-3 py-2 border rounded-lg font-medium"
+                style={{ fontFamily: 'cursive, serif' }}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                By typing your name above, you are signing this waiver electronically
+              </p>
+            </div>
+
+            {/* Emergency Phone if not minor */}
+            {!isMinorWaiver && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Emergency Phone <span className="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  placeholder="(555) 123-4567"
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+            )}
+
+            {/* Agreement Checkbox */}
+            <label className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-1"
+              />
+              <span className="text-sm text-gray-700">
+                I have read this release waiver, fully understand its terms, understand that I have given up substantial rights by signing it, and sign it freely and voluntarily.
+              </span>
+            </label>
           </div>
         </div>
 
-        <div className="p-4 border-t">
-          <label className="flex items-start gap-2 mb-4">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1"
-            />
-            <span className="text-sm text-gray-600">
-              I have read and agree to the terms of this waiver
-            </span>
-          </label>
-
+        <div className="p-4 border-t flex-shrink-0">
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="flex-1 py-2 border rounded-lg hover:bg-gray-50"
+              disabled={signing}
             >
               Cancel
             </button>
             <button
-              onClick={() => onSign(currentWaiver.id)}
-              disabled={!agreed}
+              onClick={handleSign}
+              disabled={!agreed || !signature.trim() || signing}
               className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              Sign Waiver
+              {signing ? 'Signing...' : 'Sign Waiver'}
             </button>
           </div>
         </div>

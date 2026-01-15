@@ -1918,8 +1918,15 @@ export const checkInApi = {
   // Manual check-in by TD
   manualCheckIn: (eventId, userId, data = {}) => api.post(`/checkin/manual/${eventId}/${userId}`, data),
 
-  // Sign waiver
-  signWaiver: (eventId, waiverId) => api.post(`/checkin/waiver/${eventId}`, { waiverId }),
+  // Sign waiver with digital signature
+  signWaiver: (eventId, waiverId, signatureData = {}) => api.post(`/checkin/waiver/${eventId}`, {
+    waiverId,
+    signature: signatureData.signature,
+    signerRole: signatureData.signerRole || 'Participant',
+    parentGuardianName: signatureData.parentGuardianName,
+    emergencyPhone: signatureData.emergencyPhone,
+    chineseName: signatureData.chineseName
+  }),
 
   // Get event check-in summary (TD view)
   getEventCheckIns: (eventId) => api.get(`/checkin/event/${eventId}`),

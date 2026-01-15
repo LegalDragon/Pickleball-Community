@@ -90,7 +90,9 @@ public class CheckInController : ControllerBase
                         Title = w.Title,
                         Content = w.Content,
                         Version = w.Version,
-                        IsRequired = w.IsRequired
+                        IsRequired = w.IsRequired,
+                        RequiresMinorWaiver = w.RequiresMinorWaiver,
+                        MinorAgeThreshold = w.MinorAgeThreshold
                     }).ToList(),
                 Divisions = registrations.Select(r => new CheckInDivisionDto
                 {
@@ -130,16 +132,26 @@ public class CheckInController : ControllerBase
         if (!registrations.Any())
             return BadRequest(new ApiResponse<object> { Success = false, Message = "Not registered for this event" });
 
+        // Validate signature
+        if (string.IsNullOrWhiteSpace(request.Signature))
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Signature is required" });
+
         // Sign waiver for all registrations
         foreach (var reg in registrations)
         {
             reg.WaiverSignedAt = DateTime.Now;
             reg.WaiverDocumentId = waiver.Id;
+            reg.WaiverSignature = request.Signature.Trim();
+            reg.WaiverSignerRole = request.SignerRole;
+            reg.ParentGuardianName = request.ParentGuardianName?.Trim();
+            reg.EmergencyPhone = request.EmergencyPhone?.Trim();
+            reg.ChineseName = request.ChineseName?.Trim();
         }
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User {UserId} signed waiver {WaiverId} for event {EventId}", userId, waiver.Id, eventId);
+        _logger.LogInformation("User {UserId} signed waiver {WaiverId} for event {EventId} with signature '{Signature}'",
+            userId, waiver.Id, eventId, request.Signature);
 
         return Ok(new ApiResponse<object>
         {
@@ -415,7 +427,9 @@ public class CheckInController : ControllerBase
                 Title = w.Title,
                 Content = w.Content,
                 Version = w.Version,
-                IsRequired = w.IsRequired
+                IsRequired = w.IsRequired,
+                RequiresMinorWaiver = w.RequiresMinorWaiver,
+                MinorAgeThreshold = w.MinorAgeThreshold
             })
             .ToListAsync();
 
@@ -503,11 +517,33 @@ public class WaiverDto
     public string Content { get; set; } = string.Empty;
     public int Version { get; set; }
     public bool IsRequired { get; set; }
+    public bool RequiresMinorWaiver { get; set; }
+    public int MinorAgeThreshold { get; set; }
 }
 
 public class SignWaiverRequest
 {
     public int WaiverId { get; set; }
+    /// <summary>
+    /// Digital signature (typed full name)
+    /// </summary>
+    public string Signature { get; set; } = string.Empty;
+    /// <summary>
+    /// Who is signing: Participant, Parent, Guardian
+    /// </summary>
+    public string SignerRole { get; set; } = "Participant";
+    /// <summary>
+    /// Parent/Guardian name if signing for a minor
+    /// </summary>
+    public string? ParentGuardianName { get; set; }
+    /// <summary>
+    /// Emergency contact phone
+    /// </summary>
+    public string? EmergencyPhone { get; set; }
+    /// <summary>
+    /// Chinese name (optional, for tournaments requiring it)
+    /// </summary>
+    public string? ChineseName { get; set; }
 }
 
 public class CheckInResultDto

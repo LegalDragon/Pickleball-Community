@@ -29,6 +29,16 @@ public class EventWaiver
     /// </summary>
     public bool IsRequired { get; set; } = true;
 
+    /// <summary>
+    /// Whether this waiver requires parent/guardian signature for minors
+    /// </summary>
+    public bool RequiresMinorWaiver { get; set; } = false;
+
+    /// <summary>
+    /// Age threshold below which parent/guardian signature is needed
+    /// </summary>
+    public int MinorAgeThreshold { get; set; } = 18;
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
