@@ -19,6 +19,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<ActivityLog> ActivityLogs { get; set; }
     public DbSet<Asset> Assets { get; set; }
 
+    // Generalized Object Assets
+    public DbSet<ObjectType> ObjectTypes { get; set; }
+    public DbSet<ObjectAssetType> ObjectAssetTypes { get; set; }
+    public DbSet<ObjectAsset> ObjectAssets { get; set; }
+
     // Content Types
     public DbSet<ContentType> ContentTypes { get; set; }
 

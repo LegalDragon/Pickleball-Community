@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import api, { eventsApi, checkInApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import api, { eventsApi, checkInApi, sharedAssetApi, objectAssetsApi, objectAssetTypesApi, getSharedAssetUrl } from '../services/api';
 
 // Scheduling API
 const schedulingApi = {
@@ -51,13 +51,13 @@ export default function EventManage() {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(null);
 
-  // Event documents state (waivers, maps, rules, contacts)
+  // Event documents/assets state
   const [documents, setDocuments] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [showDocumentForm, setShowDocumentForm] = useState(false);
   const [editingDocument, setEditingDocument] = useState(null);
   const [documentForm, setDocumentForm] = useState({
-    documentType: 'other',
+    objectAssetTypeId: null,
     title: '',
     fileUrl: '',
     fileName: '',
@@ -68,19 +68,14 @@ export default function EventManage() {
   const [savingDocument, setSavingDocument] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  // Document type options
-  const documentTypes = [
-    { value: 'waiver', label: 'Waiver', icon: 'Shield', description: 'Liability and consent forms' },
-    { value: 'map', label: 'Map', icon: 'Map', description: 'Venue and court layouts' },
-    { value: 'rules', label: 'Rules', icon: 'Book', description: 'Event rules and guidelines' },
-    { value: 'contacts', label: 'Contacts', icon: 'Phone', description: 'Emergency and staff contacts' },
-    { value: 'other', label: 'Other', icon: 'FileText', description: 'Other event documents' }
-  ];
+  // Asset types loaded from server
+  const [assetTypes, setAssetTypes] = useState([]);
 
   useEffect(() => {
     if (eventId) {
       loadEvent();
       loadDocuments();
+      loadAssetTypes();
     }
   }, [eventId]);
 
@@ -125,7 +120,7 @@ export default function EventManage() {
   const loadDocuments = async () => {
     setLoadingDocuments(true);
     try {
-      const response = await eventsApi.getDocuments(eventId);
+      const response = await objectAssetsApi.getAssets('Event', eventId);
       if (response.success) {
         setDocuments(response.data || []);
       }
@@ -133,6 +128,17 @@ export default function EventManage() {
       console.error('Error loading documents:', err);
     } finally {
       setLoadingDocuments(false);
+    }
+  };
+
+  const loadAssetTypes = async () => {
+    try {
+      const response = await objectAssetTypesApi.getAll({ objectTypeName: 'Event' });
+      if (response.success) {
+        setAssetTypes(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading asset types:', err);
     }
   };
 
@@ -168,6 +174,10 @@ export default function EventManage() {
       toast.error('Please enter a title for the document');
       return;
     }
+    if (!documentForm.objectAssetTypeId) {
+      toast.error('Please select a document type');
+      return;
+    }
     if (!documentForm.fileUrl && !editingDocument) {
       toast.error('Please upload a file');
       return;
@@ -177,14 +187,14 @@ export default function EventManage() {
     try {
       let response;
       if (editingDocument) {
-        response = await eventsApi.updateDocument(eventId, editingDocument.id, {
-          documentType: documentForm.documentType,
+        response = await objectAssetsApi.updateAsset('Event', eventId, editingDocument.id, {
+          objectAssetTypeId: documentForm.objectAssetTypeId,
           title: documentForm.title,
           isPublic: documentForm.isPublic
         });
       } else {
-        response = await eventsApi.addDocument(eventId, {
-          documentType: documentForm.documentType,
+        response = await objectAssetsApi.addAsset('Event', eventId, {
+          objectAssetTypeId: documentForm.objectAssetTypeId,
           title: documentForm.title,
           fileUrl: documentForm.fileUrl,
           fileName: documentForm.fileName,
@@ -198,7 +208,7 @@ export default function EventManage() {
         setShowDocumentForm(false);
         setEditingDocument(null);
         setDocumentForm({
-          documentType: 'other',
+          objectAssetTypeId: null,
           title: '',
           fileUrl: '',
           fileName: '',
@@ -222,7 +232,7 @@ export default function EventManage() {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     try {
-      const response = await eventsApi.deleteDocument(eventId, documentId);
+      const response = await objectAssetsApi.deleteAsset('Event', eventId, documentId);
       if (response.success) {
         toast.success('Document deleted');
         loadDocuments();
@@ -238,7 +248,7 @@ export default function EventManage() {
   const handleEditDocument = (doc) => {
     setEditingDocument(doc);
     setDocumentForm({
-      documentType: doc.documentType || 'other',
+      objectAssetTypeId: doc.objectAssetTypeId,
       title: doc.title,
       fileUrl: doc.fileUrl,
       fileName: doc.fileName,
@@ -249,8 +259,28 @@ export default function EventManage() {
     setShowDocumentForm(true);
   };
 
-  const getDocumentTypeInfo = (type) => {
-    return documentTypes.find(dt => dt.value === type) || documentTypes[0];
+  const getAssetTypeInfo = (assetTypeId) => {
+    return assetTypes.find(at => at.id === assetTypeId);
+  };
+
+  const getIconForAssetType = (typeName) => {
+    switch (typeName) {
+      case 'waiver': return Shield;
+      case 'map': return Map;
+      case 'rules': return BookOpen;
+      case 'contacts': return Phone;
+      default: return FileText;
+    }
+  };
+
+  const getColorForAssetType = (colorClass) => {
+    switch (colorClass) {
+      case 'red': return { bg: 'bg-red-100', text: 'text-red-600' };
+      case 'green': return { bg: 'bg-green-100', text: 'text-green-600' };
+      case 'purple': return { bg: 'bg-purple-100', text: 'text-purple-600' };
+      case 'blue': return { bg: 'bg-blue-100', text: 'text-blue-600' };
+      default: return { bg: 'bg-gray-100', text: 'text-gray-600' };
+    }
   };
 
   const handleGenerateRound = async () => {
@@ -595,7 +625,7 @@ export default function EventManage() {
               onClick={() => {
                 setEditingDocument(null);
                 setDocumentForm({
-                  documentType: 'other',
+                  objectAssetTypeId: assetTypes[0]?.id || null,
                   title: '',
                   fileUrl: '',
                   fileName: '',
@@ -627,34 +657,18 @@ export default function EventManage() {
             ) : (
               <div className="divide-y divide-gray-100">
                 {documents.map(doc => {
-                  const typeInfo = getDocumentTypeInfo(doc.documentType);
-                  const IconComponent = doc.documentType === 'waiver' ? Shield
-                    : doc.documentType === 'map' ? Map
-                    : doc.documentType === 'rules' ? BookOpen
-                    : doc.documentType === 'contacts' ? Phone
-                    : FileText;
+                  const IconComponent = getIconForAssetType(doc.assetTypeName);
+                  const colors = getColorForAssetType(doc.assetTypeColorClass);
                   return (
                     <div key={doc.id} className="p-4 hover:bg-gray-50">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex gap-3">
-                          <div className={`p-2 rounded-lg ${
-                            doc.documentType === 'waiver' ? 'bg-red-100' :
-                            doc.documentType === 'map' ? 'bg-green-100' :
-                            doc.documentType === 'rules' ? 'bg-purple-100' :
-                            doc.documentType === 'contacts' ? 'bg-blue-100' :
-                            'bg-gray-100'
-                          }`}>
-                            <IconComponent className={`w-4 h-4 ${
-                              doc.documentType === 'waiver' ? 'text-red-600' :
-                              doc.documentType === 'map' ? 'text-green-600' :
-                              doc.documentType === 'rules' ? 'text-purple-600' :
-                              doc.documentType === 'contacts' ? 'text-blue-600' :
-                              'text-gray-600'
-                            }`} />
+                          <div className={`p-2 rounded-lg ${colors.bg}`}>
+                            <IconComponent className={`w-4 h-4 ${colors.text}`} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded capitalize">{typeInfo.label}</span>
+                              <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded capitalize">{doc.assetTypeDisplayName || 'Document'}</span>
                               <h4 className="font-medium text-gray-900 truncate">{doc.title}</h4>
                               {!doc.isPublic && (
                                 <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Private</span>
@@ -720,30 +734,26 @@ export default function EventManage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
                   <div className="grid grid-cols-2 gap-2">
-                    {documentTypes.map(type => {
-                      const IconComponent = type.value === 'waiver' ? Shield
-                        : type.value === 'map' ? Map
-                        : type.value === 'rules' ? BookOpen
-                        : type.value === 'contacts' ? Phone
-                        : FileText;
+                    {assetTypes.map(type => {
+                      const IconComponent = getIconForAssetType(type.typeName);
                       return (
                         <button
-                          key={type.value}
+                          key={type.id}
                           type="button"
-                          onClick={() => setDocumentForm({ ...documentForm, documentType: type.value })}
+                          onClick={() => setDocumentForm({ ...documentForm, objectAssetTypeId: type.id })}
                           className={`p-3 rounded-lg border-2 text-left transition-all ${
-                            documentForm.documentType === type.value
+                            documentForm.objectAssetTypeId === type.id
                               ? 'border-blue-500 bg-blue-50'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <div className="flex items-center gap-2">
                             <IconComponent className={`w-4 h-4 ${
-                              documentForm.documentType === type.value ? 'text-blue-600' : 'text-gray-400'
+                              documentForm.objectAssetTypeId === type.id ? 'text-blue-600' : 'text-gray-400'
                             }`} />
                             <span className={`text-sm font-medium ${
-                              documentForm.documentType === type.value ? 'text-blue-900' : 'text-gray-700'
-                            }`}>{type.label}</span>
+                              documentForm.objectAssetTypeId === type.id ? 'text-blue-900' : 'text-gray-700'
+                            }`}>{type.displayName}</span>
                           </div>
                           <p className="text-xs text-gray-500 mt-1">{type.description}</p>
                         </button>
@@ -758,11 +768,7 @@ export default function EventManage() {
                     type="text"
                     value={documentForm.title}
                     onChange={(e) => setDocumentForm({ ...documentForm, title: e.target.value })}
-                    placeholder={documentForm.documentType === 'waiver' ? 'e.g., Liability Waiver' :
-                      documentForm.documentType === 'map' ? 'e.g., Venue Map' :
-                      documentForm.documentType === 'rules' ? 'e.g., Tournament Rules' :
-                      documentForm.documentType === 'contacts' ? 'e.g., Emergency Contacts' :
-                      'e.g., Event Schedule'}
+                    placeholder="Enter document title"
                     className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

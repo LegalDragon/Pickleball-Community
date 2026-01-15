@@ -2051,4 +2051,49 @@ export const scoreboardApi = {
   getPools: (eventId, divisionId) => api.get(`/scoreboard/pools/${eventId}/${divisionId}`)
 }
 
+// Object Types API (admin)
+export const objectTypesApi = {
+  getAll: (includeInactive = false) =>
+    api.get(`/objecttypes${includeInactive ? '?includeInactive=true' : ''}`),
+  getById: (id) => api.get(`/objecttypes/${id}`),
+  create: (data) => api.post('/objecttypes', data),
+  update: (id, data) => api.put(`/objecttypes/${id}`, data),
+  delete: (id) => api.delete(`/objecttypes/${id}`)
+}
+
+// Object Asset Types API (admin)
+export const objectAssetTypesApi = {
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.objectTypeId) queryParams.append('objectTypeId', params.objectTypeId)
+    if (params.objectTypeName) queryParams.append('objectTypeName', params.objectTypeName)
+    if (params.includeInactive) queryParams.append('includeInactive', 'true')
+    const queryString = queryParams.toString()
+    return api.get(`/objectassettypes${queryString ? `?${queryString}` : ''}`)
+  },
+  getById: (id) => api.get(`/objectassettypes/${id}`),
+  create: (data) => api.post('/objectassettypes', data),
+  update: (id, data) => api.put(`/objectassettypes/${id}`, data),
+  delete: (id) => api.delete(`/objectassettypes/${id}`)
+}
+
+// Object Assets API (generalized assets for any object type)
+export const objectAssetsApi = {
+  // Get assets for an object
+  getAssets: (objectTypeName, objectId) =>
+    api.get(`/objectassets/${objectTypeName}/${objectId}`),
+
+  // Add asset to an object
+  addAsset: (objectTypeName, objectId, data) =>
+    api.post(`/objectassets/${objectTypeName}/${objectId}`, data),
+
+  // Update asset
+  updateAsset: (objectTypeName, objectId, assetId, data) =>
+    api.put(`/objectassets/${objectTypeName}/${objectId}/${assetId}`, data),
+
+  // Delete asset
+  deleteAsset: (objectTypeName, objectId, assetId) =>
+    api.delete(`/objectassets/${objectTypeName}/${objectId}/${assetId}`)
+}
+
 export default api
