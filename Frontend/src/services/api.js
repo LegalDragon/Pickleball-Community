@@ -1935,7 +1935,10 @@ export const checkInApi = {
   getWaivers: (eventId) => api.get(`/checkin/waivers/${eventId}`),
 
   // Create waiver (TD)
-  createWaiver: (eventId, data) => api.post(`/checkin/waivers/${eventId}`, data)
+  createWaiver: (eventId, data) => api.post(`/checkin/waivers/${eventId}`, data),
+
+  // Delete waiver (TD)
+  deleteWaiver: (eventId, waiverId) => api.delete(`/checkin/waivers/${eventId}/${waiverId}`)
 }
 
 // Tournament Game Day API

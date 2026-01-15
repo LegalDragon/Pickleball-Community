@@ -461,16 +461,40 @@ public class CheckInController : ControllerBase
         if (!isOrganizer)
             return Forbid();
 
-        var waiver = new EventWaiver
-        {
-            EventId = eventId,
-            Title = request.Title,
-            Content = request.Content,
-            IsRequired = request.IsRequired,
-            CreatedByUserId = userId
-        };
+        EventWaiver waiver;
 
-        _context.EventWaivers.Add(waiver);
+        if (request.Id > 0)
+        {
+            // Update existing waiver
+            waiver = await _context.EventWaivers
+                .FirstOrDefaultAsync(w => w.Id == request.Id && w.EventId == eventId);
+            if (waiver == null)
+                return NotFound(new ApiResponse<WaiverDto> { Success = false, Message = "Waiver not found" });
+
+            waiver.Title = request.Title;
+            waiver.Content = request.Content;
+            waiver.IsRequired = request.IsRequired;
+            waiver.RequiresMinorWaiver = request.RequiresMinorWaiver;
+            waiver.MinorAgeThreshold = request.MinorAgeThreshold;
+            waiver.UpdatedAt = DateTime.Now;
+            waiver.Version++;
+        }
+        else
+        {
+            // Create new waiver
+            waiver = new EventWaiver
+            {
+                EventId = eventId,
+                Title = request.Title,
+                Content = request.Content,
+                IsRequired = request.IsRequired,
+                RequiresMinorWaiver = request.RequiresMinorWaiver,
+                MinorAgeThreshold = request.MinorAgeThreshold,
+                CreatedByUserId = userId
+            };
+            _context.EventWaivers.Add(waiver);
+        }
+
         await _context.SaveChangesAsync();
 
         return Ok(new ApiResponse<WaiverDto>
@@ -482,8 +506,48 @@ public class CheckInController : ControllerBase
                 Title = waiver.Title,
                 Content = waiver.Content,
                 Version = waiver.Version,
-                IsRequired = waiver.IsRequired
+                IsRequired = waiver.IsRequired,
+                RequiresMinorWaiver = waiver.RequiresMinorWaiver,
+                MinorAgeThreshold = waiver.MinorAgeThreshold
             }
+        });
+    }
+
+    /// <summary>
+    /// Delete a waiver (TD only)
+    /// </summary>
+    [HttpDelete("waivers/{eventId}/{waiverId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteWaiver(int eventId, int waiverId)
+    {
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+
+        // Verify user is organizer
+        var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        var isOrganizer = evt.OrganizedByUserId == userId;
+        if (!isOrganizer)
+            return Forbid();
+
+        var waiver = await _context.EventWaivers
+            .FirstOrDefaultAsync(w => w.Id == waiverId && w.EventId == eventId);
+
+        if (waiver == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Waiver not found" });
+
+        // Soft delete - mark as inactive
+        waiver.IsActive = false;
+        waiver.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool>
+        {
+            Success = true,
+            Data = true,
+            Message = "Waiver deleted"
         });
     }
 }
@@ -588,7 +652,10 @@ public class PlayerCheckInDto
 
 public class CreateWaiverRequest
 {
+    public int Id { get; set; } = 0; // 0 for new, >0 to update
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public bool IsRequired { get; set; } = true;
+    public bool RequiresMinorWaiver { get; set; } = false;
+    public int MinorAgeThreshold { get; set; } = 18;
 }

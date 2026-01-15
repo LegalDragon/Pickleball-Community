@@ -4,11 +4,11 @@ import {
   ArrowLeft, Users, Calendar, Clock, MapPin, Play, Check,
   ChevronRight, AlertCircle, Loader2, Settings, FileText,
   LayoutGrid, UserCheck, DollarSign, Shuffle, Trophy, Zap,
-  UserPlus, X, Plus, Search, ToggleLeft, ToggleRight
+  UserPlus, X, Plus, Search, ToggleLeft, ToggleRight, Shield, Trash2, Edit3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import api, { eventsApi, getSharedAssetUrl } from '../services/api';
+import api, { eventsApi, checkInApi, getSharedAssetUrl } from '../services/api';
 
 // Scheduling API
 const schedulingApi = {
@@ -50,9 +50,24 @@ export default function EventManage() {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(null);
 
+  // Waiver management state
+  const [waivers, setWaivers] = useState([]);
+  const [loadingWaivers, setLoadingWaivers] = useState(false);
+  const [showWaiverForm, setShowWaiverForm] = useState(false);
+  const [editingWaiver, setEditingWaiver] = useState(null);
+  const [waiverForm, setWaiverForm] = useState({
+    title: '',
+    content: '',
+    isRequired: true,
+    requiresMinorWaiver: true,
+    minorAgeThreshold: 18
+  });
+  const [savingWaiver, setSavingWaiver] = useState(false);
+
   useEffect(() => {
     if (eventId) {
       loadEvent();
+      loadWaivers();
     }
   }, [eventId]);
 
@@ -92,6 +107,84 @@ export default function EventManage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadWaivers = async () => {
+    setLoadingWaivers(true);
+    try {
+      const response = await checkInApi.getWaivers(eventId);
+      if (response.success) {
+        setWaivers(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading waivers:', err);
+    } finally {
+      setLoadingWaivers(false);
+    }
+  };
+
+  const handleSaveWaiver = async () => {
+    if (!waiverForm.title.trim() || !waiverForm.content.trim()) {
+      toast.error('Please enter a title and content for the waiver');
+      return;
+    }
+
+    setSavingWaiver(true);
+    try {
+      const response = await checkInApi.createWaiver(eventId, {
+        ...waiverForm,
+        id: editingWaiver?.id || 0
+      });
+      if (response.success) {
+        toast.success(editingWaiver ? 'Waiver updated' : 'Waiver created');
+        setShowWaiverForm(false);
+        setEditingWaiver(null);
+        setWaiverForm({
+          title: '',
+          content: '',
+          isRequired: true,
+          requiresMinorWaiver: true,
+          minorAgeThreshold: 18
+        });
+        loadWaivers();
+      } else {
+        toast.error(response.message || 'Failed to save waiver');
+      }
+    } catch (err) {
+      console.error('Error saving waiver:', err);
+      toast.error(err.response?.data?.message || 'Failed to save waiver');
+    } finally {
+      setSavingWaiver(false);
+    }
+  };
+
+  const handleDeleteWaiver = async (waiverId) => {
+    if (!confirm('Are you sure you want to delete this waiver?')) return;
+
+    try {
+      const response = await checkInApi.deleteWaiver(eventId, waiverId);
+      if (response.success) {
+        toast.success('Waiver deleted');
+        loadWaivers();
+      } else {
+        toast.error(response.message || 'Failed to delete waiver');
+      }
+    } catch (err) {
+      console.error('Error deleting waiver:', err);
+      toast.error(err.response?.data?.message || 'Failed to delete waiver');
+    }
+  };
+
+  const handleEditWaiver = (waiver) => {
+    setEditingWaiver(waiver);
+    setWaiverForm({
+      title: waiver.title,
+      content: waiver.content,
+      isRequired: waiver.isRequired,
+      requiresMinorWaiver: waiver.requiresMinorWaiver,
+      minorAgeThreshold: waiver.minorAgeThreshold
+    });
+    setShowWaiverForm(true);
   };
 
   const handleGenerateRound = async () => {
@@ -424,6 +517,201 @@ export default function EventManage() {
             </Link>
           </div>
         </div>
+
+        {/* Waiver Management */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-blue-600" />
+              Event Waivers
+            </h2>
+            <button
+              onClick={() => {
+                setEditingWaiver(null);
+                setWaiverForm({
+                  title: '',
+                  content: '',
+                  isRequired: true,
+                  requiresMinorWaiver: true,
+                  minorAgeThreshold: 18
+                });
+                setShowWaiverForm(true);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200"
+            >
+              <Plus className="w-4 h-4" />
+              Add Waiver
+            </button>
+          </div>
+
+          {/* Waiver List */}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            {loadingWaivers ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+              </div>
+            ) : waivers.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                <Shield className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">No waivers configured for this event</p>
+                <p className="text-xs text-gray-400 mt-1">Add a waiver to require players to sign before check-in</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {waivers.map(waiver => (
+                  <div key={waiver.id} className="p-4 hover:bg-gray-50">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900 truncate">{waiver.title}</h4>
+                          {waiver.isRequired && (
+                            <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">Required</span>
+                          )}
+                          {waiver.requiresMinorWaiver && (
+                            <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded">Minor Waiver</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{waiver.content}</p>
+                        {waiver.requiresMinorWaiver && (
+                          <p className="text-xs text-gray-400 mt-1">Parent/guardian signature required for players under {waiver.minorAgeThreshold}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleEditWaiver(waiver)}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteWaiver(waiver.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Waiver Form Modal */}
+        {showWaiverForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingWaiver ? 'Edit Waiver' : 'Create Waiver'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowWaiverForm(false);
+                    setEditingWaiver(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={waiverForm.title}
+                    onChange={(e) => setWaiverForm({ ...waiverForm, title: e.target.value })}
+                    placeholder="e.g., Liability Waiver"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                  <textarea
+                    value={waiverForm.content}
+                    onChange={(e) => setWaiverForm({ ...waiverForm, content: e.target.value })}
+                    rows={8}
+                    placeholder="Enter the full waiver text that players must agree to..."
+                    className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={waiverForm.isRequired}
+                      onChange={(e) => setWaiverForm({ ...waiverForm, isRequired: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Required to participate</span>
+                      <p className="text-xs text-gray-500">Players must sign this waiver to check in</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={waiverForm.requiresMinorWaiver}
+                      onChange={(e) => setWaiverForm({ ...waiverForm, requiresMinorWaiver: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Requires minor waiver</span>
+                      <p className="text-xs text-gray-500">Parent/guardian must sign for minors</p>
+                    </div>
+                  </label>
+
+                  {waiverForm.requiresMinorWaiver && (
+                    <div className="ml-7">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Minor age threshold</label>
+                      <select
+                        value={waiverForm.minorAgeThreshold}
+                        onChange={(e) => setWaiverForm({ ...waiverForm, minorAgeThreshold: parseInt(e.target.value) })}
+                        className="border border-gray-300 rounded-lg p-2 text-sm"
+                      >
+                        <option value={16}>Under 16</option>
+                        <option value={18}>Under 18</option>
+                        <option value={21}>Under 21</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-gray-200 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowWaiverForm(false);
+                    setEditingWaiver(null);
+                  }}
+                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveWaiver}
+                  disabled={savingWaiver}
+                  className="flex-1 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {savingWaiver ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    editingWaiver ? 'Update Waiver' : 'Create Waiver'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* On-Site Join */}
         <div className="space-y-3">
