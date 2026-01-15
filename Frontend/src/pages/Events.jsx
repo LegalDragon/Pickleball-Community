@@ -6535,78 +6535,56 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
               <div>
                 <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-2">
                   Event Type *
-                  <HelpIcon topicCode="event.eventType" size="sm" />
+                  <HelpIcon topicCode="event.eventTypes" size="sm" />
                 </label>
 
-                {/* Event Type Comparison Cards */}
-                <div className="grid gap-3 mb-4">
+                {/* Condensed Event Type Selection */}
+                <div className="space-y-2 mb-4">
                   {eventTypes.map(type => {
                     const isSelected = formData.eventTypeId === type.id;
                     const TypeIcon = type.icon ? getIconByName(type.icon, Trophy) : Trophy;
                     const colors = getColorValues(type.color);
 
-                    // Schedule type descriptions
-                    const scheduleTypeInfo = {
-                      'PrePlanned': { label: 'Pre-Planned', desc: 'Brackets/pools created before event', icon: ClipboardList },
-                      'Manual Only': { label: 'Manual', desc: 'Organizer creates all games manually', icon: Edit3 },
-                      'Dynamic': { label: 'Dynamic', desc: 'Popcorn/Gauntlet auto-scheduling', icon: Shuffle },
-                      'None': { label: 'No Scheduling', desc: 'No game scheduling needed', icon: Users }
+                    // Schedule type short labels
+                    const scheduleLabels = {
+                      'PrePlanned': 'Brackets/Pools',
+                      'Manual Only': 'Manual Games',
+                      'Dynamic': 'Auto-Schedule',
+                      'None': 'No Schedule'
                     };
-
-                    const schedInfo = scheduleTypeInfo[type.scheduleType] || scheduleTypeInfo['None'];
-                    const ScheduleIcon = schedInfo.icon;
 
                     return (
                       <button
                         key={type.id}
                         type="button"
                         onClick={() => setFormData({ ...formData, eventTypeId: type.id })}
-                        className={`text-left p-4 rounded-xl border-2 transition-all ${
+                        className={`w-full text-left p-3 rounded-lg border-2 transition-all flex items-center gap-3 ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                            ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className="w-10 h-10 rounded-lg flex items-center justify-center"
-                              style={{ backgroundColor: colors.bg, color: colors.text }}
-                            >
-                              <TypeIcon className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900">{type.name}</div>
-                              {type.description && (
-                                <div className="text-sm text-gray-500 mt-0.5">{type.description}</div>
-                              )}
-                            </div>
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: colors.bg, color: colors.text }}
+                        >
+                          <TypeIcon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{type.name}</span>
+                            {type.scheduleType && (
+                              <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                {scheduleLabels[type.scheduleType] || type.scheduleType}
+                              </span>
+                            )}
                           </div>
-                          {isSelected && (
-                            <CheckCircle className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                          {type.description && (
+                            <div className="text-xs text-gray-500 truncate">{type.description}</div>
                           )}
                         </div>
-
-                        {/* Features */}
-                        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <ScheduleIcon className="w-3.5 h-3.5" />
-                            <span>{schedInfo.label}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <Grid className="w-3.5 h-3.5" />
-                            <span>
-                              {type.divisionMax ? `Max ${type.divisionMax} division${type.divisionMax > 1 ? 's' : ''}` : 'Unlimited divisions'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Schedule type tooltip on hover */}
-                        {isSelected && type.scheduleType && (
-                          <div className="mt-2 p-2 bg-blue-100 rounded-lg text-xs text-blue-700">
-                            <Info className="w-3 h-3 inline mr-1" />
-                            {schedInfo.desc}
-                          </div>
+                        {isSelected && (
+                          <CheckCircle className="w-5 h-5 text-blue-500 flex-shrink-0" />
                         )}
                       </button>
                     );
