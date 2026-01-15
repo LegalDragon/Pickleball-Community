@@ -4461,36 +4461,34 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       </div>
                                     )}
 
-                                    {/* Admin: Cancel/Break unit */}
-                                    {isOrganizer && (
+                                    {/* Admin: Break unit apart (only for complete teams with 2+ members) */}
+                                    {isOrganizer && isComplete && unit.members?.filter(m => m.inviteStatus === 'Accepted').length >= 2 && (
                                       <button
                                         onClick={async () => {
-                                          if (!confirm(`Cancel registration for ${unit.name || 'this unit'}? This will remove all members.`)) return;
+                                          if (!confirm(`Break apart "${unit.name || 'this unit'}"? Each member will become their own individual registration that can be merged with other teams.`)) return;
                                           try {
-                                            const response = await tournamentApi.adminCancelUnit(unit.id);
+                                            const response = await tournamentApi.adminBreakUnit(unit.id);
                                             if (response.success) {
-                                              toast.success('Unit cancelled');
-                                              // Refresh registrations
+                                              toast.success(response.message || 'Unit broken apart');
+                                              // Invalidate cache to force refresh
                                               setDivisionRegistrationsCache(prev => {
                                                 const updated = { ...prev };
-                                                if (updated[division.id]) {
-                                                  updated[division.id] = updated[division.id].filter(u => u.id !== unit.id);
-                                                }
+                                                delete updated[division.id];
                                                 return updated;
                                               });
                                               onUpdate();
                                             } else {
-                                              toast.error(response.message || 'Failed to cancel unit');
+                                              toast.error(response.message || 'Failed to break unit');
                                             }
                                           } catch (err) {
-                                            console.error('Error cancelling unit:', err);
-                                            toast.error(err?.message || 'Failed to cancel unit');
+                                            console.error('Error breaking unit:', err);
+                                            toast.error(err?.message || 'Failed to break unit');
                                           }
                                         }}
-                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                        title="Cancel registration"
+                                        className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
+                                        title="Break team apart into individual registrations"
                                       >
-                                        <XCircle className="w-4 h-4" />
+                                        <ArrowRightLeft className="w-4 h-4" />
                                       </button>
                                     )}
                                   </div>

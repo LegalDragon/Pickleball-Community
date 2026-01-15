@@ -1090,26 +1090,29 @@ public class TournamentController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/Organizer: Cancel a unit registration (break/remove team)
+    /// Admin/Organizer: Break a unit apart - creates individual registrations for each member
+    /// Captain stays in original unit, other members get their own units
     /// </summary>
     [Authorize]
-    [HttpDelete("units/{unitId}/admin-cancel")]
-    public async Task<ActionResult<ApiResponse<bool>>> AdminCancelUnit(int unitId)
+    [HttpPost("units/{unitId}/admin-break")]
+    public async Task<ActionResult<ApiResponse<object>>> AdminBreakUnit(int unitId)
     {
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
 
         var unit = await _context.EventUnits
             .Include(u => u.Event)
+            .Include(u => u.Division)
             .Include(u => u.Members)
+                .ThenInclude(m => m.User)
             .Include(u => u.JoinRequests)
             .FirstOrDefaultAsync(u => u.Id == unitId);
 
         if (unit == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Message = "Unit not found" });
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Unit not found" });
 
-        // Only site admin or event organizer can cancel units
+        // Only site admin or event organizer can break units
         var isAdmin = await IsAdminAsync();
         var isOrganizer = unit.Event?.OrganizedByUserId == userId.Value;
 
@@ -1122,10 +1125,24 @@ public class TournamentController : ControllerBase
 
         if (hasScheduledMatches)
         {
-            return BadRequest(new ApiResponse<bool>
+            return BadRequest(new ApiResponse<object>
             {
                 Success = false,
-                Message = "Cannot cancel unit with scheduled matches. Cancel or reassign the matches first."
+                Message = "Cannot break unit with scheduled matches. Cancel or reassign the matches first."
+            });
+        }
+
+        // Get accepted members (excluding pending/requested)
+        var acceptedMembers = unit.Members
+            .Where(m => m.InviteStatus == "Accepted")
+            .ToList();
+
+        if (acceptedMembers.Count <= 1)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = "Unit only has one member. Nothing to break apart."
             });
         }
 
@@ -1135,23 +1152,58 @@ public class TournamentController : ControllerBase
             _context.EventUnitJoinRequests.RemoveRange(unit.JoinRequests);
         }
 
-        // Remove all members
-        if (unit.Members.Any())
+        // Remove pending/requested members (they'll need to request again)
+        var pendingMembers = unit.Members
+            .Where(m => m.InviteStatus != "Accepted")
+            .ToList();
+        if (pendingMembers.Any())
         {
-            _context.EventUnitMembers.RemoveRange(unit.Members);
+            _context.EventUnitMembers.RemoveRange(pendingMembers);
         }
 
-        // Mark unit as cancelled (or delete if preferred)
-        unit.Status = "Cancelled";
+        // Create new units for non-captain members
+        var createdUnits = new List<string>();
+        var captain = acceptedMembers.FirstOrDefault(m => m.UserId == unit.CaptainUserId);
+        var nonCaptainMembers = acceptedMembers.Where(m => m.UserId != unit.CaptainUserId).ToList();
+
+        foreach (var member in nonCaptainMembers)
+        {
+            // Create a new unit for this member
+            var memberName = Utility.FormatName(member.User?.LastName, member.User?.FirstName);
+            var newUnit = new EventUnit
+            {
+                EventId = unit.EventId,
+                DivisionId = unit.DivisionId,
+                Name = memberName,
+                Status = "Registered",
+                CaptainUserId = member.UserId,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EventUnits.Add(newUnit);
+            await _context.SaveChangesAsync(); // Save to get ID
+
+            // Move member to new unit and make them captain
+            member.UnitId = newUnit.Id;
+            member.Role = "Captain";
+
+            createdUnits.Add(memberName);
+        }
+
+        // Update original unit name to captain's name (since it's now solo)
+        if (captain != null)
+        {
+            unit.Name = Utility.FormatName(captain.User?.LastName, captain.User?.FirstName);
+        }
         unit.UpdatedAt = DateTime.Now;
 
         await _context.SaveChangesAsync();
 
-        return Ok(new ApiResponse<bool>
+        return Ok(new ApiResponse<object>
         {
             Success = true,
-            Data = true,
-            Message = "Unit registration cancelled successfully"
+            Data = new { createdUnits = createdUnits.Count },
+            Message = $"Unit broken apart. {createdUnits.Count} new individual registration(s) created: {string.Join(", ", createdUnits)}"
         });
     }
 

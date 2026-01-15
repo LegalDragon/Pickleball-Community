@@ -1389,8 +1389,8 @@ export const tournamentApi = {
     api.post(`/tournament/events/${eventId}/registrations/${unitId}/move`, { newDivisionId }),
   mergeRegistrations: (eventId, targetUnitId, sourceUnitId) =>
     api.post(`/tournament/events/${eventId}/registrations/merge`, { targetUnitId, sourceUnitId }),
-  adminCancelUnit: (unitId) =>
-    api.delete(`/tournament/units/${unitId}/admin-cancel`),
+  adminBreakUnit: (unitId) =>
+    api.post(`/tournament/units/${unitId}/admin-break`),
 
   // Player self-move to different division
   selfMoveToDivision: (eventId, newDivisionId, joinUnitId = null, newUnitName = null) =>
