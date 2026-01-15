@@ -451,48 +451,26 @@ export default function EventView() {
                         {divisionPlayers.length > 0 && (
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 mt-2">
                             {divisionPlayers.map((player) => (
-                              isAuthenticated ? (
-                                <button
-                                  key={player.userId}
-                                  onClick={() => setSelectedProfileUserId(player.userId)}
-                                  className="flex items-center gap-2 p-1.5 bg-white rounded hover:bg-gray-100 transition-colors text-left"
-                                >
-                                  {player.profileImageUrl ? (
-                                    <img
-                                      src={getSharedAssetUrl(player.profileImageUrl)}
-                                      alt={player.name}
-                                      className="w-7 h-7 rounded-full object-cover flex-shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                      <User className="w-3.5 h-3.5 text-gray-400" />
-                                    </div>
-                                  )}
-                                  <span className="text-xs text-gray-700 truncate">
-                                    {player.name}
-                                  </span>
-                                </button>
-                              ) : (
-                                <div
-                                  key={player.userId}
-                                  className="flex items-center gap-2 p-1.5 bg-white rounded"
-                                >
-                                  {player.profileImageUrl ? (
-                                    <img
-                                      src={getSharedAssetUrl(player.profileImageUrl)}
-                                      alt={player.name}
-                                      className="w-7 h-7 rounded-full object-cover flex-shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                      <User className="w-3.5 h-3.5 text-gray-400" />
-                                    </div>
-                                  )}
-                                  <span className="text-xs text-gray-700 truncate">
-                                    {player.name}
-                                  </span>
-                                </div>
-                              )
+                              <button
+                                key={player.userId}
+                                onClick={() => setSelectedProfileUserId(player.userId)}
+                                className="flex items-center gap-2 p-1.5 bg-white rounded hover:bg-gray-100 transition-colors text-left"
+                              >
+                                {player.profileImageUrl ? (
+                                  <img
+                                    src={getSharedAssetUrl(player.profileImageUrl)}
+                                    alt={player.name}
+                                    className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <User className="w-3.5 h-3.5 text-gray-400" />
+                                  </div>
+                                )}
+                                <span className="text-xs text-gray-700 truncate">
+                                  {player.name}
+                                </span>
+                              </button>
                             ))}
                           </div>
                         )}

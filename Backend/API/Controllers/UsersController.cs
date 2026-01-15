@@ -95,8 +95,9 @@ public class UsersController : ControllerBase
         }
     }
 
-    // GET: api/Users/{id}/public - Get public profile (anyone authenticated can view)
+    // GET: api/Users/{id}/public - Get public profile (anyone can view)
     [HttpGet("{id}/public")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<PublicProfileDto>>> GetPublicProfile(int id)
     {
         try
