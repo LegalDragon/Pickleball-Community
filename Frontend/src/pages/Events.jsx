@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
 import ShareLink, { QrCodeModal } from '../components/ui/ShareLink';
 import { getIconByName } from '../utils/iconMap';
@@ -1719,10 +1719,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
   // Document management state
   const [documents, setDocuments] = useState([]);
+  const [assetTypes, setAssetTypes] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
-  const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0 });
+  const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
   const [editingDocument, setEditingDocument] = useState(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
 
@@ -1912,6 +1913,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       }
       if (documents.length === 0) {
         loadDocuments();
+      }
+      if (assetTypes.length === 0) {
+        loadAssetTypes();
       }
     }
   }, [activeTab, isOrganizer]);
@@ -2273,11 +2277,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
-  // Load event documents
+  // Load event documents using ObjectAssets API
   const loadDocuments = async () => {
     setLoadingDocuments(true);
     try {
-      const response = await eventsApi.getDocuments(event.id);
+      const response = await objectAssetsApi.getAssets('Event', event.id);
       if (response.success) {
         setDocuments(response.data || []);
       }
@@ -2285,6 +2289,40 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       console.error('Error loading documents:', err);
     } finally {
       setLoadingDocuments(false);
+    }
+  };
+
+  // Load asset types for Event
+  const loadAssetTypes = async () => {
+    try {
+      const response = await objectAssetTypesApi.getAll({ objectTypeName: 'Event' });
+      if (response.success) {
+        setAssetTypes(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading asset types:', err);
+    }
+  };
+
+  // Get icon for asset type
+  const getIconForAssetType = (typeName) => {
+    switch (typeName?.toLowerCase()) {
+      case 'waiver': return Shield;
+      case 'map': return MapIcon;
+      case 'rules': return BookOpen;
+      case 'contacts': return Phone;
+      default: return FileText;
+    }
+  };
+
+  // Get color for asset type
+  const getColorForAssetType = (colorClass) => {
+    switch (colorClass) {
+      case 'red': return { bg: 'bg-red-100', text: 'text-red-600' };
+      case 'green': return { bg: 'bg-green-100', text: 'text-green-600' };
+      case 'purple': return { bg: 'bg-purple-100', text: 'text-purple-600' };
+      case 'blue': return { bg: 'bg-blue-100', text: 'text-blue-600' };
+      default: return { bg: 'bg-gray-100', text: 'text-gray-600' };
     }
   };
 
@@ -2303,10 +2341,15 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       return;
     }
 
+    if (!newDocument.objectAssetTypeId) {
+      toast.error('Please select a document type');
+      return;
+    }
+
     setUploadingDocument(true);
     try {
       // Upload file to shared assets
-      const uploadResponse = await sharedAssetApi.upload(file, 'document', 'event');
+      const uploadResponse = await sharedAssetApi.upload(file, 'document', 'event', true);
       const fileUrl = uploadResponse?.data?.url || uploadResponse?.url;
 
       if (!fileUrl) {
@@ -2314,8 +2357,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         return;
       }
 
-      // Create document record
-      const response = await eventsApi.addDocument(event.id, {
+      // Create document record using ObjectAssets API
+      const response = await objectAssetsApi.addAsset('Event', event.id, {
+        objectAssetTypeId: newDocument.objectAssetTypeId,
         title: newDocument.title,
         fileUrl: fileUrl,
         fileName: file.name,
@@ -2329,7 +2373,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         toast.success('Document added successfully');
         setDocuments([...documents, response.data]);
         setShowAddDocument(false);
-        setNewDocument({ title: '', isPublic: true, sortOrder: 0 });
+        setNewDocument({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
       } else {
         toast.error(response.message || 'Failed to add document');
       }
@@ -2344,7 +2388,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   // Update document
   const handleUpdateDocument = async (docId, updates) => {
     try {
-      const response = await eventsApi.updateDocument(event.id, docId, updates);
+      const response = await objectAssetsApi.updateAsset('Event', event.id, docId, updates);
       if (response.success) {
         setDocuments(documents.map(d => d.id === docId ? response.data : d));
         setEditingDocument(null);
@@ -2364,7 +2408,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
     setDeletingDocumentId(docId);
     try {
-      const response = await eventsApi.deleteDocument(event.id, docId);
+      const response = await objectAssetsApi.deleteAsset('Event', event.id, docId);
       if (response.success) {
         setDocuments(documents.filter(d => d.id !== docId));
         toast.success('Document deleted');
@@ -4459,10 +4503,15 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-100">
-                    {documents.map((doc) => (
+                    {documents.map((doc) => {
+                      const IconComponent = getIconForAssetType(doc.assetTypeName);
+                      const colors = getColorForAssetType(doc.assetTypeColorClass);
+                      return (
                       <div key={doc.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <FileText className="w-8 h-8 text-gray-400 flex-shrink-0" />
+                          <div className={`p-2 rounded-lg ${colors.bg} flex-shrink-0`}>
+                            <IconComponent className={`w-5 h-5 ${colors.text}`} />
+                          </div>
                           <div className="min-w-0">
                             {editingDocument?.id === doc.id ? (
                               <input
@@ -4473,7 +4522,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 autoFocus
                               />
                             ) : (
-                              <p className="font-medium text-gray-900 truncate">{doc.title}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {doc.assetTypeDisplayName && (
+                                  <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded capitalize">{doc.assetTypeDisplayName}</span>
+                                )}
+                                <p className="font-medium text-gray-900 truncate">{doc.title}</p>
+                              </div>
                             )}
                             <p className="text-sm text-gray-500 truncate">{doc.fileName}</p>
                             <div className="flex items-center gap-2 mt-1">
@@ -4551,7 +4605,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                           )}
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
 
@@ -4559,6 +4613,41 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 {showAddDocument && (
                   <div className="p-4 bg-gray-50 border-t border-gray-200">
                     <div className="space-y-3">
+                      {/* Document Type Selector */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Document Type *</label>
+                        {assetTypes.length === 0 ? (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                            No document types available. Please run Migration_098_ObjectAssets.sql.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                            {assetTypes.map(type => {
+                              const IconComponent = getIconForAssetType(type.typeName);
+                              const colors = getColorForAssetType(type.colorClass);
+                              return (
+                                <button
+                                  key={type.id}
+                                  type="button"
+                                  onClick={() => setNewDocument({ ...newDocument, objectAssetTypeId: type.id })}
+                                  className={`p-2 rounded-lg border-2 text-center transition-all ${
+                                    newDocument.objectAssetTypeId === type.id
+                                      ? 'border-orange-500 bg-orange-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <div className={`mx-auto w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center mb-1`}>
+                                    <IconComponent className={`w-4 h-4 ${colors.text}`} />
+                                  </div>
+                                  <span className={`text-xs font-medium ${
+                                    newDocument.objectAssetTypeId === type.id ? 'text-orange-700' : 'text-gray-600'
+                                  }`}>{type.displayName}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Document Title *</label>
                         <input
@@ -4594,12 +4683,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                           <input
                             type="file"
                             onChange={handleDocumentUpload}
-                            disabled={uploadingDocument || !newDocument.title.trim()}
+                            disabled={uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId}
                             className="hidden"
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg"
                           />
                           <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-colors ${
-                            uploadingDocument || !newDocument.title.trim()
+                            uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId
                               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                               : 'bg-orange-600 text-white hover:bg-orange-700'
                           }`}>
@@ -4619,7 +4708,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                         <button
                           onClick={() => {
                             setShowAddDocument(false);
-                            setNewDocument({ title: '', isPublic: true, sortOrder: 0 });
+                            setNewDocument({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
                           }}
                           className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg"
                         >
