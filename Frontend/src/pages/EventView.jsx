@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, objectAssetsApi, getSharedAssetUrl } from '../services/api';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function EventView() {
   const { eventId } = useParams();
@@ -19,6 +20,7 @@ export default function EventView() {
   const [adAssets, setAdAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
 
   // Load event data
   useEffect(() => {
@@ -456,43 +458,60 @@ export default function EventView() {
               </div>
             )}
 
-            {/* Registered Players */}
+            {/* Registered Players by Division */}
             {event.registeredPlayers && event.registeredPlayers.length > 0 && (
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5 text-orange-600" />
                   Registered Players ({event.registeredPlayers.length})
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {event.registeredPlayers.map((player) => (
-                    <div
-                      key={player.userId}
-                      className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg"
-                    >
-                      {player.profileImageUrl ? (
-                        <img
-                          src={getSharedAssetUrl(player.profileImageUrl)}
-                          alt={player.name}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                          <User className="w-4 h-4 text-gray-500" />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {player.name}
-                        </p>
-                        {(player.city || player.state) && (
-                          <p className="text-xs text-gray-500 truncate">
-                            {[player.city, player.state].filter(Boolean).join(', ')}
-                          </p>
-                        )}
+                {/* Group players by division */}
+                {event.divisions && event.divisions.map((division) => {
+                  const divisionPlayers = event.registeredPlayers.filter(
+                    p => p.divisionName === division.name
+                  );
+                  if (divisionPlayers.length === 0) return null;
+
+                  return (
+                    <div key={division.id} className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-sm font-medium text-gray-700">{division.name}</h3>
+                        <span className="text-xs text-gray-400">({divisionPlayers.length})</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {divisionPlayers.map((player) => (
+                          <button
+                            key={player.userId}
+                            onClick={() => setSelectedProfileUserId(player.userId)}
+                            className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+                          >
+                            {player.profileImageUrl ? (
+                              <img
+                                src={getSharedAssetUrl(player.profileImageUrl)}
+                                alt={player.name}
+                                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
+                                <User className="w-4 h-4 text-gray-500" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate group-hover:text-orange-600">
+                                {player.name}
+                              </p>
+                              {(player.city || player.state) && (
+                                <p className="text-xs text-gray-500 truncate">
+                                  {[player.city, player.state].filter(Boolean).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -511,6 +530,14 @@ export default function EventView() {
           </div>
         </div>
       </div>
+
+      {/* Public Profile Modal */}
+      {selectedProfileUserId && (
+        <PublicProfileModal
+          userId={selectedProfileUserId}
+          onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
     </div>
   );
 }
