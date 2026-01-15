@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { tournamentApi, tournamentGameDayApi, eventsApi, getSharedAssetUrl } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DrawingModal from '../components/DrawingModal';
 
@@ -113,7 +113,7 @@ export default function TournamentManage() {
 
     setCalculatingRankings(true);
     try {
-      const response = await tournamentGameDayApi.calculatePoolRankings(eventId, selectedDivision.id);
+      const response = await gameDayApi.calculatePoolRankings(eventId, selectedDivision.id);
       if (response.success) {
         setPoolStandings(response.data);
         toast.success('Pool rankings calculated');
@@ -139,7 +139,7 @@ export default function TournamentManage() {
 
     setFinalizingPools(true);
     try {
-      const response = await tournamentGameDayApi.finalizePools(eventId, selectedDivision.id);
+      const response = await gameDayApi.finalizePools(eventId, selectedDivision.id);
       if (response.success) {
         toast.success(`${response.data?.advancedCount || 0} teams advanced to playoffs`);
         setShowAdvancementPreview(false);
@@ -164,7 +164,7 @@ export default function TournamentManage() {
     }
 
     try {
-      const response = await tournamentGameDayApi.resetPools(eventId, selectedDivision.id);
+      const response = await gameDayApi.resetPools(eventId, selectedDivision.id);
       if (response.success) {
         toast.success('Pool finalization reset');
         loadDashboard();
@@ -180,7 +180,7 @@ export default function TournamentManage() {
 
   const handleOverrideRank = async (unitId, poolRank) => {
     try {
-      const response = await tournamentGameDayApi.overrideRank(unitId, { poolRank });
+      const response = await gameDayApi.overrideRank(unitId, { poolRank });
       if (response.success) {
         toast.success('Rank updated');
         setEditingRank(null);
