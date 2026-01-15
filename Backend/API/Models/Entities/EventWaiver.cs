@@ -4,13 +4,19 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// Event-specific waiver document that players must sign
+/// Event document (waiver, map, rules, contacts)
 /// </summary>
 public class EventWaiver
 {
     public int Id { get; set; }
 
     public int EventId { get; set; }
+
+    /// <summary>
+    /// Document type: waiver, map, rules, contacts
+    /// </summary>
+    [MaxLength(50)]
+    public string DocumentType { get; set; } = "waiver";
 
     [Required]
     [MaxLength(200)]

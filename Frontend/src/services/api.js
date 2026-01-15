@@ -1931,14 +1931,23 @@ export const checkInApi = {
   // Get event check-in summary (TD view)
   getEventCheckIns: (eventId) => api.get(`/checkin/event/${eventId}`),
 
-  // Get waivers for event
+  // Get waivers for event (legacy, still used for check-in flow)
   getWaivers: (eventId) => api.get(`/checkin/waivers/${eventId}`),
 
-  // Create waiver (TD)
+  // Create waiver (TD) - legacy
   createWaiver: (eventId, data) => api.post(`/checkin/waivers/${eventId}`, data),
 
-  // Delete waiver (TD)
-  deleteWaiver: (eventId, waiverId) => api.delete(`/checkin/waivers/${eventId}/${waiverId}`)
+  // Delete waiver (TD) - legacy
+  deleteWaiver: (eventId, waiverId) => api.delete(`/checkin/waivers/${eventId}/${waiverId}`),
+
+  // Get all event documents (waivers, maps, rules, contacts)
+  getDocuments: (eventId) => api.get(`/checkin/documents/${eventId}`),
+
+  // Create or update event document (TD)
+  createDocument: (eventId, data) => api.post(`/checkin/documents/${eventId}`, data),
+
+  // Delete event document (TD)
+  deleteDocument: (eventId, documentId) => api.delete(`/checkin/documents/${eventId}/${documentId}`)
 }
 
 // Tournament Game Day API
