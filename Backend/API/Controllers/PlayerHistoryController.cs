@@ -786,14 +786,23 @@ public class PlayerHistoryController : ControllerBase
         var eventIds = paymentRecords.Where(p => p.RelatedObjectId.HasValue).Select(p => p.RelatedObjectId!.Value).Distinct().ToList();
         var unitIds = paymentRecords.Where(p => p.SecondaryObjectId.HasValue).Select(p => p.SecondaryObjectId!.Value).Distinct().ToList();
 
-        // Fetch events and units in separate queries
-        var events = eventIds.Any()
-            ? await _context.Events.Where(e => eventIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id)
-            : new Dictionary<int, Event>();
+        // Fetch events and units in separate queries (only if we have IDs)
+        var events = new Dictionary<int, Pickleball.Community.Models.Entities.Event>();
+        if (eventIds.Any())
+        {
+            events = await _context.Events
+                .Where(e => eventIds.Contains(e.Id))
+                .ToDictionaryAsync(e => e.Id, e => e);
+        }
 
-        var units = unitIds.Any()
-            ? await _context.EventUnits.Include(u => u.Division).Where(u => unitIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id)
-            : new Dictionary<int, EventUnit>();
+        var units = new Dictionary<int, Pickleball.Community.Models.Entities.EventUnit>();
+        if (unitIds.Any())
+        {
+            units = await _context.EventUnits
+                .Include(u => u.Division)
+                .Where(u => unitIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u);
+        }
 
         // Map to DTOs
         var payments = paymentRecords.Select(p => new PlayerPaymentHistoryDto
