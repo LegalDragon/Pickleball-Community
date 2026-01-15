@@ -394,7 +394,7 @@ public class EventsController : ControllerBase
             // Determine primary team size
             var primaryTeamSize = evt.Divisions.Any()
                 ? evt.Divisions
-                    .GroupBy(d => d.TeamUnit?.RequiredPlayers ?? 1)
+                    .GroupBy(d => d.TeamUnit?.TotalPlayers ?? 1)
                     .OrderByDescending(g => g.Count())
                     .First().Key
                 : 2;
@@ -469,7 +469,7 @@ public class EventsController : ControllerBase
                     DivisionFee = d.DivisionFee,
                     RegisteredCount = d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary),
                     RegisteredPlayerCount = d.Units.Where(u => u.Status != "Cancelled" && !u.IsTemporary).Sum(u => u.Members.Count),
-                    LookingForPartnerCount = d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary && u.Members.Count < (d.TeamUnit?.RequiredPlayers ?? 1))
+                    LookingForPartnerCount = d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary && u.Members.Count < (d.TeamUnit?.TotalPlayers ?? 1))
                 }).ToList(),
                 RegisteredPlayers = registeredPlayers
             };
