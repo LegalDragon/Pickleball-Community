@@ -20,20 +20,6 @@ public class ObjectTypesController : ControllerBase
         _logger = logger;
     }
 
-    private int? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var id) ? id : null;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetCurrentUserId();
-        if (!userId.HasValue) return false;
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
-    }
-
     // GET: /objecttypes - Get all object types
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ObjectTypeDto>>>> GetAll([FromQuery] bool includeInactive = false)
@@ -103,14 +89,11 @@ public class ObjectTypesController : ControllerBase
 
     // POST: /objecttypes - Create new object type (admin only)
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<ObjectTypeDto>>> Create([FromBody] CreateObjectTypeDto dto)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             // Check for duplicate name
             if (await _context.ObjectTypes.AnyAsync(t => t.Name == dto.Name))
                 return BadRequest(new ApiResponse<ObjectTypeDto> { Success = false, Message = "An object type with this name already exists" });
@@ -153,14 +136,11 @@ public class ObjectTypesController : ControllerBase
 
     // PUT: /objecttypes/{id} - Update object type (admin only)
     [HttpPut("{id}")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<ObjectTypeDto>>> Update(int id, [FromBody] UpdateObjectTypeDto dto)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             var type = await _context.ObjectTypes.FindAsync(id);
             if (type == null)
                 return NotFound(new ApiResponse<ObjectTypeDto> { Success = false, Message = "Object type not found" });
@@ -205,14 +185,11 @@ public class ObjectTypesController : ControllerBase
 
     // DELETE: /objecttypes/{id} - Delete object type (admin only, soft delete)
     [HttpDelete("{id}")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             var type = await _context.ObjectTypes.FindAsync(id);
             if (type == null)
                 return NotFound(new ApiResponse<bool> { Success = false, Message = "Object type not found" });

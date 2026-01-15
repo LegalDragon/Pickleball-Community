@@ -20,20 +20,6 @@ public class ObjectAssetTypesController : ControllerBase
         _logger = logger;
     }
 
-    private int? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var id) ? id : null;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetCurrentUserId();
-        if (!userId.HasValue) return false;
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
-    }
-
     // GET: /objectassettypes - Get all asset types
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ObjectAssetTypeDto>>>> GetAll(
@@ -124,14 +110,11 @@ public class ObjectAssetTypesController : ControllerBase
 
     // POST: /objectassettypes - Create new asset type (admin only)
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<ObjectAssetTypeDto>>> Create([FromBody] CreateObjectAssetTypeDto dto)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             // Verify object type exists
             var objectType = await _context.ObjectTypes.FindAsync(dto.ObjectTypeId);
             if (objectType == null)
@@ -187,14 +170,11 @@ public class ObjectAssetTypesController : ControllerBase
 
     // PUT: /objectassettypes/{id} - Update asset type (admin only)
     [HttpPut("{id}")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<ObjectAssetTypeDto>>> Update(int id, [FromBody] UpdateObjectAssetTypeDto dto)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             var type = await _context.ObjectAssetTypes
                 .Include(t => t.ObjectType)
                 .FirstOrDefaultAsync(t => t.Id == id);
@@ -246,14 +226,11 @@ public class ObjectAssetTypesController : ControllerBase
 
     // DELETE: /objectassettypes/{id} - Delete asset type (admin only, soft delete)
     [HttpDelete("{id}")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(int id)
     {
         try
         {
-            if (!await IsAdminAsync())
-                return Forbid();
-
             var type = await _context.ObjectAssetTypes.FindAsync(id);
             if (type == null)
                 return NotFound(new ApiResponse<bool> { Success = false, Message = "Asset type not found" });
