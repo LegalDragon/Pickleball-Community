@@ -402,116 +402,104 @@ export default function EventView() {
               </div>
             )}
 
-            {/* Divisions */}
+            {/* Divisions with Players */}
             {event.divisions && event.divisions.length > 0 && (
-              <div className="mb-6 pb-6 border-b border-gray-100">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">Divisions</h2>
-                <div className="space-y-3">
-                  {event.divisions.map((division) => (
-                    <div
-                      key={division.id}
-                      className="p-4 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-medium text-gray-900">{division.name}</h3>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {division.teamUnitName && (
-                              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                                {division.teamUnitName}
-                              </span>
-                            )}
-                            {division.skillLevelName && (
-                              <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                                {division.skillLevelName}
-                              </span>
-                            )}
-                            {division.ageGroupName && (
-                              <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-                                {division.ageGroupName}
-                              </span>
-                            )}
-                          </div>
-                          {division.description && (
-                            <p className="text-sm text-gray-500 mt-2">{division.description}</p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-gray-900">
-                            {division.registeredCount} {division.registeredCount === 1 ? 'team' : 'teams'}
-                          </p>
-                          {division.maxUnits && (
-                            <p className="text-xs text-gray-500">
-                              Max {division.maxUnits}
-                            </p>
-                          )}
-                          {division.lookingForPartnerCount > 0 && (
-                            <p className="text-xs text-orange-600 mt-1">
-                              {division.lookingForPartnerCount} looking for partner
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Registered Players by Division */}
-            {event.registeredPlayers && event.registeredPlayers.length > 0 && (
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-orange-600" />
-                  Registered Players ({event.registeredPlayers.length})
-                </h2>
-                {/* Group players by division */}
-                {event.divisions && event.divisions.map((division) => {
-                  const divisionPlayers = event.registeredPlayers.filter(
-                    p => p.divisionName === division.name
-                  );
-                  if (divisionPlayers.length === 0) return null;
+                <h2 className="text-base font-semibold text-gray-900 mb-3">Divisions & Players</h2>
+                <div className="space-y-4">
+                  {event.divisions.map((division) => {
+                    const divisionPlayers = event.registeredPlayers?.filter(
+                      p => p.divisionName === division.name
+                    ) || [];
 
-                  return (
-                    <div key={division.id} className="mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-sm font-medium text-gray-700">{division.name}</h3>
-                        <span className="text-xs text-gray-400">({divisionPlayers.length})</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {divisionPlayers.map((player) => (
-                          <button
-                            key={player.userId}
-                            onClick={() => setSelectedProfileUserId(player.userId)}
-                            className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
-                          >
-                            {player.profileImageUrl ? (
-                              <img
-                                src={getSharedAssetUrl(player.profileImageUrl)}
-                                alt={player.name}
-                                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
-                                <User className="w-4 h-4 text-gray-500" />
+                    return (
+                      <div
+                        key={division.id}
+                        className="p-3 bg-gray-50 rounded-lg"
+                      >
+                        {/* Division Header */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-medium text-gray-900">{division.name}</h3>
+                              <div className="flex flex-wrap gap-1">
+                                {division.teamUnitName && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                    {division.teamUnitName}
+                                  </span>
+                                )}
+                                {division.skillLevelName && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                                    {division.skillLevelName}
+                                  </span>
+                                )}
+                                {division.ageGroupName && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                    {division.ageGroupName}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 truncate group-hover:text-orange-600">
-                                {player.name}
-                              </p>
-                              {(player.city || player.state) && (
-                                <p className="text-xs text-gray-500 truncate">
-                                  {[player.city, player.state].filter(Boolean).join(', ')}
-                                </p>
-                              )}
                             </div>
-                          </button>
-                        ))}
+                          </div>
+                          <div className="text-right text-xs text-gray-500">
+                            {division.registeredCount} {division.registeredCount === 1 ? 'team' : 'teams'}
+                            {division.maxUnits && ` / ${division.maxUnits}`}
+                          </div>
+                        </div>
+
+                        {/* Players in this division */}
+                        {divisionPlayers.length > 0 && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 mt-2">
+                            {divisionPlayers.map((player) => (
+                              isAuthenticated ? (
+                                <button
+                                  key={player.userId}
+                                  onClick={() => setSelectedProfileUserId(player.userId)}
+                                  className="flex items-center gap-2 p-1.5 bg-white rounded hover:bg-gray-100 transition-colors text-left"
+                                >
+                                  {player.profileImageUrl ? (
+                                    <img
+                                      src={getSharedAssetUrl(player.profileImageUrl)}
+                                      alt={player.name}
+                                      className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <User className="w-3.5 h-3.5 text-gray-400" />
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-gray-700 truncate">
+                                    {player.name}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div
+                                  key={player.userId}
+                                  className="flex items-center gap-2 p-1.5 bg-white rounded"
+                                >
+                                  {player.profileImageUrl ? (
+                                    <img
+                                      src={getSharedAssetUrl(player.profileImageUrl)}
+                                      alt={player.name}
+                                      className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <User className="w-3.5 h-3.5 text-gray-400" />
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-gray-700 truncate">
+                                    {player.name}
+                                  </span>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
