@@ -14,12 +14,12 @@ namespace Pickleball.Community.Controllers;
 public class TournamentGameDayController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    private readonly NotificationService _notificationService;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<TournamentGameDayController> _logger;
 
     public TournamentGameDayController(
         ApplicationDbContext context,
-        NotificationService notificationService,
+        INotificationService notificationService,
         ILogger<TournamentGameDayController> logger)
     {
         _context = context;
