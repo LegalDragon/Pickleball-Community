@@ -793,12 +793,13 @@ public class TournamentController : ControllerBase
         }
         else
         {
-            // Declined - remove the pending membership
+            // Declined - update membership status to Rejected (preserve payment info if any)
             if (membership != null)
             {
-                _context.EventUnitMembers.Remove(membership);
+                membership.InviteStatus = "Rejected";
+                membership.RespondedAt = DateTime.Now;
             }
-            // Also remove the join request so the user can make a new request
+            // Remove the join request so the user can make a new request to another team
             _context.EventUnitJoinRequests.Remove(joinRequest);
         }
 
