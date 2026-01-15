@@ -128,6 +128,16 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
     }
   };
 
+  // Check if there's any existing payment data (must be before early returns)
+  const hasExistingPaymentData = member?.paymentProofUrl || member?.paymentReference || (member?.amountPaid > 0);
+
+  // Auto-start in edit mode if no payment data and not paid (must be before early returns)
+  useEffect(() => {
+    if (member && !member.hasPaid && !hasExistingPaymentData && !isEditing) {
+      setIsEditing(true);
+    }
+  }, [member, hasExistingPaymentData, isEditing]);
+
   if (!isOpen || !unit) return null;
 
   if (!member) {
@@ -166,18 +176,8 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
   const isPdf = isPdfUrl(memberProofUrl);
   const isImage = isImageUrl(memberProofUrl);
 
-  // Check if there's any existing payment data
-  const hasExistingPaymentData = member.paymentProofUrl || member.paymentReference || member.amountPaid > 0;
-
   // Determine if we should show "Add Payment" vs "Edit Payment" vs "Verify Payment"
   const isAddingPayment = isEditing && !member.hasPaid && !hasExistingPaymentData;
-
-  // Auto-start in edit mode if no payment data and not paid
-  useEffect(() => {
-    if (member && !member.hasPaid && !hasExistingPaymentData && !isEditing) {
-      setIsEditing(true);
-    }
-  }, [member, hasExistingPaymentData, isEditing]);
 
   const handleMarkAsPaid = async () => {
     setIsUpdating(true);
