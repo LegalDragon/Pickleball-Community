@@ -775,40 +775,51 @@ public class PlayerHistoryController : ControllerBase
 
         var totalCount = await query.CountAsync();
 
-        // Join with Events and EventUnits to get names
-        var payments = await (from p in query
-            join e in _context.Events on p.RelatedObjectId equals e.Id into eventJoin
-            from e in eventJoin.DefaultIfEmpty()
-            join u in _context.EventUnits.Include(u => u.Division) on p.SecondaryObjectId equals u.Id into unitJoin
-            from u in unitJoin.DefaultIfEmpty()
-            orderby p.CreatedAt descending
-            select new PlayerPaymentHistoryDto
-            {
-                Id = p.Id,
-                EventId = p.RelatedObjectId,
-                EventName = e != null ? e.Name : "Unknown Event",
-                EventDate = e != null ? e.StartDate : null,
-                UnitId = p.SecondaryObjectId,
-                UnitName = u != null ? u.Name : null,
-                DivisionName = u != null && u.Division != null ? u.Division.Name : null,
-                Amount = p.Amount,
-                PaymentMethod = p.PaymentMethod,
-                PaymentReference = p.PaymentReference,
-                PaymentProofUrl = p.PaymentProofUrl,
-                ReferenceId = p.ReferenceId,
-                Status = p.Status,
-                IsApplied = p.IsApplied,
-                AppliedAt = p.AppliedAt,
-                VerifiedAt = p.VerifiedAt,
-                VerifiedByName = p.VerifiedByUser != null
-                    ? Utility.FormatName(p.VerifiedByUser.LastName, p.VerifiedByUser.FirstName)
-                    : null,
-                Notes = p.Notes,
-                CreatedAt = p.CreatedAt
-            })
+        // Fetch payments first
+        var paymentRecords = await query
+            .OrderByDescending(p => p.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync();
+
+        // Get related event and unit IDs
+        var eventIds = paymentRecords.Where(p => p.RelatedObjectId.HasValue).Select(p => p.RelatedObjectId!.Value).Distinct().ToList();
+        var unitIds = paymentRecords.Where(p => p.SecondaryObjectId.HasValue).Select(p => p.SecondaryObjectId!.Value).Distinct().ToList();
+
+        // Fetch events and units in separate queries
+        var events = eventIds.Any()
+            ? await _context.Events.Where(e => eventIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id)
+            : new Dictionary<int, Event>();
+
+        var units = unitIds.Any()
+            ? await _context.EventUnits.Include(u => u.Division).Where(u => unitIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id)
+            : new Dictionary<int, EventUnit>();
+
+        // Map to DTOs
+        var payments = paymentRecords.Select(p => new PlayerPaymentHistoryDto
+        {
+            Id = p.Id,
+            EventId = p.RelatedObjectId,
+            EventName = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt) ? evt.Name : "Unknown Event",
+            EventDate = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt2) ? evt2.StartDate : null,
+            UnitId = p.SecondaryObjectId,
+            UnitName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit) ? unit.Name : null,
+            DivisionName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit2) && unit2.Division != null ? unit2.Division.Name : null,
+            Amount = p.Amount,
+            PaymentMethod = p.PaymentMethod,
+            PaymentReference = p.PaymentReference,
+            PaymentProofUrl = p.PaymentProofUrl,
+            ReferenceId = p.ReferenceId,
+            Status = p.Status,
+            IsApplied = p.IsApplied,
+            AppliedAt = p.AppliedAt,
+            VerifiedAt = p.VerifiedAt,
+            VerifiedByName = p.VerifiedByUser != null
+                ? Utility.FormatName(p.VerifiedByUser.LastName, p.VerifiedByUser.FirstName)
+                : null,
+            Notes = p.Notes,
+            CreatedAt = p.CreatedAt
+        }).ToList();
 
         // Calculate summary stats for all payments (not just current page)
         var allPayments = await _context.UserPayments
