@@ -51,6 +51,11 @@ export default function TournamentManage() {
   const [addingCourts, setAddingCourts] = useState(false);
   const [mapAsset, setMapAsset] = useState(null);
 
+  // Edit court modal state
+  const [editingCourt, setEditingCourt] = useState(null);
+  const [editCourtForm, setEditCourtForm] = useState({ label: '', status: '' });
+  const [savingCourt, setSavingCourt] = useState(false);
+
   // Status update state
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
@@ -130,6 +135,52 @@ export default function TournamentManage() {
       toast.error('Failed to add courts');
     } finally {
       setAddingCourts(false);
+    }
+  };
+
+  const handleEditCourt = (court) => {
+    setEditingCourt(court);
+    setEditCourtForm({ label: court.courtLabel, status: court.status });
+  };
+
+  const handleSaveCourt = async () => {
+    if (!editingCourt) return;
+
+    setSavingCourt(true);
+    try {
+      const response = await gameDayApi.updateCourt(editingCourt.id, {
+        label: editCourtForm.label,
+        status: editCourtForm.status
+      });
+      if (response.success) {
+        toast.success('Court updated');
+        setEditingCourt(null);
+        loadDashboard(); // Refresh to show updated court
+      } else {
+        toast.error(response.message || 'Failed to update court');
+      }
+    } catch (err) {
+      console.error('Error updating court:', err);
+      toast.error('Failed to update court');
+    } finally {
+      setSavingCourt(false);
+    }
+  };
+
+  const handleDeleteCourt = async (courtId) => {
+    if (!confirm('Delete this court? This cannot be undone.')) return;
+
+    try {
+      const response = await gameDayApi.deleteCourt(courtId);
+      if (response.success) {
+        toast.success('Court deleted');
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to delete court');
+      }
+    } catch (err) {
+      console.error('Error deleting court:', err);
+      toast.error('Failed to delete court');
     }
   };
 
@@ -820,13 +871,24 @@ export default function TournamentManage() {
                   <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
-                        court.status === 'Available' ? 'bg-green-100 text-green-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {court.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
+                          court.status === 'Available' ? 'bg-green-100 text-green-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {court.status}
+                        </span>
+                        {isOrganizer && (
+                          <button
+                            onClick={() => handleEditCourt(court)}
+                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                            title="Edit court"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {court.locationDescription && (
                       <p className="text-sm text-gray-500">{court.locationDescription}</p>
@@ -881,6 +943,73 @@ export default function TournamentManage() {
                     setNumberOfCourts('');
                   }}
                   disabled={addingCourts}
+                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Court Modal */}
+        {editingCourt && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-sm w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Court</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Court Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editCourtForm.label}
+                    onChange={(e) => setEditCourtForm(prev => ({ ...prev, label: e.target.value }))}
+                    placeholder="Court name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editCourtForm.status}
+                    onChange={(e) => setEditCourtForm(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="Available">Available</option>
+                    <option value="InUse">In Use</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSaveCourt}
+                  disabled={savingCourt || !editCourtForm.label}
+                  className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {savingCourt ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save
+                </button>
+                <button
+                  onClick={() => handleDeleteCourt(editingCourt.id)}
+                  disabled={savingCourt}
+                  className="px-4 py-2 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setEditingCourt(null)}
+                  disabled={savingCourt}
                   className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
                 >
                   Cancel

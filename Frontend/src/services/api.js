@@ -1984,6 +1984,10 @@ export const gameDayApi = {
   // Player Dashboard
   getPlayerGameDay: (eventId) => api.get(`/tournament-gameday/player/${eventId}`),
 
+  // Court management
+  updateCourt: (courtId, data) => api.put(`/gameday/courts/${courtId}`, data),
+  deleteCourt: (courtId) => api.delete(`/gameday/courts/${courtId}`),
+
   // Get ready games
   getReadyGames: (eventId, divisionId = null) => {
     const params = divisionId ? `?divisionId=${divisionId}` : ''
