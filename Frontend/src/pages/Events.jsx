@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -17,6 +17,7 @@ import HelpIcon from '../components/ui/HelpIcon';
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const courtIdParam = searchParams.get('courtId');
   const courtNameParam = searchParams.get('courtName');
@@ -276,6 +277,27 @@ export default function Events() {
     }
   }, [isAuthenticated]);
 
+  // Handle opening event modal from navigation state (e.g., from public EventView page)
+  useEffect(() => {
+    const openEventId = location.state?.openEventId;
+    if (openEventId && isAuthenticated) {
+      // Load and open the event modal
+      const loadAndOpenEvent = async () => {
+        try {
+          const response = await eventsApi.getEvent(openEventId);
+          if (response.success) {
+            setSelectedEvent(response.data);
+          }
+        } catch (err) {
+          console.error('Error loading event from navigation state:', err);
+        }
+      };
+      loadAndOpenEvent();
+      // Clear the state to prevent reopening on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.openEventId, isAuthenticated, navigate, location.pathname]);
+
   const loadMyEvents = async () => {
     try {
       const response = await eventsApi.getMyEvents();
@@ -408,10 +430,9 @@ export default function Events() {
   const toast = useToast();
 
   const handleViewDetails = async (event) => {
-    // Redirect unauthenticated users to login
+    // Navigate to public event view page for unauthenticated users
     if (!isAuthenticated) {
-      toast.info('Please log in to view event details');
-      navigate('/login', { state: { from: '/events', eventId: event.id } });
+      navigate(`/events/${event.id}`);
       return;
     }
 
@@ -422,17 +443,19 @@ export default function Events() {
       }
     } catch (err) {
       console.error('Error loading event details:', err);
-      // Check if this is a 401 Unauthorized
+      // Check if this is a 401 Unauthorized - redirect to public view
       if (err?.status === 401 || err?.response?.status === 401) {
-        toast.info('Please log in to view event details');
-        navigate('/login', { state: { from: '/events', eventId: event.id } });
+        navigate(`/events/${event.id}`);
         return;
       }
       // Check if this is a profile completion requirement (403)
       if (err?.message?.toLowerCase().includes('complete your profile')) {
         toast.warning('Please complete your profile to view event details');
         navigate('/complete-profile');
+        return;
       }
+      // For other errors, still show the public view
+      navigate(`/events/${event.id}`);
     }
   };
 

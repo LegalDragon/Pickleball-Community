@@ -22,6 +22,7 @@ import FeaturesAdmin from './pages/FeaturesAdmin'
 import Feedback from './pages/Feedback'
 import FeedbackAdmin from './pages/FeedbackAdmin'
 import Events from './pages/Events'
+import EventView from './pages/EventView'
 import TournamentManage from './pages/TournamentManage'
 import GameDayManage from './pages/GameDayManage'
 import EventManage from './pages/EventManage'
@@ -70,6 +71,7 @@ function App() {
 
       {/* Community Features - Public */}
       <Route path="/events" element={<Events />} />
+      <Route path="/events/:eventId" element={<EventView />} />
       <Route path="/tournament/:eventId/manage" element={
         <ProtectedRoute>
           <TournamentManage />

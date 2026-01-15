@@ -283,7 +283,7 @@ function EventCard({ event, formatDate, formatTime }) {
 
   return (
     <Link
-      to="/events"
+      to={`/events/${event.id}`}
       className="block bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group"
     >
       {/* Image */}

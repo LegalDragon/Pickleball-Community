@@ -846,8 +846,11 @@ export const eventsApi = {
   // Get featured events for home page
   getFeatured: (limit = 6) => api.get(`/events/featured?limit=${limit}`),
 
-  // Get event details
+  // Get event details (requires auth)
   getEvent: (id) => api.get(`/events/${id}`),
+
+  // Get public event view (no auth required)
+  getEventPublic: (id) => api.get(`/events/${id}/public`),
 
   // Create a new event
   create: (data) => api.post('/events', data),
