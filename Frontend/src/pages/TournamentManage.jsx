@@ -944,7 +944,7 @@ export default function TournamentManage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {pool.standings?.map((standing, idx) => {
+                                  {pool.standings?.filter(s => s != null).map((standing, idx) => {
                                     const willAdvance = selectedDivision?.playoffFromPools &&
                                       standing.rank <= selectedDivision.playoffFromPools;
                                     const isEditing = editingRank?.unitId === standing.unitId;
