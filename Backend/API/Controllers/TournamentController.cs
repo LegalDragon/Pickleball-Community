@@ -1790,6 +1790,137 @@ public class TournamentController : ControllerBase
     }
 
     /// <summary>
+    /// Apply a member's existing payment to other teammates (organizer/admin only)
+    /// Copies payment proof and reference, splits amount among all selected members
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/units/{unitId}/members/{memberId}/apply-to-teammates")]
+    public async Task<ActionResult<ApiResponse<object>>> ApplyPaymentToTeammates(
+        int eventId, int unitId, int memberId, [FromBody] ApplyPaymentToTeammatesRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (request.TargetMemberIds == null || request.TargetMemberIds.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No target members specified" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Event)
+            .Include(u => u.Division)
+            .Include(u => u.Members)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+
+        if (unit == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Registration not found" });
+
+        // Only organizer or site admin can apply payment to teammates
+        var isAdmin = await IsAdminAsync();
+        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+            return Forbid();
+
+        // Get the source member (whose payment we're copying)
+        var sourceMember = unit.Members.FirstOrDefault(m => m.UserId == memberId);
+        if (sourceMember == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Source member not found" });
+
+        if (!sourceMember.HasPaid)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Source member has not paid yet" });
+
+        // Get accepted members only
+        var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+
+        // Validate target members exist and are unpaid
+        var targetMembers = acceptedMembers
+            .Where(m => request.TargetMemberIds.Contains(m.UserId) && m.UserId != memberId && !m.HasPaid)
+            .ToList();
+
+        if (targetMembers.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No valid unpaid teammates to apply payment to" });
+
+        // Calculate amounts
+        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+        var totalMembersBeingCovered = targetMembers.Count + 1; // targets + source member
+        var perMemberAmount = amountDue / acceptedMembers.Count;
+
+        // If redistributing, update source member's amount
+        if (request.RedistributeAmount)
+        {
+            sourceMember.AmountPaid = perMemberAmount;
+        }
+
+        var appliedCount = 0;
+
+        foreach (var targetMember in targetMembers)
+        {
+            // Load user info for description
+            var targetUser = await _context.Users.FindAsync(targetMember.UserId);
+            var targetName = Utility.FormatName(targetUser?.LastName, targetUser?.FirstName);
+            var referenceId = $"E{eventId}-U{unitId}-M{targetMember.Id}";
+
+            // Create UserPayment record for audit trail
+            var userPayment = new UserPayment
+            {
+                UserId = targetMember.UserId,
+                PaymentType = PaymentTypes.EventRegistration,
+                RelatedObjectId = eventId,
+                SecondaryObjectId = unitId,
+                TertiaryObjectId = targetMember.Id,
+                Description = $"Event registration - {unit.Event?.Name} - {targetName} (applied from teammate)",
+                Amount = perMemberAmount,
+                PaymentProofUrl = sourceMember.PaymentProofUrl,
+                PaymentReference = sourceMember.PaymentReference,
+                ReferenceId = referenceId,
+                Status = "Verified",
+                VerifiedByUserId = userId.Value,
+                VerifiedAt = DateTime.Now,
+                Notes = $"Payment applied from teammate (Member ID: {memberId})",
+                IsApplied = true,
+                AppliedAt = DateTime.Now,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.UserPayments.Add(userPayment);
+
+            // Update target member's payment info
+            targetMember.HasPaid = true;
+            targetMember.PaidAt = DateTime.Now;
+            targetMember.AmountPaid = perMemberAmount;
+            targetMember.PaymentProofUrl = sourceMember.PaymentProofUrl;
+            targetMember.PaymentReference = sourceMember.PaymentReference;
+            targetMember.ReferenceId = referenceId;
+
+            appliedCount++;
+        }
+
+        // Update unit-level payment status
+        var allMembersPaid = acceptedMembers.All(m => m.HasPaid);
+        var totalPaidAmount = acceptedMembers.Where(m => m.HasPaid).Sum(m => m.AmountPaid);
+
+        if (allMembersPaid)
+        {
+            unit.PaymentStatus = "Paid";
+            unit.AmountPaid = totalPaidAmount;
+            unit.PaidAt = DateTime.Now;
+        }
+        else
+        {
+            unit.PaymentStatus = "Partial";
+            unit.AmountPaid = totalPaidAmount;
+        }
+        unit.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Data = new { appliedCount, unitPaymentStatus = unit.PaymentStatus },
+            Message = $"Payment applied to {appliedCount} teammate{(appliedCount > 1 ? "s" : "")}"
+        });
+    }
+
+    /// <summary>
     /// Update a member's payment info (organizer/admin only)
     /// </summary>
     [Authorize]

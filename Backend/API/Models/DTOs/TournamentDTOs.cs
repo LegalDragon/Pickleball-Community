@@ -698,3 +698,15 @@ public class UpdateMemberPaymentRequest
     public string? PaymentReference { get; set; }
     public string? ReferenceId { get; set; }
 }
+
+public class ApplyPaymentToTeammatesRequest
+{
+    /// <summary>
+    /// List of teammate user IDs to apply payment to
+    /// </summary>
+    public List<int> TargetMemberIds { get; set; } = new();
+    /// <summary>
+    /// If true, redistributes the source member's amount evenly across all members
+    /// </summary>
+    public bool RedistributeAmount { get; set; } = true;
+}
