@@ -131,8 +131,8 @@ public class PlayerHistoryController : ControllerBase
             .ToListAsync();
 
         // Payment summary
-        var payments = await _context.EventPayments
-            .Where(p => p.UserId == userId)
+        var payments = await _context.UserPayments
+            .Where(p => p.UserId == userId && p.PaymentType == PaymentTypes.EventRegistration)
             .ToListAsync();
 
         var totalPayments = payments.Count;
@@ -748,12 +748,9 @@ public class PlayerHistoryController : ControllerBase
         if (user == null)
             return NotFound(new ApiResponse<PaymentHistoryPagedResponse> { Success = false, Message = "User not found" });
 
-        var query = _context.EventPayments
-            .Include(p => p.Event)
-            .Include(p => p.Unit)
-                .ThenInclude(u => u!.Division)
+        var query = _context.UserPayments
             .Include(p => p.VerifiedByUser)
-            .Where(p => p.UserId == userId);
+            .Where(p => p.UserId == userId && p.PaymentType == PaymentTypes.EventRegistration);
 
         // Apply filters
         if (!string.IsNullOrEmpty(request.Status))
@@ -763,7 +760,7 @@ public class PlayerHistoryController : ControllerBase
 
         if (request.EventId.HasValue)
         {
-            query = query.Where(p => p.EventId == request.EventId.Value);
+            query = query.Where(p => p.RelatedObjectId == request.EventId.Value);
         }
 
         if (request.DateFrom.HasValue)
@@ -778,19 +775,22 @@ public class PlayerHistoryController : ControllerBase
 
         var totalCount = await query.CountAsync();
 
-        var payments = await query
-            .OrderByDescending(p => p.CreatedAt)
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(p => new PlayerPaymentHistoryDto
+        // Join with Events and EventUnits to get names
+        var payments = await (from p in query
+            join e in _context.Events on p.RelatedObjectId equals e.Id into eventJoin
+            from e in eventJoin.DefaultIfEmpty()
+            join u in _context.EventUnits.Include(u => u.Division) on p.SecondaryObjectId equals u.Id into unitJoin
+            from u in unitJoin.DefaultIfEmpty()
+            orderby p.CreatedAt descending
+            select new PlayerPaymentHistoryDto
             {
                 Id = p.Id,
-                EventId = p.EventId,
-                EventName = p.Event != null ? p.Event.Name : "Unknown Event",
-                EventDate = p.Event != null ? p.Event.StartDate : null,
-                UnitId = p.UnitId,
-                UnitName = p.Unit != null ? p.Unit.Name : null,
-                DivisionName = p.Unit != null && p.Unit.Division != null ? p.Unit.Division.Name : null,
+                EventId = p.RelatedObjectId,
+                EventName = e != null ? e.Name : "Unknown Event",
+                EventDate = e != null ? e.StartDate : null,
+                UnitId = p.SecondaryObjectId,
+                UnitName = u != null ? u.Name : null,
+                DivisionName = u != null && u.Division != null ? u.Division.Name : null,
                 Amount = p.Amount,
                 PaymentMethod = p.PaymentMethod,
                 PaymentReference = p.PaymentReference,
@@ -806,11 +806,13 @@ public class PlayerHistoryController : ControllerBase
                 Notes = p.Notes,
                 CreatedAt = p.CreatedAt
             })
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
             .ToListAsync();
 
         // Calculate summary stats for all payments (not just current page)
-        var allPayments = await _context.EventPayments
-            .Where(p => p.UserId == userId)
+        var allPayments = await _context.UserPayments
+            .Where(p => p.UserId == userId && p.PaymentType == PaymentTypes.EventRegistration)
             .ToListAsync();
 
         var response = new PaymentHistoryPagedResponse

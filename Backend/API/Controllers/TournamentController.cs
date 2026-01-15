@@ -1096,13 +1096,15 @@ public class TournamentController : ControllerBase
         // Get the member record for linking
         var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId.Value);
 
-        // STEP 1: Save payment to EventPayments table FIRST (preserves payment data independently)
-        var eventPayment = new EventPayment
+        // STEP 1: Save payment to UserPayments table FIRST (preserves payment data independently)
+        var userPayment = new UserPayment
         {
-            EventId = eventId,
             UserId = userId.Value,
-            UnitId = unitId,
-            MemberId = memberRecord?.Id,
+            PaymentType = PaymentTypes.EventRegistration,
+            RelatedObjectId = eventId,
+            SecondaryObjectId = unitId,
+            TertiaryObjectId = memberRecord?.Id,
+            Description = $"Event registration - {unit.Event?.Name}",
             Amount = request.AmountPaid ?? 0,
             PaymentProofUrl = request.PaymentProofUrl,
             PaymentReference = request.PaymentReference,
@@ -1113,7 +1115,7 @@ public class TournamentController : ControllerBase
             UpdatedAt = DateTime.Now
         };
 
-        _context.EventPayments.Add(eventPayment);
+        _context.UserPayments.Add(userPayment);
         await _context.SaveChangesAsync(); // Save payment record first
 
         // STEP 2: Apply payment to registration records
@@ -1170,9 +1172,9 @@ public class TournamentController : ControllerBase
         }
 
         // Mark payment as applied to registration
-        eventPayment.IsApplied = true;
-        eventPayment.AppliedAt = DateTime.Now;
-        eventPayment.UpdatedAt = DateTime.Now;
+        userPayment.IsApplied = true;
+        userPayment.AppliedAt = DateTime.Now;
+        userPayment.UpdatedAt = DateTime.Now;
 
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
@@ -1224,23 +1226,26 @@ public class TournamentController : ControllerBase
         var memberCount = unit.Members.Count;
         var perMemberAmount = memberCount > 0 ? amountDue / memberCount : amountDue;
 
-        // STEP 1: Save payment records to EventPayments for each member
+        // STEP 1: Save payment records to UserPayments for each member
         foreach (var member in unit.Members)
         {
             var referenceId = $"E{eventId}-U{unitId}-P{member.UserId}";
 
             // Check if payment record already exists
-            var existingPayment = await _context.EventPayments
-                .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == member.UserId);
+            var existingPayment = await _context.UserPayments
+                .FirstOrDefaultAsync(p => p.PaymentType == PaymentTypes.EventRegistration
+                    && p.RelatedObjectId == eventId && p.SecondaryObjectId == unitId && p.UserId == member.UserId);
 
             if (existingPayment == null)
             {
-                var eventPayment = new EventPayment
+                var userPayment = new UserPayment
                 {
-                    EventId = eventId,
                     UserId = member.UserId,
-                    UnitId = unitId,
-                    MemberId = member.Id,
+                    PaymentType = PaymentTypes.EventRegistration,
+                    RelatedObjectId = eventId,
+                    SecondaryObjectId = unitId,
+                    TertiaryObjectId = member.Id,
+                    Description = $"Event registration - {unit.Event?.Name}",
                     Amount = perMemberAmount,
                     ReferenceId = referenceId,
                     Status = "Verified",
@@ -1252,7 +1257,7 @@ public class TournamentController : ControllerBase
                     CreatedAt = DateTime.Now,
                     UpdatedAt = DateTime.Now
                 };
-                _context.EventPayments.Add(eventPayment);
+                _context.UserPayments.Add(userPayment);
             }
             else
             {
@@ -1326,12 +1331,13 @@ public class TournamentController : ControllerBase
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
 
-        // Update EventPayments status to Pending for all members in this unit
-        var eventPayments = await _context.EventPayments
-            .Where(p => p.EventId == eventId && p.UnitId == unitId && p.Status == "Verified")
+        // Update UserPayments status to Pending for all members in this unit
+        var userPayments = await _context.UserPayments
+            .Where(p => p.PaymentType == PaymentTypes.EventRegistration
+                && p.RelatedObjectId == eventId && p.SecondaryObjectId == unitId && p.Status == "Verified")
             .ToListAsync();
 
-        foreach (var payment in eventPayments)
+        foreach (var payment in userPayments)
         {
             payment.Status = !string.IsNullOrEmpty(payment.PaymentProofUrl) ? "PendingVerification" : "Pending";
             payment.IsApplied = false;
@@ -1415,18 +1421,21 @@ public class TournamentController : ControllerBase
         var perMemberAmount = memberCount > 0 ? amountDue / memberCount : amountDue;
         var referenceId = $"E{eventId}-U{unitId}-P{memberId}";
 
-        // STEP 1: Save payment record to EventPayments first
-        var existingPayment = await _context.EventPayments
-            .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == memberId);
+        // STEP 1: Save payment record to UserPayments first
+        var existingPayment = await _context.UserPayments
+            .FirstOrDefaultAsync(p => p.PaymentType == PaymentTypes.EventRegistration
+                && p.RelatedObjectId == eventId && p.SecondaryObjectId == unitId && p.UserId == memberId);
 
         if (existingPayment == null)
         {
-            var eventPayment = new EventPayment
+            var userPayment = new UserPayment
             {
-                EventId = eventId,
                 UserId = memberId,
-                UnitId = unitId,
-                MemberId = member.Id,
+                PaymentType = PaymentTypes.EventRegistration,
+                RelatedObjectId = eventId,
+                SecondaryObjectId = unitId,
+                TertiaryObjectId = member.Id,
+                Description = $"Event registration - {unit.Event?.Name}",
                 Amount = perMemberAmount,
                 ReferenceId = referenceId,
                 Status = "Verified",
@@ -1438,7 +1447,7 @@ public class TournamentController : ControllerBase
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
             };
-            _context.EventPayments.Add(eventPayment);
+            _context.UserPayments.Add(userPayment);
         }
         else
         {
@@ -1530,18 +1539,19 @@ public class TournamentController : ControllerBase
         if (member == null)
             return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Member not found in unit" });
 
-        // Update EventPayment status for this member
-        var eventPayment = await _context.EventPayments
-            .FirstOrDefaultAsync(p => p.EventId == eventId && p.UnitId == unitId && p.UserId == memberId && p.Status == "Verified");
+        // Update UserPayment status for this member
+        var userPayment = await _context.UserPayments
+            .FirstOrDefaultAsync(p => p.PaymentType == PaymentTypes.EventRegistration
+                && p.RelatedObjectId == eventId && p.SecondaryObjectId == unitId && p.UserId == memberId && p.Status == "Verified");
 
-        if (eventPayment != null)
+        if (userPayment != null)
         {
-            eventPayment.Status = !string.IsNullOrEmpty(eventPayment.PaymentProofUrl) ? "PendingVerification" : "Pending";
-            eventPayment.IsApplied = false;
-            eventPayment.AppliedAt = null;
-            eventPayment.VerifiedAt = null;
-            eventPayment.VerifiedByUserId = null;
-            eventPayment.UpdatedAt = DateTime.Now;
+            userPayment.Status = !string.IsNullOrEmpty(userPayment.PaymentProofUrl) ? "PendingVerification" : "Pending";
+            userPayment.IsApplied = false;
+            userPayment.AppliedAt = null;
+            userPayment.VerifiedAt = null;
+            userPayment.VerifiedByUserId = null;
+            userPayment.UpdatedAt = DateTime.Now;
         }
 
         // Reset this member's payment

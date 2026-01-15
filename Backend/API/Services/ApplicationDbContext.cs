@@ -76,7 +76,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventUnit> EventUnits { get; set; }
     public DbSet<EventUnitMember> EventUnitMembers { get; set; }
     public DbSet<EventUnitJoinRequest> EventUnitJoinRequests { get; set; }
-    public DbSet<EventPayment> EventPayments { get; set; }
+    public DbSet<UserPayment> UserPayments { get; set; }
     public DbSet<EventMatch> EventMatches { get; set; }
     public DbSet<EventGame> EventGames { get; set; }
     public DbSet<EventGamePlayer> EventGamePlayers { get; set; }
@@ -759,39 +759,27 @@ public class ApplicationDbContext : DbContext
                   .OnDelete(DeleteBehavior.NoAction);
         });
 
-        // Event Payment configuration
-        modelBuilder.Entity<EventPayment>(entity =>
+        // User Payment configuration (generic payment system)
+        modelBuilder.Entity<UserPayment>(entity =>
         {
+            entity.Property(p => p.PaymentType).IsRequired().HasMaxLength(50);
             entity.Property(p => p.Status).IsRequired().HasMaxLength(20);
+            entity.Property(p => p.Description).HasMaxLength(200);
             entity.Property(p => p.PaymentMethod).HasMaxLength(50);
             entity.Property(p => p.PaymentReference).HasMaxLength(100);
             entity.Property(p => p.ReferenceId).HasMaxLength(50);
             entity.Property(p => p.PaymentProofUrl).HasMaxLength(500);
             entity.Property(p => p.Notes).HasMaxLength(500);
-            entity.HasIndex(p => p.EventId);
+
             entity.HasIndex(p => p.UserId);
-            entity.HasIndex(p => p.UnitId);
+            entity.HasIndex(p => p.PaymentType);
+            entity.HasIndex(p => new { p.PaymentType, p.RelatedObjectId });
             entity.HasIndex(p => p.Status);
             entity.HasIndex(p => p.ReferenceId);
-
-            entity.HasOne(p => p.Event)
-                  .WithMany()
-                  .HasForeignKey(p => p.EventId)
-                  .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(p => p.User)
                   .WithMany()
                   .HasForeignKey(p => p.UserId)
-                  .OnDelete(DeleteBehavior.NoAction);
-
-            entity.HasOne(p => p.Unit)
-                  .WithMany()
-                  .HasForeignKey(p => p.UnitId)
-                  .OnDelete(DeleteBehavior.NoAction);
-
-            entity.HasOne(p => p.Member)
-                  .WithMany()
-                  .HasForeignKey(p => p.MemberId)
                   .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(p => p.VerifiedByUser)
