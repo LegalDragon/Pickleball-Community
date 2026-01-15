@@ -798,6 +798,8 @@ public class TournamentController : ControllerBase
             {
                 _context.EventUnitMembers.Remove(membership);
             }
+            // Also remove the join request so the user can make a new request
+            _context.EventUnitJoinRequests.Remove(joinRequest);
         }
 
         await _context.SaveChangesAsync();
