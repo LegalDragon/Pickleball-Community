@@ -4552,6 +4552,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                     );
                                   })}
                                 </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-500">Sort:</label>
+                                  <input
+                                    type="number"
+                                    value={editingDocument.sortOrder}
+                                    onChange={(e) => setEditingDocument({ ...editingDocument, sortOrder: parseInt(e.target.value) || 0 })}
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    min="0"
+                                  />
+                                </div>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 flex-wrap">
@@ -4591,7 +4601,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 {editingDocument.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                               </button>
                               <button
-                                onClick={() => handleUpdateDocument(doc.id, { title: editingDocument.title, isPublic: editingDocument.isPublic, objectAssetTypeId: editingDocument.objectAssetTypeId })}
+                                onClick={() => handleUpdateDocument(doc.id, { title: editingDocument.title, isPublic: editingDocument.isPublic, objectAssetTypeId: editingDocument.objectAssetTypeId, sortOrder: editingDocument.sortOrder })}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded"
                               >
                                 <Check className="w-4 h-4" />
@@ -4615,7 +4625,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                 <ExternalLink className="w-4 h-4" />
                               </a>
                               <button
-                                onClick={() => setEditingDocument({ id: doc.id, title: doc.title, isPublic: doc.isPublic, objectAssetTypeId: doc.objectAssetTypeId })}
+                                onClick={() => setEditingDocument({ id: doc.id, title: doc.title, isPublic: doc.isPublic, objectAssetTypeId: doc.objectAssetTypeId, sortOrder: doc.sortOrder || 0 })}
                                 className="p-2 text-gray-400 hover:bg-gray-100 rounded"
                                 title="Edit"
                               >
