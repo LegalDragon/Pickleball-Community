@@ -31,11 +31,13 @@ export default function ScheduleConfigModal({
   const [poolCount, setPoolCount] = useState(1);
   const [poolGamesPerMatch, setPoolGamesPerMatch] = useState(1);
   const [poolScoreFormatId, setPoolScoreFormatId] = useState(null);
+  const [poolGameFormats, setPoolGameFormats] = useState([null, null, null, null, null]); // For Best of 3/5
 
   // Playoff phase config
   const [playoffFromPools, setPlayoffFromPools] = useState(2);
   const [playoffGamesPerMatch, setPlayoffGamesPerMatch] = useState(1);
   const [playoffScoreFormatId, setPlayoffScoreFormatId] = useState(null);
+  const [playoffGameFormats, setPlayoffGameFormats] = useState([null, null, null, null, null]); // For Best of 3/5
 
   // Score formats
   const [scoreFormats, setScoreFormats] = useState([]);
@@ -87,6 +89,9 @@ export default function ScheduleConfigModal({
         if (defaultFormat && !poolScoreFormatId) {
           setPoolScoreFormatId(defaultFormat.id);
           setPlayoffScoreFormatId(defaultFormat.id);
+          // Initialize all game formats with default
+          setPoolGameFormats([defaultFormat.id, defaultFormat.id, defaultFormat.id, defaultFormat.id, defaultFormat.id]);
+          setPlayoffGameFormats([defaultFormat.id, defaultFormat.id, defaultFormat.id, defaultFormat.id, defaultFormat.id]);
         }
       }
     } catch (err) {
@@ -201,6 +206,12 @@ export default function ScheduleConfigModal({
   const handleGenerate = () => {
     const selectedType = SCHEDULE_TYPES.find(t => t.value === scheduleType);
 
+    // Get relevant game formats based on gamesPerMatch
+    const getGameFormatsArray = (gamesPerMatch, gameFormats, defaultFormatId) => {
+      if (gamesPerMatch === 1) return [defaultFormatId];
+      return gameFormats.slice(0, gamesPerMatch).map(f => f || defaultFormatId);
+    };
+
     onGenerate({
       scheduleType,
       targetUnits,
@@ -208,10 +219,12 @@ export default function ScheduleConfigModal({
       poolCount: selectedType?.hasPoolPhase ? poolCount : null,
       poolGamesPerMatch: selectedType?.hasPoolPhase ? poolGamesPerMatch : null,
       poolScoreFormatId: selectedType?.hasPoolPhase ? poolScoreFormatId : null,
+      poolGameFormats: selectedType?.hasPoolPhase ? getGameFormatsArray(poolGamesPerMatch, poolGameFormats, poolScoreFormatId) : null,
       // Playoff config
       playoffFromPools: scheduleType === 'RoundRobinPlayoff' ? playoffFromPools : null,
       playoffGamesPerMatch: selectedType?.hasPlayoffPhase ? playoffGamesPerMatch : null,
       playoffScoreFormatId: selectedType?.hasPlayoffPhase ? playoffScoreFormatId : null,
+      playoffGameFormats: selectedType?.hasPlayoffPhase ? getGameFormatsArray(playoffGamesPerMatch, playoffGameFormats, playoffScoreFormatId) : null,
       // Legacy field for backward compatibility
       bestOf: selectedType?.hasPoolPhase ? poolGamesPerMatch : playoffGamesPerMatch,
       scoreFormatId: selectedType?.hasPoolPhase ? poolScoreFormatId : playoffScoreFormatId
@@ -230,6 +243,32 @@ export default function ScheduleConfigModal({
     const setGamesPerMatch = isPool ? setPoolGamesPerMatch : setPlayoffGamesPerMatch;
     const scoreFormatId = isPool ? poolScoreFormatId : playoffScoreFormatId;
     const setScoreFormatId = isPool ? setPoolScoreFormatId : setPlayoffScoreFormatId;
+    const gameFormats = isPool ? poolGameFormats : playoffGameFormats;
+    const setGameFormats = isPool ? setPoolGameFormats : setPlayoffGameFormats;
+
+    // Update a specific game's format
+    const updateGameFormat = (gameIndex, formatId) => {
+      const newFormats = [...gameFormats];
+      newFormats[gameIndex] = formatId;
+      setGameFormats(newFormats);
+    };
+
+    // Apply same format to all games
+    const applyToAll = (formatId) => {
+      setGameFormats([formatId, formatId, formatId, formatId, formatId]);
+    };
+
+    // When gamesPerMatch changes, update default format for new selection
+    const handleGamesPerMatchChange = (value) => {
+      setGamesPerMatch(value);
+      // Initialize game formats with current default if not set
+      if (scoreFormatId) {
+        const newFormats = gameFormats.map(f => f || scoreFormatId);
+        setGameFormats(newFormats);
+      }
+    };
+
+    const gameLabels = ['Game 1', 'Game 2', 'Game 3 (Decider)', 'Game 4', 'Game 5 (Decider)'];
 
     return (
       <div className="space-y-4">
@@ -244,7 +283,7 @@ export default function ScheduleConfigModal({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setGamesPerMatch(option.value)}
+                onClick={() => handleGamesPerMatchChange(option.value)}
                 className={`p-3 border rounded-lg text-center transition-colors ${
                   gamesPerMatch === option.value
                     ? 'border-orange-500 bg-orange-50 text-orange-700'
@@ -258,7 +297,7 @@ export default function ScheduleConfigModal({
           </div>
         </div>
 
-        {/* Score Format */}
+        {/* Score Format Section */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="flex items-center gap-1 text-sm font-medium text-gray-700">
@@ -277,12 +316,18 @@ export default function ScheduleConfigModal({
               Add Format
             </button>
           </div>
+
           {loadingFormats ? (
             <div className="text-sm text-gray-500">Loading formats...</div>
-          ) : (
+          ) : gamesPerMatch === 1 ? (
+            // Single game - single format selector
             <select
               value={scoreFormatId || ''}
-              onChange={(e) => setScoreFormatId(e.target.value ? parseInt(e.target.value) : null)}
+              onChange={(e) => {
+                const val = e.target.value ? parseInt(e.target.value) : null;
+                setScoreFormatId(val);
+                if (val) applyToAll(val);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
             >
               <option value="">Select format...</option>
@@ -292,6 +337,66 @@ export default function ScheduleConfigModal({
                 </option>
               ))}
             </select>
+          ) : (
+            // Multiple games - show format for each game
+            <div className="space-y-2">
+              {/* Quick apply dropdown */}
+              <div className="flex items-center gap-2 mb-3">
+                <select
+                  value={scoreFormatId || ''}
+                  onChange={(e) => {
+                    const val = e.target.value ? parseInt(e.target.value) : null;
+                    setScoreFormatId(val);
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 text-sm"
+                >
+                  <option value="">Select default format...</option>
+                  {scoreFormats.map(format => (
+                    <option key={format.id} value={format.id}>
+                      {format.name} ({format.maxPoints} pts, win by {format.winByMargin})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => scoreFormatId && applyToAll(scoreFormatId)}
+                  disabled={!scoreFormatId}
+                  className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  Apply to All
+                </button>
+              </div>
+
+              {/* Individual game formats */}
+              <div className="border rounded-lg divide-y bg-gray-50">
+                {Array.from({ length: gamesPerMatch }, (_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2">
+                    <span className={`text-sm font-medium w-28 ${
+                      (gamesPerMatch === 3 && i === 2) || (gamesPerMatch === 5 && i === 4)
+                        ? 'text-orange-600'
+                        : 'text-gray-600'
+                    }`}>
+                      {gameLabels[i]}
+                    </span>
+                    <select
+                      value={gameFormats[i] || ''}
+                      onChange={(e) => updateGameFormat(i, e.target.value ? parseInt(e.target.value) : null)}
+                      className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="">Select...</option>
+                      {scoreFormats.map(format => (
+                        <option key={format.id} value={format.id}>
+                          {format.name} ({format.maxPoints} pts)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                Tip: Decider games are often played to 15 points instead of 11
+              </p>
+            </div>
           )}
         </div>
       </div>
