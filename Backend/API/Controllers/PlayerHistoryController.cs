@@ -787,21 +787,21 @@ public class PlayerHistoryController : ControllerBase
         var unitIds = paymentRecords.Where(p => p.SecondaryObjectId.HasValue).Select(p => p.SecondaryObjectId!.Value).Distinct().ToList();
 
         // Fetch events and units in separate queries (only if we have IDs)
+        // Use individual lookups to avoid EF Core OPENJSON compatibility issues with older SQL Server
         var events = new Dictionary<int, Pickleball.Community.Models.Entities.Event>();
-        if (eventIds.Any())
+        foreach (var eventId in eventIds)
         {
-            events = await _context.Events
-                .Where(e => eventIds.Contains(e.Id))
-                .ToDictionaryAsync(e => e.Id, e => e);
+            var evt = await _context.Events.FindAsync(eventId);
+            if (evt != null) events[eventId] = evt;
         }
 
         var units = new Dictionary<int, Pickleball.Community.Models.Entities.EventUnit>();
-        if (unitIds.Any())
+        foreach (var unitId in unitIds)
         {
-            units = await _context.EventUnits
+            var unit = await _context.EventUnits
                 .Include(u => u.Division)
-                .Where(u => unitIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id, u => u);
+                .FirstOrDefaultAsync(u => u.Id == unitId);
+            if (unit != null) units[unitId] = unit;
         }
 
         // Map to DTOs
