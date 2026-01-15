@@ -2358,12 +2358,22 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       }
 
       // Create document record using ObjectAssets API
+      // Log for debugging truncation issues
+      console.log('Adding asset:', {
+        fileUrl,
+        fileUrlLength: fileUrl?.length,
+        fileName: file.name,
+        fileNameLength: file.name?.length,
+        title: newDocument.title,
+        titleLength: newDocument.title?.length
+      });
+
       const response = await objectAssetsApi.addAsset('Event', event.id, {
         objectAssetTypeId: newDocument.objectAssetTypeId,
-        title: newDocument.title,
+        title: newDocument.title.substring(0, 200),
         fileUrl: fileUrl,
-        fileName: file.name,
-        fileType: file.type,
+        fileName: file.name.substring(0, 200),
+        fileType: file.type?.substring(0, 50),
         fileSize: file.size,
         isPublic: newDocument.isPublic,
         sortOrder: newDocument.sortOrder
