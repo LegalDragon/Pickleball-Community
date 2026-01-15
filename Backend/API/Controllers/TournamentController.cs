@@ -569,17 +569,17 @@ public class TournamentController : ControllerBase
         if (existingInDivision != null)
             return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You already have a pending request in this division. Cancel it first before requesting to join another team." });
 
-        // Check if already registered in this division (as accepted member of a COMPLETE team)
-        // Allow captains of "LookingForPartner" units to request to join other teams
-        var alreadyRegistered = await _context.EventUnitMembers
+        // Check if already registered in this division (as accepted member of a team where user is NOT captain)
+        // Captains of incomplete units CAN request to join other teams (to merge/find partners)
+        var alreadyRegisteredAsNonCaptain = await _context.EventUnitMembers
             .Include(m => m.Unit)
             .AnyAsync(m => m.UserId == userId.Value &&
                 m.Unit!.DivisionId == unit.DivisionId &&
                 m.Unit.Status != "Cancelled" &&
-                m.Unit.Status != "LookingForPartner" && // Allow if only in a looking-for-partner unit
+                m.Unit.CaptainUserId != userId.Value && // Allow if user is captain (looking for partner)
                 m.InviteStatus == "Accepted");
 
-        if (alreadyRegistered)
+        if (alreadyRegisteredAsNonCaptain)
             return BadRequest(new ApiResponse<UnitJoinRequestDto> { Success = false, Message = "You are already registered in this division" });
 
         // Check for MUTUAL REQUEST scenario:
