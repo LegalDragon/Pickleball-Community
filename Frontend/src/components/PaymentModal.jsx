@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, DollarSign, Upload, CheckCircle, AlertCircle, Loader2, Image, ExternalLink, Copy, Check, FileText } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, DollarSign, Upload, CheckCircle, AlertCircle, Loader2, Image, ExternalLink, Copy, Check, FileText, Users } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 
@@ -13,6 +13,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
   const [paymentAmount, setPaymentAmount] = useState('');
   const [copied, setCopied] = useState(false);
   const [proofUrlCopied, setProofUrlCopied] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
 
   // Helper to check if URL is a PDF
   const isPdfUrl = (url) => {
@@ -21,6 +22,23 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
     return lowercaseUrl.endsWith('.pdf') || lowercaseUrl.includes('.pdf?');
   };
 
+  // Get accepted members who haven't paid yet
+  const acceptedMembers = useMemo(() => {
+    if (!registration?.members) return [];
+    return registration.members.filter(m => m.inviteStatus === 'Accepted');
+  }, [registration?.members]);
+
+  const unpaidMembers = useMemo(() => {
+    return acceptedMembers.filter(m => !m.hasPaid);
+  }, [acceptedMembers]);
+
+  // Calculate per-person amount
+  const perPersonAmount = useMemo(() => {
+    if (acceptedMembers.length === 0) return 0;
+    const totalAmount = registration?.amountDue || 0;
+    return totalAmount / acceptedMembers.length;
+  }, [acceptedMembers.length, registration?.amountDue]);
+
   useEffect(() => {
     if (registration) {
       setPaymentReference(registration.paymentReference || '');
@@ -28,11 +46,27 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       // Only set preview image for non-PDF files
       const proofUrl = registration.paymentProofUrl || '';
       setPreviewImage(proofUrl && !isPdfUrl(proofUrl) ? proofUrl : null);
-      // Initialize payment amount to remaining balance
-      const remaining = (registration.amountDue || 0) - (registration.amountPaid || 0);
-      setPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '');
+
+      // Initialize selected members: default to just the current user (if they haven't paid)
+      const currentMemberRecord = acceptedMembers.find(m => m.userId === userId);
+      if (currentMemberRecord && !currentMemberRecord.hasPaid) {
+        setSelectedMemberIds([currentMemberRecord.id]);
+      } else {
+        // If current user already paid, select all unpaid members by default
+        setSelectedMemberIds(unpaidMembers.map(m => m.id));
+      }
     }
-  }, [registration]);
+  }, [registration, userId, acceptedMembers, unpaidMembers]);
+
+  // Calculate payment amount based on selected members
+  useEffect(() => {
+    if (selectedMemberIds.length > 0 && perPersonAmount > 0) {
+      const totalForSelected = selectedMemberIds.length * perPersonAmount;
+      setPaymentAmount(totalForSelected.toFixed(2));
+    } else {
+      setPaymentAmount('');
+    }
+  }, [selectedMemberIds, perPersonAmount]);
 
   const referenceId = event && registration ? `E${event.id}-U${registration.unitId}-P${userId || 0}` : '';
 
@@ -121,16 +155,23 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       return;
     }
 
+    if (selectedMemberIds.length === 0) {
+      toast.error('Please select at least one team member to pay for');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const response = await tournamentApi.uploadPaymentProof(event.id, registration.unitId, {
         paymentProofUrl,
         paymentReference,
         amountPaid: paymentAmount ? parseFloat(paymentAmount) : null,
+        memberIds: selectedMemberIds,
       });
 
       if (response.success) {
-        toast.success('Payment information submitted');
+        const memberCount = selectedMemberIds.length;
+        toast.success(`Payment submitted for ${memberCount} team member${memberCount > 1 ? 's' : ''}`);
         onPaymentUpdated?.(response.data);
         onClose();
       } else {
@@ -141,6 +182,33 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       toast.error('Failed to submit payment information');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Toggle member selection
+  const toggleMemberSelection = (memberId) => {
+    setSelectedMemberIds(prev => {
+      if (prev.includes(memberId)) {
+        return prev.filter(id => id !== memberId);
+      } else {
+        return [...prev, memberId];
+      }
+    });
+  };
+
+  // Select/deselect all unpaid members
+  const toggleAllUnpaid = () => {
+    if (selectedMemberIds.length === unpaidMembers.length) {
+      // Deselect all, but keep at least current user selected
+      const currentMemberRecord = acceptedMembers.find(m => m.userId === userId);
+      if (currentMemberRecord && !currentMemberRecord.hasPaid) {
+        setSelectedMemberIds([currentMemberRecord.id]);
+      } else {
+        setSelectedMemberIds([]);
+      }
+    } else {
+      // Select all unpaid
+      setSelectedMemberIds(unpaidMembers.map(m => m.id));
     }
   };
 
@@ -296,8 +364,8 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
             </div>
           )}
 
-          {/* Payment Form (only if member hasn't paid yet) */}
-          {!memberHasPaid && (
+          {/* Payment Form - show if member hasn't paid OR there are unpaid teammates */}
+          {(!memberHasPaid || unpaidMembers.length > 0) && (
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Reference ID for Payment */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
@@ -319,6 +387,79 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                   Include this ID in your payment note/memo so the organizer can match your payment to your registration.
                 </p>
               </div>
+
+              {/* Member Selection - Pay for team */}
+              {acceptedMembers.length > 1 && unpaidMembers.length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">Paying for</span>
+                    </div>
+                    {unpaidMembers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={toggleAllUnpaid}
+                        className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+                      >
+                        {selectedMemberIds.length === unpaidMembers.length ? 'Select just me' : 'Select all'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {acceptedMembers.map(member => {
+                      const isSelected = selectedMemberIds.includes(member.id);
+                      const isCurrentUser = member.userId === userId;
+                      const alreadyPaid = member.hasPaid;
+
+                      return (
+                        <label
+                          key={member.id}
+                          className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${
+                            alreadyPaid
+                              ? 'bg-green-50 border-green-200 cursor-not-allowed'
+                              : isSelected
+                                ? 'bg-orange-50 border-orange-300'
+                                : 'bg-white border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected || alreadyPaid}
+                              disabled={alreadyPaid}
+                              onChange={() => !alreadyPaid && toggleMemberSelection(member.id)}
+                              className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500 disabled:opacity-50"
+                            />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {member.name || `Player ${member.id}`}
+                                {isCurrentUser && <span className="text-orange-600 ml-1">(you)</span>}
+                              </div>
+                              {alreadyPaid && (
+                                <div className="text-xs text-green-600">Already paid</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className={`text-sm font-medium ${alreadyPaid ? 'text-green-600' : 'text-gray-700'}`}>
+                            ${perPersonAmount.toFixed(2)}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedMemberIds.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">
+                        Total for {selectedMemberIds.length} member{selectedMemberIds.length > 1 ? 's' : ''}:
+                      </span>
+                      <span className="text-lg font-semibold text-orange-600">
+                        ${(selectedMemberIds.length * perPersonAmount).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Payment Amount */}
               <div>

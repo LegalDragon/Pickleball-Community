@@ -657,6 +657,11 @@ public class UploadPaymentProofRequest
     /// Payment method: Cash, Zelle, Venmo, PayPal, CreditCard, Check, Other
     /// </summary>
     public string? PaymentMethod { get; set; }
+    /// <summary>
+    /// List of member IDs to apply payment to. If null/empty, applies only to the submitting user.
+    /// Allows a player to pay for the whole team by selecting all members.
+    /// </summary>
+    public List<int>? MemberIds { get; set; }
 }
 
 public class PaymentInfoDto

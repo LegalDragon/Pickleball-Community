@@ -1241,36 +1241,79 @@ public class TournamentController : ControllerBase
         if (!isMember && !isOrganizer)
             return Forbid();
 
-        // Generate reference ID for this payment
-        var referenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
+        // Determine which members to apply payment to
+        // If MemberIds provided, use those; otherwise just the submitting user
+        var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+        List<EventUnitMember> membersToPayFor;
 
-        // Get the member record for linking
-        var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId.Value);
-
-        // STEP 1: Save payment to UserPayments table FIRST (preserves payment data independently)
-        var userPayment = new UserPayment
+        if (request.MemberIds != null && request.MemberIds.Count > 0)
         {
-            UserId = userId.Value,
-            PaymentType = PaymentTypes.EventRegistration,
-            RelatedObjectId = eventId,
-            SecondaryObjectId = unitId,
-            TertiaryObjectId = memberRecord?.Id,
-            Description = $"Event registration - {unit.Event?.Name}",
-            Amount = request.AmountPaid ?? 0,
-            PaymentProofUrl = request.PaymentProofUrl,
-            PaymentReference = request.PaymentReference,
-            PaymentMethod = request.PaymentMethod,
-            ReferenceId = referenceId,
-            Status = "Pending",
-            CreatedAt = DateTime.Now,
-            UpdatedAt = DateTime.Now
-        };
+            // Validate that all requested member IDs are valid accepted members of this unit
+            membersToPayFor = acceptedMembers.Where(m => request.MemberIds.Contains(m.Id)).ToList();
+            if (membersToPayFor.Count == 0)
+            {
+                return BadRequest(new ApiResponse<PaymentInfoDto> { Success = false, Message = "No valid members selected for payment" });
+            }
+        }
+        else
+        {
+            // Default: just the submitting user
+            var submitterMember = acceptedMembers.FirstOrDefault(m => m.UserId == userId.Value);
+            membersToPayFor = submitterMember != null ? new List<EventUnitMember> { submitterMember } : new List<EventUnitMember>();
+        }
 
-        _context.UserPayments.Add(userPayment);
-        await _context.SaveChangesAsync(); // Save payment record first
+        if (membersToPayFor.Count == 0)
+        {
+            return BadRequest(new ApiResponse<PaymentInfoDto> { Success = false, Message = "No members to apply payment to" });
+        }
 
-        // STEP 2: Apply payment to registration records
-        // Update unit payment info
+        // Calculate amount due and per-member amount
+        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+        var totalPaymentAmount = request.AmountPaid ?? 0m;
+        var perMemberAmount = membersToPayFor.Count > 0 ? totalPaymentAmount / membersToPayFor.Count : 0m;
+
+        // STEP 1: Create UserPayment records for each selected member
+        foreach (var member in membersToPayFor)
+        {
+            // Load user info for description
+            var memberUser = await _context.Users.FindAsync(member.UserId);
+            var memberName = Utility.FormatName(memberUser?.LastName, memberUser?.FirstName);
+            var referenceId = $"E{eventId}-U{unitId}-M{member.Id}";
+
+            var userPayment = new UserPayment
+            {
+                UserId = userId.Value, // The person who made the payment
+                PaymentType = PaymentTypes.EventRegistration,
+                RelatedObjectId = eventId,
+                SecondaryObjectId = unitId,
+                TertiaryObjectId = member.Id,
+                Description = $"Event registration - {unit.Event?.Name} - {memberName}",
+                Amount = perMemberAmount,
+                PaymentProofUrl = request.PaymentProofUrl,
+                PaymentReference = request.PaymentReference,
+                PaymentMethod = request.PaymentMethod,
+                ReferenceId = referenceId,
+                Status = "Pending",
+                IsApplied = true,
+                AppliedAt = DateTime.Now,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+
+            _context.UserPayments.Add(userPayment);
+
+            // Update member's payment record
+            member.HasPaid = true;
+            member.PaidAt = DateTime.Now;
+            member.AmountPaid = perMemberAmount;
+            member.PaymentProofUrl = request.PaymentProofUrl;
+            member.PaymentReference = request.PaymentReference;
+            member.ReferenceId = referenceId;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // STEP 2: Update unit-level payment info
         if (!string.IsNullOrEmpty(request.PaymentProofUrl))
         {
             unit.PaymentProofUrl = request.PaymentProofUrl;
@@ -1281,51 +1324,33 @@ public class TournamentController : ControllerBase
             unit.PaymentReference = request.PaymentReference;
         }
 
-        if (request.AmountPaid.HasValue)
-        {
-            unit.AmountPaid = request.AmountPaid.Value;
-        }
+        // Calculate total amount paid across all members
+        var totalPaidByMembers = acceptedMembers.Where(m => m.HasPaid).Sum(m => m.AmountPaid);
+        unit.AmountPaid = totalPaidByMembers;
 
         // Set reference ID on unit if not already set
         if (string.IsNullOrEmpty(unit.ReferenceId))
         {
-            unit.ReferenceId = referenceId;
+            unit.ReferenceId = $"E{eventId}-U{unitId}";
         }
 
-        // Calculate amount due
-        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+        // Auto-update payment status based on member payments
+        var allMembersPaid = acceptedMembers.All(m => m.HasPaid);
+        var someMembersPaid = acceptedMembers.Any(m => m.HasPaid);
 
-        // Auto-update payment status based on amount paid
-        if (unit.AmountPaid >= amountDue && amountDue > 0)
+        if (allMembersPaid && unit.AmountPaid >= amountDue && amountDue > 0)
         {
             unit.PaymentStatus = "Paid";
             unit.PaidAt = DateTime.Now;
         }
-        else if (unit.AmountPaid > 0)
+        else if (someMembersPaid || unit.AmountPaid > 0)
         {
             unit.PaymentStatus = "Partial";
         }
         else if (!string.IsNullOrEmpty(unit.PaymentProofUrl))
         {
-            // If proof uploaded but no amount, mark as pending verification
             unit.PaymentStatus = "PendingVerification";
         }
-
-        // Mark the submitting user's member record as paid and copy payment details
-        if (memberRecord != null)
-        {
-            memberRecord.HasPaid = true;
-            memberRecord.PaidAt = DateTime.Now;
-            memberRecord.AmountPaid = request.AmountPaid ?? 0;
-            memberRecord.PaymentProofUrl = unit.PaymentProofUrl;
-            memberRecord.PaymentReference = unit.PaymentReference;
-            memberRecord.ReferenceId = referenceId;
-        }
-
-        // Mark payment as applied to registration
-        userPayment.IsApplied = true;
-        userPayment.AppliedAt = DateTime.Now;
-        userPayment.UpdatedAt = DateTime.Now;
 
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
