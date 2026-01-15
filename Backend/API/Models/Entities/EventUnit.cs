@@ -181,6 +181,11 @@ public class EventUnitMember
     public string? ReferenceId { get; set; }
 
     /// <summary>
+    /// Reference to the UserPayment record that covered this registration
+    /// </summary>
+    public int? PaymentId { get; set; }
+
+    /// <summary>
     /// When the waiver was signed
     /// </summary>
     public DateTime? WaiverSignedAt { get; set; }
@@ -231,6 +236,9 @@ public class EventUnitMember
 
     [ForeignKey("WaiverDocumentId")]
     public EventWaiver? WaiverDocument { get; set; }
+
+    [ForeignKey("PaymentId")]
+    public UserPayment? Payment { get; set; }
 }
 
 /// <summary>

@@ -1272,43 +1272,42 @@ public class TournamentController : ControllerBase
         var totalPaymentAmount = request.AmountPaid ?? 0m;
         var perMemberAmount = membersToPayFor.Count > 0 ? totalPaymentAmount / membersToPayFor.Count : 0m;
 
-        // STEP 1: Create UserPayment records for each selected member
+        // Generate reference ID for this payment
+        var referenceId = $"E{eventId}-U{unitId}-P{userId.Value}";
+
+        // STEP 1: Create ONE UserPayment record for the submitter (tracks total payment)
+        var userPayment = new UserPayment
+        {
+            UserId = userId.Value, // The person who made the payment
+            PaymentType = PaymentTypes.EventRegistration,
+            RelatedObjectId = eventId,
+            SecondaryObjectId = unitId,
+            Description = $"Event registration - {unit.Event?.Name} ({membersToPayFor.Count} member{(membersToPayFor.Count > 1 ? "s" : "")})",
+            Amount = totalPaymentAmount,
+            PaymentProofUrl = request.PaymentProofUrl,
+            PaymentReference = request.PaymentReference,
+            PaymentMethod = request.PaymentMethod,
+            ReferenceId = referenceId,
+            Status = "Pending",
+            IsApplied = true,
+            AppliedAt = DateTime.Now,
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+
+        _context.UserPayments.Add(userPayment);
+        await _context.SaveChangesAsync(); // Save to get PaymentId
+
+        // STEP 2: Update each member's registration with PaymentId and amount
         foreach (var member in membersToPayFor)
         {
-            // Load user info for description
-            var memberUser = await _context.Users.FindAsync(member.UserId);
-            var memberName = Utility.FormatName(memberUser?.LastName, memberUser?.FirstName);
-            var referenceId = $"E{eventId}-U{unitId}-M{member.Id}";
-
-            var userPayment = new UserPayment
-            {
-                UserId = userId.Value, // The person who made the payment
-                PaymentType = PaymentTypes.EventRegistration,
-                RelatedObjectId = eventId,
-                SecondaryObjectId = unitId,
-                TertiaryObjectId = member.Id,
-                Description = $"Event registration - {unit.Event?.Name} - {memberName}",
-                Amount = perMemberAmount,
-                PaymentProofUrl = request.PaymentProofUrl,
-                PaymentReference = request.PaymentReference,
-                PaymentMethod = request.PaymentMethod,
-                ReferenceId = referenceId,
-                Status = "Pending",
-                IsApplied = true,
-                AppliedAt = DateTime.Now,
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
-            };
-
-            _context.UserPayments.Add(userPayment);
-
-            // Update member's payment record
             member.HasPaid = true;
             member.PaidAt = DateTime.Now;
             member.AmountPaid = perMemberAmount;
             member.PaymentProofUrl = request.PaymentProofUrl;
             member.PaymentReference = request.PaymentReference;
             member.ReferenceId = referenceId;
+            member.PaymentId = userPayment.Id; // Link to the UserPayment record
         }
 
         await _context.SaveChangesAsync();
@@ -1849,46 +1848,21 @@ public class TournamentController : ControllerBase
             sourceMember.AmountPaid = perMemberAmount;
         }
 
+        // Get the PaymentId from the source member (they should have one if they paid)
+        var sourcePaymentId = sourceMember.PaymentId;
+
         var appliedCount = 0;
 
         foreach (var targetMember in targetMembers)
         {
-            // Load user info for description
-            var targetUser = await _context.Users.FindAsync(targetMember.UserId);
-            var targetName = Utility.FormatName(targetUser?.LastName, targetUser?.FirstName);
-            var referenceId = $"E{eventId}-U{unitId}-M{targetMember.Id}";
-
-            // Create UserPayment record for audit trail
-            var userPayment = new UserPayment
-            {
-                UserId = targetMember.UserId,
-                PaymentType = PaymentTypes.EventRegistration,
-                RelatedObjectId = eventId,
-                SecondaryObjectId = unitId,
-                TertiaryObjectId = targetMember.Id,
-                Description = $"Event registration - {unit.Event?.Name} - {targetName} (applied from teammate)",
-                Amount = perMemberAmount,
-                PaymentProofUrl = sourceMember.PaymentProofUrl,
-                PaymentReference = sourceMember.PaymentReference,
-                ReferenceId = referenceId,
-                Status = "Verified",
-                VerifiedByUserId = userId.Value,
-                VerifiedAt = DateTime.Now,
-                Notes = $"Payment applied from teammate (Member ID: {memberId})",
-                IsApplied = true,
-                AppliedAt = DateTime.Now,
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
-            };
-            _context.UserPayments.Add(userPayment);
-
-            // Update target member's payment info
+            // Update target member's payment info - link to same PaymentId as source
             targetMember.HasPaid = true;
             targetMember.PaidAt = DateTime.Now;
             targetMember.AmountPaid = perMemberAmount;
             targetMember.PaymentProofUrl = sourceMember.PaymentProofUrl;
             targetMember.PaymentReference = sourceMember.PaymentReference;
-            targetMember.ReferenceId = referenceId;
+            targetMember.ReferenceId = sourceMember.ReferenceId;
+            targetMember.PaymentId = sourcePaymentId; // Link to same UserPayment as source
 
             appliedCount++;
         }
