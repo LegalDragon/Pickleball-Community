@@ -65,6 +65,9 @@ export const AuthProvider = ({ children }) => {
           const sharedUser = sharedData.user || sharedData.User
 
           if (sharedToken) {
+            // Capture systemRole from shared auth response (SU role for cross-site admin)
+            const sharedSystemRole = sharedUser?.systemRole || sharedUser?.SystemRole
+
             // Step 2: Sync user to local database (temporarily use shared token for sync call)
             localStorage.setItem('jwtToken', sharedToken)
             axios.defaults.headers.common['Authorization'] = `Bearer ${sharedToken}`
@@ -82,7 +85,12 @@ export const AuthProvider = ({ children }) => {
               console.warn('No local token in sync response, falling back to shared token')
               token = sharedToken
             }
-            userData = syncResponse.User || syncResponse.user || sharedUser
+            // Merge local user data with systemRole from shared auth
+            const localUser = syncResponse.User || syncResponse.user || sharedUser
+            userData = {
+              ...localUser,
+              systemRole: sharedSystemRole || localUser?.systemRole || null
+            }
           }
         } catch (sharedError) {
           console.log('Shared auth failed, falling back to local auth:', sharedError.message)
@@ -104,11 +112,12 @@ export const AuthProvider = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       }
 
-      // Store user data (including profileImageUrl)
+      // Store user data (including profileImageUrl and systemRole)
       if (userData) {
         const userWithAvatar = {
           ...userData,
-          profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null
+          profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null,
+          systemRole: userData.systemRole || null // Preserve SU role from shared auth
         }
         setUser(userWithAvatar)
         setIsAuthenticated(true)

@@ -21,8 +21,8 @@ const PublicProfile = () => {
   const [actionLoading, setActionLoading] = useState(false)
   const [showAdminModal, setShowAdminModal] = useState(false)
 
-  // Check if current user is admin
-  const isAdmin = currentUser?.role?.toLowerCase() === 'admin'
+  // Check if current user has SU role on shared auth (required for editing credentials)
+  const hasSharedAdminRole = currentUser?.systemRole?.toLowerCase() === 'su'
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -300,8 +300,8 @@ const PublicProfile = () => {
                 </button>
               )}
 
-              {/* Admin Edit Credentials Button */}
-              {isAdmin && profile.friendshipStatus !== 'self' && (
+              {/* Admin Edit Credentials Button - requires SU role on shared auth */}
+              {hasSharedAdminRole && profile.friendshipStatus !== 'self' && (
                 <button
                   onClick={() => setShowAdminModal(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors"
