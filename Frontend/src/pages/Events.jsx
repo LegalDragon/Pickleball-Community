@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, RefreshCcw, Radio, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useAdmin } from '../contexts/AdminContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
@@ -18,7 +17,7 @@ import WatchDrawingModal from '../components/WatchDrawingModal';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
-  const { isAdmin } = useAdmin();
+  const isAdmin = user?.role === 'Admin';
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -1912,7 +1911,6 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
   };
 
   const isOrganizer = event.isOrganizer;
-  const isAdmin = user?.role === 'Admin';
   const canEditDivision = isOrganizer || isAdmin;
   const isRegistered = event.isRegistered;
 

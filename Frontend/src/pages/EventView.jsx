@@ -6,7 +6,6 @@ import {
   Loader2, AlertCircle, FileText, Radio, Settings
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useAdmin } from '../contexts/AdminContext';
 import { eventsApi, objectAssetsApi, getSharedAssetUrl } from '../services/api';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
@@ -16,7 +15,7 @@ export default function EventView() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
-  const { isAdmin } = useAdmin();
+  const isAdmin = user?.role === 'Admin';
 
   const [event, setEvent] = useState(null);
   const [adAssets, setAdAssets] = useState([]);
