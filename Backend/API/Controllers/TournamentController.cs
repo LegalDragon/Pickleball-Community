@@ -4537,8 +4537,9 @@ public class TournamentController : ControllerBase
             StartedByName = startedBy != null ? Utility.FormatName(startedBy.LastName, startedBy.FirstName) : null
         };
 
-        // Broadcast to connected viewers
+        // Broadcast to connected viewers (both division and event level)
         await _drawingBroadcaster.BroadcastDrawingStarted(divisionId, state);
+        await _drawingBroadcaster.BroadcastEventDrawingStarted(division.EventId, divisionId, state);
 
         return Ok(new ApiResponse<DrawingStateDto> { Success = true, Data = state });
     }
@@ -4605,8 +4606,9 @@ public class TournamentController : ControllerBase
             DrawnAt = DateTime.Now
         };
 
-        // Broadcast to connected viewers
+        // Broadcast to connected viewers (both division and event level)
         await _drawingBroadcaster.BroadcastUnitDrawn(divisionId, drawnUnit);
+        await _drawingBroadcaster.BroadcastEventUnitDrawn(division.EventId, divisionId, drawnUnit);
 
         return Ok(new ApiResponse<DrawnUnitDto> { Success = true, Data = drawnUnit });
     }
@@ -4705,8 +4707,9 @@ public class TournamentController : ControllerBase
             CompletedAt = DateTime.Now
         };
 
-        // Broadcast completion to connected viewers
+        // Broadcast completion to connected viewers (both division and event level)
         await _drawingBroadcaster.BroadcastDrawingCompleted(divisionId, result);
+        await _drawingBroadcaster.BroadcastEventDrawingCompleted(division.EventId, divisionId, result);
 
         return Ok(new ApiResponse<DrawingCompletedDto> { Success = true, Data = result });
     }
@@ -4762,10 +4765,164 @@ public class TournamentController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // Broadcast cancellation to connected viewers
+        // Broadcast cancellation to connected viewers (both division and event level)
         await _drawingBroadcaster.BroadcastDrawingCancelled(divisionId);
+        await _drawingBroadcaster.BroadcastEventDrawingCancelled(division.EventId, divisionId);
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Drawing cancelled" });
+    }
+
+    // ============================================
+    // Event-Level Drawing State (for Drawing Monitor)
+    // ============================================
+
+    /// <summary>
+    /// Get the complete drawing state for an event (all divisions)
+    /// Used by the drawing monitor page to show all divisions' drawing states
+    /// </summary>
+    [HttpGet("events/{eventId}/drawing")]
+    public async Task<ActionResult<ApiResponse<EventDrawingStateDto>>> GetEventDrawingState(int eventId)
+    {
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<EventDrawingStateDto> { Success = false, Message = "Event not found" });
+
+        var divisions = await _context.EventDivisions
+            .Include(d => d.TeamUnit)
+            .Where(d => d.EventId == eventId)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+
+        var divisionStates = new List<DivisionDrawingStateDto>();
+
+        foreach (var division in divisions)
+        {
+            var units = await _context.EventUnits
+                .Include(u => u.Members)
+                    .ThenInclude(m => m.User)
+                .Where(u => u.DivisionId == division.Id && u.Status != "Cancelled" && u.Status != "Waitlisted")
+                .ToListAsync();
+
+            var drawnUnits = units
+                .Where(u => u.UnitNumber.HasValue)
+                .OrderBy(u => u.UnitNumber)
+                .Select(u => new DrawnUnitDto
+                {
+                    UnitId = u.Id,
+                    UnitNumber = u.UnitNumber!.Value,
+                    UnitName = u.Name,
+                    MemberNames = u.Members.Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                        .Select(m => Utility.FormatName(m.User!.LastName, m.User.FirstName)).ToList(),
+                    DrawnAt = u.UpdatedAt
+                }).ToList();
+
+            var remainingUnitNames = units
+                .Where(u => !u.UnitNumber.HasValue)
+                .Select(u => u.Name)
+                .ToList();
+
+            User? startedBy = null;
+            if (division.DrawingByUserId.HasValue)
+            {
+                startedBy = await _context.Users.FindAsync(division.DrawingByUserId.Value);
+            }
+
+            divisionStates.Add(new DivisionDrawingStateDto
+            {
+                DivisionId = division.Id,
+                DivisionName = division.Name,
+                TeamSize = division.TeamUnit?.TotalPlayers ?? division.TeamSize,
+                ScheduleStatus = division.ScheduleStatus ?? "NotGenerated",
+                DrawingInProgress = division.DrawingInProgress,
+                DrawingStartedAt = division.DrawingStartedAt,
+                DrawingByName = startedBy != null ? Utility.FormatName(startedBy.LastName, startedBy.FirstName) : null,
+                TotalUnits = units.Count,
+                DrawnCount = drawnUnits.Count,
+                DrawnUnits = drawnUnits,
+                RemainingUnitNames = remainingUnitNames
+            });
+        }
+
+        // Get current viewers
+        var viewers = DrawingHub.GetEventViewers(eventId);
+
+        var state = new EventDrawingStateDto
+        {
+            EventId = evt.Id,
+            EventName = evt.Name,
+            TournamentStatus = evt.TournamentStatus ?? "Draft",
+            Divisions = divisionStates,
+            Viewers = viewers,
+            ViewerCount = viewers.Count
+        };
+
+        return Ok(new ApiResponse<EventDrawingStateDto> { Success = true, Data = state });
+    }
+
+    /// <summary>
+    /// Set event tournament status to Drawing mode
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/drawing/start-mode")]
+    public async Task<ActionResult<ApiResponse<bool>>> StartDrawingMode(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Set to Drawing status
+        evt.TournamentStatus = "Drawing";
+        evt.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Event is now in Drawing mode" });
+    }
+
+    /// <summary>
+    /// End drawing mode and transition to next status
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/drawing/end-mode")]
+    public async Task<ActionResult<ApiResponse<bool>>> EndDrawingMode(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Check if all divisions have completed drawing
+        var divisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId)
+            .ToListAsync();
+
+        var anyDrawingInProgress = divisions.Any(d => d.DrawingInProgress);
+        if (anyDrawingInProgress)
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "Cannot end drawing mode while a division drawing is in progress" });
+
+        // Set to Running status (or ScheduleReady if you prefer)
+        evt.TournamentStatus = "Running";
+        evt.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Drawing mode ended, event is now Running" });
     }
 
     // ==================== Payment Verification ====================

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Calendar, MapPin, Clock, Users, DollarSign, ChevronLeft,
   UserPlus, Building2, Phone, Mail, User, Image, ExternalLink,
-  Loader2, AlertCircle, FileText
+  Loader2, AlertCircle, FileText, Radio
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { eventsApi, objectAssetsApi, getSharedAssetUrl } from '../services/api';
@@ -194,6 +194,23 @@ export default function EventView() {
               </button>
             )}
           </div>
+
+          {/* Live Drawing Button - Show when event is in Drawing status */}
+          {event.tournamentStatus === 'Drawing' && (
+            <div className="p-4 bg-gradient-to-r from-orange-500 to-red-500">
+              <Link
+                to={`/event/${eventId}/drawing`}
+                className="w-full py-3 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition-colors flex items-center justify-center gap-2 shadow-lg"
+              >
+                <div className="relative">
+                  <Radio className="w-5 h-5" />
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                </div>
+                Live Drawing
+              </Link>
+            </div>
+          )}
 
           {/* Event Header */}
           <div className="p-6">

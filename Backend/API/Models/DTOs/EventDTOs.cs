@@ -41,6 +41,7 @@ public class EventPublicViewDto
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? TournamentStatus { get; set; }
 
     // Divisions (public info only)
     public List<EventDivisionPublicDto> Divisions { get; set; } = new();

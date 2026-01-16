@@ -1469,12 +1469,17 @@ export const tournamentApi = {
   updateTournamentStatus: (eventId, status) =>
     api.put(`/tournament/events/${eventId}/status?status=${status}`),
 
-  // Live Drawing
+  // Live Drawing (Division-level)
   getDrawingState: (divisionId) => api.get(`/tournament/divisions/${divisionId}/drawing`),
   startDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/start`),
   drawNextUnit: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/next`),
   completeDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/complete`),
-  cancelDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/cancel`)
+  cancelDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/cancel`),
+
+  // Event-level Drawing (for Drawing Monitor page)
+  getEventDrawingState: (eventId) => api.get(`/tournament/events/${eventId}/drawing`),
+  startDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/start-mode`),
+  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`)
 }
 
 // Messaging API

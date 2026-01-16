@@ -4,12 +4,14 @@ import { API_BASE_URL } from '../services/api';
 
 /**
  * Hook for connecting to the live drawing SignalR hub
- * Allows players to watch division drawings in real-time
+ * Supports both division-level drawing (for spectators) and event-level drawing (for Drawing Monitor)
  */
 export function useDrawingHub() {
   const [connection, setConnection] = useState(null);
   const [connectionState, setConnectionState] = useState('disconnected');
   const [drawingState, setDrawingState] = useState(null);
+  const [viewers, setViewers] = useState([]);
+  const [divisionStates, setDivisionStates] = useState({});
   const connectionRef = useRef(null);
   const maxReconnectAttempts = 5;
 
@@ -72,7 +74,7 @@ export function useDrawingHub() {
       setConnection(null);
     });
 
-    // Set up drawing event handlers
+    // Set up division-level drawing event handlers
     newConnection.on('DrawingStarted', (state) => {
       console.log('DrawingHub: Drawing started', state);
       setDrawingState(state);
@@ -99,6 +101,68 @@ export function useDrawingHub() {
     newConnection.on('DrawingCancelled', () => {
       console.log('DrawingHub: Drawing cancelled');
       setDrawingState(null);
+    });
+
+    // Set up event-level drawing event handlers (for Drawing Monitor page)
+    newConnection.on('EventDrawingStarted', (data) => {
+      console.log('DrawingHub: Event drawing started', data);
+      setDivisionStates(prev => ({
+        ...prev,
+        [data.divisionId]: {
+          ...data.state,
+          drawingInProgress: true
+        }
+      }));
+    });
+
+    newConnection.on('EventUnitDrawn', (data) => {
+      console.log('DrawingHub: Event unit drawn', data);
+      setDivisionStates(prev => {
+        const divState = prev[data.divisionId];
+        if (!divState) return prev;
+        return {
+          ...prev,
+          [data.divisionId]: {
+            ...divState,
+            drawnCount: divState.drawnCount + 1,
+            drawnUnits: [...(divState.drawnUnits || []), data.drawnUnit],
+            remainingUnitNames: (divState.remainingUnitNames || []).filter(name => name !== data.drawnUnit.unitName)
+          }
+        };
+      });
+    });
+
+    newConnection.on('EventDrawingCompleted', (data) => {
+      console.log('DrawingHub: Event drawing completed', data);
+      setDivisionStates(prev => ({
+        ...prev,
+        [data.divisionId]: {
+          ...prev[data.divisionId],
+          drawingInProgress: false,
+          drawnUnits: data.result.finalOrder,
+          scheduleStatus: 'UnitsAssigned'
+        }
+      }));
+    });
+
+    newConnection.on('EventDrawingCancelled', (data) => {
+      console.log('DrawingHub: Event drawing cancelled', data);
+      setDivisionStates(prev => ({
+        ...prev,
+        [data.divisionId]: {
+          ...prev[data.divisionId],
+          drawingInProgress: false,
+          drawnCount: 0,
+          drawnUnits: [],
+          remainingUnitNames: prev[data.divisionId]?.remainingUnitNames || []
+        }
+      }));
+    });
+
+    // Set up viewer list updates
+    newConnection.on('ViewersUpdated', (viewerList) => {
+      console.log('DrawingHub: Viewers updated', viewerList);
+      setViewers(viewerList);
     });
 
     try {
@@ -129,10 +193,12 @@ export function useDrawingHub() {
       setConnection(null);
       setConnectionState('disconnected');
       setDrawingState(null);
+      setViewers([]);
+      setDivisionStates({});
     }
   }, []);
 
-  // Join a division drawing room
+  // Join a division drawing room (for WatchDrawingModal)
   const joinDrawingRoom = useCallback(async (divisionId) => {
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       try {
@@ -163,6 +229,47 @@ export function useDrawingHub() {
     return false;
   }, []);
 
+  // Join an event drawing room (for Drawing Monitor page)
+  const joinEventDrawing = useCallback(async (eventId, displayName, avatarUrl) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await connectionRef.current.invoke('JoinEventDrawing', eventId, displayName || null, avatarUrl || null);
+        console.log('DrawingHub: Joined event drawing for event', eventId);
+        return true;
+      } catch (err) {
+        console.error('DrawingHub: Error joining event drawing:', err);
+        return false;
+      }
+    }
+    return false;
+  }, []);
+
+  // Leave an event drawing room
+  const leaveEventDrawing = useCallback(async (eventId) => {
+    if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await connectionRef.current.invoke('LeaveEventDrawing', eventId);
+        console.log('DrawingHub: Left event drawing for event', eventId);
+        setViewers([]);
+        setDivisionStates({});
+        return true;
+      } catch (err) {
+        console.error('DrawingHub: Error leaving event drawing:', err);
+        return false;
+      }
+    }
+    return false;
+  }, []);
+
+  // Initialize division states from API data
+  const initializeDivisionStates = useCallback((divisions) => {
+    const states = {};
+    divisions.forEach(div => {
+      states[div.divisionId] = div;
+    });
+    setDivisionStates(states);
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -176,11 +283,16 @@ export function useDrawingHub() {
     connection,
     connectionState,
     drawingState,
+    setDrawingState,
+    viewers,
+    divisionStates,
+    initializeDivisionStates,
     connect,
     disconnect,
     joinDrawingRoom,
     leaveDrawingRoom,
-    setDrawingState,
+    joinEventDrawing,
+    leaveEventDrawing,
     isConnected: connectionState === 'connected'
   };
 }
@@ -190,5 +302,10 @@ export const DrawingEvents = {
   DrawingStarted: 'DrawingStarted',
   UnitDrawn: 'UnitDrawn',
   DrawingCompleted: 'DrawingCompleted',
-  DrawingCancelled: 'DrawingCancelled'
+  DrawingCancelled: 'DrawingCancelled',
+  EventDrawingStarted: 'EventDrawingStarted',
+  EventUnitDrawn: 'EventUnitDrawn',
+  EventDrawingCompleted: 'EventDrawingCompleted',
+  EventDrawingCancelled: 'EventDrawingCancelled',
+  ViewersUpdated: 'ViewersUpdated'
 };

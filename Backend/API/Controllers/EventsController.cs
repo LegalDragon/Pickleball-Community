@@ -456,6 +456,7 @@ public class EventsController : ControllerBase
                 ContactEmail = evt.ContactEmail,
                 ContactPhone = evt.ContactPhone,
                 CreatedAt = evt.CreatedAt,
+                TournamentStatus = evt.TournamentStatus,
                 Divisions = evt.Divisions.OrderBy(d => d.SortOrder).Select(d => new EventDivisionPublicDto
                 {
                     Id = d.Id,
