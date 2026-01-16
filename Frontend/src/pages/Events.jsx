@@ -3079,27 +3079,19 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       const response = await tournamentApi.respondToJoinRequest(joinRequestId, accept);
       if (response.success) {
         toast.showSuccess(accept ? 'Join request accepted' : 'Join request rejected');
-        // Refresh the registrations for this division
-        if (selectedDivisionForViewing) {
-          loadDivisionRegistrations(selectedDivisionForViewing);
-        }
-        // Also refresh the cache if viewing inline
-        if (divisionRegistrationsCache[divisionId]) {
-          setDivisionRegistrationsCache(prev => {
-            const updated = { ...prev };
-            delete updated[divisionId];
-            return updated;
-          });
-          // Reload if expanded
-          if (expandedDivisions[divisionId]) {
-            const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
-            if (divResponse.success) {
-              const sorted = (divResponse.data || []).sort((a, b) => {
-                if (a.isComplete && !b.isComplete) return -1;
-                if (!a.isComplete && b.isComplete) return 1;
-                return 0;
-              });
-              setDivisionRegistrationsCache(prev => ({ ...prev, [divisionId]: sorted }));
+        // Refetch division registrations immediately
+        if (divisionId) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divisionId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divisionId) {
+              setDivisionRegistrations(sorted);
             }
           }
         }
@@ -3394,13 +3386,26 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     setMergingUnits(true);
     try {
       const [target, source] = selectedUnitsForMerge;
+      const divisionId = target.divisionId || source.divisionId;
       const response = await tournamentApi.mergeRegistrations(event.id, target.id, source.id);
       if (response.success) {
         toast.success('Registrations merged successfully');
         setSelectedUnitsForMerge([]);
-        // Refresh division registrations
-        if (selectedRegDivisionId) {
-          loadDivisionRegistrations(selectedRegDivisionId);
+        // Refetch division registrations immediately
+        if (divisionId) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divisionId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divisionId) {
+              setDivisionRegistrations(sorted);
+            }
+          }
         }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
@@ -3428,14 +3433,28 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
     setMovingUnit(true);
     try {
+      const oldDivisionId = unitToMove.divisionId;
       const response = await tournamentApi.moveRegistration(event.id, unitToMove.id, newDivisionId);
       if (response.success) {
         toast.success('Registration moved successfully');
         setShowMoveModal(false);
         setUnitToMove(null);
-        // Refresh division registrations
-        if (selectedRegDivisionId) {
-          loadDivisionRegistrations(selectedRegDivisionId);
+        // Refetch both source and target division registrations
+        const divisionsToRefresh = [oldDivisionId, newDivisionId].filter(Boolean);
+        for (const divId of divisionsToRefresh) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divId) {
+              setDivisionRegistrations(sorted);
+            }
+          }
         }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
@@ -4581,12 +4600,20 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             const response = await tournamentApi.adminBreakUnit(unit.id);
                                             if (response.success) {
                                               toast.success(response.message || 'Unit broken apart');
-                                              // Invalidate cache to force refresh
-                                              setDivisionRegistrationsCache(prev => {
-                                                const updated = { ...prev };
-                                                delete updated[division.id];
-                                                return updated;
-                                              });
+                                              // Refetch division registrations immediately
+                                              const divResponse = await tournamentApi.getEventUnits(event.id, division.id);
+                                              if (divResponse.success) {
+                                                const sorted = (divResponse.data || []).sort((a, b) => {
+                                                  if (a.isComplete && !b.isComplete) return -1;
+                                                  if (!a.isComplete && b.isComplete) return 1;
+                                                  return 0;
+                                                });
+                                                setDivisionRegistrationsCache(prev => ({ ...prev, [division.id]: sorted }));
+                                              }
+                                              // Also update legacy modal state if viewing this division
+                                              if (selectedDivisionForViewing?.id === division.id) {
+                                                loadDivisionRegistrations(selectedDivisionForViewing);
+                                              }
                                               onUpdate();
                                             } else {
                                               toast.error(response.message || 'Failed to break unit');
