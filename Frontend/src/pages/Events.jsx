@@ -1786,7 +1786,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   // Payment summary state
   const [paymentSummary, setPaymentSummary] = useState(null);
   const [loadingPayments, setLoadingPayments] = useState(false);
-  const [expandedDivisions, setExpandedDivisions] = useState({});
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
