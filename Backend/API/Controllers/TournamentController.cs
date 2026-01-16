@@ -1177,7 +1177,7 @@ public class TournamentController : ControllerBase
                 EventId = unit.EventId,
                 DivisionId = unit.DivisionId,
                 Name = memberName,
-                Status = "Registered",
+                Status = member.IsCheckedIn ? "CheckedIn" : "Registered",
                 CaptainUserId = member.UserId,
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
@@ -1185,17 +1185,64 @@ public class TournamentController : ControllerBase
             _context.EventUnits.Add(newUnit);
             await _context.SaveChangesAsync(); // Save to get ID
 
+            // Sync member's payment data to the new unit
+            newUnit.ReferenceId = $"E{unit.EventId}-U{newUnit.Id}";
+            if (member.HasPaid)
+            {
+                newUnit.PaymentStatus = "Paid";
+                newUnit.AmountPaid = member.AmountPaid;
+                newUnit.PaidAt = member.PaidAt;
+                newUnit.PaymentProofUrl = member.PaymentProofUrl;
+                newUnit.PaymentReference = member.PaymentReference;
+            }
+            else if (!string.IsNullOrEmpty(member.PaymentProofUrl))
+            {
+                newUnit.PaymentStatus = "PendingVerification";
+                newUnit.PaymentProofUrl = member.PaymentProofUrl;
+                newUnit.PaymentReference = member.PaymentReference;
+            }
+
             // Move member to new unit and make them captain
             member.UnitId = newUnit.Id;
             member.Role = "Captain";
+            member.ReferenceId = $"E{unit.EventId}-U{newUnit.Id}-P{member.UserId}";
 
             createdUnits.Add(memberName);
         }
 
-        // Update original unit name to captain's name (since it's now solo)
+        // Update original unit for captain
         if (captain != null)
         {
             unit.Name = Utility.FormatName(captain.User?.LastName, captain.User?.FirstName);
+            unit.Status = captain.IsCheckedIn ? "CheckedIn" : "Registered";
+
+            // Reset unit payment to captain's individual payment data
+            unit.ReferenceId = $"E{unit.EventId}-U{unit.Id}";
+            if (captain.HasPaid)
+            {
+                unit.PaymentStatus = "Paid";
+                unit.AmountPaid = captain.AmountPaid;
+                unit.PaidAt = captain.PaidAt;
+                unit.PaymentProofUrl = captain.PaymentProofUrl;
+                unit.PaymentReference = captain.PaymentReference;
+            }
+            else if (!string.IsNullOrEmpty(captain.PaymentProofUrl))
+            {
+                unit.PaymentStatus = "PendingVerification";
+                unit.AmountPaid = 0;
+                unit.PaymentProofUrl = captain.PaymentProofUrl;
+                unit.PaymentReference = captain.PaymentReference;
+            }
+            else
+            {
+                unit.PaymentStatus = "Pending";
+                unit.AmountPaid = 0;
+                unit.PaymentProofUrl = null;
+                unit.PaymentReference = null;
+            }
+
+            // Update captain's member reference ID
+            captain.ReferenceId = $"E{unit.EventId}-U{unit.Id}-P{captain.UserId}";
         }
         unit.UpdatedAt = DateTime.Now;
 
