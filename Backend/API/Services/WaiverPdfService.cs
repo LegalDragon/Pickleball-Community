@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
+using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Models.Entities;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -10,7 +11,7 @@ namespace Pickleball.Community.Services;
 public interface IWaiverPdfService
 {
     Task<WaiverSigningResult> ProcessWaiverSignatureAsync(
-        EventWaiver waiver,
+        WaiverDocumentDto waiver,
         User user,
         string typedSignature,
         string signatureImageBase64,
@@ -46,7 +47,7 @@ public class WaiverPdfService : IWaiverPdfService
     }
 
     public async Task<WaiverSigningResult> ProcessWaiverSignatureAsync(
-        EventWaiver waiver,
+        WaiverDocumentDto waiver,
         User user,
         string typedSignature,
         string signatureImageBase64,
@@ -56,7 +57,6 @@ public class WaiverPdfService : IWaiverPdfService
         string? parentGuardianName)
     {
         var result = new WaiverSigningResult();
-        var eventName = waiver.Event?.Name ?? "Event";
 
         // 1. Upload signature image to shared asset service
         var signatureBytes = Convert.FromBase64String(
@@ -85,8 +85,7 @@ public class WaiverPdfService : IWaiverPdfService
             signedAt,
             ipAddress,
             signerRole,
-            parentGuardianName,
-            eventName);
+            parentGuardianName);
 
         // 3. Upload PDF to shared asset service
         var pdfFileName = $"waiver_e{waiver.EventId}_u{user.Id}_{signedAt:yyyyMMddHHmmss}.pdf";
@@ -101,7 +100,7 @@ public class WaiverPdfService : IWaiverPdfService
         _logger.LogInformation("Uploaded signed waiver PDF for user {UserId} event {EventId}: {Url}",
             user.Id, waiver.EventId, result.SignedWaiverPdfUrl);
 
-        // 3. Call stored procedure for email notification
+        // 4. Call stored procedure for email notification
         try
         {
             await _context.Database.ExecuteSqlRawAsync(
@@ -110,7 +109,7 @@ public class WaiverPdfService : IWaiverPdfService
                 user.Id,
                 user.Email ?? "",
                 $"{user.FirstName} {user.LastName}".Trim() is { Length: > 0 } name ? name : "User",
-                eventName,
+                waiver.EventName,
                 waiver.Title,
                 signedAt,
                 result.SignatureAssetUrl,
@@ -126,15 +125,14 @@ public class WaiverPdfService : IWaiverPdfService
     }
 
     private byte[] GenerateSignedWaiverPdf(
-        EventWaiver waiver,
+        WaiverDocumentDto waiver,
         User user,
         string typedSignature,
         byte[] signatureImage,
         DateTime signedAt,
         string? ipAddress,
         string signerRole,
-        string? parentGuardianName,
-        string eventName)
+        string? parentGuardianName)
     {
         var document = Document.Create(container =>
         {
@@ -144,7 +142,7 @@ public class WaiverPdfService : IWaiverPdfService
                 page.Margin(50);
                 page.DefaultTextStyle(x => x.FontSize(11));
 
-                page.Header().Element(c => ComposeHeader(c, waiver, eventName));
+                page.Header().Element(c => ComposeHeader(c, waiver));
                 page.Content().Element(c => ComposeContent(c, waiver, user, typedSignature, signatureImage, signedAt, ipAddress, signerRole, parentGuardianName));
                 page.Footer().Element(ComposeFooter);
             });
@@ -153,11 +151,11 @@ public class WaiverPdfService : IWaiverPdfService
         return document.GeneratePdf();
     }
 
-    private void ComposeHeader(IContainer container, EventWaiver waiver, string eventName)
+    private void ComposeHeader(IContainer container, WaiverDocumentDto waiver)
     {
         container.Column(column =>
         {
-            column.Item().Text(eventName).Bold().FontSize(16);
+            column.Item().Text(waiver.EventName).Bold().FontSize(16);
             column.Item().Text(waiver.Title).Bold().FontSize(14);
             column.Item().PaddingBottom(10).LineHorizontal(1);
         });
@@ -165,7 +163,7 @@ public class WaiverPdfService : IWaiverPdfService
 
     private void ComposeContent(
         IContainer container,
-        EventWaiver waiver,
+        WaiverDocumentDto waiver,
         User user,
         string typedSignature,
         byte[] signatureImage,

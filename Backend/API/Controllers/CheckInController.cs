@@ -171,33 +171,6 @@ public class CheckInController : ControllerBase
                 _logger.LogWarning(ex, "Could not query ObjectAssets for waivers - table may not exist yet");
             }
 
-            // Fallback to legacy EventWaivers table if no ObjectAssets found
-            if (!pendingWaiverDtos.Any())
-            {
-                try
-                {
-                    var legacyWaivers = await _context.EventWaivers
-                        .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-                        .ToListAsync();
-
-                    pendingWaiverDtos = legacyWaivers.Select(w => new WaiverDto
-                    {
-                        Id = w.Id,
-                        DocumentType = "waiver",
-                        Title = w.Title,
-                        Content = w.Content,
-                        Version = w.Version,
-                        IsRequired = w.IsRequired,
-                        RequiresMinorWaiver = w.RequiresMinorWaiver,
-                        MinorAgeThreshold = w.MinorAgeThreshold
-                    }).ToList();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not query EventWaivers table - it may not exist yet");
-                }
-            }
-
             var firstReg = registrations.First();
             var allWaiversSigned = !pendingWaiverDtos.Any() || firstReg.WaiverSignedAt != null;
 
@@ -270,36 +243,22 @@ public class CheckInController : ControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
 
-        // Try to find waiver in legacy EventWaivers table first
-        var legacyWaiver = await _context.EventWaivers
-            .Include(w => w.Event)
-            .FirstOrDefaultAsync(w => w.Id == request.WaiverId && w.EventId == eventId && w.IsActive);
+        // Find waiver in ObjectAssets
+        var objectAsset = await _context.ObjectAssets
+            .Include(a => a.AssetType)
+            .FirstOrDefaultAsync(a => a.Id == request.WaiverId
+                && a.ObjectId == eventId
+                && a.AssetType != null
+                && a.AssetType.TypeName.ToLower() == "waiver");
 
-        // If not found in legacy table, check ObjectAssets (new system)
-        string waiverTitle = "Release Waiver";
+        if (objectAsset == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
+
+        // Fetch waiver content from file URL if available
         string waiverContent = "";
-        int waiverDocumentId = request.WaiverId;
-
-        if (legacyWaiver != null)
+        if (!string.IsNullOrEmpty(objectAsset.FileUrl) && IsRenderableFile(objectAsset.FileName))
         {
-            waiverTitle = legacyWaiver.Title;
-            waiverContent = legacyWaiver.Content;
-        }
-        else
-        {
-            // Try ObjectAssets
-            var objectAsset = await _context.ObjectAssets
-                .Include(a => a.AssetType)
-                .FirstOrDefaultAsync(a => a.Id == request.WaiverId
-                    && a.ObjectId == eventId
-                    && a.AssetType != null
-                    && a.AssetType.TypeName.ToLower() == "waiver");
-
-            if (objectAsset == null)
-                return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
-
-            waiverTitle = objectAsset.Title;
-            // Content would need to be fetched from the file URL if needed
+            waiverContent = await FetchFileContentAsync(objectAsset.FileUrl);
         }
 
         // Get user info for legal record
@@ -331,18 +290,17 @@ public class CheckInController : ControllerBase
         WaiverSigningResult? signingResult = null;
         try
         {
-            // Create a minimal EventWaiver object for the PDF service if using ObjectAssets
-            var waiverForPdf = legacyWaiver ?? new EventWaiver
+            var waiverDto = new WaiverDocumentDto
             {
-                Id = waiverDocumentId,
+                Id = objectAsset.Id,
                 EventId = eventId,
-                Event = evt,
-                Title = waiverTitle,
+                EventName = evt.Name,
+                Title = objectAsset.Title,
                 Content = waiverContent
             };
 
             signingResult = await _waiverPdfService.ProcessWaiverSignatureAsync(
-                waiverForPdf,
+                waiverDto,
                 user,
                 request.Signature.Trim(),
                 request.SignatureImage,
@@ -361,7 +319,7 @@ public class CheckInController : ControllerBase
         foreach (var reg in registrations)
         {
             reg.WaiverSignedAt = signedAt;
-            reg.WaiverDocumentId = waiverDocumentId;
+            reg.WaiverDocumentId = objectAsset.Id;
             reg.WaiverSignature = request.Signature.Trim();
         }
 
@@ -389,7 +347,7 @@ public class CheckInController : ControllerBase
         }
 
         _logger.LogInformation("User {UserId} signed waiver {WaiverId} for event {EventId} with signature '{Signature}'",
-            userId, waiverDocumentId, eventId, request.Signature);
+            userId, objectAsset.Id, eventId, request.Signature);
 
         return Ok(new ApiResponse<object>
         {
@@ -423,11 +381,15 @@ public class CheckInController : ControllerBase
             if (!registrations.Any())
                 return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
 
-            // Check if waiver is required but not signed (gracefully handle missing table)
+            // Check if waiver is required but not signed (using ObjectAssets)
             try
             {
-                var pendingWaivers = await _context.EventWaivers
-                    .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
+                var pendingWaivers = await _context.ObjectAssets
+                    .Include(a => a.AssetType)
+                    .Where(a => a.ObjectType == "Event"
+                        && a.ObjectId == eventId
+                        && a.AssetType != null
+                        && a.AssetType.TypeName.ToLower() == "waiver")
                     .ToListAsync();
 
                 var firstReg = registrations.First();
@@ -442,7 +404,7 @@ public class CheckInController : ControllerBase
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not query EventWaivers table - skipping waiver check");
+                _logger.LogWarning(ex, "Could not query ObjectAssets table - skipping waiver check");
             }
 
             // Create or update event-level check-in (gracefully handle missing table)
