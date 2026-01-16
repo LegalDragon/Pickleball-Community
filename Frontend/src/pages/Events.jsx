@@ -3145,7 +3145,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
     try {
       const response = await tournamentApi.respondToJoinRequest(joinRequestId, accept);
       if (response.success) {
-        toast.showSuccess(accept ? 'Join request accepted' : 'Join request rejected');
+        toast.success(accept ? 'Join request accepted' : 'Join request rejected');
         // Refetch division registrations immediately
         if (divisionId) {
           const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
@@ -3168,11 +3168,11 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
           onUpdate(updatedEventResponse.data);
         }
       } else {
-        toast.showError(response.message || 'Failed to respond to join request');
+        toast.error(response.message || 'Failed to respond to join request');
       }
     } catch (err) {
       console.error('Error responding to join request:', err);
-      toast.showError('Failed to respond to join request');
+      toast.error('Failed to respond to join request');
     }
   };
 
