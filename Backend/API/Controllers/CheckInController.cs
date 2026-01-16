@@ -35,76 +35,87 @@ public class CheckInController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponse<PlayerCheckInStatusDto>>> GetCheckInStatus(int eventId)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        // Get user's registrations in this event
-        var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
-            .Include(m => m.Unit)
-                .ThenInclude(u => u!.Division)
-            .Include(m => m.WaiverDocument)
-            .ToListAsync();
-
-        if (!registrations.Any())
+        try
         {
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
+
+            // Get user's registrations in this event
+            var registrations = await _context.EventUnitMembers
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Include(m => m.Unit)
+                    .ThenInclude(u => u!.Division)
+                .ToListAsync();
+
+            if (!registrations.Any())
+            {
+                return Ok(new ApiResponse<PlayerCheckInStatusDto>
+                {
+                    Success = true,
+                    Data = new PlayerCheckInStatusDto
+                    {
+                        IsRegistered = false,
+                        IsCheckedIn = false,
+                        WaiverSigned = false
+                    }
+                });
+            }
+
+            // Get event check-in record
+            var checkIn = await _context.EventCheckIns
+                .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+
+            // Get event waivers
+            var waivers = await _context.EventWaivers
+                .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
+                .ToListAsync();
+
+            var firstReg = registrations.First();
+            var allWaiversSigned = !waivers.Any() || firstReg.WaiverSignedAt != null;
+
             return Ok(new ApiResponse<PlayerCheckInStatusDto>
             {
                 Success = true,
                 Data = new PlayerCheckInStatusDto
                 {
-                    IsRegistered = false,
-                    IsCheckedIn = false,
-                    WaiverSigned = false
+                    IsRegistered = true,
+                    IsCheckedIn = firstReg.IsCheckedIn,
+                    CheckedInAt = firstReg.CheckedInAt,
+                    WaiverSigned = allWaiversSigned,
+                    WaiverSignedAt = firstReg.WaiverSignedAt,
+                    PendingWaivers = waivers
+                        .Where(w => firstReg.WaiverSignedAt == null || firstReg.WaiverDocumentId != w.Id)
+                        .Select(w => new WaiverDto
+                        {
+                            Id = w.Id,
+                            Title = w.Title,
+                            Content = w.Content,
+                            Version = w.Version,
+                            IsRequired = w.IsRequired,
+                            RequiresMinorWaiver = w.RequiresMinorWaiver,
+                            MinorAgeThreshold = w.MinorAgeThreshold
+                        }).ToList(),
+                    Divisions = registrations.Select(r => new CheckInDivisionDto
+                    {
+                        DivisionId = r.Unit!.DivisionId,
+                        DivisionName = r.Unit.Division?.Name ?? "",
+                        UnitId = r.UnitId,
+                        UnitName = r.Unit.Name,
+                        IsCheckedIn = r.IsCheckedIn,
+                        CheckedInAt = r.CheckedInAt
+                    }).ToList()
                 }
             });
         }
-
-        // Get event check-in record
-        var checkIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
-
-        // Get event waivers
-        var waivers = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-            .ToListAsync();
-
-        var firstReg = registrations.First();
-        var allWaiversSigned = !waivers.Any() || firstReg.WaiverSignedAt != null;
-
-        return Ok(new ApiResponse<PlayerCheckInStatusDto>
+        catch (Exception ex)
         {
-            Success = true,
-            Data = new PlayerCheckInStatusDto
+            _logger.LogError(ex, "Error getting check-in status for event {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<PlayerCheckInStatusDto>
             {
-                IsRegistered = true,
-                IsCheckedIn = firstReg.IsCheckedIn,
-                CheckedInAt = firstReg.CheckedInAt,
-                WaiverSigned = allWaiversSigned,
-                WaiverSignedAt = firstReg.WaiverSignedAt,
-                PendingWaivers = waivers
-                    .Where(w => firstReg.WaiverSignedAt == null || firstReg.WaiverDocumentId != w.Id)
-                    .Select(w => new WaiverDto
-                    {
-                        Id = w.Id,
-                        Title = w.Title,
-                        Content = w.Content,
-                        Version = w.Version,
-                        IsRequired = w.IsRequired,
-                        RequiresMinorWaiver = w.RequiresMinorWaiver,
-                        MinorAgeThreshold = w.MinorAgeThreshold
-                    }).ToList(),
-                Divisions = registrations.Select(r => new CheckInDivisionDto
-                {
-                    DivisionId = r.Unit!.DivisionId,
-                    DivisionName = r.Unit.Division?.Name ?? "",
-                    UnitId = r.UnitId,
-                    UnitName = r.Unit.Name,
-                    IsCheckedIn = r.IsCheckedIn,
-                    CheckedInAt = r.CheckedInAt
-                }).ToList()
-            }
-        });
+                Success = false,
+                Message = $"Error getting check-in status: {ex.Message}"
+            });
+        }
     }
 
     /// <summary>
