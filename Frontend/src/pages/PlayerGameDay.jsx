@@ -374,7 +374,6 @@ function WaiverModal({ waivers, onSign, onClose }) {
   const [chineseName, setChineseName] = useState('')
   const [signing, setSigning] = useState(false)
   const [waiverContent, setWaiverContent] = useState('')
-  const [loadingContent, setLoadingContent] = useState(false)
 
   const isMinorWaiver = signerRole === 'Parent' || signerRole === 'Guardian'
 
@@ -399,35 +398,19 @@ function WaiverModal({ waivers, onSign, onClose }) {
       .replace(/\n/gim, '<br>')
   }
 
-  // Fetch waiver content from file URL if it's .md or .html
+  // Set waiver content - backend now fetches .md/.html content for us
   useEffect(() => {
-    const fetchContent = async () => {
-      if (currentWaiver.fileUrl && isRenderableFile(currentWaiver.fileName)) {
-        setLoadingContent(true)
-        try {
-          const response = await fetch(currentWaiver.fileUrl)
-          if (response.ok) {
-            let content = await response.text()
-            // If it's markdown, convert to HTML
-            if (currentWaiver.fileName?.toLowerCase().endsWith('.md')) {
-              content = markdownToHtml(content)
-            }
-            setWaiverContent(content)
-          } else {
-            setWaiverContent('<p>Failed to load waiver content</p>')
-          }
-        } catch (err) {
-          console.error('Error fetching waiver content:', err)
-          setWaiverContent('<p>Failed to load waiver content</p>')
-        } finally {
-          setLoadingContent(false)
-        }
-      } else if (currentWaiver.content) {
-        // Use existing content from legacy system
-        setWaiverContent(currentWaiver.content)
+    if (currentWaiver.content) {
+      // Content provided by backend (for .md/.html files or legacy system)
+      let content = currentWaiver.content
+      // If it's markdown, convert to HTML
+      if (currentWaiver.fileName?.toLowerCase().endsWith('.md')) {
+        content = markdownToHtml(content)
       }
+      setWaiverContent(content)
+    } else {
+      setWaiverContent('')
     }
-    fetchContent()
   }, [currentWaiver])
 
   const handleSign = async () => {
@@ -477,11 +460,7 @@ function WaiverModal({ waivers, onSign, onClose }) {
           <h4 className="font-medium mb-2">{currentWaiver.title}</h4>
 
           {/* Waiver Content Display */}
-          {loadingContent ? (
-            <div className="bg-gray-50 p-3 rounded-lg border flex items-center justify-center h-48">
-              <div className="text-gray-500">Loading waiver content...</div>
-            </div>
-          ) : currentWaiver.fileUrl && !isRenderableFile(currentWaiver.fileName) ? (
+          {currentWaiver.fileUrl && !isRenderableFile(currentWaiver.fileName) ? (
             // Non-renderable file (PDF, etc.) - show link
             <div className="bg-gray-50 p-4 rounded-lg border">
               <p className="text-sm text-gray-600 mb-3">

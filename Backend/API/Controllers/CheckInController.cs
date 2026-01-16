@@ -16,12 +16,41 @@ public class CheckInController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<CheckInController> _logger;
     private readonly IWaiverPdfService _waiverPdfService;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService)
+    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService, IHttpClientFactory httpClientFactory)
     {
         _context = context;
         _logger = logger;
         _waiverPdfService = waiverPdfService;
+        _httpClientFactory = httpClientFactory;
+    }
+
+    // Helper to check if file is renderable (md/html)
+    private static bool IsRenderableFile(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return false;
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext == ".md" || ext == ".html" || ext == ".htm";
+    }
+
+    // Fetch content from URL for renderable files
+    private async Task<string> FetchFileContentAsync(string url)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch waiver content from {Url}", url);
+        }
+        return string.Empty;
     }
 
     private int GetUserId()
@@ -83,19 +112,29 @@ public class CheckInController : ControllerBase
                             && a.AssetType.TypeName.ToLower() == "waiver")
                         .ToListAsync();
 
-                    pendingWaiverDtos = waiverAssets.Select(w => new WaiverDto
+                    // Fetch content for renderable files (.md, .html)
+                    foreach (var w in waiverAssets)
                     {
-                        Id = w.Id,
-                        DocumentType = "waiver",
-                        Title = w.Title,
-                        Content = "", // Content will be fetched by frontend for .md/.html files
-                        FileUrl = w.FileUrl,
-                        FileName = w.FileName,
-                        Version = 1,
-                        IsRequired = true,
-                        RequiresMinorWaiver = false,
-                        MinorAgeThreshold = 18
-                    }).ToList();
+                        var content = "";
+                        if (IsRenderableFile(w.FileName) && !string.IsNullOrEmpty(w.FileUrl))
+                        {
+                            content = await FetchFileContentAsync(w.FileUrl);
+                        }
+
+                        pendingWaiverDtos.Add(new WaiverDto
+                        {
+                            Id = w.Id,
+                            DocumentType = "waiver",
+                            Title = w.Title,
+                            Content = content,
+                            FileUrl = w.FileUrl,
+                            FileName = w.FileName,
+                            Version = 1,
+                            IsRequired = true,
+                            RequiresMinorWaiver = false,
+                            MinorAgeThreshold = 18
+                        });
+                    }
                 }
             }
             catch (Exception ex)
