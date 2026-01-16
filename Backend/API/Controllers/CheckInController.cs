@@ -182,108 +182,141 @@ public class CheckInController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponse<CheckInResultDto>>> CheckIn(int eventId)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        // Verify user is registered
-        var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
-            .Include(m => m.Unit)
-            .ToListAsync();
-
-        if (!registrations.Any())
-            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
-
-        // Check if waiver is required but not signed
-        var pendingWaivers = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-            .ToListAsync();
-
-        var firstReg = registrations.First();
-        if (pendingWaivers.Any() && firstReg.WaiverSignedAt == null)
+        try
         {
-            return BadRequest(new ApiResponse<CheckInResultDto>
-            {
-                Success = false,
-                Message = "Please sign the waiver before checking in"
-            });
-        }
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
 
-        // Create or update event-level check-in
-        var existingCheckIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
-
-        if (existingCheckIn == null)
-        {
-            existingCheckIn = new EventCheckIn
-            {
-                EventId = eventId,
-                UserId = userId,
-                CheckInMethod = CheckInMethod.Self,
-                CheckedInAt = DateTime.Now,
-                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-            };
-            _context.EventCheckIns.Add(existingCheckIn);
-        }
-
-        // Update all unit member check-ins
-        foreach (var reg in registrations)
-        {
-            reg.IsCheckedIn = true;
-            reg.CheckedInAt = DateTime.Now;
-        }
-
-        // Check if this makes any games ready
-        var readyGames = new List<int>();
-        foreach (var reg in registrations)
-        {
-            var unit = reg.Unit!;
-            // Find games where this unit is playing
-            var games = await _context.EventGames
-                .Include(g => g.Match)
-                    .ThenInclude(m => m!.Unit1)
-                        .ThenInclude(u => u!.Members)
-                .Include(g => g.Match)
-                    .ThenInclude(m => m!.Unit2)
-                        .ThenInclude(u => u!.Members)
-                .Where(g => g.Status == "New" &&
-                    (g.Match!.Unit1Id == unit.Id || g.Match.Unit2Id == unit.Id))
+            // Verify user is registered
+            var registrations = await _context.EventUnitMembers
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Include(m => m.Unit)
                 .ToListAsync();
 
-            foreach (var game in games)
+            if (!registrations.Any())
+                return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
+
+            // Check if waiver is required but not signed (gracefully handle missing table)
+            try
             {
-                var unit1Members = game.Match!.Unit1?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
-                var unit2Members = game.Match!.Unit2?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+                var pendingWaivers = await _context.EventWaivers
+                    .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
+                    .ToListAsync();
 
-                var allUnit1CheckedIn = unit1Members.All(m => m.IsCheckedIn);
-                var allUnit2CheckedIn = unit2Members.All(m => m.IsCheckedIn);
-
-                if (allUnit1CheckedIn && allUnit2CheckedIn && game.Status == "New")
+                var firstReg = registrations.First();
+                if (pendingWaivers.Any() && firstReg.WaiverSignedAt == null)
                 {
-                    game.Status = "Ready";
-                    game.UpdatedAt = DateTime.Now;
-                    readyGames.Add(game.Id);
+                    return BadRequest(new ApiResponse<CheckInResultDto>
+                    {
+                        Success = false,
+                        Message = "Please sign the waiver before checking in"
+                    });
                 }
             }
-        }
-
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("User {UserId} checked in to event {EventId}. {ReadyCount} games now ready.",
-            userId, eventId, readyGames.Count);
-
-        return Ok(new ApiResponse<CheckInResultDto>
-        {
-            Success = true,
-            Data = new CheckInResultDto
+            catch (Exception ex)
             {
-                CheckedInAt = DateTime.Now,
-                GamesNowReady = readyGames.Count,
-                Message = readyGames.Count > 0
-                    ? $"Checked in successfully! {readyGames.Count} game(s) are now ready to play."
-                    : "Checked in successfully!"
+                _logger.LogWarning(ex, "Could not query EventWaivers table - skipping waiver check");
             }
-        });
+
+            // Create or update event-level check-in (gracefully handle missing table)
+            try
+            {
+                var existingCheckIn = await _context.EventCheckIns
+                    .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+
+                if (existingCheckIn == null)
+                {
+                    existingCheckIn = new EventCheckIn
+                    {
+                        EventId = eventId,
+                        UserId = userId,
+                        CheckInMethod = CheckInMethod.Self,
+                        CheckedInAt = DateTime.Now,
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+                    };
+                    _context.EventCheckIns.Add(existingCheckIn);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not query EventCheckIns table - skipping event-level check-in");
+            }
+
+            // Update all unit member check-ins
+            foreach (var reg in registrations)
+            {
+                reg.IsCheckedIn = true;
+                reg.CheckedInAt = DateTime.Now;
+            }
+
+            // Check if this makes any games ready (gracefully handle missing table)
+            var readyGames = new List<int>();
+            try
+            {
+                foreach (var reg in registrations)
+                {
+                    var unit = reg.Unit!;
+                    // Find games where this unit is playing
+                    var games = await _context.EventGames
+                        .Include(g => g.Match)
+                            .ThenInclude(m => m!.Unit1)
+                                .ThenInclude(u => u!.Members)
+                        .Include(g => g.Match)
+                            .ThenInclude(m => m!.Unit2)
+                                .ThenInclude(u => u!.Members)
+                        .Where(g => g.Status == "New" &&
+                            (g.Match!.Unit1Id == unit.Id || g.Match.Unit2Id == unit.Id))
+                        .ToListAsync();
+
+                    foreach (var game in games)
+                    {
+                        var unit1Members = game.Match!.Unit1?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+                        var unit2Members = game.Match!.Unit2?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+
+                        var allUnit1CheckedIn = unit1Members.All(m => m.IsCheckedIn);
+                        var allUnit2CheckedIn = unit2Members.All(m => m.IsCheckedIn);
+
+                        if (allUnit1CheckedIn && allUnit2CheckedIn && game.Status == "New")
+                        {
+                            game.Status = "Ready";
+                            game.UpdatedAt = DateTime.Now;
+                            readyGames.Add(game.Id);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not query EventGames table - skipping game readiness check");
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("User {UserId} checked in to event {EventId}. {ReadyCount} games now ready.",
+                userId, eventId, readyGames.Count);
+
+            return Ok(new ApiResponse<CheckInResultDto>
+            {
+                Success = true,
+                Data = new CheckInResultDto
+                {
+                    CheckedInAt = DateTime.Now,
+                    GamesNowReady = readyGames.Count,
+                    Message = readyGames.Count > 0
+                        ? $"Checked in successfully! {readyGames.Count} game(s) are now ready to play."
+                        : "Checked in successfully!"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking in to event {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<CheckInResultDto>
+            {
+                Success = false,
+                Message = $"Error checking in: {ex.Message}"
+            });
+        }
     }
 
     /// <summary>
