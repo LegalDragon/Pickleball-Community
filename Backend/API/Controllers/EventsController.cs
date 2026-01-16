@@ -608,6 +608,7 @@ public class EventsController : ControllerBase
                 OrganizedByClubId = evt.OrganizedByClubId,
                 ClubName = evt.OrganizedByClub?.Name,
                 CreatedAt = evt.CreatedAt,
+                TournamentStatus = evt.TournamentStatus,
                 IsOrganizer = isAdmin || (userId.HasValue && evt.OrganizedByUserId == userId.Value),
                 IsRegistered = userId.HasValue && (
                     evt.Divisions.Any(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))) ||
@@ -2318,7 +2319,8 @@ public class EventsController : ControllerBase
             OrganizerName = evt.OrganizedBy != null ? Utility.FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName) : null,
             OrganizedByClubId = evt.OrganizedByClubId,
             ClubName = evt.OrganizedByClub?.Name,
-            CreatedAt = evt.CreatedAt
+            CreatedAt = evt.CreatedAt,
+            TournamentStatus = evt.TournamentStatus
         };
     }
 

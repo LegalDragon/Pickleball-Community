@@ -121,6 +121,7 @@ public class EventDto
     public int? OrganizedByClubId { get; set; }
     public string? ClubName { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? TournamentStatus { get; set; }
 }
 
 // Event detail view
