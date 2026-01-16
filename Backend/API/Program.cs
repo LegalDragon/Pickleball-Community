@@ -113,6 +113,9 @@ builder.Services.AddHttpClient("SharedAuth", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// HttpContext accessor for services that need access to the current request
+builder.Services.AddHttpContextAccessor();
+
 // Services
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<IFileStorageService, AwsS3StorageService>();
