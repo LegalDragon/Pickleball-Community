@@ -50,10 +50,10 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       // Initialize selected members: default to just the current user (if they haven't paid)
       const currentMemberRecord = acceptedMembers.find(m => m.userId === userId);
       if (currentMemberRecord && !currentMemberRecord.hasPaid) {
-        setSelectedMemberIds([currentMemberRecord.id]);
+        setSelectedMemberIds([currentMemberRecord.userId]);
       } else {
         // If current user already paid, select all unpaid members by default
-        setSelectedMemberIds(unpaidMembers.map(m => m.id));
+        setSelectedMemberIds(unpaidMembers.map(m => m.userId));
       }
     }
   }, [registration, userId, acceptedMembers, unpaidMembers]);
@@ -162,11 +162,16 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
 
     setIsSubmitting(true);
     try {
+      // Convert selectedMemberIds (userIds) to actual member record IDs for the API
+      const memberRecordIds = acceptedMembers
+        .filter(m => selectedMemberIds.includes(m.userId))
+        .map(m => m.id);
+
       const response = await tournamentApi.uploadPaymentProof(event.id, registration.unitId, {
         paymentProofUrl,
         paymentReference,
         amountPaid: paymentAmount ? parseFloat(paymentAmount) : null,
-        memberIds: selectedMemberIds,
+        memberIds: memberRecordIds,
       });
 
       if (response.success) {
@@ -185,13 +190,13 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
     }
   };
 
-  // Toggle member selection
-  const toggleMemberSelection = (memberId) => {
+  // Toggle member selection (using userId for unique identification)
+  const toggleMemberSelection = (memberUserId) => {
     setSelectedMemberIds(prev => {
-      if (prev.includes(memberId)) {
-        return prev.filter(id => id !== memberId);
+      if (prev.includes(memberUserId)) {
+        return prev.filter(id => id !== memberUserId);
       } else {
-        return [...prev, memberId];
+        return [...prev, memberUserId];
       }
     });
   };
@@ -202,13 +207,13 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       // Deselect all, but keep at least current user selected
       const currentMemberRecord = acceptedMembers.find(m => m.userId === userId);
       if (currentMemberRecord && !currentMemberRecord.hasPaid) {
-        setSelectedMemberIds([currentMemberRecord.id]);
+        setSelectedMemberIds([currentMemberRecord.userId]);
       } else {
         setSelectedMemberIds([]);
       }
     } else {
       // Select all unpaid
-      setSelectedMemberIds(unpaidMembers.map(m => m.id));
+      setSelectedMemberIds(unpaidMembers.map(m => m.userId));
     }
   };
 
@@ -408,14 +413,14 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                   </div>
                   <div className="space-y-2">
                     {acceptedMembers.map(member => {
-                      const isSelected = selectedMemberIds.includes(member.id);
+                      const isSelected = selectedMemberIds.includes(member.userId);
                       const isCurrentUser = member.userId === userId;
                       const alreadyPaid = member.hasPaid;
 
                       return (
                         <div
-                          key={member.id}
-                          onClick={() => !alreadyPaid && toggleMemberSelection(member.id)}
+                          key={member.userId}
+                          onClick={() => !alreadyPaid && toggleMemberSelection(member.userId)}
                           className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${
                             alreadyPaid
                               ? 'bg-green-50 border-green-200 cursor-not-allowed'
@@ -431,13 +436,13 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                               disabled={alreadyPaid}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                if (!alreadyPaid) toggleMemberSelection(member.id);
+                                if (!alreadyPaid) toggleMemberSelection(member.userId);
                               }}
                               className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500 disabled:opacity-50"
                             />
                             <div>
                               <div className="text-sm font-medium text-gray-900">
-                                {member.name || `Player ${member.id}`}
+                                {member.name || `Player ${member.userId}`}
                                 {isCurrentUser && <span className="text-orange-600 ml-1">(you)</span>}
                               </div>
                               {alreadyPaid && (
