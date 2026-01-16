@@ -17,13 +17,15 @@ public class CheckInController : ControllerBase
     private readonly ILogger<CheckInController> _logger;
     private readonly IWaiverPdfService _waiverPdfService;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
-    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService, IHttpClientFactory httpClientFactory)
+    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService, IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
         _waiverPdfService = waiverPdfService;
         _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
     }
 
     // Helper to check if file is renderable (md/html)
@@ -34,17 +36,43 @@ public class CheckInController : ControllerBase
         return ext == ".md" || ext == ".html" || ext == ".htm";
     }
 
+    // Convert relative URL to absolute using SharedAuth base URL
+    private string GetFullUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+
+        // Already a full URL
+        if (url.StartsWith("http://") || url.StartsWith("https://"))
+            return url;
+
+        // Get base URL from config
+        var baseUrl = _configuration["SharedAuth:BaseUrl"]?.TrimEnd('/');
+        if (string.IsNullOrEmpty(baseUrl))
+            return url;
+
+        // Ensure URL starts with /
+        if (!url.StartsWith("/"))
+            url = "/" + url;
+
+        return baseUrl + url;
+    }
+
     // Fetch content from URL for renderable files
     private async Task<string> FetchFileContentAsync(string url)
     {
         try
         {
+            // Convert relative URL to full URL
+            var fullUrl = GetFullUrl(url);
+            _logger.LogInformation("Fetching waiver content from {Url}", fullUrl);
+
             var client = _httpClientFactory.CreateClient();
-            var response = await client.GetAsync(url);
+            var response = await client.GetAsync(fullUrl);
             if (response.IsSuccessStatusCode)
             {
                 return await response.Content.ReadAsStringAsync();
             }
+            _logger.LogWarning("Failed to fetch waiver content: {StatusCode}", response.StatusCode);
         }
         catch (Exception ex)
         {
