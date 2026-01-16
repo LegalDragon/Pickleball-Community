@@ -245,4 +245,60 @@ public class PlayerHistorySummaryDto
     public decimal? HighestRating { get; set; }
     public decimal? RatingTrend { get; set; }
     public List<PlayerRatingHistoryDto> RecentRatings { get; set; } = new();
+
+    // Payment summary
+    public int TotalPayments { get; set; }
+    public decimal TotalAmountPaid { get; set; }
+    public int PendingPayments { get; set; }
+}
+
+// =====================================================
+// Payment History DTOs
+// =====================================================
+
+public class PlayerPaymentHistoryDto
+{
+    public int Id { get; set; }
+    public int? EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public DateTime? EventDate { get; set; }
+    public int? UnitId { get; set; }
+    public string? UnitName { get; set; }
+    public string? DivisionName { get; set; }
+    public decimal Amount { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? PaymentProofUrl { get; set; }
+    public string? ReferenceId { get; set; }
+    public string Status { get; set; } = "Pending";
+    public bool IsApplied { get; set; }
+    public DateTime? AppliedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public string? VerifiedByName { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class PaymentHistorySearchRequest
+{
+    public string? Status { get; set; }
+    public int? EventId { get; set; }
+    public DateTime? DateFrom { get; set; }
+    public DateTime? DateTo { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+}
+
+public class PaymentHistoryPagedResponse
+{
+    public List<PlayerPaymentHistoryDto> Payments { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+
+    // Summary
+    public decimal TotalAmountPaid { get; set; }
+    public int TotalVerified { get; set; }
+    public int TotalPending { get; set; }
 }

@@ -77,6 +77,9 @@ public class NotificationsController : ControllerBase
                 .OrderByDescending(n => n.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Include(n => n.PrimaryObjectType)
+                .Include(n => n.SecondaryObjectType)
+                .Include(n => n.TertiaryObjectType)
                 .Select(n => new NotificationDto
                 {
                     Id = n.Id,
@@ -86,6 +89,42 @@ public class NotificationsController : ControllerBase
                     ActionUrl = n.ActionUrl,
                     ReferenceType = n.ReferenceType,
                     ReferenceId = n.ReferenceId,
+                    PrimaryObject = n.PrimaryObjectTypeId.HasValue && n.PrimaryObjectId.HasValue && n.PrimaryObjectType != null
+                        ? new NotificationObjectRefDto
+                        {
+                            ObjectTypeId = n.PrimaryObjectTypeId.Value,
+                            ObjectTypeName = n.PrimaryObjectType.Name,
+                            ObjectTypeDisplayName = n.PrimaryObjectType.DisplayName,
+                            ObjectId = n.PrimaryObjectId.Value,
+                            ViewUrl = n.PrimaryObjectType.ViewUrl != null
+                                ? n.PrimaryObjectType.ViewUrl.Replace("{id}", n.PrimaryObjectId.Value.ToString())
+                                : null
+                        }
+                        : null,
+                    SecondaryObject = n.SecondaryObjectTypeId.HasValue && n.SecondaryObjectId.HasValue && n.SecondaryObjectType != null
+                        ? new NotificationObjectRefDto
+                        {
+                            ObjectTypeId = n.SecondaryObjectTypeId.Value,
+                            ObjectTypeName = n.SecondaryObjectType.Name,
+                            ObjectTypeDisplayName = n.SecondaryObjectType.DisplayName,
+                            ObjectId = n.SecondaryObjectId.Value,
+                            ViewUrl = n.SecondaryObjectType.ViewUrl != null
+                                ? n.SecondaryObjectType.ViewUrl.Replace("{id}", n.SecondaryObjectId.Value.ToString())
+                                : null
+                        }
+                        : null,
+                    TertiaryObject = n.TertiaryObjectTypeId.HasValue && n.TertiaryObjectId.HasValue && n.TertiaryObjectType != null
+                        ? new NotificationObjectRefDto
+                        {
+                            ObjectTypeId = n.TertiaryObjectTypeId.Value,
+                            ObjectTypeName = n.TertiaryObjectType.Name,
+                            ObjectTypeDisplayName = n.TertiaryObjectType.DisplayName,
+                            ObjectId = n.TertiaryObjectId.Value,
+                            ViewUrl = n.TertiaryObjectType.ViewUrl != null
+                                ? n.TertiaryObjectType.ViewUrl.Replace("{id}", n.TertiaryObjectId.Value.ToString())
+                                : null
+                        }
+                        : null,
                     IsRead = n.IsRead,
                     ReadAt = n.ReadAt,
                     CreatedAt = n.CreatedAt
@@ -389,14 +428,21 @@ public class NotificationsController : ControllerBase
                         return BadRequest(new { success = false, message = "User not found" });
                     }
                     // Create and save to DB, then push via SignalR
-                    var notification = await _notificationService.CreateAndSendAsync(
+                    // Use the extended method if object references are provided
+                    var notification = await _notificationService.CreateAndSendWithObjectsAsync(
                         dto.TargetId.Value,
                         dto.Type ?? "System",
                         dto.Title,
                         dto.Message,
                         dto.ActionUrl,
                         dto.ReferenceType,
-                        dto.ReferenceId
+                        dto.ReferenceId,
+                        dto.PrimaryObjectTypeId,
+                        dto.PrimaryObjectId,
+                        dto.SecondaryObjectTypeId,
+                        dto.SecondaryObjectId,
+                        dto.TertiaryObjectTypeId,
+                        dto.TertiaryObjectId
                     );
                     _logger.LogInformation("Notification sent to user {UserId}: {Title}", dto.TargetId.Value, dto.Title);
                     return Ok(new { success = true, data = notification.Id, message = "Notification sent to user" });
@@ -546,9 +592,31 @@ public class NotificationDto
     public string? ActionUrl { get; set; }
     public string? ReferenceType { get; set; }
     public int? ReferenceId { get; set; }
+
+    // Primary Object Reference
+    public NotificationObjectRefDto? PrimaryObject { get; set; }
+
+    // Secondary Object Reference
+    public NotificationObjectRefDto? SecondaryObject { get; set; }
+
+    // Tertiary Object Reference
+    public NotificationObjectRefDto? TertiaryObject { get; set; }
+
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Represents an object reference in a notification with its resolved URL
+/// </summary>
+public class NotificationObjectRefDto
+{
+    public int ObjectTypeId { get; set; }
+    public string ObjectTypeName { get; set; } = string.Empty;
+    public string ObjectTypeDisplayName { get; set; } = string.Empty;
+    public int ObjectId { get; set; }
+    public string? ViewUrl { get; set; }
 }
 
 public class CreateNotificationDto
@@ -570,6 +638,18 @@ public class CreateNotificationDto
     public string? ActionUrl { get; set; }
     public string? ReferenceType { get; set; }
     public int? ReferenceId { get; set; }
+
+    // Primary Object Reference
+    public int? PrimaryObjectTypeId { get; set; }
+    public int? PrimaryObjectId { get; set; }
+
+    // Secondary Object Reference
+    public int? SecondaryObjectTypeId { get; set; }
+    public int? SecondaryObjectId { get; set; }
+
+    // Tertiary Object Reference
+    public int? TertiaryObjectTypeId { get; set; }
+    public int? TertiaryObjectId { get; set; }
 }
 
 public class BroadcastNotificationDto

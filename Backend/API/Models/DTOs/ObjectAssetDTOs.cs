@@ -7,6 +7,10 @@ public class ObjectTypeDto
     public string Name { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string? TableName { get; set; }
+    /// <summary>
+    /// URL template for viewing this object type (e.g., "/events/{id}")
+    /// </summary>
+    public string? ViewUrl { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; }
     public int AssetTypeCount { get; set; }
@@ -17,6 +21,10 @@ public class CreateObjectTypeDto
     public string Name { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string? TableName { get; set; }
+    /// <summary>
+    /// URL template for viewing this object type (e.g., "/events/{id}")
+    /// </summary>
+    public string? ViewUrl { get; set; }
     public int SortOrder { get; set; } = 0;
 }
 
@@ -25,6 +33,10 @@ public class UpdateObjectTypeDto
     public string? Name { get; set; }
     public string? DisplayName { get; set; }
     public string? TableName { get; set; }
+    /// <summary>
+    /// URL template for viewing this object type (e.g., "/events/{id}")
+    /// </summary>
+    public string? ViewUrl { get; set; }
     public int? SortOrder { get; set; }
     public bool? IsActive { get; set; }
 }

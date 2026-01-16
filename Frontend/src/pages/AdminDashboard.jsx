@@ -48,6 +48,14 @@ const AdminDashboard = () => {
   const [savingUser, setSavingUser] = useState(false)
   const [usersError, setUsersError] = useState(null)
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null)
+  const [sendingPasswordReset, setSendingPasswordReset] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [editingPassword, setEditingPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
 
   // Theme state
   const [themeSettings, setThemeSettings] = useState(null)
@@ -673,15 +681,17 @@ const AdminDashboard = () => {
     }
   }
 
-  // Filter users
-  const filteredUsers = users.filter(u => {
-    const matchesSearch =
-      (u.firstName?.toLowerCase() || '').includes(userSearch.toLowerCase()) ||
-      (u.lastName?.toLowerCase() || '').includes(userSearch.toLowerCase()) ||
-      (u.email?.toLowerCase() || '').includes(userSearch.toLowerCase())
-    const matchesRole = userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter.toLowerCase()
-    return matchesSearch && matchesRole
-  })
+  // Filter and sort users (newest first by ID)
+  const filteredUsers = users
+    .filter(u => {
+      const matchesSearch =
+        (u.firstName?.toLowerCase() || '').includes(userSearch.toLowerCase()) ||
+        (u.lastName?.toLowerCase() || '').includes(userSearch.toLowerCase()) ||
+        (u.email?.toLowerCase() || '').includes(userSearch.toLowerCase())
+      const matchesRole = userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter.toLowerCase()
+      return matchesSearch && matchesRole
+    })
+    .sort((a, b) => b.id - a.id)
 
   // Filter templates
   const filteredTemplates = templates.filter(t => {
@@ -727,6 +737,78 @@ const AdminDashboard = () => {
       alert('Failed to update user')
     } finally {
       setSavingUser(false)
+    }
+  }
+
+  // Handle admin send password reset
+  const handleSendPasswordReset = async () => {
+    if (!selectedUser) return
+    if (!confirm(`Send password reset email to ${selectedUser.email}?`)) return
+
+    setSendingPasswordReset(true)
+    try {
+      const response = await userApi.adminSendPasswordReset(selectedUser.id)
+      alert(response?.message || 'Password reset email sent successfully')
+    } catch (error) {
+      console.error('Error sending password reset:', error)
+      alert(error?.message || 'Failed to send password reset email')
+    } finally {
+      setSendingPasswordReset(false)
+    }
+  }
+
+  // Handle admin update email
+  const handleUpdateEmail = async () => {
+    if (!selectedUser || !newEmail.trim()) return
+    if (!confirm(`Update email from ${selectedUser.email} to ${newEmail}?`)) return
+
+    setSavingEmail(true)
+    try {
+      const response = await userApi.adminUpdateEmail(selectedUser.id, newEmail.trim())
+      // Update local state
+      const updatedUser = { ...selectedUser, email: newEmail.trim() }
+      setSelectedUser(updatedUser)
+      setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u))
+      setEditingEmail(false)
+      setNewEmail('')
+      alert(response?.message || 'Email updated successfully')
+    } catch (error) {
+      console.error('Error updating email:', error)
+      alert(error?.message || 'Failed to update email')
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
+  // Handle admin set password
+  const handleSetPassword = async () => {
+    if (!selectedUser) return
+    if (!newPassword.trim()) {
+      alert('Please enter a new password')
+      return
+    }
+    if (newPassword.length < 6) {
+      alert('Password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match')
+      return
+    }
+    if (!confirm(`Set new password for ${selectedUser.email}?`)) return
+
+    setSavingPassword(true)
+    try {
+      const response = await userApi.adminSetPassword(selectedUser.id, newPassword.trim())
+      setEditingPassword(false)
+      setNewPassword('')
+      setConfirmPassword('')
+      alert(response?.message || 'Password updated successfully')
+    } catch (error) {
+      console.error('Error setting password:', error)
+      alert(error?.message || 'Failed to set password')
+    } finally {
+      setSavingPassword(false)
     }
   }
 
@@ -2702,6 +2784,107 @@ const AdminDashboard = () => {
                       }`}
                     />
                   </button>
+                </div>
+
+                {/* Credential Management Section */}
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Credential Management</h4>
+
+                  {/* Email Update */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    {editingEmail ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          placeholder="New email address"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        <button
+                          onClick={handleUpdateEmail}
+                          disabled={savingEmail || !newEmail.trim()}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+                        >
+                          {savingEmail ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => { setEditingEmail(false); setNewEmail(''); }}
+                          className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">{selectedUser.email}</span>
+                        <button
+                          onClick={() => { setEditingEmail(true); setNewEmail(selectedUser.email || ''); }}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Change Email
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Password Management */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    {editingPassword ? (
+                      <div className="space-y-2">
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="New password (min 6 characters)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm password"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSetPassword}
+                            disabled={savingPassword || !newPassword.trim() || newPassword !== confirmPassword}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+                          >
+                            {savingPassword ? 'Saving...' : 'Set Password'}
+                          </button>
+                          <button
+                            onClick={() => { setEditingPassword(false); setNewPassword(''); setConfirmPassword(''); }}
+                            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">Set a new password directly</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingPassword(true)}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            Set Password
+                          </button>
+                          <button
+                            onClick={handleSendPasswordReset}
+                            disabled={sendingPasswordReset}
+                            className="text-sm text-orange-600 hover:text-orange-800 disabled:opacity-50"
+                          >
+                            {sendingPasswordReset ? 'Sending...' : 'Send Reset Email'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

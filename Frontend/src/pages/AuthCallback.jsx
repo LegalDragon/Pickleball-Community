@@ -46,7 +46,8 @@ const AuthCallback = () => {
       const token = searchParams.get('token')
       const siteRole = searchParams.get('siteRole')
       const isSiteAdmin = searchParams.get('isSiteAdmin') === 'true'
-      console.log('Site role from shared auth:', siteRole, 'isSiteAdmin:', isSiteAdmin)
+      const systemRoleFromUrl = searchParams.get('systemRole') // Cross-site SU role from shared auth
+      console.log('Site role from shared auth:', siteRole, 'isSiteAdmin:', isSiteAdmin, 'systemRoleFromUrl:', systemRoleFromUrl)
 
       if (!token) {
         setStatus('error')
@@ -56,9 +57,23 @@ const AuthCallback = () => {
 
       setMessage('Storing credentials...')
 
-      // Store the token
+      // Store the tokens - keep shared auth token separate for shared API calls
       localStorage.setItem('jwtToken', token)
+      localStorage.setItem('sharedAuthToken', token) // Keep original shared token for admin API calls
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+
+      // Extract systemRole from JWT claims (cross-site super admin role, e.g., "SU")
+      // Also use URL param as fallback since shared auth passes it
+      let systemRole = systemRoleFromUrl || null
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        // The role claim uses Microsoft's full claim URI
+        const jwtSystemRole = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || null
+        systemRole = jwtSystemRole || systemRole // JWT takes precedence, URL param as fallback
+        console.log('Extracted systemRole from JWT:', jwtSystemRole, 'final systemRole:', systemRole)
+      } catch (e) {
+        console.warn('Could not decode JWT to extract systemRole:', e.message, 'using URL param:', systemRole)
+      }
 
       setMessage('Syncing user data...')
 
@@ -115,8 +130,10 @@ const AuthCallback = () => {
         firstName: userData.firstName || userData.FirstName,
         lastName: userData.lastName || userData.LastName,
         role: userData.role || userData.Role || effectiveRole,
-        profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null
+        profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null,
+        systemRole: systemRole || userData.systemRole || userData.SystemRole || null
       }
+      console.log('AuthCallback userWithDefaults:', userWithDefaults, 'systemRole variable:', systemRole)
       localStorage.setItem('pickleball_user', JSON.stringify(userWithDefaults))
 
       // Update auth context

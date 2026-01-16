@@ -15,7 +15,13 @@ import {
   Target,
   Users,
   Search,
-  X
+  X,
+  CreditCard,
+  DollarSign,
+  CheckCircle,
+  Clock,
+  ExternalLink,
+  Image
 } from 'lucide-react'
 
 export default function PlayerHistory() {
@@ -62,6 +68,17 @@ export default function PlayerHistory() {
   const [showRatingFilters, setShowRatingFilters] = useState(false)
   const [ratingTypes, setRatingTypes] = useState([])
 
+  // Payments State
+  const [payments, setPayments] = useState([])
+  const [paymentsStats, setPaymentsStats] = useState({})
+  const [paymentFilters, setPaymentFilters] = useState({
+    status: '',
+    dateFrom: '',
+    dateTo: ''
+  })
+  const [showPaymentFilters, setShowPaymentFilters] = useState(false)
+  const [paymentStatuses, setPaymentStatuses] = useState([])
+
   useEffect(() => {
     if (isAuthenticated && user?.id) {
       loadInitialData()
@@ -73,23 +90,26 @@ export default function PlayerHistory() {
       if (activeTab === 'games') loadGames()
       else if (activeTab === 'awards') loadAwards()
       else if (activeTab === 'ratings') loadRatings()
+      else if (activeTab === 'payments') loadPayments()
     }
   }, [activeTab, user])
 
   const loadInitialData = async () => {
     try {
       setLoading(true)
-      const [summaryRes, eventTypesRes, awardTypesRes, ratingTypesRes] = await Promise.all([
+      const [summaryRes, eventTypesRes, awardTypesRes, ratingTypesRes, paymentStatusesRes] = await Promise.all([
         playerHistoryApi.getSummary(user.id),
         playerHistoryApi.getEventTypes(),
         playerHistoryApi.getAwardTypes(),
-        playerHistoryApi.getRatingTypes()
+        playerHistoryApi.getRatingTypes(),
+        playerHistoryApi.getPaymentStatuses()
       ])
 
       if (summaryRes?.success) setSummary(summaryRes.data)
       if (eventTypesRes?.success) setEventTypes(eventTypesRes.data || [])
       if (awardTypesRes?.success) setAwardTypes(awardTypesRes.data || [])
       if (ratingTypesRes?.success) setRatingTypes(ratingTypesRes.data || [])
+      if (paymentStatusesRes?.success) setPaymentStatuses(paymentStatusesRes.data || [])
 
       // Load initial tab data
       loadGames()
@@ -179,6 +199,31 @@ export default function PlayerHistory() {
     }
   }
 
+  const loadPayments = async () => {
+    if (!user?.id) return
+    try {
+      const params = {
+        pageSize: 50,
+        ...paymentFilters
+      }
+      Object.keys(params).forEach(key => {
+        if (params[key] === '' || params[key] === undefined) delete params[key]
+      })
+
+      const response = await playerHistoryApi.getPayments(user.id, params)
+      if (response?.success) {
+        setPayments(response.data?.payments || [])
+        setPaymentsStats({
+          totalAmountPaid: response.data?.totalAmountPaid || 0,
+          totalVerified: response.data?.totalVerified || 0,
+          totalPending: response.data?.totalPending || 0
+        })
+      }
+    } catch (err) {
+      console.error('Error loading payments:', err)
+    }
+  }
+
   const toggleGameExpand = (gameId) => {
     setExpandedGames(prev => ({
       ...prev,
@@ -212,6 +257,35 @@ export default function PlayerHistory() {
       dateFrom: '',
       dateTo: ''
     })
+  }
+
+  const clearPaymentFilters = () => {
+    setPaymentFilters({
+      status: '',
+      dateFrom: '',
+      dateTo: ''
+    })
+  }
+
+  const getPaymentStatusColor = (status) => {
+    switch (status) {
+      case 'Verified': return 'bg-green-100 text-green-700'
+      case 'Pending': return 'bg-yellow-100 text-yellow-700'
+      case 'PendingVerification': return 'bg-blue-100 text-blue-700'
+      case 'Rejected': return 'bg-red-100 text-red-700'
+      case 'Refunded': return 'bg-purple-100 text-purple-700'
+      case 'Cancelled': return 'bg-gray-100 text-gray-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
+  const getPaymentStatusIcon = (status) => {
+    switch (status) {
+      case 'Verified': return <CheckCircle className="w-4 h-4" />
+      case 'Pending': return <Clock className="w-4 h-4" />
+      case 'PendingVerification': return <Clock className="w-4 h-4" />
+      default: return <CreditCard className="w-4 h-4" />
+    }
   }
 
   const formatDate = (dateStr) => {
@@ -291,7 +365,7 @@ export default function PlayerHistory() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Summary Cards */}
         {summary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-center gap-2 text-gray-600 mb-1">
                 <Gamepad2 className="w-4 h-4" />
@@ -330,6 +404,16 @@ export default function PlayerHistory() {
               </div>
               <div className="text-sm text-gray-500">
                 {summary.ratingTrend > 0 ? '+' : ''}{summary.ratingTrend?.toFixed(2) || '0'} last 30 days
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex items-center gap-2 text-gray-600 mb-1">
+                <DollarSign className="w-4 h-4" />
+                <span className="text-sm">Payments</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-900">${summary.totalAmountPaid?.toFixed(2) || '0.00'}</div>
+              <div className="text-sm text-gray-500">
+                {summary.totalPayments || 0} total, {summary.pendingPayments || 0} pending
               </div>
             </div>
           </div>
@@ -383,6 +467,24 @@ export default function PlayerHistory() {
           >
             <TrendingUp className="w-5 h-5" />
             Ratings
+          </button>
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 ${
+              activeTab === 'payments'
+                ? 'bg-amber-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
+            }`}
+          >
+            <CreditCard className="w-5 h-5" />
+            Payments
+            {paymentsStats.totalPending > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                activeTab === 'payments' ? 'bg-amber-500' : 'bg-yellow-200 text-yellow-800'
+              }`}>
+                {paymentsStats.totalPending}
+              </span>
+            )}
           </button>
         </div>
 
@@ -895,6 +997,178 @@ export default function PlayerHistory() {
                     </table>
                   </div>
                 )}
+            </div>
+          </div>
+        )}
+
+        {/* Payments Tab */}
+        {activeTab === 'payments' && (
+          <div className="bg-white rounded-xl shadow-sm">
+            {/* Header */}
+            <div className="p-6 border-b flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Payment History</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  {payments.length} payments found
+                  {paymentsStats.totalAmountPaid > 0 && ` (${paymentsStats.totalVerified} verified)`}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPaymentFilters(!showPaymentFilters)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                {showPaymentFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Payment Stats */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-sm text-green-600">Verified</div>
+                  <div className="text-xl font-bold text-green-700">
+                    ${paymentsStats.totalAmountPaid?.toFixed(2) || '0.00'}
+                  </div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-3 text-center">
+                  <div className="text-sm text-yellow-600">Pending</div>
+                  <div className="text-xl font-bold text-yellow-700">
+                    {paymentsStats.totalPending || 0}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-sm text-gray-600">Verified Count</div>
+                  <div className="text-xl font-bold text-gray-700">
+                    {paymentsStats.totalVerified || 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Filters */}
+              {showPaymentFilters && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={paymentFilters.status}
+                        onChange={(e) => setPaymentFilters({...paymentFilters, status: e.target.value})}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                      >
+                        <option value="">All Statuses</option>
+                        {paymentStatuses.map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
+                      <input
+                        type="date"
+                        value={paymentFilters.dateFrom}
+                        onChange={(e) => setPaymentFilters({...paymentFilters, dateFrom: e.target.value})}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date To</label>
+                      <input
+                        type="date"
+                        value={paymentFilters.dateTo}
+                        onChange={(e) => setPaymentFilters({...paymentFilters, dateTo: e.target.value})}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={loadPayments}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700"
+                    >
+                      <Search className="w-4 h-4 inline mr-1" />
+                      Apply Filters
+                    </button>
+                    <button
+                      onClick={() => { clearPaymentFilters(); setTimeout(loadPayments, 100); }}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"
+                    >
+                      <X className="w-4 h-4 inline mr-1" />
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Payments List */}
+              {payments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <CreditCard className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No payments found</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {payments.map(payment => (
+                    <div key={payment.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-medium text-gray-900">{payment.eventName}</h3>
+                            <span className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${getPaymentStatusColor(payment.status)}`}>
+                              {getPaymentStatusIcon(payment.status)}
+                              {payment.status === 'PendingVerification' ? 'Pending Verification' : payment.status}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500 space-y-1">
+                            {payment.divisionName && (
+                              <div>Division: {payment.divisionName}</div>
+                            )}
+                            {payment.paymentMethod && (
+                              <div>Method: {payment.paymentMethod}</div>
+                            )}
+                            {payment.paymentReference && (
+                              <div>Reference: {payment.paymentReference}</div>
+                            )}
+                            {payment.referenceId && (
+                              <div className="text-xs text-gray-400">ID: {payment.referenceId}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-gray-900">
+                            ${payment.amount?.toFixed(2) || '0.00'}
+                          </div>
+                          <div className="text-sm text-gray-500">{formatDate(payment.createdAt)}</div>
+                          {payment.paymentProofUrl && (
+                            <a
+                              href={getSharedAssetUrl(payment.paymentProofUrl)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1"
+                            >
+                              <Image className="w-3 h-3" />
+                              View Proof
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      {payment.verifiedAt && (
+                        <div className="mt-2 pt-2 border-t text-xs text-gray-500">
+                          Verified {formatDate(payment.verifiedAt)}
+                          {payment.verifiedByName && ` by ${payment.verifiedByName}`}
+                        </div>
+                      )}
+                      {payment.notes && (
+                        <div className="mt-2 pt-2 border-t text-xs text-gray-600 italic">
+                          {payment.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

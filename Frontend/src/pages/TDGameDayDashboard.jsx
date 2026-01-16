@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Users, CheckCircle, XCircle, Play, Clock, MapPin,
   Send, RefreshCw, AlertCircle, ChevronDown, ChevronRight,
-  FileText, Bell, Trophy, Grid, List
+  FileText, Bell, Trophy, Grid, List, Eye, UserCheck, Tv
 } from 'lucide-react'
 import { gameDayApi, checkInApi } from '../services/api'
 
@@ -18,6 +18,7 @@ export default function TDGameDayDashboard() {
   const [showNotifyModal, setShowNotifyModal] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState('courts') // courts, games, checkins
+  const [dashboardView, setDashboardView] = useState('td') // td, player, spectator
 
   const loadData = useCallback(async () => {
     try {
@@ -102,24 +103,22 @@ export default function TDGameDayDashboard() {
   const gamesReadyWithCheckIn = dashboard.readyGames.filter(g => g.allPlayersCheckedIn)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Compact Header - No back button for clean game day experience */}
+      <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-10">
+        <div className="px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
+              <Trophy className="w-6 h-6" />
               <div>
-                <h1 className="text-lg font-semibold">{dashboard.eventName}</h1>
-                <p className="text-sm text-gray-500">TD Dashboard</p>
+                <h1 className="text-base font-semibold">{dashboard.eventName}</h1>
+                <p className="text-xs text-blue-100">Game Day Control Center</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setShowNotifyModal(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-blue-500 rounded-lg"
                 title="Send Notification"
               >
                 <Bell className="w-5 h-5" />
@@ -127,16 +126,56 @@ export default function TDGameDayDashboard() {
               <button
                 onClick={loadData}
                 disabled={refreshing}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-blue-500 rounded-lg"
                 title="Refresh"
               >
                 <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
+
+          {/* Dashboard View Tabs - TD can preview Player/Spectator views */}
+          <div className="flex gap-1 mt-2 -mb-2">
+            <button
+              onClick={() => setDashboardView('td')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-t-lg transition ${
+                dashboardView === 'td'
+                  ? 'bg-gray-50 text-blue-700'
+                  : 'text-blue-100 hover:bg-blue-500'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 inline mr-1" />
+              TD Controls
+            </button>
+            <button
+              onClick={() => setDashboardView('player')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-t-lg transition ${
+                dashboardView === 'player'
+                  ? 'bg-gray-50 text-blue-700'
+                  : 'text-blue-100 hover:bg-blue-500'
+              }`}
+            >
+              <Eye className="w-4 h-4 inline mr-1" />
+              Player View
+            </button>
+            <button
+              onClick={() => setDashboardView('spectator')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-t-lg transition ${
+                dashboardView === 'spectator'
+                  ? 'bg-gray-50 text-blue-700'
+                  : 'text-blue-100 hover:bg-blue-500'
+              }`}
+            >
+              <Tv className="w-4 h-4 inline mr-1" />
+              Spectator View
+            </button>
+          </div>
         </div>
       </header>
 
+      {/* TD Controls View */}
+      {dashboardView === 'td' && (
+        <>
       {/* Stats Bar */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -234,6 +273,135 @@ export default function TDGameDayDashboard() {
           />
         )}
       </div>
+        </>
+      )}
+
+      {/* Player View - Preview how players see the dashboard */}
+      {dashboardView === 'player' && (
+        <div className="flex-1 p-4 overflow-auto">
+          <div className="max-w-2xl mx-auto space-y-4">
+            {/* Check-in Status */}
+            <div className="bg-white rounded-lg p-4 border">
+              <h3 className="font-semibold text-gray-900 mb-3">Check-in Status</h3>
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                <div>
+                  <p className="font-medium">Sample Player</p>
+                  <p className="text-sm text-gray-500">Checked in at 9:00 AM</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Current/Next Game */}
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <h3 className="font-semibold text-blue-900 mb-2">Current Game</h3>
+              <div className="bg-white rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-600">Court 1</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">In Progress</span>
+                </div>
+                <p className="text-sm text-gray-600">vs Team Blue</p>
+                <p className="text-xs text-gray-400 mt-1">Game 1 of Pool A</p>
+              </div>
+            </div>
+
+            {/* Upcoming Games */}
+            <div className="bg-white rounded-lg p-4 border">
+              <h3 className="font-semibold text-gray-900 mb-3">Upcoming Games</h3>
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium">vs Team {String.fromCharCode(64 + i)}</p>
+                      <p className="text-xs text-gray-500">Pool A - Game {i + 1}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">Pending</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-center text-sm text-gray-500 py-4">
+              <Eye className="w-5 h-5 inline mr-1" />
+              Preview Mode - This is how players see their dashboard
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Spectator View - Preview how spectators see the dashboard */}
+      {dashboardView === 'spectator' && (
+        <div className="flex-1 p-4 overflow-auto">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {/* Live Games */}
+            <div className="bg-white rounded-lg border overflow-hidden">
+              <div className="bg-red-600 text-white px-4 py-2 flex items-center gap-2">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                <span className="font-semibold">LIVE</span>
+              </div>
+              <div className="divide-y">
+                {dashboard.courts?.filter(c => c.currentGame).map(court => (
+                  <div key={court.id} className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-500">{court.label}</span>
+                      <span className="text-xs text-gray-400">{court.currentGame?.divisionName}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                      <div className="text-right">
+                        <p className="font-semibold">{court.currentGame?.unit1Name || 'Team A'}</p>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-2xl font-bold">
+                          {court.currentGame?.unit1Score || 0} - {court.currentGame?.unit2Score || 0}
+                        </span>
+                      </div>
+                      <div className="text-left">
+                        <p className="font-semibold">{court.currentGame?.unit2Name || 'Team B'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!dashboard.courts?.some(c => c.currentGame) && (
+                  <div className="p-8 text-center text-gray-500">
+                    No games currently in progress
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Completed Games */}
+            <div className="bg-white rounded-lg border">
+              <div className="px-4 py-3 border-b">
+                <h3 className="font-semibold text-gray-900">Recent Results</h3>
+              </div>
+              <div className="divide-y">
+                {dashboard.completedGames?.slice(0, 5).map(game => (
+                  <div key={game.id} className="p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {game.unit1Name} vs {game.unit2Name}
+                      </p>
+                      <p className="text-xs text-gray-500">{game.divisionName}</p>
+                    </div>
+                    <span className="font-bold">
+                      {game.unit1Score} - {game.unit2Score}
+                    </span>
+                  </div>
+                )) || (
+                  <div className="p-4 text-center text-gray-500 text-sm">
+                    No completed games yet
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="text-center text-sm text-gray-500 py-4">
+              <Tv className="w-5 h-5 inline mr-1" />
+              Preview Mode - This is how spectators see the scoreboard
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notify Modal */}
       {showNotifyModal && (
@@ -261,31 +429,73 @@ function StatCard({ icon, label, value, color }) {
 
 function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueGame }) {
   const [selectedCourt, setSelectedCourt] = useState(null)
+  const [showQueueModal, setShowQueueModal] = useState(null)
+
+  // Calculate elapsed time and get color based on duration
+  const getGameElapsedMinutes = (game) => {
+    if (!game?.startedAt) return 0
+    const started = new Date(game.startedAt)
+    return Math.floor((Date.now() - started) / 60000)
+  }
+
+  const getElapsedTimeColor = (minutes) => {
+    if (minutes < 10) return { bg: 'bg-green-500', text: 'text-white' }  // Fresh - green
+    if (minutes < 15) return { bg: 'bg-yellow-400', text: 'text-gray-900' }  // Moderate - yellow
+    if (minutes < 20) return { bg: 'bg-orange-500', text: 'text-white' }  // Getting long - orange
+    return { bg: 'bg-red-500', text: 'text-white' }  // Overdue - red
+  }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Courts</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Courts</h2>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded" /> &lt;10m</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded" /> 10-15m</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-500 rounded" /> 15-20m</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500 rounded" /> &gt;20m</span>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {courts.map(court => {
-          const currentGame = inProgressGames.find(g => g.courtId === court.courtId)
+          const currentGame = inProgressGames.find(g => g.courtId === court.courtId && g.status === 'Playing')
           const queuedGames = inProgressGames.filter(g => g.courtId === court.courtId && g.status === 'Queued')
+          const elapsedMinutes = getGameElapsedMinutes(currentGame)
+          const timeColor = getElapsedTimeColor(elapsedMinutes)
 
           return (
-            <div key={court.courtId} className="bg-white rounded-lg border overflow-hidden">
+            <div key={court.courtId} className="bg-white rounded-lg border overflow-hidden shadow-sm">
+              {/* Court Header with elapsed time color coding */}
               <div className={`px-4 py-3 flex items-center justify-between ${
-                court.status === 'Available' ? 'bg-green-50' :
-                court.status === 'InUse' ? 'bg-blue-50' : 'bg-gray-50'
+                currentGame ? timeColor.bg :
+                court.status === 'Available' ? 'bg-green-500' : 'bg-gray-200'
               }`}>
                 <div>
-                  <h3 className="font-semibold">{court.name}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    court.status === 'Available' ? 'bg-green-100 text-green-700' :
-                    court.status === 'InUse' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {court.status}
-                  </span>
+                  <h3 className={`font-semibold ${currentGame ? timeColor.text : court.status === 'Available' ? 'text-white' : 'text-gray-700'}`}>
+                    {court.name}
+                  </h3>
+                  {currentGame ? (
+                    <span className={`text-xs ${timeColor.text} opacity-80`}>
+                      {elapsedMinutes}m elapsed
+                    </span>
+                  ) : (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      court.status === 'Available' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'
+                    }`}>
+                      {court.status}
+                    </span>
+                  )}
                 </div>
-                <MapPin className="w-5 h-5 text-gray-400" />
+                {/* Queue button - allow queuing even when court is busy */}
+                <button
+                  onClick={() => setShowQueueModal(court)}
+                  className={`p-1.5 rounded-lg ${
+                    currentGame ? 'bg-white/20 hover:bg-white/30' : 'bg-white/50 hover:bg-white'
+                  } transition`}
+                  title="Queue game to this court"
+                >
+                  <ChevronRight className={`w-4 h-4 ${currentGame ? timeColor.text : 'text-gray-600'}`} />
+                </button>
               </div>
 
               <div className="p-4">
@@ -336,13 +546,25 @@ function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueG
         })}
       </div>
 
-      {/* Assign Game Modal */}
-      {selectedCourt && (
+      {/* Assign/Queue Game Modal - works for both empty and busy courts */}
+      {(selectedCourt || showQueueModal) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[80vh] overflow-auto">
             <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="font-semibold">Assign Game to Court</h3>
-              <button onClick={() => setSelectedCourt(null)} className="text-gray-500 hover:text-gray-700">
+              <div>
+                <h3 className="font-semibold">
+                  {showQueueModal?.currentGame ? 'Queue Game' : 'Assign Game'} to {showQueueModal?.name || courts.find(c => c.courtId === selectedCourt)?.name}
+                </h3>
+                {showQueueModal?.currentGame && (
+                  <p className="text-xs text-orange-600 mt-1">
+                    Current game will finish first, new game will be queued
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => { setSelectedCourt(null); setShowQueueModal(null); }}
+                className="text-gray-500 hover:text-gray-700"
+              >
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
@@ -354,13 +576,23 @@ function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueG
                   <button
                     key={game.gameId}
                     onClick={() => {
-                      onQueueGame(game.gameId, selectedCourt)
+                      onQueueGame(game.gameId, showQueueModal?.courtId || selectedCourt)
                       setSelectedCourt(null)
+                      setShowQueueModal(null)
                     }}
                     className="w-full p-3 border rounded-lg hover:bg-blue-50 text-left"
                   >
-                    <div className="font-medium">{game.unit1Name} vs {game.unit2Name}</div>
-                    <div className="text-sm text-gray-500">{game.divisionName} - {game.roundName}</div>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-medium">{game.unit1Name} vs {game.unit2Name}</div>
+                        <div className="text-sm text-gray-500">{game.divisionName} - {game.roundName}</div>
+                      </div>
+                      {game.allPlayersCheckedIn && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                          Ready
+                        </span>
+                      )}
+                    </div>
                   </button>
                 ))
               )}

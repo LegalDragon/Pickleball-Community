@@ -40,6 +40,7 @@ public class ObjectTypesController : ControllerBase
                     Name = t.Name,
                     DisplayName = t.DisplayName,
                     TableName = t.TableName,
+                    ViewUrl = t.ViewUrl,
                     SortOrder = t.SortOrder,
                     IsActive = t.IsActive,
                     AssetTypeCount = t.AssetTypes.Count(at => at.IsActive)
@@ -69,6 +70,7 @@ public class ObjectTypesController : ControllerBase
                     Name = t.Name,
                     DisplayName = t.DisplayName,
                     TableName = t.TableName,
+                    ViewUrl = t.ViewUrl,
                     SortOrder = t.SortOrder,
                     IsActive = t.IsActive,
                     AssetTypeCount = t.AssetTypes.Count(at => at.IsActive)
@@ -103,6 +105,7 @@ public class ObjectTypesController : ControllerBase
                 Name = dto.Name,
                 DisplayName = dto.DisplayName,
                 TableName = dto.TableName,
+                ViewUrl = dto.ViewUrl,
                 SortOrder = dto.SortOrder,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
@@ -120,6 +123,7 @@ public class ObjectTypesController : ControllerBase
                     Name = type.Name,
                     DisplayName = type.DisplayName,
                     TableName = type.TableName,
+                    ViewUrl = type.ViewUrl,
                     SortOrder = type.SortOrder,
                     IsActive = type.IsActive,
                     AssetTypeCount = 0
@@ -153,6 +157,7 @@ public class ObjectTypesController : ControllerBase
             if (dto.Name != null) type.Name = dto.Name;
             if (dto.DisplayName != null) type.DisplayName = dto.DisplayName;
             if (dto.TableName != null) type.TableName = dto.TableName;
+            if (dto.ViewUrl != null) type.ViewUrl = dto.ViewUrl;
             if (dto.SortOrder.HasValue) type.SortOrder = dto.SortOrder.Value;
             if (dto.IsActive.HasValue) type.IsActive = dto.IsActive.Value;
 
@@ -169,6 +174,7 @@ public class ObjectTypesController : ControllerBase
                     Name = type.Name,
                     DisplayName = type.DisplayName,
                     TableName = type.TableName,
+                    ViewUrl = type.ViewUrl,
                     SortOrder = type.SortOrder,
                     IsActive = type.IsActive,
                     AssetTypeCount = assetTypeCount

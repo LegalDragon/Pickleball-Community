@@ -36,6 +36,36 @@ const NotificationTypeIcon = ({ type }) => {
   }
 };
 
+// Component to render object reference links
+const ObjectLink = ({ objectRef, className = '' }) => {
+  if (!objectRef || !objectRef.viewUrl) return null;
+
+  return (
+    <Link
+      to={objectRef.viewUrl}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded text-xs font-medium transition-colors ${className}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {objectRef.objectTypeDisplayName}
+    </Link>
+  );
+};
+
+// Component to render all object references for a notification
+const ObjectLinks = ({ notification }) => {
+  const { primaryObject, secondaryObject, tertiaryObject } = notification;
+
+  if (!primaryObject && !secondaryObject && !tertiaryObject) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {primaryObject && <ObjectLink objectRef={primaryObject} />}
+      {secondaryObject && <ObjectLink objectRef={secondaryObject} />}
+      {tertiaryObject && <ObjectLink objectRef={tertiaryObject} />}
+    </div>
+  );
+};
+
 const NotificationItem = ({ notification, onMarkRead, onDelete }) => {
   const timeAgo = (date) => {
     const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -61,6 +91,7 @@ const NotificationItem = ({ notification, onMarkRead, onDelete }) => {
               {notification.message && (
                 <p className="text-sm text-gray-500 mt-1 line-clamp-2">{notification.message}</p>
               )}
+              <ObjectLinks notification={notification} />
               <span className="text-xs text-gray-400 mt-1 block">{timeAgo(notification.createdAt)}</span>
             </div>
             <div className="flex items-center gap-1">

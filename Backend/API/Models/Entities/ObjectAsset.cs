@@ -30,6 +30,13 @@ public class ObjectType
     [MaxLength(100)]
     public string? TableName { get; set; }
 
+    /// <summary>
+    /// URL template for viewing this object type (e.g., "/events/{id}")
+    /// Use {id} as placeholder for the object ID
+    /// </summary>
+    [MaxLength(500)]
+    public string? ViewUrl { get; set; }
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 

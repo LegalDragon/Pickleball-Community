@@ -41,6 +41,26 @@ public class AwsS3StorageService : IFileStorageService
         return $"https://{_bucketName}.s3.amazonaws.com/{key}";
     }
 
+    public async Task<string> UploadBytesAsync(byte[] data, string fileName, string contentType, string containerName)
+    {
+        var key = $"{containerName}/{Guid.NewGuid()}-{fileName}";
+
+        using var stream = new MemoryStream(data);
+        var uploadRequest = new TransferUtilityUploadRequest
+        {
+            InputStream = stream,
+            Key = key,
+            BucketName = _bucketName,
+            ContentType = contentType,
+            CannedACL = S3CannedACL.PublicRead
+        };
+
+        var transferUtility = new TransferUtility(_s3Client);
+        await transferUtility.UploadAsync(uploadRequest);
+
+        return $"https://{_bucketName}.s3.amazonaws.com/{key}";
+    }
+
     public async Task DeleteFileAsync(string fileUrl)
     {
         var key = fileUrl.Split('/').Last();

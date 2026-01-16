@@ -181,6 +181,11 @@ public class EventUnitMember
     public string? ReferenceId { get; set; }
 
     /// <summary>
+    /// Reference to the UserPayment record that covered this registration
+    /// </summary>
+    public int? PaymentId { get; set; }
+
+    /// <summary>
     /// When the waiver was signed
     /// </summary>
     public DateTime? WaiverSignedAt { get; set; }
@@ -195,6 +200,30 @@ public class EventUnitMember
     /// </summary>
     [MaxLength(200)]
     public string? WaiverSignature { get; set; }
+
+    /// <summary>
+    /// URL to drawn signature image (stored in asset management)
+    /// </summary>
+    [MaxLength(500)]
+    public string? SignatureAssetUrl { get; set; }
+
+    /// <summary>
+    /// URL to generated PDF of signed waiver (stored in asset management)
+    /// </summary>
+    [MaxLength(500)]
+    public string? SignedWaiverPdfUrl { get; set; }
+
+    /// <summary>
+    /// Email address at time of signing (for legal record)
+    /// </summary>
+    [MaxLength(255)]
+    public string? SignerEmail { get; set; }
+
+    /// <summary>
+    /// IP address at time of signing (for legal record)
+    /// </summary>
+    [MaxLength(50)]
+    public string? SignerIpAddress { get; set; }
 
     /// <summary>
     /// Who signed: Participant, Parent, Guardian
@@ -231,6 +260,9 @@ public class EventUnitMember
 
     [ForeignKey("WaiverDocumentId")]
     public EventWaiver? WaiverDocument { get; set; }
+
+    [ForeignKey("PaymentId")]
+    public UserPayment? Payment { get; set; }
 }
 
 /// <summary>

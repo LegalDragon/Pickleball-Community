@@ -18,6 +18,15 @@ public interface INotificationService
         string? actionUrl = null, string? referenceType = null, int? referenceId = null);
 
     /// <summary>
+    /// Create a notification with object references in the database and push it via SignalR
+    /// </summary>
+    Task<Notification> CreateAndSendWithObjectsAsync(int userId, string type, string title, string? message = null,
+        string? actionUrl = null, string? referenceType = null, int? referenceId = null,
+        int? primaryObjectTypeId = null, int? primaryObjectId = null,
+        int? secondaryObjectTypeId = null, int? secondaryObjectId = null,
+        int? tertiaryObjectTypeId = null, int? tertiaryObjectId = null);
+
+    /// <summary>
     /// Send a notification to a specific user via SignalR (without saving to DB)
     /// </summary>
     Task SendToUserAsync(int userId, NotificationPayload notification);
@@ -191,6 +200,58 @@ public class NotificationService : INotificationService
         await SendToUserAsync(userId, payload);
 
         _logger.LogInformation("Notification {Id} created and sent to user {UserId}: {Title}",
+            notification.Id, userId, title);
+
+        return notification;
+    }
+
+    /// <inheritdoc />
+    public async Task<Notification> CreateAndSendWithObjectsAsync(int userId, string type, string title, string? message = null,
+        string? actionUrl = null, string? referenceType = null, int? referenceId = null,
+        int? primaryObjectTypeId = null, int? primaryObjectId = null,
+        int? secondaryObjectTypeId = null, int? secondaryObjectId = null,
+        int? tertiaryObjectTypeId = null, int? tertiaryObjectId = null)
+    {
+        // Create notification in database with object references
+        var notification = new Notification
+        {
+            UserId = userId,
+            Type = type,
+            Title = title,
+            Message = message,
+            ActionUrl = actionUrl,
+            ReferenceType = referenceType,
+            ReferenceId = referenceId,
+            PrimaryObjectTypeId = primaryObjectTypeId,
+            PrimaryObjectId = primaryObjectId,
+            SecondaryObjectTypeId = secondaryObjectTypeId,
+            SecondaryObjectId = secondaryObjectId,
+            TertiaryObjectTypeId = tertiaryObjectTypeId,
+            TertiaryObjectId = tertiaryObjectId,
+            IsRead = false,
+            CreatedAt = DateTime.Now
+        };
+
+        _context.Notifications.Add(notification);
+        await _context.SaveChangesAsync();
+
+        // Push via SignalR if user is connected
+        var payload = new NotificationPayload
+        {
+            Id = notification.Id,
+            Type = notification.Type,
+            Title = notification.Title,
+            Message = notification.Message,
+            ActionUrl = notification.ActionUrl,
+            ReferenceType = notification.ReferenceType,
+            ReferenceId = notification.ReferenceId,
+            CreatedAt = notification.CreatedAt
+        };
+
+        // SendToUserAsync now handles both SignalR and Web Push
+        await SendToUserAsync(userId, payload);
+
+        _logger.LogInformation("Notification {Id} with object refs created and sent to user {UserId}: {Title}",
             notification.Id, userId, title);
 
         return notification;

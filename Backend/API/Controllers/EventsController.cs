@@ -357,6 +357,134 @@ public class EventsController : ControllerBase
         }
     }
 
+    // GET: /events/{id}/public - Get public event view (no auth required)
+    [HttpGet("{id}/public")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<EventPublicViewDto>>> GetEventPublic(int id)
+    {
+        try
+        {
+            var evt = await _context.Events
+                .AsSplitQuery()
+                .Include(e => e.EventType)
+                .Include(e => e.OrganizedBy)
+                .Include(e => e.OrganizedByClub)
+                .Include(e => e.Venue)
+                .Include(e => e.Divisions)
+                    .ThenInclude(d => d.Units.Where(u => u.Status != "Cancelled" && !u.IsTemporary))
+                        .ThenInclude(u => u.Members)
+                            .ThenInclude(m => m.User)
+                .Include(e => e.Divisions)
+                    .ThenInclude(d => d.TeamUnit)
+                .Include(e => e.Divisions)
+                    .ThenInclude(d => d.AgeGroupEntity)
+                .Include(e => e.Divisions)
+                    .ThenInclude(d => d.SkillLevel)
+                .FirstOrDefaultAsync(e => e.Id == id && e.IsActive && e.IsPublished && !e.IsPrivate);
+
+            if (evt == null)
+                return NotFound(new ApiResponse<EventPublicViewDto> { Success = false, Message = "Event not found or not public" });
+
+            // Get total counts across all divisions
+            var totalRegisteredCount = evt.Divisions.Sum(d =>
+                d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary));
+            var totalRegisteredPlayerCount = evt.Divisions.Sum(d =>
+                d.Units.Where(u => u.Status != "Cancelled" && !u.IsTemporary).Sum(u => u.Members.Count));
+
+            // Determine primary team size
+            var primaryTeamSize = evt.Divisions.Any()
+                ? evt.Divisions
+                    .GroupBy(d => d.TeamUnit?.TotalPlayers ?? 1)
+                    .OrderByDescending(g => g.Count())
+                    .First().Key
+                : 2;
+
+            // Get registered players with public info only
+            var registeredPlayers = evt.Divisions
+                .SelectMany(d => d.Units
+                    .Where(u => u.Status != "Cancelled" && !u.IsTemporary)
+                    .SelectMany(u => u.Members.Select(m => new RegisteredPlayerPublicDto
+                    {
+                        UserId = m.UserId,
+                        Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "",
+                        ProfileImageUrl = m.User?.ProfileImageUrl,
+                        City = m.User?.City,
+                        State = m.User?.State,
+                        DivisionName = d.Name,
+                        TeamName = u.Name
+                    })))
+                .DistinctBy(p => p.UserId)
+                .ToList();
+
+            var dto = new EventPublicViewDto
+            {
+                Id = evt.Id,
+                Name = evt.Name,
+                Description = evt.Description,
+                EventTypeId = evt.EventTypeId,
+                EventTypeName = evt.EventType?.Name,
+                EventTypeIcon = evt.EventType?.Icon,
+                EventTypeColor = evt.EventType?.Color,
+                StartDate = evt.StartDate,
+                EndDate = evt.EndDate,
+                RegistrationOpenDate = evt.RegistrationOpenDate,
+                RegistrationCloseDate = evt.RegistrationCloseDate,
+                IsPublished = evt.IsPublished,
+                VenueName = evt.VenueName,
+                Address = evt.Address,
+                City = evt.City,
+                State = evt.State,
+                Country = evt.Country,
+                Latitude = evt.Latitude,
+                Longitude = evt.Longitude,
+                CourtId = evt.CourtId,
+                PosterImageUrl = evt.PosterImageUrl,
+                BannerImageUrl = evt.BannerImageUrl,
+                RegistrationFee = evt.RegistrationFee,
+                PerDivisionFee = evt.PerDivisionFee,
+                PriceUnit = evt.PriceUnit,
+                PaymentModel = evt.PaymentModel,
+                MaxParticipants = evt.MaxParticipants,
+                RegisteredCount = totalRegisteredCount,
+                RegisteredPlayerCount = totalRegisteredPlayerCount,
+                DivisionCount = evt.Divisions.Count,
+                PrimaryTeamSize = primaryTeamSize,
+                OrganizerName = evt.OrganizedBy != null ? Utility.FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName) : null,
+                OrganizedByUserId = evt.OrganizedByUserId,
+                OrganizedByClubId = evt.OrganizedByClubId,
+                ClubName = evt.OrganizedByClub?.Name,
+                ContactName = evt.ContactName,
+                ContactEmail = evt.ContactEmail,
+                ContactPhone = evt.ContactPhone,
+                CreatedAt = evt.CreatedAt,
+                TournamentStatus = evt.TournamentStatus,
+                Divisions = evt.Divisions.OrderBy(d => d.SortOrder).Select(d => new EventDivisionPublicDto
+                {
+                    Id = d.Id,
+                    Name = d.Name,
+                    Description = d.Description,
+                    TeamUnitName = d.TeamUnit?.Name,
+                    AgeGroupName = d.AgeGroupEntity?.Name,
+                    SkillLevelName = d.SkillLevel?.Name,
+                    MaxUnits = d.MaxUnits,
+                    MaxPlayers = d.MaxPlayers,
+                    DivisionFee = d.DivisionFee,
+                    RegisteredCount = d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary),
+                    RegisteredPlayerCount = d.Units.Where(u => u.Status != "Cancelled" && !u.IsTemporary).Sum(u => u.Members.Count),
+                    LookingForPartnerCount = d.Units.Count(u => u.Status != "Cancelled" && !u.IsTemporary && u.Members.Count < (d.TeamUnit?.TotalPlayers ?? 1))
+                }).ToList(),
+                RegisteredPlayers = registeredPlayers
+            };
+
+            return Ok(new ApiResponse<EventPublicViewDto> { Success = true, Data = dto });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching public event {EventId}", id);
+            return StatusCode(500, new ApiResponse<EventPublicViewDto> { Success = false, Message = "An error occurred" });
+        }
+    }
+
     // GET: /events/{id} - Get event details
     [HttpGet("{id}")]
     [Authorize]
@@ -480,6 +608,7 @@ public class EventsController : ControllerBase
                 OrganizedByClubId = evt.OrganizedByClubId,
                 ClubName = evt.OrganizedByClub?.Name,
                 CreatedAt = evt.CreatedAt,
+                TournamentStatus = evt.TournamentStatus,
                 IsOrganizer = isAdmin || (userId.HasValue && evt.OrganizedByUserId == userId.Value),
                 IsRegistered = userId.HasValue && (
                     evt.Divisions.Any(d => d.Units.Any(u => u.Status != "Cancelled" && u.Members.Any(m => m.UserId == userId.Value))) ||
@@ -529,6 +658,7 @@ public class EventsController : ControllerBase
                                     Members = u.Members
                                         .Select(m => new TeamMemberDto
                                         {
+                                            Id = m.Id,
                                             UserId = m.UserId,
                                             Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "Unknown",
                                             ProfileImageUrl = m.User?.ProfileImageUrl,
@@ -1419,12 +1549,14 @@ public class EventsController : ControllerBase
                             PaymentStatus = unit.PaymentStatus,
                             AmountDue = amountDue,
                             AmountPaid = unit.AmountPaid,
+                            DrawingInProgress = division?.DrawingInProgress ?? false,
                             // Filter out duplicate members (those with PendingJoinRequest status that also appear as join requests)
                             Members = unit.Members
                                 .GroupBy(mem => mem.UserId)
                                 .Select(grp => grp.First()) // Keep only one entry per user
                                 .Select(mem => new TeamMemberDto
                                 {
+                                    Id = mem.Id,
                                     UserId = mem.UserId,
                                     // Name format: "Last, First"
                                     Name = FormatName(mem.User?.LastName, mem.User?.FirstName),
@@ -2187,7 +2319,8 @@ public class EventsController : ControllerBase
             OrganizerName = evt.OrganizedBy != null ? Utility.FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName) : null,
             OrganizedByClubId = evt.OrganizedByClubId,
             ClubName = evt.OrganizedByClub?.Name,
-            CreatedAt = evt.CreatedAt
+            CreatedAt = evt.CreatedAt,
+            TournamentStatus = evt.TournamentStatus
         };
     }
 

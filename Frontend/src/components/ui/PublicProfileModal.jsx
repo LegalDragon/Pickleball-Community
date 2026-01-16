@@ -1,19 +1,27 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 import { userApi, friendsApi, messagingApi, getSharedAssetUrl, getAssetUrl } from '../../services/api'
 import {
   User, MapPin, Calendar, UserPlus, UserCheck, Clock,
   Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle,
-  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink
+  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink,
+  KeyRound
 } from 'lucide-react'
+import AdminEditCredentialsModal from './AdminEditCredentialsModal'
 
 export default function PublicProfileModal({ userId, onClose, onFriendshipChange }) {
   const navigate = useNavigate()
+  const { user: currentUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [startingChat, setStartingChat] = useState(false)
+  const [showAdminModal, setShowAdminModal] = useState(false)
+
+  // Check if current user has SU role on shared auth (required for editing credentials)
+  const hasSharedAdminRole = currentUser?.systemRole?.toLowerCase() === 'su'
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -242,7 +250,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                   {profile.createdAt && (
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
                       <Calendar className="w-4 h-4" />
-                      <span>Member since {formatDate(profile.createdAt)}</span>
+                      <span>Member since {formatDate(profile.createdAt)} ({profile.id})</span>
                     </div>
                   )}
 
@@ -255,7 +263,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-4 flex justify-center sm:justify-start">
+              <div className="mt-4 flex flex-wrap gap-2 justify-center sm:justify-start">
                 {profile.friendshipStatus === 'self' ? (
                   <Link
                     to="/profile"
@@ -265,7 +273,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     Edit Profile
                   </Link>
                 ) : profile.friendshipStatus === 'friends' ? (
-                  <div className="flex gap-2">
+                  <>
                     <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg font-medium">
                       <UserCheck className="w-5 h-5" />
                       Friends
@@ -278,7 +286,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                       <MessageCircle className="w-5 h-5" />
                       {startingChat ? 'Starting...' : 'Message'}
                     </button>
-                  </div>
+                  </>
                 ) : profile.friendshipStatus === 'pending_sent' ? (
                   <button
                     onClick={handleCancelRequest}
@@ -289,7 +297,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     Request Sent
                   </button>
                 ) : profile.friendshipStatus === 'pending_received' ? (
-                  <div className="flex gap-2">
+                  <>
                     <button
                       onClick={handleAcceptRequest}
                       disabled={actionLoading}
@@ -305,7 +313,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     >
                       <X className="w-5 h-5" />
                     </button>
-                  </div>
+                  </>
                 ) : (
                   <button
                     onClick={handleSendFriendRequest}
@@ -314,6 +322,17 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                   >
                     <UserPlus className="w-5 h-5" />
                     Add Friend
+                  </button>
+                )}
+
+                {/* Admin Edit Credentials Button - requires SU role on shared auth */}
+                {hasSharedAdminRole && profile.friendshipStatus !== 'self' && (
+                  <button
+                    onClick={() => setShowAdminModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors"
+                  >
+                    <KeyRound className="w-5 h-5" />
+                    Edit Credentials
                   </button>
                 )}
               </div>
@@ -475,6 +494,17 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
           </>
         )}
       </div>
+
+      {/* Admin Edit Credentials Modal */}
+      {profile && (
+        <AdminEditCredentialsModal
+          isOpen={showAdminModal}
+          onClose={() => setShowAdminModal(false)}
+          userId={profile.id}
+          currentEmail={profile.email}
+          userName={`${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'User'}
+        />
+      )}
     </div>
   )
 }

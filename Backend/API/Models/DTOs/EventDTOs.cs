@@ -1,5 +1,85 @@
 namespace Pickleball.Community.Models.DTOs;
 
+// Public event view (no authentication required)
+public class EventPublicViewDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int EventTypeId { get; set; }
+    public string? EventTypeName { get; set; }
+    public string? EventTypeIcon { get; set; }
+    public string? EventTypeColor { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public DateTime? RegistrationOpenDate { get; set; }
+    public DateTime? RegistrationCloseDate { get; set; }
+    public bool IsPublished { get; set; }
+    public string? VenueName { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public int? CourtId { get; set; }
+    public string? PosterImageUrl { get; set; }
+    public string? BannerImageUrl { get; set; }
+    public decimal RegistrationFee { get; set; }
+    public decimal PerDivisionFee { get; set; }
+    public string? PriceUnit { get; set; }
+    public string? PaymentModel { get; set; }
+    public int? MaxParticipants { get; set; }
+    public int RegisteredCount { get; set; }
+    public int RegisteredPlayerCount { get; set; }
+    public int DivisionCount { get; set; }
+    public int PrimaryTeamSize { get; set; } = 2;
+    public string? OrganizerName { get; set; }
+    public int? OrganizedByUserId { get; set; }
+    public int? OrganizedByClubId { get; set; }
+    public string? ClubName { get; set; }
+    public string? ContactName { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string? TournamentStatus { get; set; }
+
+    // Divisions (public info only)
+    public List<EventDivisionPublicDto> Divisions { get; set; } = new();
+
+    // Registered players (public info only)
+    public List<RegisteredPlayerPublicDto> RegisteredPlayers { get; set; } = new();
+}
+
+// Public division info
+public class EventDivisionPublicDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? TeamUnitName { get; set; }
+    public string? AgeGroupName { get; set; }
+    public string? SkillLevelName { get; set; }
+    public int? MaxUnits { get; set; }
+    public int? MaxPlayers { get; set; }
+    public decimal? DivisionFee { get; set; }
+    public int RegisteredCount { get; set; }
+    public int RegisteredPlayerCount { get; set; }
+    public int LookingForPartnerCount { get; set; }
+}
+
+// Public registered player info
+public class RegisteredPlayerPublicDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? ProfileImageUrl { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string? TeamName { get; set; }
+}
+
 // Event list item
 public class EventDto
 {
@@ -41,6 +121,7 @@ public class EventDto
     public int? OrganizedByClubId { get; set; }
     public string? ClubName { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? TournamentStatus { get; set; }
 }
 
 // Event detail view
@@ -457,6 +538,12 @@ public class MyRegistrationUnitDto
     public decimal AmountDue { get; set; }
     public decimal AmountPaid { get; set; }
 
+    // Drawing state
+    /// <summary>
+    /// Indicates if a live drawing is currently in progress for this division
+    /// </summary>
+    public bool DrawingInProgress { get; set; }
+
     // Team members (including self)
     public List<TeamMemberDto> Members { get; set; } = new();
 }
@@ -466,6 +553,7 @@ public class MyRegistrationUnitDto
 /// </summary>
 public class TeamMemberDto
 {
+    public int Id { get; set; } // EventUnitMember record ID
     public int UserId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? ProfileImageUrl { get; set; }

@@ -215,6 +215,27 @@ public class EventDivision
     public int GamesPerMatch { get; set; } = 1; // Best of X
     public int? TargetUnitCount { get; set; } // Target number of units/placeholders for schedule generation
 
+    // Live Drawing State
+    /// <summary>
+    /// Whether a live drawing is currently in progress for this division
+    /// </summary>
+    public bool DrawingInProgress { get; set; } = false;
+
+    /// <summary>
+    /// When the current drawing session started
+    /// </summary>
+    public DateTime? DrawingStartedAt { get; set; }
+
+    /// <summary>
+    /// User ID of the organizer who started the drawing
+    /// </summary>
+    public int? DrawingByUserId { get; set; }
+
+    /// <summary>
+    /// Current sequence number in the drawing (how many units have been drawn)
+    /// </summary>
+    public int DrawingSequence { get; set; } = 0;
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 

@@ -140,8 +140,10 @@ const sharedAuthApi = axios.create({
 })
 
 // Add auth token to shared auth API requests
+// Use sharedAuthToken (original token from shared auth) if available,
+// otherwise fall back to jwtToken (which may be local token after sync)
 sharedAuthApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jwtToken');
+  const token = localStorage.getItem('sharedAuthToken') || localStorage.getItem('jwtToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -179,6 +181,12 @@ export const sharedUserApi = {
 
   // Update user profile on shared auth
   updateProfile: (data) => sharedAuthApi.put('/users/me', data),
+}
+
+// Shared Admin API (for Funtime-Shared admin operations - requires SU role)
+export const sharedAdminApi = {
+  // Update user credentials (email, password, etc.) - requires SU role on shared auth
+  updateUser: (userId, data) => sharedAuthApi.put(`/admin/users/${userId}`, data),
 }
 
 // Shared Asset API (for Funtime-Shared centralized asset management)
@@ -461,7 +469,16 @@ export const userApi = {
   updateSocialLink: (id, data) => api.put(`/users/social-links/${id}`, data),
   deleteSocialLink: (id) => api.delete(`/users/social-links/${id}`),
   bulkUpdateSocialLinks: (links) => api.put('/users/social-links/bulk', { links }),
-  getSocialPlatforms: () => api.get('/users/social-platforms')
+  getSocialPlatforms: () => api.get('/users/social-platforms'),
+
+  // Admin: Send password reset email to a user
+  adminSendPasswordReset: (userId) => api.post(`/users/${userId}/admin-password-reset`),
+
+  // Admin: Update a user's email
+  adminUpdateEmail: (userId, newEmail) => api.put(`/users/${userId}/admin-email`, { newEmail }),
+
+  // Admin: Set a user's password directly
+  adminSetPassword: (userId, newPassword) => api.put(`/users/${userId}/admin-password`, { newPassword })
 }
 
 // Content Types API
@@ -846,8 +863,11 @@ export const eventsApi = {
   // Get featured events for home page
   getFeatured: (limit = 6) => api.get(`/events/featured?limit=${limit}`),
 
-  // Get event details
+  // Get event details (requires auth)
   getEvent: (id) => api.get(`/events/${id}`),
+
+  // Get public event view (no auth required)
+  getEventPublic: (id) => api.get(`/events/${id}/public`),
 
   // Create a new event
   create: (data) => api.post('/events', data),
@@ -1379,13 +1399,15 @@ export const tournamentApi = {
   unregisterFromDivision: (eventId, divisionId) =>
     api.delete(`/tournament/events/${eventId}/divisions/${divisionId}/unregister`),
 
-  // Registration Management (organizer)
+  // Registration Management (organizer/admin)
   removeRegistration: (eventId, unitId, userId) =>
     api.delete(`/tournament/events/${eventId}/registrations/${unitId}/members/${userId}`),
   moveRegistration: (eventId, unitId, newDivisionId) =>
     api.post(`/tournament/events/${eventId}/registrations/${unitId}/move`, { newDivisionId }),
   mergeRegistrations: (eventId, targetUnitId, sourceUnitId) =>
     api.post(`/tournament/events/${eventId}/registrations/merge`, { targetUnitId, sourceUnitId }),
+  adminBreakUnit: (unitId) =>
+    api.post(`/tournament/units/${unitId}/admin-break`),
 
   // Player self-move to different division
   selfMoveToDivision: (eventId, newDivisionId, joinUnitId = null, newUnitName = null) =>
@@ -1394,6 +1416,8 @@ export const tournamentApi = {
     api.get(`/tournament/events/${eventId}/divisions/${divisionId}/joinable-units`),
 
   // Payment
+  getPaymentSummary: (eventId) =>
+    api.get(`/tournament/events/${eventId}/payment-summary`),
   uploadPaymentProof: (eventId, unitId, data) =>
     api.post(`/tournament/events/${eventId}/units/${unitId}/payment`, data),
   markAsPaid: (eventId, unitId) =>
@@ -1406,10 +1430,17 @@ export const tournamentApi = {
     api.post(`/tournament/events/${eventId}/units/${unitId}/members/${memberId}/unmark-paid`),
   updateMemberPayment: (eventId, unitId, memberId, data) =>
     api.put(`/tournament/events/${eventId}/units/${unitId}/members/${memberId}/payment`, data),
+  applyPaymentToTeammates: (eventId, unitId, memberId, targetMemberIds, redistributeAmount = true) =>
+    api.post(`/tournament/events/${eventId}/units/${unitId}/members/${memberId}/apply-to-teammates`, {
+      targetMemberIds,
+      redistributeAmount,
+    }),
 
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),
   createTournamentCourt: (eventId, data) => api.post(`/tournament/events/${eventId}/courts`, data),
+  bulkCreateCourts: (eventId, numberOfCourts, labelPrefix = 'Court', startingNumber = 1) =>
+    api.post(`/tournament/events/${eventId}/courts/bulk`, { numberOfCourts, labelPrefix, startingNumber }),
 
   // Match Scheduling
   generateSchedule: (divisionId, data) => api.post(`/tournament/divisions/${divisionId}/generate-schedule`, data),
@@ -1436,7 +1467,19 @@ export const tournamentApi = {
   // Dashboard
   getDashboard: (eventId) => api.get(`/tournament/events/${eventId}/dashboard`),
   updateTournamentStatus: (eventId, status) =>
-    api.put(`/tournament/events/${eventId}/status?status=${status}`)
+    api.put(`/tournament/events/${eventId}/status?status=${status}`),
+
+  // Live Drawing (Division-level)
+  getDrawingState: (divisionId) => api.get(`/tournament/divisions/${divisionId}/drawing`),
+  startDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/start`),
+  drawNextUnit: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/next`),
+  completeDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/complete`),
+  cancelDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/cancel`),
+
+  // Event-level Drawing (for Drawing Monitor page)
+  getEventDrawingState: (eventId) => api.get(`/tournament/events/${eventId}/drawing`),
+  startDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/start-mode`),
+  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`)
 }
 
 // Messaging API
@@ -1761,7 +1804,7 @@ export const clubFinanceApi = {
 // Player History API
 export const playerHistoryApi = {
   // Summary
-  getSummary: (userId) => api.get(`/api/player-history/${userId}/summary`),
+  getSummary: (userId) => api.get(`/player-history/${userId}/summary`),
 
   // Game History
   getGames: (userId, params = {}) => {
@@ -1778,7 +1821,7 @@ export const playerHistoryApi = {
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     const queryString = queryParams.toString();
-    return api.get(`/api/player-history/${userId}/games${queryString ? `?${queryString}` : ''}`);
+    return api.get(`/player-history/${userId}/games${queryString ? `?${queryString}` : ''}`);
   },
 
   // Awards
@@ -1794,9 +1837,9 @@ export const playerHistoryApi = {
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     const queryString = queryParams.toString();
-    return api.get(`/api/player-history/${userId}/awards${queryString ? `?${queryString}` : ''}`);
+    return api.get(`/player-history/${userId}/awards${queryString ? `?${queryString}` : ''}`);
   },
-  createAward: (data) => api.post('/api/player-history/awards', data),
+  createAward: (data) => api.post('/player-history/awards', data),
 
   // Ratings
   getRatings: (userId, params = {}) => {
@@ -1807,14 +1850,28 @@ export const playerHistoryApi = {
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     const queryString = queryParams.toString();
-    return api.get(`/api/player-history/${userId}/ratings${queryString ? `?${queryString}` : ''}`);
+    return api.get(`/player-history/${userId}/ratings${queryString ? `?${queryString}` : ''}`);
   },
-  createRating: (data) => api.post('/api/player-history/ratings', data),
+  createRating: (data) => api.post('/player-history/ratings', data),
+
+  // Payments
+  getPayments: (userId, params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.eventId) queryParams.append('eventId', params.eventId);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    const queryString = queryParams.toString();
+    return api.get(`/player-history/${userId}/payments${queryString ? `?${queryString}` : ''}`);
+  },
 
   // Helpers
-  getEventTypes: () => api.get('/api/player-history/event-types'),
-  getAwardTypes: () => api.get('/api/player-history/award-types'),
-  getRatingTypes: () => api.get('/api/player-history/rating-types')
+  getEventTypes: () => api.get('/player-history/event-types'),
+  getAwardTypes: () => api.get('/player-history/award-types'),
+  getRatingTypes: () => api.get('/player-history/rating-types'),
+  getPaymentStatuses: () => api.get('/player-history/payment-statuses')
 }
 
 // Help Topics API (dynamic contextual help)
@@ -1918,10 +1975,11 @@ export const checkInApi = {
   // Manual check-in by TD
   manualCheckIn: (eventId, userId, data = {}) => api.post(`/checkin/manual/${eventId}/${userId}`, data),
 
-  // Sign waiver with digital signature
+  // Sign waiver with digital signature (typed + drawn)
   signWaiver: (eventId, waiverId, signatureData = {}) => api.post(`/checkin/waiver/${eventId}`, {
     waiverId,
     signature: signatureData.signature,
+    signatureImage: signatureData.signatureImage,
     signerRole: signatureData.signerRole || 'Participant',
     parentGuardianName: signatureData.parentGuardianName,
     emergencyPhone: signatureData.emergencyPhone,
@@ -1957,6 +2015,10 @@ export const gameDayApi = {
 
   // Player Dashboard
   getPlayerGameDay: (eventId) => api.get(`/tournament-gameday/player/${eventId}`),
+
+  // Court management
+  updateCourt: (courtId, data) => api.put(`/gameday/courts/${courtId}`, data),
+  deleteCourt: (courtId) => api.delete(`/gameday/courts/${courtId}`),
 
   // Get ready games
   getReadyGames: (eventId, divisionId = null) => {
@@ -2094,6 +2156,22 @@ export const objectAssetsApi = {
   // Delete asset
   deleteAsset: (objectTypeName, objectId, assetId) =>
     api.delete(`/objectassets/${objectTypeName}/${objectId}/${assetId}`)
+}
+
+// Location Reference API (countries and states)
+export const locationApi = {
+  // Get all active countries
+  getCountries: () => api.get('/location/countries'),
+
+  // Get states/provinces for a country (by code or ID)
+  getStatesByCountry: (countryCode) => api.get(`/location/countries/${encodeURIComponent(countryCode)}/states`),
+
+  // Get all countries with their states
+  getCountriesWithStates: () => api.get('/location/countries-with-states'),
+
+  // Get a specific state by country and state code
+  getState: (countryCode, stateCode) =>
+    api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`)
 }
 
 export default api

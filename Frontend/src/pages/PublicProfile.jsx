@@ -5,8 +5,10 @@ import { userApi, friendsApi, getSharedAssetUrl, getAssetUrl } from '../services
 import {
   User, MapPin, Calendar, ArrowLeft, UserPlus, UserCheck, Clock,
   Award, Target, Zap, Heart, Activity, Play, X, Check,
-  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink
+  Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink,
+  KeyRound
 } from 'lucide-react'
+import AdminEditCredentialsModal from '../components/ui/AdminEditCredentialsModal'
 
 const PublicProfile = () => {
   const { userId } = useParams()
@@ -17,6 +19,10 @@ const PublicProfile = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [showAdminModal, setShowAdminModal] = useState(false)
+
+  // Check if current user has SU role on shared auth (required for editing credentials)
+  const hasSharedAdminRole = currentUser?.systemRole?.toLowerCase() === 'su'
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -232,7 +238,7 @@ const PublicProfile = () => {
 
               <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
                 <Calendar className="w-4 h-4" />
-                <span>Member since {formatDate(profile.createdAt)}</span>
+                <span>Member since {formatDate(profile.createdAt)} ({profile.id})</span>
               </div>
 
               {profile.experienceLevel && (
@@ -243,7 +249,7 @@ const PublicProfile = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 flex flex-col gap-2">
               {profile.friendshipStatus === 'self' ? (
                 <Link
                   to="/profile"
@@ -291,6 +297,17 @@ const PublicProfile = () => {
                 >
                   <UserPlus className="w-5 h-5" />
                   Add Friend
+                </button>
+              )}
+
+              {/* Admin Edit Credentials Button - requires SU role on shared auth */}
+              {hasSharedAdminRole && profile.friendshipStatus !== 'self' && (
+                <button
+                  onClick={() => setShowAdminModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors"
+                >
+                  <KeyRound className="w-5 h-5" />
+                  Edit Credentials
                 </button>
               )}
             </div>
@@ -466,6 +483,18 @@ const PublicProfile = () => {
           )}
         </div>
       </div>
+
+      {/* Admin Edit Credentials Modal */}
+      <AdminEditCredentialsModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        userId={profile?.id}
+        currentEmail={profile?.email}
+        userName={getFullName()}
+        onSuccess={() => {
+          // Optionally refresh profile data after update
+        }}
+      />
     </div>
   )
 }

@@ -9,6 +9,7 @@ public static class TournamentStatus
     public const string RegistrationOpen = "RegistrationOpen";
     public const string RegistrationClosed = "RegistrationClosed";
     public const string ScheduleReady = "ScheduleReady";
+    public const string Drawing = "Drawing";
     public const string Running = "Running";
     public const string Completed = "Completed";
     public const string Cancelled = "Cancelled";
@@ -19,6 +20,7 @@ public static class TournamentStatus
         RegistrationOpen,
         RegistrationClosed,
         ScheduleReady,
+        Drawing,
         Running,
         Completed,
         Cancelled

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, DollarSign, CheckCircle, AlertCircle, ExternalLink, FileText, Loader2, XCircle, User, Edit2, Upload } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, DollarSign, CheckCircle, AlertCircle, ExternalLink, FileText, Loader2, XCircle, User, Edit2, Upload, Users, UserPlus } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 
@@ -9,6 +9,8 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
   const [isUploading, setIsUploading] = useState(false);
   const [localMember, setLocalMember] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showApplyToTeammates, setShowApplyToTeammates] = useState(false);
+  const [selectedTeammateIds, setSelectedTeammateIds] = useState([]);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -24,22 +26,117 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
   // Reset edit form when member changes
   useEffect(() => {
     if (member) {
+      // If no amount paid, calculate the per-person amount as default
+      let defaultAmount = '';
+      if (member.amountPaid > 0) {
+        defaultAmount = member.amountPaid.toString();
+      } else if (unit?.members && event) {
+        const acceptedCount = unit.members.filter(m => m.inviteStatus === 'Accepted').length;
+        if (acceptedCount > 0) {
+          const totalAmount = (event.registrationFee || 0) + (unit.divisionFee || 0);
+          defaultAmount = (totalAmount / acceptedCount).toFixed(2);
+        }
+      }
+
       setEditForm({
         paymentReference: member.paymentReference || '',
         paymentProofUrl: member.paymentProofUrl || '',
-        amountPaid: member.amountPaid > 0 ? member.amountPaid.toString() : '',
+        amountPaid: defaultAmount,
         referenceId: member.referenceId || ''
       });
     }
-  }, [member]);
+  }, [member, unit?.members, event, unit?.divisionFee]);
 
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setLocalMember(null);
       setIsEditing(false);
+      setShowApplyToTeammates(false);
+      setSelectedTeammateIds([]);
     }
   }, [isOpen]);
+
+  // Get unpaid teammates (excluding current member)
+  const unpaidTeammates = useMemo(() => {
+    if (!unit?.members || !member) return [];
+    return unit.members.filter(
+      m => m.inviteStatus === 'Accepted' && !m.hasPaid && m.userId !== member.userId
+    );
+  }, [unit?.members, member]);
+
+  // Calculate per-person amount
+  const perPersonAmount = useMemo(() => {
+    if (!unit?.members || !event) return 0;
+    const acceptedCount = unit.members.filter(m => m.inviteStatus === 'Accepted').length;
+    if (acceptedCount === 0) return 0;
+    const totalAmount = (event.registrationFee || 0) + (unit.divisionFee || 0);
+    return totalAmount / acceptedCount;
+  }, [unit?.members, event, unit?.divisionFee]);
+
+  // Toggle teammate selection
+  const toggleTeammateSelection = (userId) => {
+    setSelectedTeammateIds(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  // Select all unpaid teammates
+  const selectAllUnpaid = () => {
+    if (selectedTeammateIds.length === unpaidTeammates.length) {
+      setSelectedTeammateIds([]);
+    } else {
+      setSelectedTeammateIds(unpaidTeammates.map(m => m.userId));
+    }
+  };
+
+  // Apply payment to selected teammates
+  const handleApplyToTeammates = async () => {
+    if (selectedTeammateIds.length === 0) {
+      toast.error('Please select at least one teammate');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const response = await tournamentApi.applyPaymentToTeammates(
+        event.id,
+        unit.unitId,
+        member.userId,
+        selectedTeammateIds,
+        true // redistribute amount
+      );
+
+      if (response.success) {
+        toast.success(response.message || 'Payment applied to teammates');
+        setShowApplyToTeammates(false);
+        setSelectedTeammateIds([]);
+        onPaymentUpdated?.(unit.unitId, response.data);
+        onClose(); // Close to refresh the parent
+      } else {
+        toast.error(response.message || 'Failed to apply payment');
+      }
+    } catch (err) {
+      console.error('Error applying payment to teammates:', err);
+      toast.error('Failed to apply payment to teammates');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Check if there's any existing payment data (must be before early returns)
+  const hasExistingPaymentData = member?.paymentProofUrl || member?.paymentReference || (member?.amountPaid > 0);
+
+  // Auto-start in edit mode if no payment data and not paid (must be before early returns)
+  useEffect(() => {
+    if (member && !member.hasPaid && !hasExistingPaymentData && !isEditing) {
+      setIsEditing(true);
+    }
+  }, [member, hasExistingPaymentData, isEditing]);
 
   if (!isOpen || !unit) return null;
 
@@ -78,6 +175,9 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
   const memberProofUrl = getProofUrl(member.paymentProofUrl);
   const isPdf = isPdfUrl(memberProofUrl);
   const isImage = isImageUrl(memberProofUrl);
+
+  // Determine if we should show "Add Payment" vs "Edit Payment" vs "Verify Payment"
+  const isAddingPayment = isEditing && !member.hasPaid && !hasExistingPaymentData;
 
   const handleMarkAsPaid = async () => {
     setIsUpdating(true);
@@ -206,7 +306,7 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-orange-600" />
             <h2 className="text-lg font-semibold">
-              {isEditing ? 'Edit Payment Info' : 'Verify Payment'}
+              {isAddingPayment ? 'Add Payment' : isEditing ? 'Edit Payment Info' : 'Verify Payment'}
             </h2>
           </div>
           <button
@@ -339,25 +439,79 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
 
               {/* Edit Form Buttons */}
               <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSavePaymentInfo}
-                  disabled={isUpdating}
-                  className="flex-1 py-2.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                >
-                  {isUpdating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4" />
-                  )}
-                  Save
-                </button>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  disabled={isUpdating}
-                  className="px-4 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
+                {isAddingPayment ? (
+                  <>
+                    <button
+                      onClick={async () => {
+                        // Save payment info first, then mark as paid
+                        setIsUpdating(true);
+                        try {
+                          // Save the payment info
+                          const updateData = {
+                            paymentReference: editForm.paymentReference || null,
+                            paymentProofUrl: editForm.paymentProofUrl || null,
+                            amountPaid: editForm.amountPaid ? parseFloat(editForm.amountPaid) : null,
+                            referenceId: editForm.referenceId || null,
+                            hasPaid: true // Mark as paid
+                          };
+                          const response = await tournamentApi.updateMemberPayment(event.id, unit.unitId, member.userId, updateData);
+                          if (response.success) {
+                            toast.success('Payment added and verified');
+                            const updatedMember = { ...member, ...response.data };
+                            setLocalMember(updatedMember);
+                            setIsEditing(false);
+                            onPaymentUpdated?.(unit.unitId, response.data);
+                          } else {
+                            toast.error(response.message || 'Failed to add payment');
+                          }
+                        } catch (err) {
+                          console.error('Error adding payment:', err);
+                          toast.error('Failed to add payment');
+                        } finally {
+                          setIsUpdating(false);
+                        }
+                      }}
+                      disabled={isUpdating}
+                      className="flex-1 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isUpdating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4" />
+                      )}
+                      Save & Mark Paid
+                    </button>
+                    <button
+                      onClick={onClose}
+                      disabled={isUpdating}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleSavePaymentInfo}
+                      disabled={isUpdating}
+                      className="flex-1 py-2.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isUpdating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4" />
+                      )}
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      disabled={isUpdating}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -453,6 +607,113 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
                   </div>
                 )}
               </div>
+
+              {/* Apply to Teammates Section */}
+              {member.hasPaid && unpaidTeammates.length > 0 && (
+                <div className="border border-blue-200 rounded-lg bg-blue-50 p-3">
+                  {!showApplyToTeammates ? (
+                    <button
+                      onClick={() => {
+                        setShowApplyToTeammates(true);
+                        setSelectedTeammateIds(unpaidTeammates.map(m => m.userId));
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 text-blue-700 hover:text-blue-800 font-medium"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Apply this payment to teammates ({unpaidTeammates.length} unpaid)
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">Apply to teammates</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={selectAllUnpaid}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          {selectedTeammateIds.length === unpaidTeammates.length ? 'Deselect all' : 'Select all'}
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {unpaidTeammates.map(teammate => {
+                          const isSelected = selectedTeammateIds.includes(teammate.userId);
+                          const name = teammate.lastName && teammate.firstName
+                            ? `${teammate.lastName}, ${teammate.firstName}`
+                            : (teammate.lastName || teammate.firstName || 'Player');
+
+                          return (
+                            <div
+                              key={teammate.userId}
+                              onClick={() => toggleTeammateSelection(teammate.userId)}
+                              className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-100 border-blue-300'
+                                  : 'bg-white border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={() => toggleTeammateSelection(teammate.userId)}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm font-medium text-gray-900">{name}</span>
+                              </div>
+                              <span className="text-sm font-medium text-gray-600">
+                                ${perPersonAmount.toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {selectedTeammateIds.length > 0 && (
+                        <div className="pt-2 border-t border-blue-200">
+                          <div className="flex justify-between items-center text-sm mb-2">
+                            <span className="text-blue-800">
+                              Will apply to {selectedTeammateIds.length} teammate{selectedTeammateIds.length > 1 ? 's' : ''}
+                            </span>
+                            <span className="font-medium text-blue-800">
+                              ${(selectedTeammateIds.length * perPersonAmount).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleApplyToTeammates}
+                          disabled={isUpdating || selectedTeammateIds.length === 0}
+                          className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                        >
+                          {isUpdating ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4" />
+                          )}
+                          Apply Payment
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowApplyToTeammates(false);
+                            setSelectedTeammateIds([]);
+                          }}
+                          disabled={isUpdating}
+                          className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col gap-2 pt-2">

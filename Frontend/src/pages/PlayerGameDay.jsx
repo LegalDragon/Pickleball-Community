@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, CheckCircle, XCircle, Play, Clock, MapPin,
+  CheckCircle, XCircle, Play, Clock, MapPin,
   RefreshCw, AlertCircle, FileText, Trophy, Calendar,
   ChevronRight, User
 } from 'lucide-react'
 import { gameDayApi, checkInApi } from '../services/api'
+import SignatureCanvas from '../components/SignatureCanvas'
 
 export default function PlayerGameDay() {
   const { eventId } = useParams()
@@ -112,24 +113,22 @@ export default function PlayerGameDay() {
   if (!gameDay) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-gray-50 pb-20 flex flex-col">
+      {/* Clean Game Day Header - No back button */}
+      <header className="bg-gradient-to-r from-green-600 to-green-700 text-white sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
+              <Trophy className="w-6 h-6" />
               <div>
-                <h1 className="text-lg font-semibold">{gameDay.eventName}</h1>
-                <p className="text-sm text-gray-500">Game Day</p>
+                <h1 className="text-base font-semibold">{gameDay.eventName}</h1>
+                <p className="text-xs text-green-100">Player Dashboard</p>
               </div>
             </div>
             <button
               onClick={loadData}
               disabled={refreshing}
-              className="p-2 hover:bg-gray-100 rounded-lg"
+              className="p-2 hover:bg-green-500 rounded-lg"
             >
               <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -170,7 +169,7 @@ export default function PlayerGameDay() {
             )}
           </div>
 
-          {/* Waiver status */}
+          {/* Waiver status - unsigned */}
           {checkInStatus && !gameDay.waiverSigned && checkInStatus.pendingWaivers?.length > 0 && (
             <div className="mt-3 pt-3 border-t border-yellow-200">
               <button
@@ -181,6 +180,23 @@ export default function PlayerGameDay() {
                 <span className="text-sm">Waiver requires signature</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
+            </div>
+          )}
+
+          {/* Waiver status - signed with PDF link */}
+          {checkInStatus?.waiverSigned && checkInStatus.signedWaiverPdfUrl && (
+            <div className="mt-3 pt-3 border-t border-green-200">
+              <a
+                href={checkInStatus.signedWaiverPdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-green-700 hover:text-green-800"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-sm">Waiver signed</span>
+                <FileText className="w-4 h-4" />
+                <span className="text-sm underline">View PDF</span>
+              </a>
             </div>
           )}
         </div>
@@ -275,6 +291,7 @@ export default function PlayerGameDay() {
       {showWaiverModal && checkInStatus?.pendingWaivers && (
         <WaiverModal
           waivers={checkInStatus.pendingWaivers}
+          playerName={checkInStatus.playerName}
           onSign={handleSignWaiver}
           onClose={() => setShowWaiverModal(false)}
         />
@@ -362,40 +379,79 @@ function GameCard({ game, onSubmitScore }) {
   )
 }
 
-function WaiverModal({ waivers, onSign, onClose }) {
+function WaiverModal({ waivers, playerName, onSign, onClose }) {
   const [currentWaiver, setCurrentWaiver] = useState(waivers[0])
   const [agreed, setAgreed] = useState(false)
-  const [signature, setSignature] = useState('')
-  const [signerRole, setSignerRole] = useState('Participant')
-  const [parentGuardianName, setParentGuardianName] = useState('')
-  const [emergencyPhone, setEmergencyPhone] = useState('')
-  const [chineseName, setChineseName] = useState('')
+  const [signature, setSignature] = useState(playerName || '')
+  const [signatureImage, setSignatureImage] = useState(null)
+  const [signerType, setSignerType] = useState('Self') // Self or Guardian
+  const [guardianRelationship, setGuardianRelationship] = useState('Parent') // Parent, Guardian, Legal Custodian
+  const [guardianName, setGuardianName] = useState('')
   const [signing, setSigning] = useState(false)
+  const [waiverContent, setWaiverContent] = useState('')
 
-  const isMinorWaiver = signerRole === 'Parent' || signerRole === 'Guardian'
+  const isGuardianSigning = signerType === 'Guardian'
+
+  // Check if file is markdown or html based on extension
+  const isRenderableFile = (fileName) => {
+    if (!fileName) return false
+    const ext = fileName.toLowerCase().split('.').pop()
+    return ['md', 'html', 'htm'].includes(ext)
+  }
+
+  // Convert markdown to basic HTML (simple conversion)
+  const markdownToHtml = (md) => {
+    return md
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+      .replace(/^\- (.*$)/gim, '<li>$1</li>')
+      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+      .replace(/\n\n/gim, '</p><p>')
+      .replace(/\n/gim, '<br>')
+  }
+
+  // Set waiver content - backend now fetches .md/.html content for us
+  useEffect(() => {
+    if (currentWaiver.content) {
+      // Content provided by backend (for .md/.html files or legacy system)
+      let content = currentWaiver.content
+      // If it's markdown, convert to HTML
+      if (currentWaiver.fileName?.toLowerCase().endsWith('.md')) {
+        content = markdownToHtml(content)
+      }
+      setWaiverContent(content)
+    } else {
+      setWaiverContent('')
+    }
+  }, [currentWaiver])
 
   const handleSign = async () => {
     if (!signature.trim()) {
-      alert('Please enter your signature (full legal name)')
+      alert('Please enter the participant\'s full legal name')
       return
     }
-    if (isMinorWaiver && !parentGuardianName.trim()) {
-      alert('Please enter your name as parent/guardian')
+    if (!signatureImage) {
+      alert('Please draw your signature in the box below')
       return
     }
-    if (isMinorWaiver && !emergencyPhone.trim()) {
-      alert('Please enter an emergency phone number')
+    if (isGuardianSigning && !guardianName.trim()) {
+      alert('Please enter the guardian/signer\'s name')
       return
     }
 
     setSigning(true)
     try {
+      // Map to backend format
+      const signerRole = isGuardianSigning ? guardianRelationship : 'Participant'
       await onSign(currentWaiver.id, {
         signature: signature.trim(),
+        signatureImage,
         signerRole,
-        parentGuardianName: isMinorWaiver ? parentGuardianName.trim() : null,
-        emergencyPhone: emergencyPhone.trim() || null,
-        chineseName: chineseName.trim() || null
+        parentGuardianName: isGuardianSigning ? guardianName.trim() : null,
+        guardianRelationship: isGuardianSigning ? guardianRelationship : null
       })
     } finally {
       setSigning(false)
@@ -414,119 +470,137 @@ function WaiverModal({ waivers, onSign, onClose }) {
 
         <div className="p-4 overflow-auto flex-1">
           <h4 className="font-medium mb-2">{currentWaiver.title}</h4>
-          <div className="prose prose-sm text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border max-h-48 overflow-auto text-xs">
-            {currentWaiver.content}
-          </div>
+
+          {/* Waiver Content Display */}
+          {currentWaiver.fileUrl && !isRenderableFile(currentWaiver.fileName) ? (
+            // Non-renderable file (PDF, etc.) - show link
+            <div className="bg-gray-50 p-4 rounded-lg border">
+              <p className="text-sm text-gray-600 mb-3">
+                Please review the waiver document before signing:
+              </p>
+              <a
+                href={currentWaiver.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <FileText className="w-4 h-4" />
+                View Waiver Document
+              </a>
+              <p className="text-xs text-gray-500 mt-3">
+                By signing below, you confirm that you have read and understood the waiver document.
+              </p>
+            </div>
+          ) : waiverContent ? (
+            // Renderable content (HTML from .md/.html file or legacy content)
+            <div
+              className="prose prose-sm text-gray-600 bg-gray-50 p-3 rounded-lg border max-h-48 overflow-auto text-xs"
+              dangerouslySetInnerHTML={{ __html: waiverContent }}
+            />
+          ) : (
+            // No content available
+            <div className="bg-gray-50 p-3 rounded-lg border text-gray-500 text-sm">
+              No waiver content available.
+            </div>
+          )}
 
           {/* Signature Section */}
           <div className="mt-4 space-y-3">
-            {/* Signer Role Selection */}
-            {currentWaiver.requiresMinorWaiver && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Who is signing?
-                </label>
-                <div className="flex gap-2">
-                  {['Participant', 'Parent', 'Guardian'].map(role => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => setSignerRole(role)}
-                      className={`flex-1 py-2 text-sm rounded-lg border ${
-                        signerRole === role
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Parent/Guardian Info for minors */}
-            {isMinorWaiver && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800 mb-3">
-                  For participants under {currentWaiver.minorAgeThreshold || 18} years old:
-                </p>
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Parent/Guardian Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={parentGuardianName}
-                      onChange={(e) => setParentGuardianName(e.target.value)}
-                      placeholder="Your full legal name"
-                      className="w-full px-3 py-2 border rounded-lg text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Emergency Phone # *
-                    </label>
-                    <input
-                      type="tel"
-                      value={emergencyPhone}
-                      onChange={(e) => setEmergencyPhone(e.target.value)}
-                      placeholder="(555) 123-4567"
-                      className="w-full px-3 py-2 border rounded-lg text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Chinese Name (Optional) */}
+            {/* Signer Type Selection - Self or Guardian */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Chinese Name <span className="text-gray-400">(if applicable)</span>
+                Who is signing this waiver?
               </label>
-              <input
-                type="text"
-                value={chineseName}
-                onChange={(e) => setChineseName(e.target.value)}
-                placeholder="Your Chinese name"
-                className="w-full px-3 py-2 border rounded-lg"
-              />
+              <div className="flex gap-2">
+                {[
+                  { value: 'Self', label: 'Self (Participant)' },
+                  { value: 'Guardian', label: 'Guardian/Parent' }
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSignerType(option.value)}
+                    className={`flex-1 py-2 text-sm rounded-lg border ${
+                      signerType === option.value
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Digital Signature */}
+            {/* Guardian Details - Only shown when Guardian is signing */}
+            {isGuardianSigning && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                <p className="text-sm text-amber-800">
+                  Signing on behalf of the participant:
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Relationship to Participant *
+                  </label>
+                  <select
+                    value={guardianRelationship}
+                    onChange={(e) => setGuardianRelationship(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                  >
+                    <option value="Parent">Parent</option>
+                    <option value="Guardian">Legal Guardian</option>
+                    <option value="Legal Custodian">Legal Custodian</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Your Full Name (Signer) *
+                  </label>
+                  <input
+                    type="text"
+                    value={guardianName}
+                    onChange={(e) => setGuardianName(e.target.value)}
+                    placeholder="Guardian/Parent's full legal name"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Participant's Full Legal Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {isMinorWaiver ? "Participant's Full Legal Name *" : 'Digital Signature (Full Legal Name) *'}
+                Participant's Full Legal Name *
               </label>
               <input
                 type="text"
                 value={signature}
                 onChange={(e) => setSignature(e.target.value)}
-                placeholder="Type your full legal name"
+                placeholder="Type participant's full legal name"
                 className="w-full px-3 py-2 border rounded-lg font-medium"
                 style={{ fontFamily: 'cursive, serif' }}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                By typing your name above, you are signing this waiver electronically
-              </p>
             </div>
 
-            {/* Emergency Phone if not minor */}
-            {!isMinorWaiver && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Emergency Phone <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  type="tel"
-                  value={emergencyPhone}
-                  onChange={(e) => setEmergencyPhone(e.target.value)}
-                  placeholder="(555) 123-4567"
-                  className="w-full px-3 py-2 border rounded-lg"
+            {/* Drawn Signature */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isGuardianSigning ? "Guardian's Signature *" : "Your Signature *"}
+              </label>
+              <div className="flex justify-center">
+                <SignatureCanvas
+                  onSignatureChange={setSignatureImage}
+                  width={Math.min(350, window.innerWidth - 60)}
+                  height={150}
+                  disabled={signing}
                 />
               </div>
-            )}
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                {isGuardianSigning
+                  ? `By signing above, you (${guardianRelationship}) are electronically signing this waiver on behalf of the participant`
+                  : 'By signing above, you are electronically signing this waiver'}
+              </p>
+            </div>
 
             {/* Agreement Checkbox */}
             <label className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -554,7 +628,7 @@ function WaiverModal({ waivers, onSign, onClose }) {
             </button>
             <button
               onClick={handleSign}
-              disabled={!agreed || !signature.trim() || signing}
+              disabled={!agreed || !signature.trim() || !signatureImage || signing || (isGuardianSigning && !guardianName.trim())}
               className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {signing ? 'Signing...' : 'Sign Waiver'}

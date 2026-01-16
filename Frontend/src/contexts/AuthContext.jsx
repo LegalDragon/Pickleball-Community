@@ -65,8 +65,21 @@ export const AuthProvider = ({ children }) => {
           const sharedUser = sharedData.user || sharedData.User
 
           if (sharedToken) {
+            // Extract systemRole from JWT token claims (authoritative source)
+            let sharedSystemRole = null
+            try {
+              const payload = JSON.parse(atob(sharedToken.split('.')[1]))
+              // The role claim in shared auth JWT contains the systemRole (e.g., "SU")
+              sharedSystemRole = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || null
+              console.log('Extracted systemRole from JWT:', sharedSystemRole)
+            } catch (e) {
+              console.warn('Could not decode JWT to extract systemRole:', e.message)
+            }
+
             // Step 2: Sync user to local database (temporarily use shared token for sync call)
+            // Store shared token separately for admin API calls to Funtime-Shared
             localStorage.setItem('jwtToken', sharedToken)
+            localStorage.setItem('sharedAuthToken', sharedToken)
             axios.defaults.headers.common['Authorization'] = `Bearer ${sharedToken}`
 
             const syncResponse = await authApi.syncFromSharedAuth(sharedToken)
@@ -82,7 +95,12 @@ export const AuthProvider = ({ children }) => {
               console.warn('No local token in sync response, falling back to shared token')
               token = sharedToken
             }
-            userData = syncResponse.User || syncResponse.user || sharedUser
+            // Merge local user data with systemRole from shared auth
+            const localUser = syncResponse.User || syncResponse.user || sharedUser
+            userData = {
+              ...localUser,
+              systemRole: sharedSystemRole || localUser?.systemRole || null
+            }
           }
         } catch (sharedError) {
           console.log('Shared auth failed, falling back to local auth:', sharedError.message)
@@ -104,11 +122,12 @@ export const AuthProvider = ({ children }) => {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       }
 
-      // Store user data (including profileImageUrl)
+      // Store user data (including profileImageUrl and systemRole)
       if (userData) {
         const userWithAvatar = {
           ...userData,
-          profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null
+          profileImageUrl: userData.profileImageUrl || userData.ProfileImageUrl || null,
+          systemRole: userData.systemRole || null // Preserve SU role from shared auth
         }
         setUser(userWithAvatar)
         setIsAuthenticated(true)
@@ -279,6 +298,7 @@ export const AuthProvider = ({ children }) => {
 
   const clearAuthData = () => {
     localStorage.removeItem('jwtToken')
+    localStorage.removeItem('sharedAuthToken') // Clear shared auth token for admin API calls
     localStorage.removeItem('pickleball_user')
     localStorage.removeItem('authToken') // Clear old if exists
     localStorage.removeItem('refreshToken') // Clear old if exists

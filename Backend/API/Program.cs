@@ -108,10 +108,16 @@ builder.Services.AddHttpClient("SharedAuth", client =>
     var baseUrl = builder.Configuration["SharedAuth:BaseUrl"];
     if (!string.IsNullOrEmpty(baseUrl))
     {
+        // Ensure trailing slash - HttpClient URL resolution requires it for relative paths to work correctly
+        if (!baseUrl.EndsWith("/"))
+            baseUrl += "/";
         client.BaseAddress = new Uri(baseUrl);
     }
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+
+// HttpContext accessor for services that need access to the current request
+builder.Services.AddHttpContextAccessor();
 
 // Services
 builder.Services.AddScoped<IAssetService, AssetService>();
@@ -125,6 +131,9 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddScoped<IActivityAwardService, ActivityAwardService>();
 builder.Services.AddScoped<IInstaGameService, InstaGameService>();
+builder.Services.AddScoped<IDrawingBroadcaster, DrawingBroadcaster>();
+builder.Services.AddScoped<ISharedAssetService, SharedAssetService>();
+builder.Services.AddScoped<IWaiverPdfService, WaiverPdfService>();
 
 // CORS - Load allowed origins from configuration
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
@@ -172,6 +181,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<DrawingHub>("/hubs/drawing");
 
 // Initialize database
 using (var scope = app.Services.CreateScope())

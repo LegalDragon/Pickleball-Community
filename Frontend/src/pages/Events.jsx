@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone } from 'lucide-react';
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, RefreshCcw, Radio, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
@@ -13,10 +13,13 @@ import AdminPaymentModal from '../components/AdminPaymentModal';
 import MemberPaymentModal from '../components/MemberPaymentModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import HelpIcon from '../components/ui/HelpIcon';
+import WatchDrawingModal from '../components/WatchDrawingModal';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
+  const isAdmin = user?.role === 'Admin';
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const courtIdParam = searchParams.get('courtId');
   const courtNameParam = searchParams.get('courtName');
@@ -71,6 +74,9 @@ export default function Events() {
 
   // Profile modal state (for My Events tab)
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
+
+  // Drawing modal state (for watching live drawings)
+  const [watchDrawingUnit, setWatchDrawingUnit] = useState(null);
 
   // Get user's location on mount with improved two-stage approach
   const getLocation = useCallback(async () => {
@@ -276,6 +282,27 @@ export default function Events() {
     }
   }, [isAuthenticated]);
 
+  // Handle opening event modal from navigation state (e.g., from public EventView page)
+  useEffect(() => {
+    const openEventId = location.state?.openEventId;
+    if (openEventId && isAuthenticated) {
+      // Load and open the event modal
+      const loadAndOpenEvent = async () => {
+        try {
+          const response = await eventsApi.getEvent(openEventId);
+          if (response.success) {
+            setSelectedEvent(response.data);
+          }
+        } catch (err) {
+          console.error('Error loading event from navigation state:', err);
+        }
+      };
+      loadAndOpenEvent();
+      // Clear the state to prevent reopening on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state?.openEventId, isAuthenticated, navigate, location.pathname]);
+
   const loadMyEvents = async () => {
     try {
       const response = await eventsApi.getMyEvents();
@@ -316,6 +343,12 @@ export default function Events() {
           }
         }
         toast.success(accept ? 'Player added to your team!' : 'Request declined');
+        // Display any warnings (e.g., waitlist notification)
+        if (response.warnings && response.warnings.length > 0) {
+          response.warnings.forEach(warning => {
+            toast.warning(warning, { autoClose: 8000 });
+          });
+        }
       }
     } catch (err) {
       console.error('Error responding to join request:', err);
@@ -408,10 +441,9 @@ export default function Events() {
   const toast = useToast();
 
   const handleViewDetails = async (event) => {
-    // Redirect unauthenticated users to login
+    // Navigate to public event view page for unauthenticated users
     if (!isAuthenticated) {
-      toast.info('Please log in to view event details');
-      navigate('/login', { state: { from: '/events', eventId: event.id } });
+      navigate(`/events/${event.id}`);
       return;
     }
 
@@ -422,17 +454,19 @@ export default function Events() {
       }
     } catch (err) {
       console.error('Error loading event details:', err);
-      // Check if this is a 401 Unauthorized
+      // Check if this is a 401 Unauthorized - redirect to public view
       if (err?.status === 401 || err?.response?.status === 401) {
-        toast.info('Please log in to view event details');
-        navigate('/login', { state: { from: '/events', eventId: event.id } });
+        navigate(`/events/${event.id}`);
         return;
       }
       // Check if this is a profile completion requirement (403)
       if (err?.message?.toLowerCase().includes('complete your profile')) {
         toast.warning('Please complete your profile to view event details');
         navigate('/complete-profile');
+        return;
       }
+      // For other errors, still show the public view
+      navigate(`/events/${event.id}`);
     }
   };
 
@@ -1407,6 +1441,23 @@ export default function Events() {
                                         Paid
                                       </span>
                                     )}
+                                    {/* Watch Drawing Button - show when drawing is in progress */}
+                                    {unit.drawingInProgress && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setWatchDrawingUnit({
+                                            divisionId: unit.divisionId,
+                                            divisionName: unit.divisionName,
+                                            eventName: reg.eventName
+                                          });
+                                        }}
+                                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 flex items-center gap-1 animate-pulse"
+                                      >
+                                        <Shuffle className="w-3 h-3" />
+                                        Watch Drawing
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1444,6 +1495,7 @@ export default function Events() {
         <EventDetailModal
           event={selectedEvent}
           isAuthenticated={isAuthenticated}
+          isAdmin={isAdmin}
           currentUserId={user?.id}
           user={user}
           formatDate={formatDate}
@@ -1503,6 +1555,17 @@ export default function Events() {
         <PublicProfileModal
           userId={selectedProfileUserId}
           onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
+
+      {/* Watch Drawing Modal */}
+      {watchDrawingUnit && (
+        <WatchDrawingModal
+          isOpen={!!watchDrawingUnit}
+          onClose={() => setWatchDrawingUnit(null)}
+          divisionId={watchDrawingUnit.divisionId}
+          divisionName={watchDrawingUnit.divisionName}
+          eventName={watchDrawingUnit.eventName}
         />
       )}
     </div>
@@ -1615,7 +1678,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
   );
 }
 
-function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
+function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(false);
   const [registeringDivision, setRegisteringDivision] = useState(null);
@@ -1721,6 +1784,10 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   const [documents, setDocuments] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+
+  // Payment summary state
+  const [paymentSummary, setPaymentSummary] = useState(null);
+  const [loadingPayments, setLoadingPayments] = useState(false);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
@@ -1844,7 +1911,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   };
 
   const isOrganizer = event.isOrganizer;
-  const isAdmin = user?.role === 'Admin';
   const canEditDivision = isOrganizer || isAdmin;
   const isRegistered = event.isRegistered;
 
@@ -1905,6 +1971,22 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Load payment summary for organizer
+  const loadPaymentSummary = async () => {
+    if (!isOrganizer) return;
+    setLoadingPayments(true);
+    try {
+      const response = await tournamentApi.getPaymentSummary(event.id);
+      if (response.success) {
+        setPaymentSummary(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading payment summary:', err);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
   // Load registrations and documents when switching to manage tab
   useEffect(() => {
     if (activeTab === 'manage' && isOrganizer) {
@@ -1916,6 +1998,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       }
       if (assetTypes.length === 0) {
         loadAssetTypes();
+      }
+    }
+    if (activeTab === 'payments' && isOrganizer) {
+      if (!paymentSummary) {
+        loadPaymentSummary();
       }
     }
   }, [activeTab, isOrganizer]);
@@ -2634,30 +2721,35 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     const memberName = member.lastName && member.firstName
       ? `${member.lastName}, ${member.firstName}`
       : member.lastName || member.firstName || 'Player';
-    if (!confirm(`Remove ${memberName} from ${division.name}?`)) return;
+
+    // Check if this is the only accepted member
+    const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
+    const isOnlyMember = acceptedMembers.length <= 1;
+
+    const confirmMessage = isOnlyMember
+      ? `Remove ${memberName}? This will cancel the entire registration for ${division.name}.`
+      : `Remove ${memberName} from this team? They will get their own individual registration.`;
+
+    if (!confirm(confirmMessage)) return;
 
     try {
       const response = await tournamentApi.removeRegistration(event.id, unit.id, member.userId);
       if (response.success) {
-        // Update the divisionRegistrationsCache to remove this member
-        setDivisionRegistrationsCache(prev => {
-          const updated = { ...prev };
-          if (updated[division.id]) {
-            updated[division.id] = updated[division.id].map(u => {
-              if (u.id === unit.id) {
-                const newMembers = u.members.filter(m => m.userId !== member.userId);
-                // If no members left, remove the unit entirely
-                if (newMembers.length === 0) {
-                  return null;
-                }
-                return { ...u, members: newMembers };
-              }
-              return u;
-            }).filter(Boolean);
+        toast.success(response.message || 'Player removed');
+        // Refetch division registrations immediately
+        const divResponse = await tournamentApi.getEventUnits(event.id, division.id);
+        if (divResponse.success) {
+          const sorted = (divResponse.data || []).sort((a, b) => {
+            if (a.isComplete && !b.isComplete) return -1;
+            if (!a.isComplete && b.isComplete) return 1;
+            return 0;
+          });
+          setDivisionRegistrationsCache(prev => ({ ...prev, [division.id]: sorted }));
+          // Also update legacy modal state if viewing this division
+          if (selectedDivisionForViewing?.id === division.id) {
+            setDivisionRegistrations(sorted);
           }
-          return updated;
-        });
-        toast.success('Player removed');
+        }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
         if (updatedEventResponse.success) {
@@ -2683,6 +2775,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
           onUpdate(updatedEventResponse.data);
         }
         toast.success(accept ? 'Player added to your team!' : 'Request declined');
+        // Display any warnings (e.g., waitlist notification)
+        if (response.warnings && response.warnings.length > 0) {
+          response.warnings.forEach(warning => {
+            toast.warning(warning, { autoClose: 8000 });
+          });
+        }
       } else {
         toast.error(response.message || 'Failed to respond to join request');
       }
@@ -2981,6 +3079,42 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Handle admin response to join request
+  const handleRespondToJoinRequestAdmin = async (joinRequestId, accept, divisionId) => {
+    try {
+      const response = await tournamentApi.respondToJoinRequest(joinRequestId, accept);
+      if (response.success) {
+        toast.showSuccess(accept ? 'Join request accepted' : 'Join request rejected');
+        // Refetch division registrations immediately
+        if (divisionId) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divisionId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divisionId) {
+              setDivisionRegistrations(sorted);
+            }
+          }
+        }
+        // Refresh event data
+        const updatedEventResponse = await eventsApi.getEvent(event.id);
+        if (updatedEventResponse.success) {
+          onUpdate(updatedEventResponse.data);
+        }
+      } else {
+        toast.showError(response.message || 'Failed to respond to join request');
+      }
+    } catch (err) {
+      console.error('Error responding to join request:', err);
+      toast.showError('Failed to respond to join request');
+    }
+  };
+
   // Toggle expand/collapse for division registrations (inline view)
   const toggleDivisionExpand = async (division) => {
     const divId = division.id;
@@ -3030,6 +3164,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
           toast.success(response.message || 'Teams merged automatically! You are now registered together.');
         } else {
           toast.success('Join request sent!');
+        }
+        // Display any warnings (e.g., waitlist notification)
+        if (response.warnings && response.warnings.length > 0) {
+          response.warnings.forEach(warning => {
+            toast.warning(warning, { autoClose: 8000 });
+          });
         }
         setShowTeamRegistration(false);
         setSelectedDivisionForRegistration(null);
@@ -3171,6 +3311,12 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
         } else {
           toast.success('Join request sent!');
         }
+        // Display any warnings (e.g., waitlist notification)
+        if (response.warnings && response.warnings.length > 0) {
+          response.warnings.forEach(warning => {
+            toast.warning(warning, { autoClose: 8000 });
+          });
+        }
         setFindingPartnerForReg(null);
         setAvailableUnits([]);
         // Refetch event data to update the view
@@ -3246,13 +3392,26 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     setMergingUnits(true);
     try {
       const [target, source] = selectedUnitsForMerge;
+      const divisionId = target.divisionId || source.divisionId;
       const response = await tournamentApi.mergeRegistrations(event.id, target.id, source.id);
       if (response.success) {
         toast.success('Registrations merged successfully');
         setSelectedUnitsForMerge([]);
-        // Refresh division registrations
-        if (selectedRegDivisionId) {
-          loadDivisionRegistrations(selectedRegDivisionId);
+        // Refetch division registrations immediately
+        if (divisionId) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divisionId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divisionId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divisionId) {
+              setDivisionRegistrations(sorted);
+            }
+          }
         }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
@@ -3280,14 +3439,28 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
     setMovingUnit(true);
     try {
+      const oldDivisionId = unitToMove.divisionId;
       const response = await tournamentApi.moveRegistration(event.id, unitToMove.id, newDivisionId);
       if (response.success) {
         toast.success('Registration moved successfully');
         setShowMoveModal(false);
         setUnitToMove(null);
-        // Refresh division registrations
-        if (selectedRegDivisionId) {
-          loadDivisionRegistrations(selectedRegDivisionId);
+        // Refetch both source and target division registrations
+        const divisionsToRefresh = [oldDivisionId, newDivisionId].filter(Boolean);
+        for (const divId of divisionsToRefresh) {
+          const divResponse = await tournamentApi.getEventUnits(event.id, divId);
+          if (divResponse.success) {
+            const sorted = (divResponse.data || []).sort((a, b) => {
+              if (a.isComplete && !b.isComplete) return -1;
+              if (!a.isComplete && b.isComplete) return 1;
+              return 0;
+            });
+            setDivisionRegistrationsCache(prev => ({ ...prev, [divId]: sorted }));
+            // Also update legacy modal state if viewing this division
+            if (selectedDivisionForViewing?.id === divId) {
+              setDivisionRegistrations(sorted);
+            }
+          }
         }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
@@ -3463,8 +3636,54 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 Manage
               </button>
             )}
+            {isOrganizer && (
+              <button
+                onClick={() => setActiveTab('payments')}
+                className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'payments' ? 'border-orange-600 text-orange-600' : 'border-transparent text-gray-500'
+                }`}
+              >
+                Payments
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Live Drawing Button - Show when event is in Drawing status */}
+        {event.tournamentStatus === 'Drawing' && (() => {
+          const isEventOrganizer = isAuthenticated && currentUserId === event.organizedByUserId;
+          const canManageDrawing = isEventOrganizer || isAdmin;
+
+          return (
+            <div className={`mx-6 mt-4 p-4 rounded-xl ${canManageDrawing ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-to-r from-orange-500 to-red-500'}`}>
+              <Link
+                to={`/event/${event.id}/drawing`}
+                onClick={onClose}
+                className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 shadow-lg ${
+                  canManageDrawing
+                    ? 'bg-white text-purple-600 hover:bg-purple-50'
+                    : 'bg-white text-orange-600 hover:bg-orange-50'
+                }`}
+              >
+                {canManageDrawing ? (
+                  <>
+                    <Settings className="w-5 h-5" />
+                    Manage Drawing
+                  </>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Radio className="w-5 h-5" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                    </div>
+                    Live Drawing
+                  </>
+                )}
+              </Link>
+            </div>
+          );
+        })()}
 
         <div className="p-6">
           {/* Details Tab */}
@@ -4224,11 +4443,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       const isPendingInvite = member.inviteStatus === 'Pending';
                                       // Payment status at unit level
                                       const unitPaymentStatus = unit.paymentStatus;
-                                      const hasPaymentSubmitted = unitPaymentStatus === 'PendingVerification' || unitPaymentStatus === 'Paid' || unitPaymentStatus === 'Partial';
                                       // Member's payment is verified if unit is fully Paid, or if Partial and this member has been verified
                                       const isPaymentVerified = unitPaymentStatus === 'Paid' || (unitPaymentStatus === 'Partial' && member.hasPaid);
-                                      // Can remove only if no payment has been submitted
-                                      const canRemove = isOrganizer && !hasPaymentSubmitted;
 
                                       return (
                                         <div key={mIdx} className="flex items-center gap-1 shrink-0">
@@ -4307,8 +4523,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                               </button>
                                             );
                                           })()}
-                                          {/* Trash icon - only if no payment submitted */}
-                                          {canRemove && (
+                                          {/* Trash icon for admin - remove member from unit */}
+                                          {isOrganizer && !isJoinRequest && member.inviteStatus === 'Accepted' && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -4319,6 +4535,31 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                             >
                                               <Trash2 className="w-4 h-4" />
                                             </button>
+                                          )}
+                                          {/* Admin: Accept/Reject join request - next to each join request member */}
+                                          {isOrganizer && isJoinRequest && member.joinRequestId && (
+                                            <>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleRespondToJoinRequestAdmin(member.joinRequestId, true, division.id);
+                                                }}
+                                                className="p-0.5 rounded text-green-600 hover:bg-green-100 transition-colors"
+                                                title={`Accept ${member.firstName || 'request'}`}
+                                              >
+                                                <Check className="w-4 h-4" />
+                                              </button>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleRespondToJoinRequestAdmin(member.joinRequestId, false, division.id);
+                                                }}
+                                                className="p-0.5 rounded text-red-600 hover:bg-red-100 transition-colors"
+                                                title={`Reject ${member.firstName || 'request'}`}
+                                              >
+                                                <X className="w-4 h-4" />
+                                              </button>
+                                            </>
                                           )}
                                         </div>
                                       );
@@ -4381,6 +4622,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                         <ArrowRight className="w-4 h-4" />
                                       </button>
                                     )}
+
                                   </div>
                                 </div>
                               );
@@ -4727,7 +4969,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                             onChange={handleDocumentUpload}
                             disabled={uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId}
                             className="hidden"
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg,.md,.html,.htm"
                           />
                           <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-colors ${
                             uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId
@@ -5301,6 +5543,202 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
               )}
             </div>
           )}
+
+          {/* Payments Tab */}
+          {activeTab === 'payments' && isOrganizer && (
+            <div className="space-y-6">
+              {loadingPayments ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                </div>
+              ) : !paymentSummary ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p>No payment data available</p>
+                  <button
+                    onClick={loadPaymentSummary}
+                    className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                  >
+                    Load Payment Summary
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Total Expected</p>
+                      <p className="text-2xl font-bold text-gray-900">${paymentSummary.totalExpected?.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Total Paid</p>
+                      <p className="text-2xl font-bold text-green-600">${paymentSummary.totalPaid?.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Outstanding</p>
+                      <p className={`text-2xl font-bold ${paymentSummary.totalOutstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        ${paymentSummary.totalOutstanding?.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Status</p>
+                      <p className={`text-lg font-bold ${paymentSummary.isBalanced ? 'text-green-600' : 'text-orange-600'}`}>
+                        {paymentSummary.isBalanced ? 'Balanced' : 'Incomplete'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {paymentSummary.unitsFullyPaid} paid / {paymentSummary.unitsPartiallyPaid} partial / {paymentSummary.unitsUnpaid} unpaid
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Division Breakdown */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900">Payment by Division</h3>
+                    {paymentSummary.divisionPayments?.map(division => (
+                      <div key={division.divisionId} className="bg-white rounded-lg border overflow-hidden">
+                        <button
+                          onClick={() => setExpandedDivisions(prev => ({
+                            ...prev,
+                            [division.divisionId]: !prev[division.divisionId]
+                          }))}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium">{division.divisionName}</span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              division.isBalanced ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {division.isBalanced ? 'Balanced' : `$${(division.totalExpected - division.totalPaid).toFixed(2)} outstanding`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm text-gray-500">
+                              ${division.totalPaid?.toFixed(2)} / ${division.totalExpected?.toFixed(2)}
+                            </span>
+                            {expandedDivisions[division.divisionId] ? (
+                              <ChevronUp className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            )}
+                          </div>
+                        </button>
+
+                        {expandedDivisions[division.divisionId] && (
+                          <div className="border-t divide-y">
+                            {division.units?.map(unit => (
+                              <div key={unit.unitId} className="px-4 py-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-sm">{unit.unitName}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                      unit.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+                                      unit.paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {unit.paymentStatus}
+                                    </span>
+                                    <span className="text-sm text-gray-600">
+                                      ${unit.amountPaid?.toFixed(2)} / ${unit.amountDue?.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                                {unit.paymentProofUrl && (
+                                  <a
+                                    href={unit.paymentProofUrl.startsWith('http') ? unit.paymentProofUrl : `https://shared.funtimepb.com${unit.paymentProofUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline"
+                                  >
+                                    View Payment Proof
+                                  </a>
+                                )}
+                                {unit.paymentReference && (
+                                  <p className="text-xs text-gray-500">Ref: {unit.paymentReference}</p>
+                                )}
+                                {unit.members?.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {unit.members.map(member => (
+                                      <div key={member.userId} className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-600">{member.userName}</span>
+                                        <span className={member.hasPaid ? 'text-green-600' : 'text-gray-400'}>
+                                          {member.hasPaid ? `Paid $${member.amountPaid?.toFixed(2)}` : 'Not paid'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent Payments */}
+                  {paymentSummary.recentPayments?.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-gray-900">Recent Payments</h3>
+                      <div className="bg-white rounded-lg border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">User</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Method</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {paymentSummary.recentPayments.map(payment => (
+                              <tr key={payment.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-2">
+                                  <div>{payment.userName}</div>
+                                  <div className="text-xs text-gray-500">{payment.userEmail}</div>
+                                </td>
+                                <td className="px-4 py-2 font-medium">${payment.amount?.toFixed(2)}</td>
+                                <td className="px-4 py-2 text-gray-600">{payment.paymentMethod || '-'}</td>
+                                <td className="px-4 py-2">
+                                  {payment.paymentProofUrl && (
+                                    <a
+                                      href={payment.paymentProofUrl.startsWith('http') ? payment.paymentProofUrl : `https://shared.funtimepb.com${payment.paymentProofUrl}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:underline"
+                                    >
+                                      Proof
+                                    </a>
+                                  )}
+                                  {payment.paymentReference && (
+                                    <span className="text-gray-500 ml-2">{payment.paymentReference}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-gray-500">
+                                  {new Date(payment.createdAt).toLocaleDateString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Refresh Button */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={loadPaymentSummary}
+                      disabled={loadingPayments}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <RefreshCcw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -5549,6 +5987,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                     const teamSize = unit.requiredPlayers || 1;
                     const isComplete = unit.isComplete;
                     const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
+                    const pendingJoinRequests = unit.members?.filter(m => m.joinRequestId) || [];
 
                     return (
                       <div
@@ -5574,26 +6013,60 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
                         {/* Doubles display */}
                         {teamSize === 2 && (
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
-                            <div className="flex items-center gap-2">
-                              {acceptedMembers.map((member, mIndex) => (
-                                <div key={member.id} className="flex items-center gap-2">
-                                  {mIndex > 0 && <span className="text-gray-400">&</span>}
-                                  <img
-                                    src={member.profileImageUrl || '/default-avatar.png'}
-                                    alt=""
-                                    className="w-8 h-8 rounded-full object-cover"
-                                  />
-                                  <span className="text-gray-900">
-                                    {member.firstName} {member.lastName}
-                                  </span>
-                                </div>
-                              ))}
-                              {!isComplete && (
-                                <span className="text-yellow-600 text-sm ml-2">(looking for partner)</span>
-                              )}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                              <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {acceptedMembers.map((member, mIndex) => (
+                                  <div key={member.id} className="flex items-center gap-2">
+                                    {mIndex > 0 && <span className="text-gray-400">&</span>}
+                                    <img
+                                      src={member.profileImageUrl || '/default-avatar.png'}
+                                      alt=""
+                                      className="w-8 h-8 rounded-full object-cover"
+                                    />
+                                    <span className="text-gray-900">
+                                      {member.firstName} {member.lastName}
+                                    </span>
+                                  </div>
+                                ))}
+                                {!isComplete && pendingJoinRequests.length === 0 && (
+                                  <span className="text-yellow-600 text-sm ml-2">(looking for partner)</span>
+                                )}
+                              </div>
                             </div>
+                            {/* Pending Join Requests */}
+                            {pendingJoinRequests.length > 0 && (
+                              <div className="ml-9 flex flex-wrap gap-2">
+                                {pendingJoinRequests.map((member) => (
+                                  <div key={member.joinRequestId} className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-full px-2 py-1">
+                                    <img
+                                      src={member.profileImageUrl || '/default-avatar.png'}
+                                      alt=""
+                                      className="w-6 h-6 rounded-full object-cover"
+                                    />
+                                    <span className="text-sm text-orange-700">
+                                      {member.firstName} {member.lastName}
+                                    </span>
+                                    <span className="text-xs text-orange-500">(pending)</span>
+                                    <button
+                                      onClick={() => handleRespondToJoinRequestAdmin(member.joinRequestId, true, selectedDivisionForViewing?.id)}
+                                      className="p-1 hover:bg-green-100 rounded-full text-green-600"
+                                      title="Accept"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRespondToJoinRequestAdmin(member.joinRequestId, false, selectedDivisionForViewing?.id)}
+                                      className="p-1 hover:bg-red-100 rounded-full text-red-600"
+                                      title="Reject"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -5620,6 +6093,34 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                   <span className="text-sm text-gray-700">
                                     {member.firstName} {member.lastName}
                                   </span>
+                                </div>
+                              ))}
+                              {/* Pending Join Requests for teams */}
+                              {pendingJoinRequests.map((member) => (
+                                <div key={member.joinRequestId} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-full px-2 py-1">
+                                  <img
+                                    src={member.profileImageUrl || '/default-avatar.png'}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                  <span className="text-sm text-orange-700">
+                                    {member.firstName} {member.lastName}
+                                  </span>
+                                  <span className="text-xs text-orange-500">(pending)</span>
+                                  <button
+                                    onClick={() => handleRespondToJoinRequestAdmin(member.joinRequestId, true, selectedDivisionForViewing?.id)}
+                                    className="p-0.5 hover:bg-green-100 rounded-full text-green-600"
+                                    title="Accept"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleRespondToJoinRequestAdmin(member.joinRequestId, false, selectedDivisionForViewing?.id)}
+                                    className="p-0.5 hover:bg-red-100 rounded-full text-red-600"
+                                    title="Reject"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               ))}
                             </div>
@@ -6023,6 +6524,25 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             };
           };
 
+          // Update the modal's unit data immediately so changes reflect without closing
+          setSelectedAdminPaymentUnit(prev => {
+            if (!prev) return prev;
+            const updated = updateUnit(prev);
+            // Also update the selectedMember if it matches
+            if (updated.selectedMember?.userId === paymentInfo.userId) {
+              updated.selectedMember = {
+                ...updated.selectedMember,
+                hasPaid: paymentInfo.hasPaid,
+                paidAt: paymentInfo.paidAt,
+                amountPaid: paymentInfo.amountPaid,
+                paymentProofUrl: paymentInfo.paymentProofUrl,
+                paymentReference: paymentInfo.paymentReference,
+                referenceId: paymentInfo.referenceId
+              };
+            }
+            return updated;
+          });
+
           // Update allRegistrations
           setAllRegistrations(prev => prev.map(updateUnit));
 
@@ -6034,6 +6554,9 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             });
             return updated;
           });
+
+          // Update divisionRegistrations (legacy modal state) if it contains this unit
+          setDivisionRegistrations(prev => prev.map(updateUnit));
 
           // Refresh from server to ensure consistency
           onUpdate();

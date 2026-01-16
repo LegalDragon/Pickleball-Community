@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Services;
 using System.Security.Claims;
 
 namespace Pickleball.Community.Controllers;
@@ -14,11 +15,70 @@ public class CheckInController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<CheckInController> _logger;
+    private readonly IWaiverPdfService _waiverPdfService;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
-    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger)
+    public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService, IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
+        _waiverPdfService = waiverPdfService;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
+    }
+
+    // Helper to check if file is renderable (md/html)
+    private static bool IsRenderableFile(string? fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return false;
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext == ".md" || ext == ".html" || ext == ".htm";
+    }
+
+    // Convert relative URL to absolute using SharedAuth base URL
+    private string GetFullUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+
+        // Already a full URL
+        if (url.StartsWith("http://") || url.StartsWith("https://"))
+            return url;
+
+        // Get base URL from config
+        var baseUrl = _configuration["SharedAuth:BaseUrl"]?.TrimEnd('/');
+        if (string.IsNullOrEmpty(baseUrl))
+            return url;
+
+        // Ensure URL starts with /
+        if (!url.StartsWith("/"))
+            url = "/" + url;
+
+        return baseUrl + url;
+    }
+
+    // Fetch content from URL for renderable files
+    private async Task<string> FetchFileContentAsync(string url)
+    {
+        try
+        {
+            // Convert relative URL to full URL
+            var fullUrl = GetFullUrl(url);
+            _logger.LogInformation("Fetching waiver content from {Url}", fullUrl);
+
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.GetAsync(fullUrl);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
+            _logger.LogWarning("Failed to fetch waiver content: {StatusCode}", response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch waiver content from {Url}", url);
+        }
+        return string.Empty;
     }
 
     private int GetUserId()
@@ -35,76 +95,137 @@ public class CheckInController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponse<PlayerCheckInStatusDto>>> GetCheckInStatus(int eventId)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        // Get user's registrations in this event
-        var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
-            .Include(m => m.Unit)
-                .ThenInclude(u => u!.Division)
-            .Include(m => m.WaiverDocument)
-            .ToListAsync();
-
-        if (!registrations.Any())
+        try
         {
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
+
+            // Get user's registrations in this event
+            var registrations = await _context.EventUnitMembers
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Include(m => m.User)
+                .Include(m => m.Unit)
+                    .ThenInclude(u => u!.Division)
+                .ToListAsync();
+
+            if (!registrations.Any())
+            {
+                return Ok(new ApiResponse<PlayerCheckInStatusDto>
+                {
+                    Success = true,
+                    Data = new PlayerCheckInStatusDto
+                    {
+                        IsRegistered = false,
+                        IsCheckedIn = false,
+                        WaiverSigned = false
+                    }
+                });
+            }
+
+            // Get waivers from ObjectAssets (newer system) - look for "Waiver" type documents
+            var pendingWaiverDtos = new List<WaiverDto>();
+            try
+            {
+                // First, get the ObjectType ID for "Event"
+                var eventObjectType = await _context.ObjectTypes
+                    .FirstOrDefaultAsync(ot => ot.Name == "Event");
+
+                if (eventObjectType != null)
+                {
+                    // Get waiver assets for this event
+                    var waiverAssets = await _context.ObjectAssets
+                        .Include(a => a.AssetType)
+                        .Where(a => a.ObjectTypeId == eventObjectType.Id
+                            && a.ObjectId == eventId
+                            && a.AssetType != null
+                            && a.AssetType.TypeName.ToLower() == "waiver")
+                        .ToListAsync();
+
+                    // Fetch content for renderable files (.md, .html)
+                    foreach (var w in waiverAssets)
+                    {
+                        var content = "";
+                        if (IsRenderableFile(w.FileName) && !string.IsNullOrEmpty(w.FileUrl))
+                        {
+                            content = await FetchFileContentAsync(w.FileUrl);
+                        }
+
+                        pendingWaiverDtos.Add(new WaiverDto
+                        {
+                            Id = w.Id,
+                            DocumentType = "waiver",
+                            Title = w.Title,
+                            Content = content,
+                            FileUrl = w.FileUrl,
+                            FileName = w.FileName,
+                            Version = 1,
+                            IsRequired = true,
+                            RequiresMinorWaiver = false,
+                            MinorAgeThreshold = 18
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not query ObjectAssets for waivers - table may not exist yet");
+            }
+
+            var firstReg = registrations.First();
+            var allWaiversSigned = !pendingWaiverDtos.Any() || firstReg.WaiverSignedAt != null;
+
+            // Filter out already signed waivers
+            if (firstReg.WaiverSignedAt != null)
+            {
+                pendingWaiverDtos = pendingWaiverDtos
+                    .Where(w => firstReg.WaiverDocumentId != w.Id)
+                    .ToList();
+            }
+
+            // Get player name
+            var playerName = firstReg.User != null
+                ? $"{firstReg.User.FirstName} {firstReg.User.LastName}".Trim()
+                : null;
+
+            // Get signed waiver PDF URL (convert relative to full URL if needed)
+            var signedPdfUrl = !string.IsNullOrEmpty(firstReg.SignedWaiverPdfUrl)
+                ? GetFullUrl(firstReg.SignedWaiverPdfUrl)
+                : null;
+
             return Ok(new ApiResponse<PlayerCheckInStatusDto>
             {
                 Success = true,
                 Data = new PlayerCheckInStatusDto
                 {
-                    IsRegistered = false,
-                    IsCheckedIn = false,
-                    WaiverSigned = false
+                    IsRegistered = true,
+                    IsCheckedIn = firstReg.IsCheckedIn,
+                    CheckedInAt = firstReg.CheckedInAt,
+                    WaiverSigned = allWaiversSigned,
+                    WaiverSignedAt = firstReg.WaiverSignedAt,
+                    SignedWaiverPdfUrl = signedPdfUrl,
+                    PlayerName = playerName,
+                    PendingWaivers = pendingWaiverDtos,
+                    Divisions = registrations.Select(r => new CheckInDivisionDto
+                    {
+                        DivisionId = r.Unit!.DivisionId,
+                        DivisionName = r.Unit.Division?.Name ?? "",
+                        UnitId = r.UnitId,
+                        UnitName = r.Unit.Name,
+                        IsCheckedIn = r.IsCheckedIn,
+                        CheckedInAt = r.CheckedInAt
+                    }).ToList()
                 }
             });
         }
-
-        // Get event check-in record
-        var checkIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
-
-        // Get event waivers
-        var waivers = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-            .ToListAsync();
-
-        var firstReg = registrations.First();
-        var allWaiversSigned = !waivers.Any() || firstReg.WaiverSignedAt != null;
-
-        return Ok(new ApiResponse<PlayerCheckInStatusDto>
+        catch (Exception ex)
         {
-            Success = true,
-            Data = new PlayerCheckInStatusDto
+            _logger.LogError(ex, "Error getting check-in status for event {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<PlayerCheckInStatusDto>
             {
-                IsRegistered = true,
-                IsCheckedIn = firstReg.IsCheckedIn,
-                CheckedInAt = firstReg.CheckedInAt,
-                WaiverSigned = allWaiversSigned,
-                WaiverSignedAt = firstReg.WaiverSignedAt,
-                PendingWaivers = waivers
-                    .Where(w => firstReg.WaiverSignedAt == null || firstReg.WaiverDocumentId != w.Id)
-                    .Select(w => new WaiverDto
-                    {
-                        Id = w.Id,
-                        Title = w.Title,
-                        Content = w.Content,
-                        Version = w.Version,
-                        IsRequired = w.IsRequired,
-                        RequiresMinorWaiver = w.RequiresMinorWaiver,
-                        MinorAgeThreshold = w.MinorAgeThreshold
-                    }).ToList(),
-                Divisions = registrations.Select(r => new CheckInDivisionDto
-                {
-                    DivisionId = r.Unit!.DivisionId,
-                    DivisionName = r.Unit.Division?.Name ?? "",
-                    UnitId = r.UnitId,
-                    UnitName = r.Unit.Name,
-                    IsCheckedIn = r.IsCheckedIn,
-                    CheckedInAt = r.CheckedInAt
-                }).ToList()
-            }
-        });
+                Success = false,
+                Message = $"Error getting check-in status: {ex.Message}"
+            });
+        }
     }
 
     /// <summary>
@@ -117,12 +238,33 @@ public class CheckInController : ControllerBase
         var userId = GetUserId();
         if (userId == 0) return Unauthorized();
 
-        // Verify waiver exists and is active
-        var waiver = await _context.EventWaivers
-            .FirstOrDefaultAsync(w => w.Id == request.WaiverId && w.EventId == eventId && w.IsActive);
+        // Get the event info
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
 
-        if (waiver == null)
+        // Find waiver in ObjectAssets
+        var objectAsset = await _context.ObjectAssets
+            .Include(a => a.AssetType)
+            .FirstOrDefaultAsync(a => a.Id == request.WaiverId
+                && a.ObjectId == eventId
+                && a.AssetType != null
+                && a.AssetType.TypeName.ToLower() == "waiver");
+
+        if (objectAsset == null)
             return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
+
+        // Fetch waiver content from file URL if available
+        string waiverContent = "";
+        if (!string.IsNullOrEmpty(objectAsset.FileUrl) && IsRenderableFile(objectAsset.FileName))
+        {
+            waiverContent = await FetchFileContentAsync(objectAsset.FileUrl);
+        }
+
+        // Get user info for legal record
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "User not found" });
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
@@ -132,31 +274,102 @@ public class CheckInController : ControllerBase
         if (!registrations.Any())
             return BadRequest(new ApiResponse<object> { Success = false, Message = "Not registered for this event" });
 
-        // Validate signature
+        // Validate typed signature
         if (string.IsNullOrWhiteSpace(request.Signature))
-            return BadRequest(new ApiResponse<object> { Success = false, Message = "Signature is required" });
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Typed signature is required" });
 
-        // Sign waiver for all registrations
-        foreach (var reg in registrations)
+        // Validate drawn signature
+        if (string.IsNullOrWhiteSpace(request.SignatureImage))
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Drawn signature is required" });
+
+        // Get IP address for legal record
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var signedAt = DateTime.Now;
+
+        // Get first registration for reference ID
+        var firstReg = registrations.First();
+
+        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}
+        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}";
+
+        // Get player name
+        var playerName = $"{user.FirstName} {user.LastName}".Trim();
+        if (string.IsNullOrEmpty(playerName))
+            playerName = user.Email ?? "Unknown";
+
+        // Process signature: upload assets, generate PDF, call notification SP
+        WaiverSigningResult? signingResult = null;
+        try
         {
-            reg.WaiverSignedAt = DateTime.Now;
-            reg.WaiverDocumentId = waiver.Id;
-            reg.WaiverSignature = request.Signature.Trim();
-            reg.WaiverSignerRole = request.SignerRole;
-            reg.ParentGuardianName = request.ParentGuardianName?.Trim();
-            reg.EmergencyPhone = request.EmergencyPhone?.Trim();
-            reg.ChineseName = request.ChineseName?.Trim();
+            var waiverDto = new WaiverDocumentDto
+            {
+                Id = objectAsset.Id,
+                EventId = eventId,
+                EventName = evt.Name,
+                Title = objectAsset.Title,
+                Content = waiverContent,
+                PlayerName = playerName,
+                ReferenceId = referenceId
+            };
+
+            signingResult = await _waiverPdfService.ProcessWaiverSignatureAsync(
+                waiverDto,
+                user,
+                request.Signature.Trim(),
+                request.SignatureImage,
+                signedAt,
+                ipAddress,
+                request.SignerRole,
+                request.ParentGuardianName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process waiver signature for user {UserId} event {EventId}", userId, eventId);
+            // Continue - waiver can still be signed even if asset upload fails
         }
 
+        // Sign waiver for all registrations - use basic fields that always exist
+        foreach (var reg in registrations)
+        {
+            reg.WaiverSignedAt = signedAt;
+            reg.WaiverDocumentId = objectAsset.Id;
+            reg.WaiverSignature = request.Signature.Trim();
+        }
+
+        // Try to save basic fields first
         await _context.SaveChangesAsync();
 
+        // Now try to update extended fields (may fail if columns don't exist yet)
+        try
+        {
+            foreach (var reg in registrations)
+            {
+                reg.SignatureAssetUrl = signingResult?.SignatureAssetUrl;
+                reg.SignedWaiverPdfUrl = signingResult?.SignedWaiverPdfUrl;
+                reg.SignerEmail = user.Email;
+                reg.SignerIpAddress = ipAddress;
+                reg.WaiverSignerRole = request.SignerRole;
+                reg.ParentGuardianName = request.ParentGuardianName?.Trim();
+            }
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not save extended waiver fields - migration may not have been run");
+            // Continue - basic waiver signing succeeded
+        }
+
         _logger.LogInformation("User {UserId} signed waiver {WaiverId} for event {EventId} with signature '{Signature}'",
-            userId, waiver.Id, eventId, request.Signature);
+            userId, objectAsset.Id, eventId, request.Signature);
 
         return Ok(new ApiResponse<object>
         {
             Success = true,
-            Message = "Waiver signed successfully"
+            Message = "Waiver signed successfully",
+            Data = new
+            {
+                SignedWaiverPdfUrl = signingResult?.SignedWaiverPdfUrl
+            }
         });
     }
 
@@ -167,108 +380,147 @@ public class CheckInController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponse<CheckInResultDto>>> CheckIn(int eventId)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        // Verify user is registered
-        var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
-            .Include(m => m.Unit)
-            .ToListAsync();
-
-        if (!registrations.Any())
-            return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
-
-        // Check if waiver is required but not signed
-        var pendingWaivers = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-            .ToListAsync();
-
-        var firstReg = registrations.First();
-        if (pendingWaivers.Any() && firstReg.WaiverSignedAt == null)
+        try
         {
-            return BadRequest(new ApiResponse<CheckInResultDto>
-            {
-                Success = false,
-                Message = "Please sign the waiver before checking in"
-            });
-        }
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
 
-        // Create or update event-level check-in
-        var existingCheckIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
-
-        if (existingCheckIn == null)
-        {
-            existingCheckIn = new EventCheckIn
-            {
-                EventId = eventId,
-                UserId = userId,
-                CheckInMethod = CheckInMethod.Self,
-                CheckedInAt = DateTime.Now,
-                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-            };
-            _context.EventCheckIns.Add(existingCheckIn);
-        }
-
-        // Update all unit member check-ins
-        foreach (var reg in registrations)
-        {
-            reg.IsCheckedIn = true;
-            reg.CheckedInAt = DateTime.Now;
-        }
-
-        // Check if this makes any games ready
-        var readyGames = new List<int>();
-        foreach (var reg in registrations)
-        {
-            var unit = reg.Unit!;
-            // Find games where this unit is playing
-            var games = await _context.EventGames
-                .Include(g => g.Match)
-                    .ThenInclude(m => m!.Unit1)
-                        .ThenInclude(u => u!.Members)
-                .Include(g => g.Match)
-                    .ThenInclude(m => m!.Unit2)
-                        .ThenInclude(u => u!.Members)
-                .Where(g => g.Status == "New" &&
-                    (g.Match!.Unit1Id == unit.Id || g.Match.Unit2Id == unit.Id))
+            // Verify user is registered
+            var registrations = await _context.EventUnitMembers
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Include(m => m.Unit)
                 .ToListAsync();
 
-            foreach (var game in games)
+            if (!registrations.Any())
+                return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Not registered for this event" });
+
+            // Check if waiver is required but not signed (using ObjectAssets)
+            try
             {
-                var unit1Members = game.Match!.Unit1?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
-                var unit2Members = game.Match!.Unit2?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+                var pendingWaivers = await _context.ObjectAssets
+                    .Include(a => a.AssetType)
+                    .Include(a => a.ObjectType)
+                    .Where(a => a.ObjectType != null
+                        && a.ObjectType.Name == "Event"
+                        && a.ObjectId == eventId
+                        && a.AssetType != null
+                        && a.AssetType.TypeName.ToLower() == "waiver")
+                    .ToListAsync();
 
-                var allUnit1CheckedIn = unit1Members.All(m => m.IsCheckedIn);
-                var allUnit2CheckedIn = unit2Members.All(m => m.IsCheckedIn);
-
-                if (allUnit1CheckedIn && allUnit2CheckedIn && game.Status == "New")
+                var firstReg = registrations.First();
+                if (pendingWaivers.Any() && firstReg.WaiverSignedAt == null)
                 {
-                    game.Status = "Ready";
-                    game.UpdatedAt = DateTime.Now;
-                    readyGames.Add(game.Id);
+                    return BadRequest(new ApiResponse<CheckInResultDto>
+                    {
+                        Success = false,
+                        Message = "Please sign the waiver before checking in"
+                    });
                 }
             }
-        }
-
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("User {UserId} checked in to event {EventId}. {ReadyCount} games now ready.",
-            userId, eventId, readyGames.Count);
-
-        return Ok(new ApiResponse<CheckInResultDto>
-        {
-            Success = true,
-            Data = new CheckInResultDto
+            catch (Exception ex)
             {
-                CheckedInAt = DateTime.Now,
-                GamesNowReady = readyGames.Count,
-                Message = readyGames.Count > 0
-                    ? $"Checked in successfully! {readyGames.Count} game(s) are now ready to play."
-                    : "Checked in successfully!"
+                _logger.LogWarning(ex, "Could not query ObjectAssets table - skipping waiver check");
             }
-        });
+
+            // Create or update event-level check-in (gracefully handle missing table)
+            try
+            {
+                var existingCheckIn = await _context.EventCheckIns
+                    .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+
+                if (existingCheckIn == null)
+                {
+                    existingCheckIn = new EventCheckIn
+                    {
+                        EventId = eventId,
+                        UserId = userId,
+                        CheckInMethod = CheckInMethod.Self,
+                        CheckedInAt = DateTime.Now,
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+                    };
+                    _context.EventCheckIns.Add(existingCheckIn);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not query EventCheckIns table - skipping event-level check-in");
+            }
+
+            // Update all unit member check-ins
+            foreach (var reg in registrations)
+            {
+                reg.IsCheckedIn = true;
+                reg.CheckedInAt = DateTime.Now;
+            }
+
+            // Check if this makes any games ready (gracefully handle missing table)
+            var readyGames = new List<int>();
+            try
+            {
+                foreach (var reg in registrations)
+                {
+                    var unit = reg.Unit!;
+                    // Find games where this unit is playing
+                    var games = await _context.EventGames
+                        .Include(g => g.Match)
+                            .ThenInclude(m => m!.Unit1)
+                                .ThenInclude(u => u!.Members)
+                        .Include(g => g.Match)
+                            .ThenInclude(m => m!.Unit2)
+                                .ThenInclude(u => u!.Members)
+                        .Where(g => g.Status == "New" &&
+                            (g.Match!.Unit1Id == unit.Id || g.Match.Unit2Id == unit.Id))
+                        .ToListAsync();
+
+                    foreach (var game in games)
+                    {
+                        var unit1Members = game.Match!.Unit1?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+                        var unit2Members = game.Match!.Unit2?.Members.Where(m => m.InviteStatus == "Accepted").ToList() ?? new List<EventUnitMember>();
+
+                        var allUnit1CheckedIn = unit1Members.All(m => m.IsCheckedIn);
+                        var allUnit2CheckedIn = unit2Members.All(m => m.IsCheckedIn);
+
+                        if (allUnit1CheckedIn && allUnit2CheckedIn && game.Status == "New")
+                        {
+                            game.Status = "Ready";
+                            game.UpdatedAt = DateTime.Now;
+                            readyGames.Add(game.Id);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not query EventGames table - skipping game readiness check");
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("User {UserId} checked in to event {EventId}. {ReadyCount} games now ready.",
+                userId, eventId, readyGames.Count);
+
+            return Ok(new ApiResponse<CheckInResultDto>
+            {
+                Success = true,
+                Data = new CheckInResultDto
+                {
+                    CheckedInAt = DateTime.Now,
+                    GamesNowReady = readyGames.Count,
+                    Message = readyGames.Count > 0
+                        ? $"Checked in successfully! {readyGames.Count} game(s) are now ready to play."
+                        : "Checked in successfully!"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking in to event {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<CheckInResultDto>
+            {
+                Success = false,
+                Message = $"Error checking in: {ex.Message}"
+            });
+        }
     }
 
     /// <summary>
@@ -715,6 +967,8 @@ public class PlayerCheckInStatusDto
     public DateTime? CheckedInAt { get; set; }
     public bool WaiverSigned { get; set; }
     public DateTime? WaiverSignedAt { get; set; }
+    public string? SignedWaiverPdfUrl { get; set; }
+    public string? PlayerName { get; set; }
     public List<WaiverDto> PendingWaivers { get; set; } = new();
     public List<CheckInDivisionDto> Divisions { get; set; } = new();
 }
@@ -735,6 +989,8 @@ public class WaiverDto
     public string DocumentType { get; set; } = "waiver";
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    public string? FileUrl { get; set; }
+    public string? FileName { get; set; }
     public int Version { get; set; }
     public bool IsRequired { get; set; }
     public bool RequiresMinorWaiver { get; set; }
@@ -748,6 +1004,10 @@ public class SignWaiverRequest
     /// Digital signature (typed full name)
     /// </summary>
     public string Signature { get; set; } = string.Empty;
+    /// <summary>
+    /// Drawn signature image (base64 encoded PNG)
+    /// </summary>
+    public string? SignatureImage { get; set; }
     /// <summary>
     /// Who is signing: Participant, Parent, Guardian
     /// </summary>

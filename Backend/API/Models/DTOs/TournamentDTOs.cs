@@ -314,6 +314,22 @@ public class CreateTournamentCourtRequest
     public int SortOrder { get; set; }
 }
 
+public class BulkCreateCourtsRequest
+{
+    /// <summary>
+    /// Number of courts to create
+    /// </summary>
+    public int NumberOfCourts { get; set; }
+    /// <summary>
+    /// Optional prefix for court labels (default: "Court")
+    /// </summary>
+    public string? LabelPrefix { get; set; }
+    /// <summary>
+    /// Starting number for court labels (default: 1)
+    /// </summary>
+    public int StartingNumber { get; set; } = 1;
+}
+
 // ============================================
 // Event Match DTOs
 // ============================================
@@ -653,6 +669,15 @@ public class UploadPaymentProofRequest
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
     public decimal? AmountPaid { get; set; }
+    /// <summary>
+    /// Payment method: Cash, Zelle, Venmo, PayPal, CreditCard, Check, Other
+    /// </summary>
+    public string? PaymentMethod { get; set; }
+    /// <summary>
+    /// List of member IDs to apply payment to. If null/empty, applies only to the submitting user.
+    /// Allows a player to pay for the whole team by selecting all members.
+    /// </summary>
+    public List<int>? MemberIds { get; set; }
 }
 
 public class PaymentInfoDto
@@ -688,4 +713,92 @@ public class UpdateMemberPaymentRequest
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
     public string? ReferenceId { get; set; }
+}
+
+public class ApplyPaymentToTeammatesRequest
+{
+    /// <summary>
+    /// List of teammate user IDs to apply payment to
+    /// </summary>
+    public List<int> TargetMemberIds { get; set; } = new();
+    /// <summary>
+    /// If true, redistributes the source member's amount evenly across all members
+    /// </summary>
+    public bool RedistributeAmount { get; set; } = true;
+}
+
+// ==================== Payment Summary DTOs ====================
+
+public class EventPaymentSummaryDto
+{
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public decimal RegistrationFee { get; set; }
+    public int TotalUnits { get; set; }
+    public decimal TotalExpected { get; set; }
+    public decimal TotalPaid { get; set; }
+    public decimal TotalOutstanding { get; set; }
+    public int UnitsFullyPaid { get; set; }
+    public int UnitsPartiallyPaid { get; set; }
+    public int UnitsUnpaid { get; set; }
+    public bool IsBalanced { get; set; }
+    public List<DivisionPaymentSummaryDto> DivisionPayments { get; set; } = new();
+    public List<PaymentRecordDto> RecentPayments { get; set; } = new();
+}
+
+public class DivisionPaymentSummaryDto
+{
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public decimal ExpectedFeePerUnit { get; set; }
+    public int TotalUnits { get; set; }
+    public decimal TotalExpected { get; set; }
+    public decimal TotalPaid { get; set; }
+    public int UnitsFullyPaid { get; set; }
+    public int UnitsPartiallyPaid { get; set; }
+    public int UnitsUnpaid { get; set; }
+    public bool IsBalanced { get; set; }
+    public List<UnitPaymentDto> Units { get; set; } = new();
+}
+
+public class UnitPaymentDto
+{
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = "Pending";
+    public decimal AmountPaid { get; set; }
+    public decimal AmountDue { get; set; }
+    public string? PaymentProofUrl { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? ReferenceId { get; set; }
+    public DateTime? PaidAt { get; set; }
+    public List<UnitMemberPaymentDto> Members { get; set; } = new();
+}
+
+public class UnitMemberPaymentDto
+{
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string? UserEmail { get; set; }
+    public bool HasPaid { get; set; }
+    public decimal AmountPaid { get; set; }
+    public string? PaymentProofUrl { get; set; }
+    public string? PaymentReference { get; set; }
+    public DateTime? PaidAt { get; set; }
+}
+
+public class PaymentRecordDto
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string? UserEmail { get; set; }
+    public decimal Amount { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? PaymentProofUrl { get; set; }
+    public string? ReferenceId { get; set; }
+    public string? Status { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
 }
