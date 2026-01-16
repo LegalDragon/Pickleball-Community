@@ -4913,7 +4913,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                             onChange={handleDocumentUpload}
                             disabled={uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId}
                             className="hidden"
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg,.md,.html,.htm"
                           />
                           <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-colors ${
                             uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId
