@@ -286,6 +286,17 @@ public class CheckInController : ControllerBase
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
         var signedAt = DateTime.Now;
 
+        // Get first registration for reference ID
+        var firstReg = registrations.First();
+
+        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}
+        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}";
+
+        // Get player name
+        var playerName = $"{user.FirstName} {user.LastName}".Trim();
+        if (string.IsNullOrEmpty(playerName))
+            playerName = user.Email ?? "Unknown";
+
         // Process signature: upload assets, generate PDF, call notification SP
         WaiverSigningResult? signingResult = null;
         try
@@ -296,7 +307,9 @@ public class CheckInController : ControllerBase
                 EventId = eventId,
                 EventName = evt.Name,
                 Title = objectAsset.Title,
-                Content = waiverContent
+                Content = waiverContent,
+                PlayerName = playerName,
+                ReferenceId = referenceId
             };
 
             signingResult = await _waiverPdfService.ProcessWaiverSignatureAsync(

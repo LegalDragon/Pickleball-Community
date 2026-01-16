@@ -384,12 +384,13 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
   const [agreed, setAgreed] = useState(false)
   const [signature, setSignature] = useState(playerName || '')
   const [signatureImage, setSignatureImage] = useState(null)
-  const [signerRole, setSignerRole] = useState('Participant')
-  const [parentGuardianName, setParentGuardianName] = useState('')
+  const [signerType, setSignerType] = useState('Self') // Self or Guardian
+  const [guardianRelationship, setGuardianRelationship] = useState('Parent') // Parent, Guardian, Legal Custodian
+  const [guardianName, setGuardianName] = useState('')
   const [signing, setSigning] = useState(false)
   const [waiverContent, setWaiverContent] = useState('')
 
-  const isMinorWaiver = signerRole === 'Parent' || signerRole === 'Guardian'
+  const isGuardianSigning = signerType === 'Guardian'
 
   // Check if file is markdown or html based on extension
   const isRenderableFile = (fileName) => {
@@ -429,25 +430,28 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
 
   const handleSign = async () => {
     if (!signature.trim()) {
-      alert('Please enter your signature (full legal name)')
+      alert('Please enter the participant\'s full legal name')
       return
     }
     if (!signatureImage) {
       alert('Please draw your signature in the box below')
       return
     }
-    if (isMinorWaiver && !parentGuardianName.trim()) {
-      alert('Please enter your name as parent/guardian')
+    if (isGuardianSigning && !guardianName.trim()) {
+      alert('Please enter the guardian/signer\'s name')
       return
     }
 
     setSigning(true)
     try {
+      // Map to backend format
+      const signerRole = isGuardianSigning ? guardianRelationship : 'Participant'
       await onSign(currentWaiver.id, {
         signature: signature.trim(),
         signatureImage,
         signerRole,
-        parentGuardianName: isMinorWaiver ? parentGuardianName.trim() : null
+        parentGuardianName: isGuardianSigning ? guardianName.trim() : null,
+        guardianRelationship: isGuardianSigning ? guardianRelationship : null
       })
     } finally {
       setSigning(false)
@@ -502,62 +506,77 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
 
           {/* Signature Section */}
           <div className="mt-4 space-y-3">
-            {/* Signer Role Selection */}
-            {currentWaiver.requiresMinorWaiver && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Who is signing?
-                </label>
-                <div className="flex gap-2">
-                  {['Participant', 'Parent', 'Guardian'].map(role => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => setSignerRole(role)}
-                      className={`flex-1 py-2 text-sm rounded-lg border ${
-                        signerRole === role
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
+            {/* Signer Type Selection - Self or Guardian */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Who is signing this waiver?
+              </label>
+              <div className="flex gap-2">
+                {[
+                  { value: 'Self', label: 'Self (Participant)' },
+                  { value: 'Guardian', label: 'Guardian/Parent' }
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSignerType(option.value)}
+                    className={`flex-1 py-2 text-sm rounded-lg border ${
+                      signerType === option.value
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
 
-            {/* Parent/Guardian Info for minors */}
-            {isMinorWaiver && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800 mb-3">
-                  For participants under {currentWaiver.minorAgeThreshold || 18} years old:
+            {/* Guardian Details - Only shown when Guardian is signing */}
+            {isGuardianSigning && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                <p className="text-sm text-amber-800">
+                  Signing on behalf of the participant:
                 </p>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Parent/Guardian Full Name *
+                    Relationship to Participant *
+                  </label>
+                  <select
+                    value={guardianRelationship}
+                    onChange={(e) => setGuardianRelationship(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                  >
+                    <option value="Parent">Parent</option>
+                    <option value="Guardian">Legal Guardian</option>
+                    <option value="Legal Custodian">Legal Custodian</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Your Full Name (Signer) *
                   </label>
                   <input
                     type="text"
-                    value={parentGuardianName}
-                    onChange={(e) => setParentGuardianName(e.target.value)}
-                    placeholder="Your full legal name"
+                    value={guardianName}
+                    onChange={(e) => setGuardianName(e.target.value)}
+                    placeholder="Guardian/Parent's full legal name"
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
               </div>
             )}
 
-            {/* Digital Signature - Typed */}
+            {/* Participant's Full Legal Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {isMinorWaiver ? "Participant's Full Legal Name *" : 'Full Legal Name *'}
+                Participant's Full Legal Name *
               </label>
               <input
                 type="text"
                 value={signature}
                 onChange={(e) => setSignature(e.target.value)}
-                placeholder="Type your full legal name"
+                placeholder="Type participant's full legal name"
                 className="w-full px-3 py-2 border rounded-lg font-medium"
                 style={{ fontFamily: 'cursive, serif' }}
               />
@@ -566,7 +585,7 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
             {/* Drawn Signature */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Draw Your Signature *
+                {isGuardianSigning ? "Guardian's Signature *" : "Your Signature *"}
               </label>
               <div className="flex justify-center">
                 <SignatureCanvas
@@ -577,7 +596,9 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
                 />
               </div>
               <p className="text-xs text-gray-500 mt-1 text-center">
-                By signing above, you are electronically signing this waiver
+                {isGuardianSigning
+                  ? `By signing above, you (${guardianRelationship}) are electronically signing this waiver on behalf of the participant`
+                  : 'By signing above, you are electronically signing this waiver'}
               </p>
             </div>
 
@@ -607,7 +628,7 @@ function WaiverModal({ waivers, playerName, onSign, onClose }) {
             </button>
             <button
               onClick={handleSign}
-              disabled={!agreed || !signature.trim() || !signatureImage || signing}
+              disabled={!agreed || !signature.trim() || !signatureImage || signing || (isGuardianSigning && !guardianName.trim())}
               className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {signing ? 'Signing...' : 'Sign Waiver'}

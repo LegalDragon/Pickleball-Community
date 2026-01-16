@@ -165,7 +165,18 @@ public class WaiverPdfService : IWaiverPdfService
         {
             column.Item().Text(waiver.EventName).Bold().FontSize(16);
             column.Item().Text(waiver.Title).Bold().FontSize(14);
-            column.Item().PaddingBottom(10).LineHorizontal(1);
+            column.Item().PaddingTop(5).Row(row =>
+            {
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text($"Player: {waiver.PlayerName}").FontSize(11);
+                    if (!string.IsNullOrEmpty(waiver.ReferenceId))
+                    {
+                        c.Item().Text($"Reference ID: {waiver.ReferenceId}").FontSize(11);
+                    }
+                });
+            });
+            column.Item().PaddingTop(5).PaddingBottom(10).LineHorizontal(1);
         });
     }
 
@@ -190,15 +201,22 @@ public class WaiverPdfService : IWaiverPdfService
             column.Item().PaddingTop(20).LineHorizontal(1);
             column.Item().PaddingTop(10).Text("SIGNATURE").Bold().FontSize(12);
 
+            // Determine if this is a guardian signing (Parent, Guardian, Legal Custodian)
+            var isGuardianSigning = signerRole != "Participant" && signerRole != "Self";
+            var signerTypeDisplay = isGuardianSigning
+                ? $"Guardian ({signerRole})"
+                : "Self (Participant)";
+
             column.Item().PaddingTop(10).Row(row =>
             {
                 row.RelativeItem().Column(c =>
                 {
-                    c.Item().Text($"Signed by: {typedSignature}").Bold();
-                    c.Item().Text($"Signer Role: {signerRole}");
-                    if (!string.IsNullOrEmpty(parentGuardianName))
+                    c.Item().Text($"Participant Name: {typedSignature}").Bold();
+                    c.Item().Text($"Signed By: {signerTypeDisplay}");
+                    if (isGuardianSigning && !string.IsNullOrEmpty(parentGuardianName))
                     {
-                        c.Item().Text($"Parent/Guardian: {parentGuardianName}");
+                        c.Item().Text($"Guardian Name: {parentGuardianName}").Bold();
+                        c.Item().Text($"Relationship: {signerRole}");
                     }
                     c.Item().Text($"Email: {user.Email}");
                     c.Item().Text($"Date: {signedAt:MMMM dd, yyyy 'at' h:mm tt}");
@@ -210,7 +228,10 @@ public class WaiverPdfService : IWaiverPdfService
             });
 
             // Drawn signature image
-            column.Item().PaddingTop(15).Text("Signature:");
+            var signatureLabel = isGuardianSigning && !string.IsNullOrEmpty(parentGuardianName)
+                ? $"Guardian's Signature ({parentGuardianName}):"
+                : "Participant's Signature:";
+            column.Item().PaddingTop(15).Text(signatureLabel);
             column.Item().PaddingTop(5)
                 .Border(1)
                 .BorderColor(Colors.Grey.Medium)

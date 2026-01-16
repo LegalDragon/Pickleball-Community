@@ -10,4 +10,14 @@ public class WaiverDocumentDto
     public string EventName { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Player's full name for PDF header
+    /// </summary>
+    public string PlayerName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Reference ID in format E{eventId}-W{waiverId}-M{memberId} for tracking
+    /// </summary>
+    public string ReferenceId { get; set; } = string.Empty;
 }
