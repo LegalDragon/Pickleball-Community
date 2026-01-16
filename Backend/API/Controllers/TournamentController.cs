@@ -4561,9 +4561,9 @@ public class TournamentController : ControllerBase
             {
                 DivisionId = division.Id,
                 DivisionName = division.Name,
-                ExpectedFeePerUnit = (evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0),
+                ExpectedFeePerUnit = (evt.RegistrationFee ?? 0m) + (division.DivisionFee ?? 0m),
                 TotalUnits = divUnits.Count,
-                TotalExpected = divUnits.Count * ((evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0)),
+                TotalExpected = divUnits.Count * ((evt.RegistrationFee ?? 0m) + (division.DivisionFee ?? 0m)),
                 TotalPaid = divUnits.Sum(u => u.AmountPaid),
                 Units = divUnits.Select(u => new UnitPaymentDto
                 {
@@ -4571,7 +4571,7 @@ public class TournamentController : ControllerBase
                     UnitName = u.Name,
                     PaymentStatus = u.PaymentStatus ?? "Pending",
                     AmountPaid = u.AmountPaid,
-                    AmountDue = (evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0),
+                    AmountDue = (evt.RegistrationFee ?? 0m) + (division.DivisionFee ?? 0m),
                     PaymentProofUrl = u.PaymentProofUrl,
                     PaymentReference = u.PaymentReference,
                     ReferenceId = u.ReferenceId,
@@ -4604,7 +4604,7 @@ public class TournamentController : ControllerBase
         {
             EventId = eventId,
             EventName = evt.Name,
-            RegistrationFee = evt.RegistrationFee ?? 0,
+            RegistrationFee = evt.RegistrationFee ?? 0m,
             TotalUnits = units.Count,
             TotalExpected = divisionPayments.Sum(d => d.TotalExpected),
             TotalPaid = divisionPayments.Sum(d => d.TotalPaid),

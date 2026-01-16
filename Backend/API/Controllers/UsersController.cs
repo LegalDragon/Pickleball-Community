@@ -17,15 +17,18 @@ public class UsersController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IAssetService _assetService;
     private readonly ILogger<UsersController> _logger;
+    private readonly IConfiguration _configuration;
 
     public UsersController(
         ApplicationDbContext context,
         IAssetService assetService,
-        ILogger<UsersController> logger)
+        ILogger<UsersController> logger,
+        IConfiguration configuration)
     {
         _context = context;
         _assetService = assetService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     private int? GetCurrentUserId()
