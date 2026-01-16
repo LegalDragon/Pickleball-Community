@@ -439,6 +439,7 @@ export default function TournamentManage() {
     RegistrationOpen: 'bg-green-100 text-green-700',
     RegistrationClosed: 'bg-yellow-100 text-yellow-700',
     ScheduleReady: 'bg-blue-100 text-blue-700',
+    Drawing: 'bg-orange-100 text-orange-700',
     Running: 'bg-purple-100 text-purple-700',
     Completed: 'bg-gray-100 text-gray-700',
     Cancelled: 'bg-red-100 text-red-700'
@@ -480,6 +481,7 @@ export default function TournamentManage() {
                   <option value="RegistrationOpen">Registration Open</option>
                   <option value="RegistrationClosed">Registration Closed</option>
                   <option value="ScheduleReady">Schedule Ready</option>
+                  <option value="Drawing">Drawing</option>
                   <option value="Running">Running</option>
                   <option value="Completed">Completed</option>
                 </select>
