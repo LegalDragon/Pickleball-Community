@@ -802,3 +802,47 @@ public class PaymentRecordDto
     public DateTime CreatedAt { get; set; }
     public DateTime? VerifiedAt { get; set; }
 }
+
+// ============================================
+// Admin Registration DTOs
+// ============================================
+
+/// <summary>
+/// Request to add a user registration to an event (admin/organizer only)
+/// </summary>
+public class AdminAddRegistrationRequest
+{
+    /// <summary>
+    /// The user ID to register for the event
+    /// </summary>
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// The division ID to register the user for
+    /// </summary>
+    public int DivisionId { get; set; }
+
+    /// <summary>
+    /// Optional partner user ID for doubles/team events
+    /// </summary>
+    public int? PartnerUserId { get; set; }
+
+    /// <summary>
+    /// Whether to auto-check-in the user (for on-site registrations)
+    /// </summary>
+    public bool AutoCheckIn { get; set; } = false;
+}
+
+/// <summary>
+/// User search result for admin registration
+/// </summary>
+public class UserSearchResultDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public bool IsAlreadyRegistered { get; set; }
+}

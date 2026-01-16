@@ -1803,6 +1803,14 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // Admin add registration state
+  const [showAddRegistration, setShowAddRegistration] = useState(false);
+  const [addRegDivisionId, setAddRegDivisionId] = useState(null);
+  const [addRegSearchQuery, setAddRegSearchQuery] = useState('');
+  const [addRegSearchResults, setAddRegSearchResults] = useState([]);
+  const [addRegSearching, setAddRegSearching] = useState(false);
+  const [addingRegistration, setAddingRegistration] = useState(null);
+
   // Handle delete event (draft only)
   const handleDeleteEvent = async () => {
     if (deleteConfirmText !== 'DELETE') return;
@@ -1824,6 +1832,59 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
       setDeleting(false);
       setShowDeleteConfirm(false);
       setDeleteConfirmText('');
+    }
+  };
+
+  // Handle admin add registration - search users
+  const handleAddRegSearch = async (query) => {
+    setAddRegSearchQuery(query);
+    if (query.length < 2) {
+      setAddRegSearchResults([]);
+      return;
+    }
+
+    setAddRegSearching(true);
+    try {
+      const response = await tournamentApi.searchUsersForRegistration(event.id, query);
+      if (response.success) {
+        setAddRegSearchResults(response.data || []);
+      }
+    } catch (err) {
+      console.error('Search users error:', err);
+      toast.error('Failed to search users');
+    } finally {
+      setAddRegSearching(false);
+    }
+  };
+
+  // Handle admin add registration - add user
+  const handleAddRegistration = async (userId, autoCheckIn = false) => {
+    if (!addRegDivisionId) return;
+
+    setAddingRegistration(userId);
+    try {
+      const response = await tournamentApi.adminRegisterUser(event.id, {
+        userId,
+        divisionId: addRegDivisionId,
+        autoCheckIn
+      });
+      if (response.success) {
+        toast.success(response.message || 'Registration added successfully');
+        // Refresh the division registrations
+        loadDivisionRegistrations({ id: addRegDivisionId });
+        // Clear search and close modal
+        setAddRegSearchQuery('');
+        setAddRegSearchResults([]);
+        setShowAddRegistration(false);
+        setAddRegDivisionId(null);
+      } else {
+        toast.error(response.message || 'Failed to add registration');
+      }
+    } catch (err) {
+      console.error('Add registration error:', err);
+      toast.error(err.response?.data?.message || 'Failed to add registration');
+    } finally {
+      setAddingRegistration(null);
     }
   };
 
@@ -4344,6 +4405,21 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                               Registered
                             </span>
                           ) : null}
+
+                          {/* Admin Add Registration Button */}
+                          {isOrganizer && (
+                            <button
+                              onClick={() => {
+                                setAddRegDivisionId(division.id);
+                                setShowAddRegistration(true);
+                              }}
+                              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap flex items-center gap-1.5"
+                              title="Add a user to this division"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                              Add Player
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -6569,6 +6645,131 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         onClose={() => setSelectedMemberPayment(null)}
         memberPayment={selectedMemberPayment}
       />
+
+      {/* Admin Add Registration Modal */}
+      {showAddRegistration && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1100]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Add Registration</h3>
+                <p className="text-sm text-gray-600">
+                  {event.divisions?.find(d => d.id === addRegDivisionId)?.name || 'Selected Division'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddRegistration(false);
+                  setAddRegDivisionId(null);
+                  setAddRegSearchQuery('');
+                  setAddRegSearchResults([]);
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={addRegSearchQuery}
+                  onChange={(e) => handleAddRegSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+                {addRegSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {addRegSearchQuery.length < 2 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Search className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>Enter at least 2 characters to search</p>
+                </div>
+              ) : addRegSearchResults.length === 0 && !addRegSearching ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>No users found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {addRegSearchResults.map((searchUser) => (
+                    <div
+                      key={searchUser.userId}
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        {searchUser.profileImageUrl ? (
+                          <img
+                            src={getSharedAssetUrl(searchUser.profileImageUrl)}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                            <User className="w-5 h-5 text-gray-500" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium text-gray-900">{searchUser.name}</p>
+                          <p className="text-sm text-gray-500">{searchUser.email}</p>
+                          {(searchUser.city || searchUser.state) && (
+                            <p className="text-xs text-gray-400">
+                              {[searchUser.city, searchUser.state].filter(Boolean).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {searchUser.isAlreadyRegistered ? (
+                          <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
+                            Already Registered
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleAddRegistration(searchUser.userId, false)}
+                              disabled={addingRegistration === searchUser.userId}
+                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {addingRegistration === searchUser.userId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <UserPlus className="w-4 h-4" />
+                              )}
+                              Add
+                            </button>
+                            <button
+                              onClick={() => handleAddRegistration(searchUser.userId, true)}
+                              disabled={addingRegistration === searchUser.userId}
+                              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                              title="Add and auto check-in"
+                            >
+                              {addingRegistration === searchUser.userId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                              Add + Check-in
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Public Profile Modal */}
       {selectedProfileUserId && (

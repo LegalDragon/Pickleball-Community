@@ -493,6 +493,239 @@ public class TournamentController : ControllerBase
     }
 
     // ============================================
+    // Admin Registration (Organizer adds users to event)
+    // ============================================
+
+    /// <summary>
+    /// Search for users to add to event registration (organizer only)
+    /// </summary>
+    [Authorize]
+    [HttpGet("events/{eventId}/search-users")]
+    public async Task<ActionResult<ApiResponse<List<UserSearchResultDto>>>> SearchUsersForRegistration(int eventId, [FromQuery] string query)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<UserSearchResultDto>> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is organizer or admin
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<List<UserSearchResultDto>> { Success = false, Message = "Event not found" });
+
+        var isOrganizer = evt.OrganizedByUserId == userId.Value;
+        var isAdmin = await IsAdminAsync();
+
+        if (!isOrganizer && !isAdmin)
+            return Forbid();
+
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            return Ok(new ApiResponse<List<UserSearchResultDto>> { Success = true, Data = new List<UserSearchResultDto>() });
+
+        // Get users already registered for this event
+        var registeredUserIds = (await _context.EventUnitMembers
+            .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync()).ToHashSet();
+
+        // Search for users by name or email
+        var queryLower = query.ToLower();
+        var users = await _context.Users
+            .Where(u => (u.FirstName != null && u.FirstName.ToLower().Contains(queryLower)) ||
+                       (u.LastName != null && u.LastName.ToLower().Contains(queryLower)) ||
+                       (u.Email != null && u.Email.ToLower().Contains(queryLower)))
+            .Take(20)
+            .Select(u => new UserSearchResultDto
+            {
+                UserId = u.Id,
+                Name = Utility.FormatName(u.LastName, u.FirstName) ?? "",
+                Email = u.Email,
+                ProfileImageUrl = u.ProfileImageUrl,
+                City = u.City,
+                State = u.State,
+                IsAlreadyRegistered = registeredUserIds.Contains(u.Id)
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<UserSearchResultDto>> { Success = true, Data = users });
+    }
+
+    /// <summary>
+    /// Add a user registration to event (organizer only)
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/admin-register")]
+    public async Task<ActionResult<ApiResponse<EventUnitDto>>> AdminRegisterUser(int eventId, [FromBody] AdminAddRegistrationRequest request)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new ApiResponse<EventUnitDto> { Success = false, Message = "Unauthorized" });
+
+        // Get event with divisions
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+                .ThenInclude(d => d.TeamUnit)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        var isOrganizer = evt.OrganizedByUserId == organizerId.Value;
+        var isAdmin = await IsAdminAsync();
+
+        if (!isOrganizer && !isAdmin)
+            return Forbid();
+
+        // Validate user exists
+        var user = await _context.Users.FindAsync(request.UserId);
+        if (user == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "User not found" });
+
+        // Validate division
+        var division = evt.Divisions.FirstOrDefault(d => d.Id == request.DivisionId);
+        if (division == null || !division.IsActive)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Division not found" });
+
+        // Check if user is already registered in this division
+        var existingMember = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .FirstOrDefaultAsync(m => m.UserId == request.UserId &&
+                m.Unit!.DivisionId == request.DivisionId &&
+                m.Unit.EventId == eventId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+
+        if (existingMember != null)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "User is already registered in this division" });
+
+        // Get team size from division
+        var teamSize = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
+        var isSingles = teamSize == 1;
+
+        // Check capacity (admin can override waitlist)
+        var completedUnitCount = await _context.EventUnits
+            .Include(u => u.Members)
+            .CountAsync(u => u.DivisionId == request.DivisionId &&
+                u.Status != "Cancelled" &&
+                u.Status != "Waitlisted" &&
+                u.Members.Count(m => m.InviteStatus == "Accepted") >= teamSize);
+
+        var isWaitlistedByUnits = division.MaxUnits.HasValue && completedUnitCount >= division.MaxUnits.Value;
+
+        // Check MaxPlayers capacity
+        var isWaitlistedByPlayers = false;
+        if (division.MaxPlayers.HasValue)
+        {
+            var currentPlayerCount = await _context.EventUnitMembers
+                .Include(m => m.Unit)
+                .CountAsync(m => m.Unit!.DivisionId == request.DivisionId &&
+                    m.Unit.EventId == eventId &&
+                    m.Unit.Status != "Cancelled" &&
+                    m.Unit.Status != "Waitlisted" &&
+                    m.InviteStatus == "Accepted");
+
+            isWaitlistedByPlayers = currentPlayerCount >= division.MaxPlayers.Value;
+        }
+
+        // Admin registrations go to waitlist if division is full (they can promote later)
+        var isWaitlisted = isWaitlistedByPlayers || isWaitlistedByUnits;
+
+        // Create unit
+        var unitName = isSingles
+            ? Utility.FormatName(user.LastName, user.FirstName)
+            : $"{user.FirstName}'s Team";
+
+        var unit = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = request.DivisionId,
+            Name = unitName,
+            Status = isWaitlisted ? "Waitlisted" : "Registered",
+            WaitlistPosition = isWaitlisted ? await GetNextWaitlistPosition(request.DivisionId) : null,
+            CaptainUserId = request.UserId,
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+
+        _context.EventUnits.Add(unit);
+        await _context.SaveChangesAsync();
+
+        // Set unit ReferenceId
+        unit.ReferenceId = $"E{eventId}-U{unit.Id}";
+
+        // Add captain as member
+        var member = new EventUnitMember
+        {
+            UnitId = unit.Id,
+            UserId = request.UserId,
+            Role = "Captain",
+            InviteStatus = "Accepted",
+            IsCheckedIn = request.AutoCheckIn,
+            CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+            CreatedAt = DateTime.Now,
+            ReferenceId = $"E{eventId}-U{unit.Id}-P{request.UserId}"
+        };
+        _context.EventUnitMembers.Add(member);
+
+        // If partner specified, add them too
+        if (!isSingles && request.PartnerUserId.HasValue)
+        {
+            var partnerUser = await _context.Users.FindAsync(request.PartnerUserId.Value);
+            if (partnerUser != null)
+            {
+                // Check if partner is already registered
+                var partnerExisting = await _context.EventUnitMembers
+                    .Include(m => m.Unit)
+                    .FirstOrDefaultAsync(m => m.UserId == request.PartnerUserId.Value &&
+                        m.Unit!.DivisionId == request.DivisionId &&
+                        m.Unit.EventId == eventId &&
+                        m.Unit.Status != "Cancelled" &&
+                        m.InviteStatus == "Accepted");
+
+                if (partnerExisting == null)
+                {
+                    var partnerMember = new EventUnitMember
+                    {
+                        UnitId = unit.Id,
+                        UserId = request.PartnerUserId.Value,
+                        Role = "Player",
+                        InviteStatus = "Accepted", // Admin registration = auto-accept partner
+                        IsCheckedIn = request.AutoCheckIn,
+                        CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+                        CreatedAt = DateTime.Now,
+                        ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
+                    };
+                    _context.EventUnitMembers.Add(partnerMember);
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Reload unit with all data
+        var loadedUnit = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
+            .FirstOrDefaultAsync(u => u.Id == unit.Id);
+
+        var message = $"{Utility.FormatName(user.LastName, user.FirstName)} has been registered for {division.Name}";
+        if (isWaitlisted)
+            message += " (placed on waitlist)";
+        if (request.AutoCheckIn)
+            message += " and checked in";
+
+        return Ok(new ApiResponse<EventUnitDto>
+        {
+            Success = true,
+            Data = MapToUnitDto(loadedUnit!),
+            Message = message
+        });
+    }
+
+    // ============================================
     // Unit Management
     // ============================================
 
