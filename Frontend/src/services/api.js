@@ -1448,7 +1448,14 @@ export const tournamentApi = {
   // Dashboard
   getDashboard: (eventId) => api.get(`/tournament/events/${eventId}/dashboard`),
   updateTournamentStatus: (eventId, status) =>
-    api.put(`/tournament/events/${eventId}/status?status=${status}`)
+    api.put(`/tournament/events/${eventId}/status?status=${status}`),
+
+  // Live Drawing
+  getDrawingState: (divisionId) => api.get(`/tournament/divisions/${divisionId}/drawing`),
+  startDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/start`),
+  drawNextUnit: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/next`),
+  completeDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/complete`),
+  cancelDrawing: (divisionId) => api.post(`/tournament/divisions/${divisionId}/drawing/cancel`)
 }
 
 // Messaging API

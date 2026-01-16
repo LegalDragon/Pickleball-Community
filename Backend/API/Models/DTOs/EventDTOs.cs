@@ -535,6 +535,12 @@ public class MyRegistrationUnitDto
     public decimal AmountDue { get; set; }
     public decimal AmountPaid { get; set; }
 
+    // Drawing state
+    /// <summary>
+    /// Indicates if a live drawing is currently in progress for this division
+    /// </summary>
+    public bool DrawingInProgress { get; set; }
+
     // Team members (including self)
     public List<TeamMemberDto> Members { get; set; } = new();
 }

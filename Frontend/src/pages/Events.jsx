@@ -13,6 +13,7 @@ import AdminPaymentModal from '../components/AdminPaymentModal';
 import MemberPaymentModal from '../components/MemberPaymentModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import HelpIcon from '../components/ui/HelpIcon';
+import WatchDrawingModal from '../components/WatchDrawingModal';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
@@ -72,6 +73,9 @@ export default function Events() {
 
   // Profile modal state (for My Events tab)
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
+
+  // Drawing modal state (for watching live drawings)
+  const [watchDrawingUnit, setWatchDrawingUnit] = useState(null);
 
   // Get user's location on mount with improved two-stage approach
   const getLocation = useCallback(async () => {
@@ -1436,6 +1440,23 @@ export default function Events() {
                                         Paid
                                       </span>
                                     )}
+                                    {/* Watch Drawing Button - show when drawing is in progress */}
+                                    {unit.drawingInProgress && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setWatchDrawingUnit({
+                                            divisionId: unit.divisionId,
+                                            divisionName: unit.divisionName,
+                                            eventName: reg.eventName
+                                          });
+                                        }}
+                                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 flex items-center gap-1 animate-pulse"
+                                      >
+                                        <Shuffle className="w-3 h-3" />
+                                        Watch Drawing
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1532,6 +1553,17 @@ export default function Events() {
         <PublicProfileModal
           userId={selectedProfileUserId}
           onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
+
+      {/* Watch Drawing Modal */}
+      {watchDrawingUnit && (
+        <WatchDrawingModal
+          isOpen={!!watchDrawingUnit}
+          onClose={() => setWatchDrawingUnit(null)}
+          divisionId={watchDrawingUnit.divisionId}
+          divisionName={watchDrawingUnit.divisionName}
+          eventName={watchDrawingUnit.eventName}
         />
       )}
     </div>

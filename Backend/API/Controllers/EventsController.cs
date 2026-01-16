@@ -1545,6 +1545,7 @@ public class EventsController : ControllerBase
                             PaymentStatus = unit.PaymentStatus,
                             AmountDue = amountDue,
                             AmountPaid = unit.AmountPaid,
+                            DrawingInProgress = division?.DrawingInProgress ?? false,
                             // Filter out duplicate members (those with PendingJoinRequest status that also appear as join requests)
                             Members = unit.Members
                                 .GroupBy(mem => mem.UserId)

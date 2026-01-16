@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Hubs;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -14,11 +15,13 @@ public class TournamentController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TournamentController> _logger;
+    private readonly IDrawingBroadcaster _drawingBroadcaster;
 
-    public TournamentController(ApplicationDbContext context, ILogger<TournamentController> logger)
+    public TournamentController(ApplicationDbContext context, ILogger<TournamentController> logger, IDrawingBroadcaster drawingBroadcaster)
     {
         _context = context;
         _logger = logger;
+        _drawingBroadcaster = drawingBroadcaster;
     }
 
     private int? GetUserId()
@@ -4117,5 +4120,395 @@ public class TournamentController : ControllerBase
         };
 
         return Ok(new ApiResponse<CheckInStatusDto> { Success = true, Data = status });
+    }
+
+    // ============================================
+    // Live Drawing
+    // ============================================
+
+    /// <summary>
+    /// Get the current drawing state for a division
+    /// </summary>
+    [HttpGet("divisions/{divisionId}/drawing")]
+    public async Task<ActionResult<ApiResponse<DrawingStateDto>>> GetDrawingState(int divisionId)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DrawingStateDto> { Success = false, Message = "Division not found" });
+
+        if (!division.DrawingInProgress)
+            return Ok(new ApiResponse<DrawingStateDto> { Success = true, Data = null, Message = "No drawing in progress" });
+
+        var units = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
+            .ToListAsync();
+
+        var drawnUnits = units
+            .Where(u => u.UnitNumber.HasValue)
+            .OrderBy(u => u.UnitNumber)
+            .Select(u => new DrawnUnitDto
+            {
+                UnitId = u.Id,
+                UnitNumber = u.UnitNumber!.Value,
+                UnitName = u.Name,
+                MemberNames = u.Members.Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                    .Select(m => Utility.FormatName(m.User!.LastName, m.User.FirstName)).ToList(),
+                DrawnAt = u.UpdatedAt
+            }).ToList();
+
+        var remainingUnitNames = units
+            .Where(u => !u.UnitNumber.HasValue)
+            .Select(u => u.Name)
+            .ToList();
+
+        var startedBy = division.DrawingByUserId.HasValue
+            ? await _context.Users.FindAsync(division.DrawingByUserId.Value)
+            : null;
+
+        var state = new DrawingStateDto
+        {
+            DivisionId = division.Id,
+            DivisionName = division.Name,
+            EventId = division.EventId,
+            EventName = division.Event?.Name ?? "",
+            TotalUnits = units.Count,
+            DrawnCount = drawnUnits.Count,
+            DrawnUnits = drawnUnits,
+            RemainingUnitNames = remainingUnitNames,
+            StartedAt = division.DrawingStartedAt ?? DateTime.Now,
+            StartedByName = startedBy != null ? Utility.FormatName(startedBy.LastName, startedBy.FirstName) : null
+        };
+
+        return Ok(new ApiResponse<DrawingStateDto> { Success = true, Data = state });
+    }
+
+    /// <summary>
+    /// Start a live drawing session for a division
+    /// </summary>
+    [Authorize]
+    [HttpPost("divisions/{divisionId}/drawing/start")]
+    public async Task<ActionResult<ApiResponse<DrawingStateDto>>> StartDrawing(int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<DrawingStateDto> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DrawingStateDto> { Success = false, Message = "Division not found" });
+
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<DrawingStateDto> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Check if drawing is already in progress
+        if (division.DrawingInProgress)
+            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = "Drawing is already in progress" });
+
+        // Check registration is closed
+        var now = DateTime.Now;
+        var isRegistrationOpen = evt.TournamentStatus == "RegistrationOpen" ||
+            (evt.RegistrationOpenDate <= now && (evt.RegistrationCloseDate == null || evt.RegistrationCloseDate > now));
+
+        if (isRegistrationOpen)
+            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = "Cannot start drawing while registration is still open" });
+
+        // Check schedule status
+        if (division.ScheduleStatus == "Finalized")
+            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = "Schedule is already finalized. Clear the schedule first if you need to redraw." });
+
+        // Get and validate units
+        var units = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
+            .ToListAsync();
+
+        if (!units.Any())
+            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = "No units to draw" });
+
+        var requiredMembers = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
+        var incompleteUnits = units.Where(u =>
+            u.Members.Count(m => m.InviteStatus == "Accepted") < requiredMembers).ToList();
+
+        if (incompleteUnits.Any())
+        {
+            var unitNames = string.Join(", ", incompleteUnits.Take(3).Select(u => u.Name));
+            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = $"Units not complete: {unitNames}. Each unit needs {requiredMembers} accepted member(s)." });
+        }
+
+        // Clear any existing unit numbers
+        foreach (var unit in units)
+        {
+            unit.UnitNumber = null;
+            unit.PoolNumber = null;
+            unit.PoolName = null;
+        }
+
+        // Start the drawing
+        division.DrawingInProgress = true;
+        division.DrawingStartedAt = DateTime.Now;
+        division.DrawingByUserId = userId.Value;
+        division.DrawingSequence = 0;
+        division.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        var startedBy = await _context.Users.FindAsync(userId.Value);
+        var state = new DrawingStateDto
+        {
+            DivisionId = division.Id,
+            DivisionName = division.Name,
+            EventId = division.EventId,
+            EventName = evt.Name,
+            TotalUnits = units.Count,
+            DrawnCount = 0,
+            DrawnUnits = new List<DrawnUnitDto>(),
+            RemainingUnitNames = units.Select(u => u.Name).ToList(),
+            StartedAt = division.DrawingStartedAt.Value,
+            StartedByName = startedBy != null ? Utility.FormatName(startedBy.LastName, startedBy.FirstName) : null
+        };
+
+        // Broadcast to connected viewers
+        await _drawingBroadcaster.BroadcastDrawingStarted(divisionId, state);
+
+        return Ok(new ApiResponse<DrawingStateDto> { Success = true, Data = state });
+    }
+
+    /// <summary>
+    /// Draw the next unit (randomly selects from remaining units)
+    /// </summary>
+    [Authorize]
+    [HttpPost("divisions/{divisionId}/drawing/next")]
+    public async Task<ActionResult<ApiResponse<DrawnUnitDto>>> DrawNextUnit(int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<DrawnUnitDto> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DrawnUnitDto> { Success = false, Message = "Division not found" });
+
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<DrawnUnitDto> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Check if drawing is in progress
+        if (!division.DrawingInProgress)
+            return BadRequest(new ApiResponse<DrawnUnitDto> { Success = false, Message = "No drawing in progress. Start a drawing first." });
+
+        // Get remaining undrawn units
+        var remainingUnits = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted" && u.UnitNumber == null)
+            .ToListAsync();
+
+        if (!remainingUnits.Any())
+            return BadRequest(new ApiResponse<DrawnUnitDto> { Success = false, Message = "All units have been drawn. Complete the drawing." });
+
+        // Randomly select next unit
+        var random = new Random();
+        var selectedUnit = remainingUnits[random.Next(remainingUnits.Count)];
+
+        // Assign the next unit number
+        division.DrawingSequence++;
+        selectedUnit.UnitNumber = division.DrawingSequence;
+        selectedUnit.UpdatedAt = DateTime.Now;
+        division.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        var drawnUnit = new DrawnUnitDto
+        {
+            UnitId = selectedUnit.Id,
+            UnitNumber = selectedUnit.UnitNumber.Value,
+            UnitName = selectedUnit.Name,
+            MemberNames = selectedUnit.Members.Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                .Select(m => Utility.FormatName(m.User!.LastName, m.User.FirstName)).ToList(),
+            DrawnAt = DateTime.Now
+        };
+
+        // Broadcast to connected viewers
+        await _drawingBroadcaster.BroadcastUnitDrawn(divisionId, drawnUnit);
+
+        return Ok(new ApiResponse<DrawnUnitDto> { Success = true, Data = drawnUnit });
+    }
+
+    /// <summary>
+    /// Complete the drawing and finalize unit assignments
+    /// </summary>
+    [Authorize]
+    [HttpPost("divisions/{divisionId}/drawing/complete")]
+    public async Task<ActionResult<ApiResponse<DrawingCompletedDto>>> CompleteDrawing(int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<DrawingCompletedDto> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DrawingCompletedDto> { Success = false, Message = "Division not found" });
+
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<DrawingCompletedDto> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Check if drawing is in progress
+        if (!division.DrawingInProgress)
+            return BadRequest(new ApiResponse<DrawingCompletedDto> { Success = false, Message = "No drawing in progress" });
+
+        // Check all units are drawn
+        var undrawnUnits = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted" && u.UnitNumber == null)
+            .CountAsync();
+
+        if (undrawnUnits > 0)
+            return BadRequest(new ApiResponse<DrawingCompletedDto> { Success = false, Message = $"{undrawnUnits} units have not been drawn yet" });
+
+        // Update matches with actual unit IDs based on assigned numbers
+        var units = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
+            .ToListAsync();
+
+        var matches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId)
+            .ToListAsync();
+
+        foreach (var match in matches)
+        {
+            match.Unit1Id = units.FirstOrDefault(u => u.UnitNumber == match.Unit1Number)?.Id;
+            match.Unit2Id = units.FirstOrDefault(u => u.UnitNumber == match.Unit2Number)?.Id;
+            match.UpdatedAt = DateTime.Now;
+
+            // Handle byes
+            if (match.Unit1Id == null && match.Unit2Id != null)
+            {
+                match.WinnerUnitId = match.Unit2Id;
+                match.Status = "Bye";
+            }
+            else if (match.Unit2Id == null && match.Unit1Id != null)
+            {
+                match.WinnerUnitId = match.Unit1Id;
+                match.Status = "Bye";
+            }
+        }
+
+        // End the drawing session
+        division.DrawingInProgress = false;
+        division.ScheduleStatus = "UnitsAssigned";
+        division.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        var finalOrder = units
+            .OrderBy(u => u.UnitNumber)
+            .Select(u => new DrawnUnitDto
+            {
+                UnitId = u.Id,
+                UnitNumber = u.UnitNumber ?? 0,
+                UnitName = u.Name,
+                MemberNames = u.Members.Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                    .Select(m => Utility.FormatName(m.User!.LastName, m.User.FirstName)).ToList(),
+                DrawnAt = u.UpdatedAt
+            }).ToList();
+
+        var result = new DrawingCompletedDto
+        {
+            DivisionId = divisionId,
+            FinalOrder = finalOrder,
+            CompletedAt = DateTime.Now
+        };
+
+        // Broadcast completion to connected viewers
+        await _drawingBroadcaster.BroadcastDrawingCompleted(divisionId, result);
+
+        return Ok(new ApiResponse<DrawingCompletedDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Cancel an in-progress drawing
+    /// </summary>
+    [Authorize]
+    [HttpPost("divisions/{divisionId}/drawing/cancel")]
+    public async Task<ActionResult<ApiResponse<bool>>> CancelDrawing(int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Division not found" });
+
+        var evt = division.Event;
+        if (evt == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Check if drawing is in progress
+        if (!division.DrawingInProgress)
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "No drawing in progress" });
+
+        // Clear unit numbers assigned during this drawing
+        var units = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
+            .ToListAsync();
+
+        foreach (var unit in units)
+        {
+            unit.UnitNumber = null;
+            unit.PoolNumber = null;
+            unit.PoolName = null;
+        }
+
+        // End the drawing session
+        division.DrawingInProgress = false;
+        division.DrawingStartedAt = null;
+        division.DrawingByUserId = null;
+        division.DrawingSequence = 0;
+        division.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        // Broadcast cancellation to connected viewers
+        await _drawingBroadcaster.BroadcastDrawingCancelled(divisionId);
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Drawing cancelled" });
     }
 }
