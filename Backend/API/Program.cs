@@ -108,6 +108,9 @@ builder.Services.AddHttpClient("SharedAuth", client =>
     var baseUrl = builder.Configuration["SharedAuth:BaseUrl"];
     if (!string.IsNullOrEmpty(baseUrl))
     {
+        // Ensure trailing slash - HttpClient URL resolution requires it for relative paths to work correctly
+        if (!baseUrl.EndsWith("/"))
+            baseUrl += "/";
         client.BaseAddress = new Uri(baseUrl);
     }
     client.Timeout = TimeSpan.FromSeconds(30);
