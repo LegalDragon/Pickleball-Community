@@ -467,7 +467,10 @@ export const userApi = {
   adminSendPasswordReset: (userId) => api.post(`/users/${userId}/admin-password-reset`),
 
   // Admin: Update a user's email
-  adminUpdateEmail: (userId, newEmail) => api.put(`/users/${userId}/admin-email`, { newEmail })
+  adminUpdateEmail: (userId, newEmail) => api.put(`/users/${userId}/admin-email`, { newEmail }),
+
+  // Admin: Set a user's password directly
+  adminSetPassword: (userId, newPassword) => api.put(`/users/${userId}/admin-password`, { newPassword })
 }
 
 // Content Types API

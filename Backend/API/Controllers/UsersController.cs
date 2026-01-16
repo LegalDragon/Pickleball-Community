@@ -1247,7 +1247,7 @@ public class UsersController : ControllerBase
                 });
             }
 
-            // Call Funtime-Shared API to update email there too
+            // Call Funtime-Shared API to update email via admin endpoint
             var httpClientFactory = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
             var httpClient = httpClientFactory.CreateClient("SharedAuth");
 
@@ -1264,13 +1264,19 @@ public class UsersController : ControllerBase
                     System.Net.Http.Headers.AuthenticationHeaderValue.Parse(authHeader);
             }
 
-            // Try to update on shared service (this may fail if endpoint doesn't exist yet)
+            // Call Funtime-Shared admin endpoint: PUT /admin/users/{id}
             try
             {
-                var response = await httpClient.PutAsJsonAsync($"users/{id}/email", new { email = request.NewEmail });
+                var response = await httpClient.PutAsJsonAsync($"admin/users/{id}", new { Email = request.NewEmail });
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Shared auth email update returned {StatusCode} - updating local only", response.StatusCode);
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning("Shared auth admin email update returned {StatusCode}: {Error} - updating local only",
+                        response.StatusCode, errorContent);
+                }
+                else
+                {
+                    _logger.LogInformation("Successfully updated email on Funtime-Shared for user {UserId}", id);
                 }
             }
             catch (Exception ex)
@@ -1303,9 +1309,124 @@ public class UsersController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Admin: Set a user's password directly via Funtime-Shared
+    /// </summary>
+    [HttpPut("{id}/admin-password")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<object>>> AdminSetPassword(int id, [FromBody] AdminSetPasswordRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request?.NewPassword))
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "New password is required"
+                });
+            }
+
+            if (request.NewPassword.Length < 6)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Password must be at least 6 characters"
+                });
+            }
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            // Call Funtime-Shared API to set password via admin endpoint
+            var httpClientFactory = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("SharedAuth");
+
+            var baseUrl = _configuration["SharedAuth:BaseUrl"];
+            if (!string.IsNullOrEmpty(baseUrl) && !baseUrl.EndsWith("/"))
+                baseUrl += "/";
+            httpClient.BaseAddress = new Uri(baseUrl ?? "https://shared.funtimepb.com/api/");
+
+            // Pass auth token for admin operations
+            var authHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                httpClient.DefaultRequestHeaders.Authorization =
+                    System.Net.Http.Headers.AuthenticationHeaderValue.Parse(authHeader);
+            }
+
+            // Call Funtime-Shared admin endpoint: PUT /admin/users/{id}
+            var response = await httpClient.PutAsJsonAsync($"admin/users/{id}", new { Password = request.NewPassword });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Admin set password for user {UserId} ({Email}) via Funtime-Shared", id, user.Email);
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = $"Password updated for {user.Email}"
+                });
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to set password on Funtime-Shared for user {UserId}: {StatusCode} - {Error}",
+                    id, response.StatusCode, errorContent);
+
+                // Return appropriate error based on status code
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                    response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    return StatusCode(403, new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Not authorized to set password on shared auth service. Contact system administrator."
+                    });
+                }
+
+                return StatusCode((int)response.StatusCode, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Failed to update password on shared auth service"
+                });
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error setting password for user {UserId}", id);
+            return StatusCode(503, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "Could not connect to shared auth service"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting password for user {UserId}", id);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while setting password"
+            });
+        }
+    }
 }
 
 public class AdminUpdateEmailRequest
 {
     public string NewEmail { get; set; } = string.Empty;
+}
+
+public class AdminSetPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
 }
