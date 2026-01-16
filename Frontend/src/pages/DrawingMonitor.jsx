@@ -80,8 +80,8 @@ export default function DrawingMonitor() {
       setError(null);
 
       const response = await tournamentApi.getEventDrawingState(eventId);
-      if (response.data?.success && response.data.data) {
-        const data = response.data.data;
+      if (response.success && response.data) {
+        const data = response.data;
         setEventData(data);
         initializeDivisionStates(data.divisions);
 
@@ -146,8 +146,8 @@ export default function DrawingMonitor() {
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.startDrawing(divisionId);
-      if (!response.data?.success) {
-        alert(response.data?.message || 'Failed to start drawing');
+      if (!response.success) {
+        alert(response.message || 'Failed to start drawing');
       }
     } catch (err) {
       alert(err?.response?.data?.message || 'Failed to start drawing');
@@ -160,8 +160,8 @@ export default function DrawingMonitor() {
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.drawNextUnit(divisionId);
-      if (!response.data?.success) {
-        alert(response.data?.message || 'Failed to draw unit');
+      if (!response.success) {
+        alert(response.message || 'Failed to draw unit');
       }
     } catch (err) {
       alert(err?.response?.data?.message || 'Failed to draw unit');
@@ -174,11 +174,11 @@ export default function DrawingMonitor() {
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.completeDrawing(divisionId);
-      if (response.data?.success) {
+      if (response.success) {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
       } else {
-        alert(response.data?.message || 'Failed to complete drawing');
+        alert(response.message || 'Failed to complete drawing');
       }
     } catch (err) {
       alert(err?.response?.data?.message || 'Failed to complete drawing');
