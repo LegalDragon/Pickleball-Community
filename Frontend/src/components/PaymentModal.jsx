@@ -413,8 +413,9 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                       const alreadyPaid = member.hasPaid;
 
                       return (
-                        <label
+                        <div
                           key={member.id}
+                          onClick={() => !alreadyPaid && toggleMemberSelection(member.id)}
                           className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${
                             alreadyPaid
                               ? 'bg-green-50 border-green-200 cursor-not-allowed'
@@ -428,7 +429,10 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                               type="checkbox"
                               checked={isSelected || alreadyPaid}
                               disabled={alreadyPaid}
-                              onChange={() => !alreadyPaid && toggleMemberSelection(member.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                if (!alreadyPaid) toggleMemberSelection(member.id);
+                              }}
                               className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500 disabled:opacity-50"
                             />
                             <div>
@@ -444,7 +448,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                           <div className={`text-sm font-medium ${alreadyPaid ? 'text-green-600' : 'text-gray-700'}`}>
                             ${perPersonAmount.toFixed(2)}
                           </div>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
