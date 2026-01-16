@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, RefreshCcw } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, RefreshCcw, Radio, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAdmin } from '../contexts/AdminContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
 import VenueMap from '../components/ui/VenueMap';
@@ -17,6 +18,7 @@ import WatchDrawingModal from '../components/WatchDrawingModal';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -1494,6 +1496,7 @@ export default function Events() {
         <EventDetailModal
           event={selectedEvent}
           isAuthenticated={isAuthenticated}
+          isAdmin={isAdmin}
           currentUserId={user?.id}
           user={user}
           formatDate={formatDate}
@@ -1676,7 +1679,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
   );
 }
 
-function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
+function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(false);
   const [registeringDivision, setRegisteringDivision] = useState(null);
@@ -3647,6 +3650,42 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
             )}
           </div>
         </div>
+
+        {/* Live Drawing Button - Show when event is in Drawing status */}
+        {event.tournamentStatus === 'Drawing' && (() => {
+          const isEventOrganizer = isAuthenticated && currentUserId === event.organizedByUserId;
+          const canManageDrawing = isEventOrganizer || isAdmin;
+
+          return (
+            <div className={`mx-6 mt-4 p-4 rounded-xl ${canManageDrawing ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-to-r from-orange-500 to-red-500'}`}>
+              <Link
+                to={`/event/${event.id}/drawing`}
+                onClick={onClose}
+                className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 shadow-lg ${
+                  canManageDrawing
+                    ? 'bg-white text-purple-600 hover:bg-purple-50'
+                    : 'bg-white text-orange-600 hover:bg-orange-50'
+                }`}
+              >
+                {canManageDrawing ? (
+                  <>
+                    <Settings className="w-5 h-5" />
+                    Manage Drawing
+                  </>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Radio className="w-5 h-5" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                    </div>
+                    Live Drawing
+                  </>
+                )}
+              </Link>
+            </div>
+          );
+        })()}
 
         <div className="p-6">
           {/* Details Tab */}
