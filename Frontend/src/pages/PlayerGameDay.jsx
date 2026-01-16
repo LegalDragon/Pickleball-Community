@@ -373,8 +373,62 @@ function WaiverModal({ waivers, onSign, onClose }) {
   const [emergencyPhone, setEmergencyPhone] = useState('')
   const [chineseName, setChineseName] = useState('')
   const [signing, setSigning] = useState(false)
+  const [waiverContent, setWaiverContent] = useState('')
+  const [loadingContent, setLoadingContent] = useState(false)
 
   const isMinorWaiver = signerRole === 'Parent' || signerRole === 'Guardian'
+
+  // Check if file is markdown or html based on extension
+  const isRenderableFile = (fileName) => {
+    if (!fileName) return false
+    const ext = fileName.toLowerCase().split('.').pop()
+    return ['md', 'html', 'htm'].includes(ext)
+  }
+
+  // Convert markdown to basic HTML (simple conversion)
+  const markdownToHtml = (md) => {
+    return md
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+      .replace(/^\- (.*$)/gim, '<li>$1</li>')
+      .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+      .replace(/\n\n/gim, '</p><p>')
+      .replace(/\n/gim, '<br>')
+  }
+
+  // Fetch waiver content from file URL if it's .md or .html
+  useEffect(() => {
+    const fetchContent = async () => {
+      if (currentWaiver.fileUrl && isRenderableFile(currentWaiver.fileName)) {
+        setLoadingContent(true)
+        try {
+          const response = await fetch(currentWaiver.fileUrl)
+          if (response.ok) {
+            let content = await response.text()
+            // If it's markdown, convert to HTML
+            if (currentWaiver.fileName?.toLowerCase().endsWith('.md')) {
+              content = markdownToHtml(content)
+            }
+            setWaiverContent(content)
+          } else {
+            setWaiverContent('<p>Failed to load waiver content</p>')
+          }
+        } catch (err) {
+          console.error('Error fetching waiver content:', err)
+          setWaiverContent('<p>Failed to load waiver content</p>')
+        } finally {
+          setLoadingContent(false)
+        }
+      } else if (currentWaiver.content) {
+        // Use existing content from legacy system
+        setWaiverContent(currentWaiver.content)
+      }
+    }
+    fetchContent()
+  }, [currentWaiver])
 
   const handleSign = async () => {
     if (!signature.trim()) {
@@ -421,9 +475,43 @@ function WaiverModal({ waivers, onSign, onClose }) {
 
         <div className="p-4 overflow-auto flex-1">
           <h4 className="font-medium mb-2">{currentWaiver.title}</h4>
-          <div className="prose prose-sm text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg border max-h-48 overflow-auto text-xs">
-            {currentWaiver.content}
-          </div>
+
+          {/* Waiver Content Display */}
+          {loadingContent ? (
+            <div className="bg-gray-50 p-3 rounded-lg border flex items-center justify-center h-48">
+              <div className="text-gray-500">Loading waiver content...</div>
+            </div>
+          ) : currentWaiver.fileUrl && !isRenderableFile(currentWaiver.fileName) ? (
+            // Non-renderable file (PDF, etc.) - show link
+            <div className="bg-gray-50 p-4 rounded-lg border">
+              <p className="text-sm text-gray-600 mb-3">
+                Please review the waiver document before signing:
+              </p>
+              <a
+                href={currentWaiver.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <FileText className="w-4 h-4" />
+                View Waiver Document
+              </a>
+              <p className="text-xs text-gray-500 mt-3">
+                By signing below, you confirm that you have read and understood the waiver document.
+              </p>
+            </div>
+          ) : waiverContent ? (
+            // Renderable content (HTML from .md/.html file or legacy content)
+            <div
+              className="prose prose-sm text-gray-600 bg-gray-50 p-3 rounded-lg border max-h-48 overflow-auto text-xs"
+              dangerouslySetInnerHTML={{ __html: waiverContent }}
+            />
+          ) : (
+            // No content available
+            <div className="bg-gray-50 p-3 rounded-lg border text-gray-500 text-sm">
+              No waiver content available.
+            </div>
+          )}
 
           {/* Signature Section */}
           <div className="mt-4 space-y-3">

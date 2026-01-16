@@ -64,21 +64,82 @@ public class CheckInController : ControllerBase
                 });
             }
 
-            // Get event waivers (wrap in try-catch in case table doesn't exist yet)
-            var waivers = new List<EventWaiver>();
+            // Get waivers from ObjectAssets (newer system) - look for "Waiver" type documents
+            var pendingWaiverDtos = new List<WaiverDto>();
             try
             {
-                waivers = await _context.EventWaivers
-                    .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
-                    .ToListAsync();
+                // First, get the ObjectType ID for "Event"
+                var eventObjectType = await _context.ObjectTypes
+                    .FirstOrDefaultAsync(ot => ot.Name == "Event");
+
+                if (eventObjectType != null)
+                {
+                    // Get waiver assets for this event
+                    var waiverAssets = await _context.ObjectAssets
+                        .Include(a => a.AssetType)
+                        .Where(a => a.ObjectTypeId == eventObjectType.Id
+                            && a.ObjectId == eventId
+                            && a.AssetType != null
+                            && a.AssetType.TypeName.ToLower() == "waiver")
+                        .ToListAsync();
+
+                    pendingWaiverDtos = waiverAssets.Select(w => new WaiverDto
+                    {
+                        Id = w.Id,
+                        DocumentType = "waiver",
+                        Title = w.Title,
+                        Content = "", // Content will be fetched by frontend for .md/.html files
+                        FileUrl = w.FileUrl,
+                        FileName = w.FileName,
+                        Version = 1,
+                        IsRequired = true,
+                        RequiresMinorWaiver = false,
+                        MinorAgeThreshold = 18
+                    }).ToList();
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not query EventWaivers table - it may not exist yet");
+                _logger.LogWarning(ex, "Could not query ObjectAssets for waivers - table may not exist yet");
+            }
+
+            // Fallback to legacy EventWaivers table if no ObjectAssets found
+            if (!pendingWaiverDtos.Any())
+            {
+                try
+                {
+                    var legacyWaivers = await _context.EventWaivers
+                        .Where(w => w.EventId == eventId && w.IsActive && w.IsRequired)
+                        .ToListAsync();
+
+                    pendingWaiverDtos = legacyWaivers.Select(w => new WaiverDto
+                    {
+                        Id = w.Id,
+                        DocumentType = "waiver",
+                        Title = w.Title,
+                        Content = w.Content,
+                        Version = w.Version,
+                        IsRequired = w.IsRequired,
+                        RequiresMinorWaiver = w.RequiresMinorWaiver,
+                        MinorAgeThreshold = w.MinorAgeThreshold
+                    }).ToList();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not query EventWaivers table - it may not exist yet");
+                }
             }
 
             var firstReg = registrations.First();
-            var allWaiversSigned = !waivers.Any() || firstReg.WaiverSignedAt != null;
+            var allWaiversSigned = !pendingWaiverDtos.Any() || firstReg.WaiverSignedAt != null;
+
+            // Filter out already signed waivers
+            if (firstReg.WaiverSignedAt != null)
+            {
+                pendingWaiverDtos = pendingWaiverDtos
+                    .Where(w => firstReg.WaiverDocumentId != w.Id)
+                    .ToList();
+            }
 
             return Ok(new ApiResponse<PlayerCheckInStatusDto>
             {
@@ -90,18 +151,7 @@ public class CheckInController : ControllerBase
                     CheckedInAt = firstReg.CheckedInAt,
                     WaiverSigned = allWaiversSigned,
                     WaiverSignedAt = firstReg.WaiverSignedAt,
-                    PendingWaivers = waivers
-                        .Where(w => firstReg.WaiverSignedAt == null || firstReg.WaiverDocumentId != w.Id)
-                        .Select(w => new WaiverDto
-                        {
-                            Id = w.Id,
-                            Title = w.Title,
-                            Content = w.Content,
-                            Version = w.Version,
-                            IsRequired = w.IsRequired,
-                            RequiresMinorWaiver = w.RequiresMinorWaiver,
-                            MinorAgeThreshold = w.MinorAgeThreshold
-                        }).ToList(),
+                    PendingWaivers = pendingWaiverDtos,
                     Divisions = registrations.Select(r => new CheckInDivisionDto
                     {
                         DivisionId = r.Unit!.DivisionId,
@@ -828,6 +878,8 @@ public class WaiverDto
     public string DocumentType { get; set; } = "waiver";
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    public string? FileUrl { get; set; }
+    public string? FileName { get; set; }
     public int Version { get; set; }
     public bool IsRequired { get; set; }
     public bool RequiresMinorWaiver { get; set; }
