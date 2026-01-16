@@ -2720,30 +2720,35 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     const memberName = member.lastName && member.firstName
       ? `${member.lastName}, ${member.firstName}`
       : member.lastName || member.firstName || 'Player';
-    if (!confirm(`Remove ${memberName} from ${division.name}?`)) return;
+
+    // Check if this is the only accepted member
+    const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
+    const isOnlyMember = acceptedMembers.length <= 1;
+
+    const confirmMessage = isOnlyMember
+      ? `Remove ${memberName}? This will cancel the entire registration for ${division.name}.`
+      : `Remove ${memberName} from ${division.name}?`;
+
+    if (!confirm(confirmMessage)) return;
 
     try {
       const response = await tournamentApi.removeRegistration(event.id, unit.id, member.userId);
       if (response.success) {
-        // Update the divisionRegistrationsCache to remove this member
-        setDivisionRegistrationsCache(prev => {
-          const updated = { ...prev };
-          if (updated[division.id]) {
-            updated[division.id] = updated[division.id].map(u => {
-              if (u.id === unit.id) {
-                const newMembers = u.members.filter(m => m.userId !== member.userId);
-                // If no members left, remove the unit entirely
-                if (newMembers.length === 0) {
-                  return null;
-                }
-                return { ...u, members: newMembers };
-              }
-              return u;
-            }).filter(Boolean);
+        toast.success(response.message || 'Player removed');
+        // Refetch division registrations immediately
+        const divResponse = await tournamentApi.getEventUnits(event.id, division.id);
+        if (divResponse.success) {
+          const sorted = (divResponse.data || []).sort((a, b) => {
+            if (a.isComplete && !b.isComplete) return -1;
+            if (!a.isComplete && b.isComplete) return 1;
+            return 0;
+          });
+          setDivisionRegistrationsCache(prev => ({ ...prev, [division.id]: sorted }));
+          // Also update legacy modal state if viewing this division
+          if (selectedDivisionForViewing?.id === division.id) {
+            setDivisionRegistrations(sorted);
           }
-          return updated;
-        });
-        toast.success('Player removed');
+        }
         // Refresh event data
         const updatedEventResponse = await eventsApi.getEvent(event.id);
         if (updatedEventResponse.success) {
@@ -4401,11 +4406,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       const isPendingInvite = member.inviteStatus === 'Pending';
                                       // Payment status at unit level
                                       const unitPaymentStatus = unit.paymentStatus;
-                                      const hasPaymentSubmitted = unitPaymentStatus === 'PendingVerification' || unitPaymentStatus === 'Paid' || unitPaymentStatus === 'Partial';
                                       // Member's payment is verified if unit is fully Paid, or if Partial and this member has been verified
                                       const isPaymentVerified = unitPaymentStatus === 'Paid' || (unitPaymentStatus === 'Partial' && member.hasPaid);
-                                      // Can remove only if no payment has been submitted
-                                      const canRemove = isOrganizer && !hasPaymentSubmitted;
 
                                       return (
                                         <div key={mIdx} className="flex items-center gap-1 shrink-0">
@@ -4484,8 +4486,8 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                               </button>
                                             );
                                           })()}
-                                          {/* Trash icon - only if no payment submitted */}
-                                          {canRemove && !isJoinRequest && (
+                                          {/* Trash icon for admin - remove member from unit */}
+                                          {isOrganizer && !isJoinRequest && member.inviteStatus === 'Accepted' && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();

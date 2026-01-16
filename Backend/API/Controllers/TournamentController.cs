@@ -2185,17 +2185,78 @@ public class TournamentController : ControllerBase
         if (member == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Member not found in unit" });
 
-        _context.EventUnitMembers.Remove(member);
+        var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+        var isOnlyMember = acceptedMembers.Count <= 1;
+        var memberHasPayment = member.HasPaid || member.AmountPaid > 0 || !string.IsNullOrEmpty(member.PaymentProofUrl);
 
-        // If unit is now empty, delete it
-        if (unit.Members.Count <= 1)
+        if (isOnlyMember)
         {
+            // Only member in the unit - check if we can delete the unit
+            if (memberHasPayment)
+            {
+                return BadRequest(new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Cannot remove last member with payment records. Cancel payment first or use a different method."
+                });
+            }
+
+            // No payment - safe to delete the unit entirely
+            // Also remove any pending join requests for this unit
+            var joinRequests = await _context.EventUnitJoinRequests
+                .Where(jr => jr.UnitId == unitId)
+                .ToListAsync();
+            _context.EventUnitJoinRequests.RemoveRange(joinRequests);
+
+            // Remove all members (including pending ones)
+            _context.EventUnitMembers.RemoveRange(unit.Members);
             _context.EventUnits.Remove(unit);
+
+            await _context.SaveChangesAsync();
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration cancelled" });
         }
+        else
+        {
+            // Has other members - just remove this member
+            _context.EventUnitMembers.Remove(member);
 
-        await _context.SaveChangesAsync();
+            // If removed member was captain, transfer captaincy to another accepted member
+            if (unit.CaptainUserId == userId)
+            {
+                var newCaptain = acceptedMembers.FirstOrDefault(m => m.UserId != userId);
+                if (newCaptain != null)
+                {
+                    unit.CaptainUserId = newCaptain.UserId;
+                    newCaptain.Role = "Captain";
+                }
+            }
 
-        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration removed" });
+            // Recalculate unit payment status
+            var remainingMembers = acceptedMembers.Where(m => m.UserId != userId).ToList();
+            var allPaid = remainingMembers.All(m => m.HasPaid);
+            var somePaid = remainingMembers.Any(m => m.HasPaid);
+
+            if (allPaid && remainingMembers.Count > 0)
+            {
+                unit.PaymentStatus = "Paid";
+                unit.AmountPaid = remainingMembers.Sum(m => m.AmountPaid);
+            }
+            else if (somePaid)
+            {
+                unit.PaymentStatus = "Partial";
+                unit.AmountPaid = remainingMembers.Sum(m => m.AmountPaid);
+            }
+            else
+            {
+                unit.PaymentStatus = "Pending";
+                unit.AmountPaid = 0;
+            }
+
+            unit.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Member removed from team" });
+        }
     }
 
     /// <summary>
