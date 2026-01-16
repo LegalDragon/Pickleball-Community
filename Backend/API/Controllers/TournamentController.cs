@@ -3643,7 +3643,7 @@ public class TournamentController : ControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
 
-        var validStatuses = new[] { "Draft", "RegistrationOpen", "RegistrationClosed", "ScheduleReady", "Running", "Completed", "Cancelled" };
+        var validStatuses = new[] { "Draft", "RegistrationOpen", "RegistrationClosed", "ScheduleReady", "Drawing", "Running", "Completed", "Cancelled" };
         if (!validStatuses.Contains(status))
             return BadRequest(new ApiResponse<bool> { Success = false, Message = "Invalid status" });
 
