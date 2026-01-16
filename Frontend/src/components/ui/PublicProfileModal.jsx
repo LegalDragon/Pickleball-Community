@@ -250,7 +250,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                   {profile.createdAt && (
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
                       <Calendar className="w-4 h-4" />
-                      <span>Member since {formatDate(profile.createdAt)}</span>
+                      <span>Member since {formatDate(profile.createdAt)} ({profile.id})</span>
                     </div>
                   )}
 
