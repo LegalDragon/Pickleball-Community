@@ -418,6 +418,9 @@ public class TournamentController : ControllerBase
             _context.EventUnits.Add(unit);
             await _context.SaveChangesAsync();
 
+            // Set unit ReferenceId now that we have the ID
+            unit.ReferenceId = $"E{eventId}-U{unit.Id}";
+
             // Add captain as member
             var member = new EventUnitMember
             {
@@ -425,7 +428,8 @@ public class TournamentController : ControllerBase
                 UserId = userId.Value,
                 Role = "Captain",
                 InviteStatus = "Accepted",
-                CreatedAt = DateTime.Now
+                CreatedAt = DateTime.Now,
+                ReferenceId = $"E{eventId}-U{unit.Id}-P{userId.Value}"
             };
             _context.EventUnitMembers.Add(member);
 
@@ -439,7 +443,8 @@ public class TournamentController : ControllerBase
                     Role = "Player",
                     InviteStatus = "Pending",
                     InvitedAt = DateTime.Now,
-                    CreatedAt = DateTime.Now
+                    CreatedAt = DateTime.Now,
+                    ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
                 };
                 _context.EventUnitMembers.Add(partnerMember);
             }
@@ -689,6 +694,12 @@ public class TournamentController : ControllerBase
 
         _context.EventUnitJoinRequests.Add(joinRequest);
 
+        // Set unit ReferenceId if not already set
+        if (string.IsNullOrEmpty(unit.ReferenceId))
+        {
+            unit.ReferenceId = $"E{unit.EventId}-U{unitId}";
+        }
+
         // Also create a membership record with PendingJoinRequest status
         // This allows the user to pay early and shows up in their registrations
         var membership = new EventUnitMember
@@ -697,7 +708,8 @@ public class TournamentController : ControllerBase
             UserId = userId.Value,
             Role = "Player",
             InviteStatus = "PendingJoinRequest",
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.Now,
+            ReferenceId = $"E{unit.EventId}-U{unitId}-P{userId.Value}"
         };
         _context.EventUnitMembers.Add(membership);
 
@@ -800,6 +812,12 @@ public class TournamentController : ControllerBase
                 // Update existing membership to Accepted
                 membership.InviteStatus = "Accepted";
                 membership.RespondedAt = DateTime.Now;
+
+                // Generate ReferenceId if not already set
+                if (string.IsNullOrEmpty(membership.ReferenceId))
+                {
+                    membership.ReferenceId = $"E{joinRequest.Unit!.EventId}-U{joinRequest.UnitId}-P{membership.UserId}";
+                }
             }
             else
             {
@@ -810,9 +828,48 @@ public class TournamentController : ControllerBase
                     UserId = joinRequest.UserId,
                     Role = "Player",
                     InviteStatus = "Accepted",
-                    CreatedAt = DateTime.Now
+                    CreatedAt = DateTime.Now,
+                    ReferenceId = $"E{joinRequest.Unit!.EventId}-U{joinRequest.UnitId}-P{joinRequest.UserId}"
                 };
                 _context.EventUnitMembers.Add(member);
+                membership = member;
+            }
+
+            // Generate unit ReferenceId if not already set
+            if (joinRequest.Unit != null && string.IsNullOrEmpty(joinRequest.Unit.ReferenceId))
+            {
+                joinRequest.Unit.ReferenceId = $"E{joinRequest.Unit.EventId}-U{joinRequest.UnitId}";
+            }
+
+            // Recalculate unit payment status based on all accepted members
+            if (joinRequest.Unit != null)
+            {
+                var allMembers = await _context.EventUnitMembers
+                    .Where(m => m.UnitId == joinRequest.UnitId && m.InviteStatus == "Accepted")
+                    .ToListAsync();
+
+                // Include the just-accepted member if not yet in the list
+                if (!allMembers.Any(m => m.UserId == membership.UserId))
+                {
+                    allMembers.Add(membership);
+                }
+
+                var allMembersPaid = allMembers.All(m => m.HasPaid);
+                var someMembersPaid = allMembers.Any(m => m.HasPaid);
+
+                if (allMembersPaid && allMembers.Count > 0)
+                {
+                    joinRequest.Unit.PaymentStatus = "Paid";
+                    joinRequest.Unit.AmountPaid = allMembers.Sum(m => m.AmountPaid);
+                    joinRequest.Unit.PaidAt ??= DateTime.Now;
+                }
+                else if (someMembersPaid)
+                {
+                    joinRequest.Unit.PaymentStatus = "Partial";
+                    joinRequest.Unit.AmountPaid = allMembers.Sum(m => m.AmountPaid);
+                }
+
+                joinRequest.Unit.UpdatedAt = DateTime.Now;
             }
         }
         else
@@ -999,6 +1056,7 @@ public class TournamentController : ControllerBase
             return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
 
         var membership = await _context.EventUnitMembers
+            .Include(m => m.Unit)
             .FirstOrDefaultAsync(m => m.UnitId == request.UnitId && m.UserId == userId.Value && m.InviteStatus == "Pending");
 
         if (membership == null)
@@ -1006,6 +1064,52 @@ public class TournamentController : ControllerBase
 
         membership.InviteStatus = request.Accept ? "Accepted" : "Declined";
         membership.RespondedAt = DateTime.Now;
+
+        if (request.Accept)
+        {
+            // Generate ReferenceId if not already set
+            if (string.IsNullOrEmpty(membership.ReferenceId) && membership.Unit != null)
+            {
+                membership.ReferenceId = $"E{membership.Unit.EventId}-U{membership.UnitId}-P{membership.UserId}";
+            }
+
+            // Generate unit ReferenceId if not already set
+            if (membership.Unit != null && string.IsNullOrEmpty(membership.Unit.ReferenceId))
+            {
+                membership.Unit.ReferenceId = $"E{membership.Unit.EventId}-U{membership.UnitId}";
+            }
+
+            // Recalculate unit payment status based on all accepted members
+            if (membership.Unit != null)
+            {
+                var allMembers = await _context.EventUnitMembers
+                    .Where(m => m.UnitId == membership.UnitId && m.InviteStatus == "Accepted")
+                    .ToListAsync();
+
+                // Include this member (just accepted) if not yet in the list
+                if (!allMembers.Any(m => m.UserId == membership.UserId))
+                {
+                    allMembers.Add(membership);
+                }
+
+                var allMembersPaid = allMembers.All(m => m.HasPaid);
+                var someMembersPaid = allMembers.Any(m => m.HasPaid);
+
+                if (allMembersPaid && allMembers.Count > 0)
+                {
+                    membership.Unit.PaymentStatus = "Paid";
+                    membership.Unit.AmountPaid = allMembers.Sum(m => m.AmountPaid);
+                    membership.Unit.PaidAt ??= DateTime.Now;
+                }
+                else if (someMembersPaid)
+                {
+                    membership.Unit.PaymentStatus = "Partial";
+                    membership.Unit.AmountPaid = allMembers.Sum(m => m.AmountPaid);
+                }
+
+                membership.Unit.UpdatedAt = DateTime.Now;
+            }
+        }
 
         await _context.SaveChangesAsync();
 
