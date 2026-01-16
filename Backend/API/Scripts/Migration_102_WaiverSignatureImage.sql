@@ -80,4 +80,80 @@ BEGIN
 END
 GO
 
+-- Create testing stored procedure that looks up data and calls sp_SendWaiverSignedNotification
+CREATE OR ALTER PROCEDURE [dbo].[sp_TestSendWaiverSignedNotification]
+    @EventId INT,
+    @UserId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @UserEmail NVARCHAR(255);
+    DECLARE @UserName NVARCHAR(200);
+    DECLARE @EventName NVARCHAR(200);
+    DECLARE @WaiverTitle NVARCHAR(200);
+    DECLARE @SignedAt DATETIME;
+    DECLARE @SignatureAssetUrl NVARCHAR(500);
+    DECLARE @SignedWaiverPdfUrl NVARCHAR(500);
+
+    -- Look up user info
+    SELECT @UserEmail = Email, @UserName = CONCAT(FirstName, ' ', LastName)
+    FROM Users
+    WHERE Id = @UserId;
+
+    IF @UserEmail IS NULL
+    BEGIN
+        SELECT 0 AS Success, 'User not found' AS Message;
+        RETURN;
+    END
+
+    -- Look up event name
+    SELECT @EventName = Name
+    FROM Events
+    WHERE Id = @EventId;
+
+    IF @EventName IS NULL
+    BEGIN
+        SELECT 0 AS Success, 'Event not found' AS Message;
+        RETURN;
+    END
+
+    -- Look up waiver title (get the first active waiver for the event)
+    SELECT TOP 1 @WaiverTitle = Title
+    FROM EventWaivers
+    WHERE EventId = @EventId AND IsActive = 1
+    ORDER BY Id;
+
+    IF @WaiverTitle IS NULL
+        SET @WaiverTitle = 'Event Waiver';
+
+    -- Look up signature data from EventUnitMembers
+    SELECT TOP 1
+        @SignedAt = um.WaiverSignedAt,
+        @SignatureAssetUrl = um.SignatureAssetUrl,
+        @SignedWaiverPdfUrl = um.SignedWaiverPdfUrl
+    FROM EventUnitMembers um
+    INNER JOIN EventUnits eu ON um.UnitId = eu.Id
+    WHERE eu.EventId = @EventId AND um.UserId = @UserId AND um.WaiverSignedAt IS NOT NULL;
+
+    IF @SignedAt IS NULL
+    BEGIN
+        SELECT 0 AS Success, 'No signed waiver found for this user in this event' AS Message;
+        RETURN;
+    END
+
+    -- Call the actual notification procedure
+    EXEC sp_SendWaiverSignedNotification
+        @EventId = @EventId,
+        @UserId = @UserId,
+        @UserEmail = @UserEmail,
+        @UserName = @UserName,
+        @EventName = @EventName,
+        @WaiverTitle = @WaiverTitle,
+        @SignedAt = @SignedAt,
+        @SignatureAssetUrl = @SignatureAssetUrl,
+        @SignedWaiverPdfUrl = @SignedWaiverPdfUrl;
+END
+GO
+
 PRINT 'Migration 102 completed successfully';
