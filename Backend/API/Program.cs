@@ -187,26 +187,6 @@ using (var scope = app.Services.CreateScope())
         if (context.Database.CanConnect())
         {
             logger.LogInformation("Database connection successful. Database already exists.");
-
-            // Run pending migrations - Drawing state columns
-            try
-            {
-                // Migration 101: Add drawing state columns to EventDivisions
-                var checkDrawingColumns = @"
-                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('EventDivisions') AND name = 'DrawingInProgress')
-                    BEGIN
-                        ALTER TABLE EventDivisions ADD DrawingInProgress BIT NOT NULL DEFAULT 0;
-                        ALTER TABLE EventDivisions ADD DrawingStartedAt DATETIME NULL;
-                        ALTER TABLE EventDivisions ADD DrawingByUserId INT NULL;
-                        ALTER TABLE EventDivisions ADD DrawingSequence INT NOT NULL DEFAULT 0;
-                    END";
-                context.Database.ExecuteSqlRaw(checkDrawingColumns);
-                logger.LogInformation("Drawing state migration check completed");
-            }
-            catch (Exception migrationEx)
-            {
-                logger.LogWarning(migrationEx, "Drawing state migration warning - columns may already exist");
-            }
         }
         else
         {
