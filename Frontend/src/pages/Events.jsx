@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, Hammer, RefreshCcw } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
@@ -2727,7 +2727,7 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
 
     const confirmMessage = isOnlyMember
       ? `Remove ${memberName}? This will cancel the entire registration for ${division.name}.`
-      : `Remove ${memberName} from ${division.name}?`;
+      : `Remove ${memberName} from this team? They will get their own individual registration.`;
 
     if (!confirm(confirmMessage)) return;
 
@@ -4586,44 +4586,6 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                                       </button>
                                     )}
 
-                                    {/* Admin: Break unit apart (only for complete teams with 2+ members) */}
-                                    {isOrganizer && isComplete && unit.members?.filter(m => m.inviteStatus === 'Accepted').length >= 2 && (
-                                      <button
-                                        onClick={async () => {
-                                          if (!confirm(`Break apart "${unit.name || 'this unit'}"? Each member will become their own individual registration that can be merged with other teams.`)) return;
-                                          try {
-                                            const response = await tournamentApi.adminBreakUnit(unit.id);
-                                            if (response.success) {
-                                              toast.success(response.message || 'Unit broken apart');
-                                              // Refetch division registrations immediately
-                                              const divResponse = await tournamentApi.getEventUnits(event.id, division.id);
-                                              if (divResponse.success) {
-                                                const sorted = (divResponse.data || []).sort((a, b) => {
-                                                  if (a.isComplete && !b.isComplete) return -1;
-                                                  if (!a.isComplete && b.isComplete) return 1;
-                                                  return 0;
-                                                });
-                                                setDivisionRegistrationsCache(prev => ({ ...prev, [division.id]: sorted }));
-                                              }
-                                              // Also update legacy modal state if viewing this division
-                                              if (selectedDivisionForViewing?.id === division.id) {
-                                                loadDivisionRegistrations(selectedDivisionForViewing);
-                                              }
-                                              onUpdate();
-                                            } else {
-                                              toast.error(response.message || 'Failed to break unit');
-                                            }
-                                          } catch (err) {
-                                            console.error('Error breaking unit:', err);
-                                            toast.error(err?.message || 'Failed to break unit');
-                                          }
-                                        }}
-                                        className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
-                                        title="Break team apart into individual registrations"
-                                      >
-                                        <Hammer className="w-4 h-4" />
-                                      </button>
-                                    )}
                                   </div>
                                 </div>
                               );

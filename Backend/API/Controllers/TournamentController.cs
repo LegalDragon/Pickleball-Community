@@ -2176,6 +2176,7 @@ public class TournamentController : ControllerBase
 
         var unit = await _context.EventUnits
             .Include(u => u.Members)
+                .ThenInclude(m => m.User)
             .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
 
         if (unit == null)
@@ -2217,10 +2218,44 @@ public class TournamentController : ControllerBase
         }
         else
         {
-            // Has other members - just remove this member
-            _context.EventUnitMembers.Remove(member);
+            // Has other members - create a new individual unit for the removed member
+            var memberName = Utility.FormatName(member.User?.LastName, member.User?.FirstName);
+            var newUnit = new EventUnit
+            {
+                EventId = unit.EventId,
+                DivisionId = unit.DivisionId,
+                Name = memberName,
+                Status = member.IsCheckedIn ? "CheckedIn" : "Registered",
+                CaptainUserId = member.UserId,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EventUnits.Add(newUnit);
+            await _context.SaveChangesAsync(); // Save to get ID
 
-            // If removed member was captain, transfer captaincy to another accepted member
+            // Set new unit's ReferenceId and sync member's payment data to unit level
+            newUnit.ReferenceId = $"E{unit.EventId}-U{newUnit.Id}";
+            if (member.HasPaid)
+            {
+                newUnit.PaymentStatus = "Paid";
+                newUnit.AmountPaid = member.AmountPaid;
+                newUnit.PaidAt = member.PaidAt;
+                newUnit.PaymentProofUrl = member.PaymentProofUrl;
+                newUnit.PaymentReference = member.PaymentReference;
+            }
+            else if (!string.IsNullOrEmpty(member.PaymentProofUrl))
+            {
+                newUnit.PaymentStatus = "PendingVerification";
+                newUnit.PaymentProofUrl = member.PaymentProofUrl;
+                newUnit.PaymentReference = member.PaymentReference;
+            }
+
+            // Move member to new unit and make them captain
+            member.UnitId = newUnit.Id;
+            member.Role = "Captain";
+            member.ReferenceId = $"E{unit.EventId}-U{newUnit.Id}-P{member.UserId}";
+
+            // If removed member was captain of old unit, transfer captaincy
             if (unit.CaptainUserId == userId)
             {
                 var newCaptain = acceptedMembers.FirstOrDefault(m => m.UserId != userId);
@@ -2231,7 +2266,17 @@ public class TournamentController : ControllerBase
                 }
             }
 
-            // Recalculate unit payment status
+            // Update old unit name if it was using the removed member's name
+            if (unit.Name == memberName)
+            {
+                var remainingCaptain = acceptedMembers.FirstOrDefault(m => m.UserId != userId);
+                if (remainingCaptain != null)
+                {
+                    unit.Name = Utility.FormatName(remainingCaptain.User?.LastName, remainingCaptain.User?.FirstName);
+                }
+            }
+
+            // Recalculate old unit's payment status
             var remainingMembers = acceptedMembers.Where(m => m.UserId != userId).ToList();
             var allPaid = remainingMembers.All(m => m.HasPaid);
             var somePaid = remainingMembers.Any(m => m.HasPaid);
@@ -2255,7 +2300,7 @@ public class TournamentController : ControllerBase
             unit.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
-            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Member removed from team" });
+            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = $"{memberName} now has their own registration" });
         }
     }
 
