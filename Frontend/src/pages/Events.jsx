@@ -1788,6 +1788,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
   // Payment summary state
   const [paymentSummary, setPaymentSummary] = useState(null);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState(null);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
@@ -2045,6 +2046,35 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
       console.error('Error loading payment summary:', err);
     } finally {
       setLoadingPayments(false);
+    }
+  };
+
+  // Handle verify/unverify payment
+  const handleVerifyPayment = async (paymentId, verify) => {
+    setVerifyingPaymentId(paymentId);
+    try {
+      const response = verify
+        ? await tournamentApi.verifyPayment(paymentId)
+        : await tournamentApi.unverifyPayment(paymentId);
+      if (response.success) {
+        toast.success(verify ? 'Payment verified' : 'Verification removed');
+        // Update local state
+        setPaymentSummary(prev => ({
+          ...prev,
+          recentPayments: prev.recentPayments.map(p =>
+            p.id === paymentId
+              ? { ...p, status: verify ? 'Verified' : 'Pending', verifiedAt: verify ? new Date().toISOString() : null }
+              : p
+          )
+        }));
+      } else {
+        toast.error(response.message || 'Failed to update payment');
+      }
+    } catch (err) {
+      console.error('Error verifying payment:', err);
+      toast.error('Failed to update payment');
+    } finally {
+      setVerifyingPaymentId(null);
     }
   };
 
@@ -5666,150 +5696,144 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                     </div>
                   </div>
 
-                  {/* Division Breakdown */}
+                  {/* All Payments */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-gray-900">Payment by Division</h3>
-                    {paymentSummary.divisionPayments?.map(division => (
-                      <div key={division.divisionId} className="bg-white rounded-lg border overflow-hidden">
-                        <button
-                          onClick={() => setExpandedDivisions(prev => ({
-                            ...prev,
-                            [division.divisionId]: !prev[division.divisionId]
-                          }))}
-                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium">{division.divisionName}</span>
-                            <span className={`px-2 py-0.5 text-xs rounded-full ${
-                              division.isBalanced ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
-                              {division.isBalanced ? 'Balanced' : `$${(division.totalExpected - division.totalPaid).toFixed(2)} outstanding`}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <span className="text-sm text-gray-500">
-                              ${division.totalPaid?.toFixed(2)} / ${division.totalExpected?.toFixed(2)}
-                            </span>
-                            {expandedDivisions[division.divisionId] ? (
-                              <ChevronUp className="w-5 h-5 text-gray-400" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-gray-400" />
-                            )}
-                          </div>
-                        </button>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900">All Payments</h3>
+                      <button
+                        onClick={loadPaymentSummary}
+                        disabled={loadingPayments}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <RefreshCcw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </button>
+                    </div>
+                    {!paymentSummary.recentPayments?.length ? (
+                      <div className="bg-white rounded-lg border p-8 text-center text-gray-500">
+                        <DollarSign className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p>No payments recorded yet</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border overflow-hidden divide-y">
+                        {paymentSummary.recentPayments.map(payment => (
+                          <div key={payment.id} className="p-4">
+                            {/* Payment Header */}
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-gray-900">{payment.userName}</span>
+                                  {payment.status === 'Verified' ? (
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+                                      <CheckCircle className="w-3 h-3" />
+                                      Verified
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">
+                                      Pending
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-500">{payment.userEmail}</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {new Date(payment.createdAt).toLocaleString()}
+                                  {payment.paymentMethod && ` • ${payment.paymentMethod}`}
+                                </p>
+                              </div>
 
-                        {expandedDivisions[division.divisionId] && (
-                          <div className="border-t divide-y">
-                            {division.units?.map(unit => (
-                              <div key={unit.unitId} className="px-4 py-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-medium text-sm">{unit.unitName}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                      unit.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
-                                      unit.paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-gray-100 text-gray-600'
-                                    }`}>
-                                      {unit.paymentStatus}
-                                    </span>
-                                    <span className="text-sm text-gray-600">
-                                      ${unit.amountPaid?.toFixed(2)} / ${unit.amountDue?.toFixed(2)}
-                                    </span>
+                              {/* Payment Amount */}
+                              <div className="text-right">
+                                <div className="flex items-center gap-3">
+                                  <div>
+                                    <p className="text-lg font-bold text-gray-900">${payment.amount?.toFixed(2)}</p>
+                                    <p className="text-xs text-gray-500">Paid</p>
+                                  </div>
+                                  <div className="text-gray-300">→</div>
+                                  <div>
+                                    <p className={`text-lg font-bold ${payment.isFullyApplied ? 'text-green-600' : 'text-orange-600'}`}>
+                                      ${payment.totalApplied?.toFixed(2)}
+                                    </p>
+                                    <p className="text-xs text-gray-500">Applied</p>
                                   </div>
                                 </div>
-                                {unit.paymentProofUrl && (
-                                  <a
-                                    href={unit.paymentProofUrl.startsWith('http') ? unit.paymentProofUrl : `https://shared.funtimepb.com${unit.paymentProofUrl}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline"
-                                  >
-                                    View Payment Proof
-                                  </a>
-                                )}
-                                {unit.paymentReference && (
-                                  <p className="text-xs text-gray-500">Ref: {unit.paymentReference}</p>
-                                )}
-                                {unit.members?.length > 0 && (
-                                  <div className="mt-2 space-y-1">
-                                    {unit.members.map(member => (
-                                      <div key={member.userId} className="flex items-center justify-between text-xs">
-                                        <span className="text-gray-600">{member.userName}</span>
-                                        <span className={member.hasPaid ? 'text-green-600' : 'text-gray-400'}>
-                                          {member.hasPaid ? `Paid $${member.amountPaid?.toFixed(2)}` : 'Not paid'}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                {!payment.isFullyApplied && (
+                                  <p className="text-xs text-orange-600 mt-1">
+                                    ${(payment.amount - payment.totalApplied).toFixed(2)} unapplied
+                                  </p>
                                 )}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                            </div>
 
-                  {/* Recent Payments */}
-                  {paymentSummary.recentPayments?.length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-gray-900">Recent Payments</h3>
-                      <div className="bg-white rounded-lg border overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">User</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Method</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {paymentSummary.recentPayments.map(payment => (
-                              <tr key={payment.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-2">
-                                  <div>{payment.userName}</div>
-                                  <div className="text-xs text-gray-500">{payment.userEmail}</div>
-                                </td>
-                                <td className="px-4 py-2 font-medium">${payment.amount?.toFixed(2)}</td>
-                                <td className="px-4 py-2 text-gray-600">{payment.paymentMethod || '-'}</td>
-                                <td className="px-4 py-2">
-                                  {payment.paymentProofUrl && (
-                                    <a
-                                      href={payment.paymentProofUrl.startsWith('http') ? payment.paymentProofUrl : `https://shared.funtimepb.com${payment.paymentProofUrl}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:underline"
+                            {/* Applied To Section */}
+                            {payment.appliedTo?.length > 0 && (
+                              <div className="mt-3 pt-3 border-t">
+                                <p className="text-xs font-medium text-gray-500 mb-2">Applied to:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {payment.appliedTo.map((app, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-xs"
                                     >
-                                      Proof
-                                    </a>
-                                  )}
-                                  {payment.paymentReference && (
-                                    <span className="text-gray-500 ml-2">{payment.paymentReference}</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-2 text-gray-500">
-                                  {new Date(payment.createdAt).toLocaleDateString()}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                                      <span className="text-gray-700">{app.userName}</span>
+                                      <span className="text-gray-500">${app.amountApplied?.toFixed(2)}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                  {/* Refresh Button */}
-                  <div className="flex justify-center">
-                    <button
-                      onClick={loadPaymentSummary}
-                      disabled={loadingPayments}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <RefreshCcw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </button>
+                            {/* References and Actions */}
+                            <div className="mt-3 pt-3 border-t flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 text-sm">
+                                {payment.paymentProofUrl && (
+                                  <a
+                                    href={payment.paymentProofUrl.startsWith('http') ? payment.paymentProofUrl : `https://shared.funtimepb.com${payment.paymentProofUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    View Proof
+                                  </a>
+                                )}
+                                {payment.paymentReference && (
+                                  <span className="text-gray-500">Ref: {payment.paymentReference}</span>
+                                )}
+                              </div>
+
+                              {/* Verify Button */}
+                              {payment.status === 'Verified' ? (
+                                <button
+                                  onClick={() => handleVerifyPayment(payment.id, false)}
+                                  disabled={verifyingPaymentId === payment.id}
+                                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {verifyingPaymentId === payment.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <X className="w-4 h-4" />
+                                  )}
+                                  Unverify
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleVerifyPayment(payment.id, true)}
+                                  disabled={verifyingPaymentId === payment.id}
+                                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {verifyingPaymentId === payment.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Check className="w-4 h-4" />
+                                  )}
+                                  Verify
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

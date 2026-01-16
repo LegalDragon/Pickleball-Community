@@ -5246,6 +5246,49 @@ public class TournamentController : ControllerBase
             divisionPayments.Add(divPayments);
         }
 
+        // Get all members that have payments applied (for building AppliedTo lists)
+        var allMembersWithPayments = await _context.EventUnitMembers
+            .Include(m => m.User)
+            .Include(m => m.Unit)
+            .Where(m => m.Unit!.EventId == eventId && m.PaymentId != null)
+            .ToListAsync();
+
+        // Build payment records with applied-to information
+        var paymentRecords = new List<PaymentRecordDto>();
+        foreach (var p in payments)
+        {
+            var appliedMembers = allMembersWithPayments
+                .Where(m => m.PaymentId == p.Id)
+                .Select(m => new PaymentApplicationDto
+                {
+                    UserId = m.UserId,
+                    UserName = Utility.FormatName(m.User?.LastName, m.User?.FirstName) ?? "",
+                    AmountApplied = m.AmountPaid
+                })
+                .ToList();
+
+            var totalApplied = appliedMembers.Sum(a => a.AmountApplied);
+
+            paymentRecords.Add(new PaymentRecordDto
+            {
+                Id = p.Id,
+                UserId = p.UserId,
+                UserName = Utility.FormatName(p.User?.LastName, p.User?.FirstName) ?? "",
+                UserEmail = p.User?.Email,
+                Amount = p.Amount,
+                PaymentMethod = p.PaymentMethod,
+                PaymentReference = p.PaymentReference,
+                PaymentProofUrl = p.PaymentProofUrl,
+                ReferenceId = p.ReferenceId,
+                Status = p.Status,
+                CreatedAt = p.CreatedAt,
+                VerifiedAt = p.VerifiedAt,
+                TotalApplied = totalApplied,
+                IsFullyApplied = Math.Abs(totalApplied - p.Amount) < 0.01m,
+                AppliedTo = appliedMembers
+            });
+        }
+
         // Build overall summary
         var summary = new EventPaymentSummaryDto
         {
@@ -5261,23 +5304,95 @@ public class TournamentController : ControllerBase
             UnitsUnpaid = divisionPayments.Sum(d => d.UnitsUnpaid),
             IsBalanced = Math.Abs(divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid)) < 0.01m,
             DivisionPayments = divisionPayments,
-            RecentPayments = payments.Take(20).Select(p => new PaymentRecordDto
-            {
-                Id = p.Id,
-                UserId = p.UserId,
-                UserName = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
-                UserEmail = p.User?.Email,
-                Amount = p.Amount,
-                PaymentMethod = p.PaymentMethod,
-                PaymentReference = p.PaymentReference,
-                PaymentProofUrl = p.PaymentProofUrl,
-                ReferenceId = p.ReferenceId,
-                Status = p.Status,
-                CreatedAt = p.CreatedAt,
-                VerifiedAt = p.VerifiedAt
-            }).ToList()
+            RecentPayments = paymentRecords
         };
 
         return Ok(new ApiResponse<EventPaymentSummaryDto> { Success = true, Data = summary });
+    }
+
+    /// <summary>
+    /// Verify a payment (organizer/admin only)
+    /// </summary>
+    [HttpPost("payments/{paymentId}/verify")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> VerifyPayment(int paymentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
+
+        // Check authorization - must be event organizer or admin
+        if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
+        {
+            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
+            if (evt == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+                return Forbid();
+        }
+        else if (!await IsAdminAsync())
+        {
+            return Forbid();
+        }
+
+        payment.Status = "Verified";
+        payment.VerifiedByUserId = userId.Value;
+        payment.VerifiedAt = DateTime.Now;
+        payment.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verified" });
+    }
+
+    /// <summary>
+    /// Unverify a payment (organizer/admin only)
+    /// </summary>
+    [HttpPost("payments/{paymentId}/unverify")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> UnverifyPayment(int paymentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
+
+        // Check authorization - must be event organizer or admin
+        if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
+        {
+            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
+            if (evt == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+                return Forbid();
+        }
+        else if (!await IsAdminAsync())
+        {
+            return Forbid();
+        }
+
+        payment.Status = "Pending";
+        payment.VerifiedByUserId = null;
+        payment.VerifiedAt = null;
+        payment.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verification removed" });
     }
 }

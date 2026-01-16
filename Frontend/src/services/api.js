@@ -1441,6 +1441,10 @@ export const tournamentApi = {
       targetMemberIds,
       redistributeAmount,
     }),
+  verifyPayment: (paymentId) =>
+    api.post(`/tournament/payments/${paymentId}/verify`),
+  unverifyPayment: (paymentId) =>
+    api.post(`/tournament/payments/${paymentId}/unverify`),
 
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),

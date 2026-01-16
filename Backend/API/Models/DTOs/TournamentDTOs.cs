@@ -801,6 +801,28 @@ public class PaymentRecordDto
     public string? Status { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? VerifiedAt { get; set; }
+
+    /// <summary>
+    /// Total amount applied to members
+    /// </summary>
+    public decimal TotalApplied { get; set; }
+
+    /// <summary>
+    /// Whether total applied equals amount paid
+    /// </summary>
+    public bool IsFullyApplied { get; set; }
+
+    /// <summary>
+    /// List of members this payment was applied to
+    /// </summary>
+    public List<PaymentApplicationDto> AppliedTo { get; set; } = new();
+}
+
+public class PaymentApplicationDto
+{
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public decimal AmountApplied { get; set; }
 }
 
 // ============================================
