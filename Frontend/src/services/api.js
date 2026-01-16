@@ -1405,6 +1405,8 @@ export const tournamentApi = {
     api.get(`/tournament/events/${eventId}/divisions/${divisionId}/joinable-units`),
 
   // Payment
+  getPaymentSummary: (eventId) =>
+    api.get(`/tournament/events/${eventId}/payment-summary`),
   uploadPaymentProof: (eventId, unitId, data) =>
     api.post(`/tournament/events/${eventId}/units/${unitId}/payment`, data),
   markAsPaid: (eventId, unitId) =>

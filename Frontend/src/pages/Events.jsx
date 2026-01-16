@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, Hammer } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Filter, Search, Plus, DollarSign, ChevronLeft, ChevronRight, X, UserPlus, Trophy, Layers, Check, AlertCircle, Navigation, Building2, Loader2, MessageCircle, CheckCircle, Edit3, ChevronDown, ChevronUp, Trash2, List, Map as MapIcon, Image, Upload, Play, Link2, QrCode, Download, ArrowRightLeft, FileText, Eye, EyeOff, ExternalLink, User, GitMerge, ArrowRight, Copy, Info, Grid, Shuffle, ClipboardList, Shield, BookOpen, Phone, Hammer, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { eventsApi, eventTypesApi, courtsApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, objectAssetsApi, objectAssetTypesApi } from '../services/api';
@@ -1782,6 +1782,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
   const [documents, setDocuments] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+
+  // Payment summary state
+  const [paymentSummary, setPaymentSummary] = useState(null);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [expandedDivisions, setExpandedDivisions] = useState({});
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
@@ -1966,6 +1971,22 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
     }
   };
 
+  // Load payment summary for organizer
+  const loadPaymentSummary = async () => {
+    if (!isOrganizer) return;
+    setLoadingPayments(true);
+    try {
+      const response = await tournamentApi.getPaymentSummary(event.id);
+      if (response.success) {
+        setPaymentSummary(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading payment summary:', err);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
   // Load registrations and documents when switching to manage tab
   useEffect(() => {
     if (activeTab === 'manage' && isOrganizer) {
@@ -1977,6 +1998,11 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
       }
       if (assetTypes.length === 0) {
         loadAssetTypes();
+      }
+    }
+    if (activeTab === 'payments' && isOrganizer) {
+      if (!paymentSummary) {
+        loadPaymentSummary();
       }
     }
   }, [activeTab, isOrganizer]);
@@ -3584,6 +3610,16 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                 }`}
               >
                 Manage
+              </button>
+            )}
+            {isOrganizer && (
+              <button
+                onClick={() => setActiveTab('payments')}
+                className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'payments' ? 'border-orange-600 text-orange-600' : 'border-transparent text-gray-500'
+                }`}
+              >
+                Payments
               </button>
             )}
           </div>
@@ -5484,6 +5520,202 @@ function EventDetailModal({ event, isAuthenticated, currentUserId, user, formatD
                     )}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Payments Tab */}
+          {activeTab === 'payments' && isOrganizer && (
+            <div className="space-y-6">
+              {loadingPayments ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                </div>
+              ) : !paymentSummary ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p>No payment data available</p>
+                  <button
+                    onClick={loadPaymentSummary}
+                    className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                  >
+                    Load Payment Summary
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Total Expected</p>
+                      <p className="text-2xl font-bold text-gray-900">${paymentSummary.totalExpected?.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Total Paid</p>
+                      <p className="text-2xl font-bold text-green-600">${paymentSummary.totalPaid?.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Outstanding</p>
+                      <p className={`text-2xl font-bold ${paymentSummary.totalOutstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        ${paymentSummary.totalOutstanding?.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg border p-4">
+                      <p className="text-sm text-gray-500">Status</p>
+                      <p className={`text-lg font-bold ${paymentSummary.isBalanced ? 'text-green-600' : 'text-orange-600'}`}>
+                        {paymentSummary.isBalanced ? 'Balanced' : 'Incomplete'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {paymentSummary.unitsFullyPaid} paid / {paymentSummary.unitsPartiallyPaid} partial / {paymentSummary.unitsUnpaid} unpaid
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Division Breakdown */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900">Payment by Division</h3>
+                    {paymentSummary.divisionPayments?.map(division => (
+                      <div key={division.divisionId} className="bg-white rounded-lg border overflow-hidden">
+                        <button
+                          onClick={() => setExpandedDivisions(prev => ({
+                            ...prev,
+                            [division.divisionId]: !prev[division.divisionId]
+                          }))}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium">{division.divisionName}</span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                              division.isBalanced ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {division.isBalanced ? 'Balanced' : `$${(division.totalExpected - division.totalPaid).toFixed(2)} outstanding`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm text-gray-500">
+                              ${division.totalPaid?.toFixed(2)} / ${division.totalExpected?.toFixed(2)}
+                            </span>
+                            {expandedDivisions[division.divisionId] ? (
+                              <ChevronUp className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            )}
+                          </div>
+                        </button>
+
+                        {expandedDivisions[division.divisionId] && (
+                          <div className="border-t divide-y">
+                            {division.units?.map(unit => (
+                              <div key={unit.unitId} className="px-4 py-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-sm">{unit.unitName}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                      unit.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+                                      unit.paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {unit.paymentStatus}
+                                    </span>
+                                    <span className="text-sm text-gray-600">
+                                      ${unit.amountPaid?.toFixed(2)} / ${unit.amountDue?.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                                {unit.paymentProofUrl && (
+                                  <a
+                                    href={unit.paymentProofUrl.startsWith('http') ? unit.paymentProofUrl : `https://shared.funtimepb.com${unit.paymentProofUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline"
+                                  >
+                                    View Payment Proof
+                                  </a>
+                                )}
+                                {unit.paymentReference && (
+                                  <p className="text-xs text-gray-500">Ref: {unit.paymentReference}</p>
+                                )}
+                                {unit.members?.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {unit.members.map(member => (
+                                      <div key={member.userId} className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-600">{member.userName}</span>
+                                        <span className={member.hasPaid ? 'text-green-600' : 'text-gray-400'}>
+                                          {member.hasPaid ? `Paid $${member.amountPaid?.toFixed(2)}` : 'Not paid'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent Payments */}
+                  {paymentSummary.recentPayments?.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-gray-900">Recent Payments</h3>
+                      <div className="bg-white rounded-lg border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">User</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Method</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {paymentSummary.recentPayments.map(payment => (
+                              <tr key={payment.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-2">
+                                  <div>{payment.userName}</div>
+                                  <div className="text-xs text-gray-500">{payment.userEmail}</div>
+                                </td>
+                                <td className="px-4 py-2 font-medium">${payment.amount?.toFixed(2)}</td>
+                                <td className="px-4 py-2 text-gray-600">{payment.paymentMethod || '-'}</td>
+                                <td className="px-4 py-2">
+                                  {payment.paymentProofUrl && (
+                                    <a
+                                      href={payment.paymentProofUrl.startsWith('http') ? payment.paymentProofUrl : `https://shared.funtimepb.com${payment.paymentProofUrl}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:underline"
+                                    >
+                                      Proof
+                                    </a>
+                                  )}
+                                  {payment.paymentReference && (
+                                    <span className="text-gray-500 ml-2">{payment.paymentReference}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-gray-500">
+                                  {new Date(payment.createdAt).toLocaleDateString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Refresh Button */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={loadPaymentSummary}
+                      disabled={loadingPayments}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <RefreshCcw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           )}

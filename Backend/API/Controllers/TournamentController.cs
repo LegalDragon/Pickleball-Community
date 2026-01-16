@@ -4510,4 +4510,127 @@ public class TournamentController : ControllerBase
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Drawing cancelled" });
     }
+
+    // ==================== Payment Verification ====================
+
+    /// <summary>
+    /// Get payment summary for an event (organizer/admin only)
+    /// </summary>
+    [HttpGet("events/{eventId}/payment-summary")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventPaymentSummaryDto>>> GetEventPaymentSummary(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = "Unauthorized" });
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = "Event not found" });
+
+        // Check authorization
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        // Get all units with members for this event
+        var units = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+            .Where(u => u.EventId == eventId && u.Status != "Cancelled")
+            .OrderBy(u => u.Division != null ? u.Division.Name : "")
+            .ThenBy(u => u.Name)
+            .ToListAsync();
+
+        // Get all payments for this event
+        var payments = await _context.UserPayments
+            .Include(p => p.User)
+            .Where(p => p.PaymentType == PaymentTypes.EventRegistration && p.RelatedObjectId == eventId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+
+        // Build payment details per division
+        var divisionPayments = new List<DivisionPaymentSummaryDto>();
+        foreach (var division in evt.Divisions.OrderBy(d => d.Name))
+        {
+            var divUnits = units.Where(u => u.DivisionId == division.Id).ToList();
+            var divPayments = new DivisionPaymentSummaryDto
+            {
+                DivisionId = division.Id,
+                DivisionName = division.Name,
+                ExpectedFeePerUnit = (evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0),
+                TotalUnits = divUnits.Count,
+                TotalExpected = divUnits.Count * ((evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0)),
+                TotalPaid = divUnits.Sum(u => u.AmountPaid),
+                Units = divUnits.Select(u => new UnitPaymentDto
+                {
+                    UnitId = u.Id,
+                    UnitName = u.Name,
+                    PaymentStatus = u.PaymentStatus ?? "Pending",
+                    AmountPaid = u.AmountPaid,
+                    AmountDue = (evt.RegistrationFee ?? 0) + (division.DivisionFee ?? 0),
+                    PaymentProofUrl = u.PaymentProofUrl,
+                    PaymentReference = u.PaymentReference,
+                    ReferenceId = u.ReferenceId,
+                    PaidAt = u.PaidAt,
+                    Members = u.Members.Select(m => new MemberPaymentDto
+                    {
+                        UserId = m.UserId,
+                        UserName = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
+                        UserEmail = m.User?.Email,
+                        HasPaid = m.HasPaid,
+                        AmountPaid = m.AmountPaid,
+                        PaymentProofUrl = m.PaymentProofUrl,
+                        PaymentReference = m.PaymentReference,
+                        PaidAt = m.PaidAt
+                    }).ToList()
+                }).ToList()
+            };
+
+            divPayments.UnitsFullyPaid = divPayments.Units.Count(u => u.PaymentStatus == "Paid" || u.AmountPaid >= u.AmountDue);
+            divPayments.UnitsPartiallyPaid = divPayments.Units.Count(u =>
+                u.PaymentStatus != "Paid" && u.AmountPaid > 0 && u.AmountPaid < u.AmountDue);
+            divPayments.UnitsUnpaid = divPayments.Units.Count(u => u.AmountPaid == 0);
+            divPayments.IsBalanced = Math.Abs(divPayments.TotalPaid - divPayments.TotalExpected) < 0.01m;
+
+            divisionPayments.Add(divPayments);
+        }
+
+        // Build overall summary
+        var summary = new EventPaymentSummaryDto
+        {
+            EventId = eventId,
+            EventName = evt.Name,
+            RegistrationFee = evt.RegistrationFee ?? 0,
+            TotalUnits = units.Count,
+            TotalExpected = divisionPayments.Sum(d => d.TotalExpected),
+            TotalPaid = divisionPayments.Sum(d => d.TotalPaid),
+            TotalOutstanding = divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid),
+            UnitsFullyPaid = divisionPayments.Sum(d => d.UnitsFullyPaid),
+            UnitsPartiallyPaid = divisionPayments.Sum(d => d.UnitsPartiallyPaid),
+            UnitsUnpaid = divisionPayments.Sum(d => d.UnitsUnpaid),
+            IsBalanced = Math.Abs(divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid)) < 0.01m,
+            DivisionPayments = divisionPayments,
+            RecentPayments = payments.Take(20).Select(p => new PaymentRecordDto
+            {
+                Id = p.Id,
+                UserId = p.UserId,
+                UserName = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
+                UserEmail = p.User?.Email,
+                Amount = p.Amount,
+                PaymentMethod = p.PaymentMethod,
+                PaymentReference = p.PaymentReference,
+                PaymentProofUrl = p.PaymentProofUrl,
+                ReferenceId = p.ReferenceId,
+                Status = p.Status,
+                CreatedAt = p.CreatedAt,
+                VerifiedAt = p.VerifiedAt
+            }).ToList()
+        };
+
+        return Ok(new ApiResponse<EventPaymentSummaryDto> { Success = true, Data = summary });
+    }
 }
