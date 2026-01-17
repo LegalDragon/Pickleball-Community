@@ -1743,8 +1743,6 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
   const [showEditDivision, setShowEditDivision] = useState(false);
   const [editingDivision, setEditingDivision] = useState(null);
   const [savingDivision, setSavingDivision] = useState(false);
-  const [showCopySettings, setShowCopySettings] = useState(false);
-  const [copyingSettings, setCopyingSettings] = useState(false);
 
   // Score formats state
   const [scoreFormats, setScoreFormats] = useState([]);
@@ -2342,20 +2340,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
 
   // Open edit division modal
   const handleEditDivision = (division) => {
-    // Load score formats if not already loaded
-    if (scoreFormats.length === 0) {
-      loadScoreFormats();
-    }
-
-    setEditingDivision({
-      ...division,
-      scheduleType: division.scheduleType || '',
-      poolCount: division.poolCount || '',
-      poolSize: division.poolSize || '',
-      playoffFromPools: division.playoffFromPools || '',
-      gamesPerMatch: division.gamesPerMatch || 1,
-      defaultScoreFormatId: division.defaultScoreFormatId || null
-    });
+    setEditingDivision({ ...division });
     setShowEditDivision(true);
   };
 
@@ -2365,6 +2350,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
 
     setSavingDivision(true);
     try {
+      // Schedule configuration is now managed in Tournament Management
       const updateData = {
         name: editingDivision.name,
         description: editingDivision.description,
@@ -2373,13 +2359,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         ageGroupId: editingDivision.ageGroupId || null,
         maxUnits: editingDivision.maxUnits ? parseInt(editingDivision.maxUnits) : null,
         maxPlayers: editingDivision.maxPlayers ? parseInt(editingDivision.maxPlayers) : null,
-        divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null,
-        scheduleType: editingDivision.scheduleType || null,
-        poolCount: editingDivision.poolCount ? parseInt(editingDivision.poolCount) : null,
-        poolSize: editingDivision.poolSize ? parseInt(editingDivision.poolSize) : null,
-        playoffFromPools: editingDivision.playoffFromPools ? parseInt(editingDivision.playoffFromPools) : null,
-        gamesPerMatch: editingDivision.gamesPerMatch ? parseInt(editingDivision.gamesPerMatch) : 1,
-        defaultScoreFormatId: editingDivision.defaultScoreFormatId ? parseInt(editingDivision.defaultScoreFormatId) : null
+        divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null
       };
 
       const response = await eventsApi.updateDivision(event.id, editingDivision.id, updateData);
@@ -2412,46 +2392,6 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
       toast.error('Failed to update division');
     } finally {
       setSavingDivision(false);
-    }
-  };
-
-  // Copy match settings to other divisions
-  const handleCopySettingsToOther = async (targetDivisionIds) => {
-    if (!editingDivision || targetDivisionIds.length === 0) return;
-
-    setCopyingSettings(true);
-    try {
-      const matchSettings = {
-        scheduleType: editingDivision.scheduleType || null,
-        poolCount: editingDivision.poolCount ? parseInt(editingDivision.poolCount) : null,
-        poolSize: editingDivision.poolSize ? parseInt(editingDivision.poolSize) : null,
-        playoffFromPools: editingDivision.playoffFromPools ? parseInt(editingDivision.playoffFromPools) : null,
-        gamesPerMatch: editingDivision.gamesPerMatch ? parseInt(editingDivision.gamesPerMatch) : 1,
-        defaultScoreFormatId: editingDivision.defaultScoreFormatId ? parseInt(editingDivision.defaultScoreFormatId) : null
-      };
-
-      let successCount = 0;
-      for (const divId of targetDivisionIds) {
-        const response = await eventsApi.updateDivision(event.id, divId, matchSettings);
-        if (response.success) successCount++;
-      }
-
-      if (successCount > 0) {
-        toast.success(`Copied match settings to ${successCount} division(s)`);
-        // Reload event to get updated divisions
-        const eventResponse = await eventsApi.getEvent(event.id);
-        if (eventResponse.success) {
-          onUpdate(eventResponse.data);
-        }
-      } else {
-        toast.error('Failed to copy settings');
-      }
-    } catch (err) {
-      console.error('Error copying settings:', err);
-      toast.error('Failed to copy settings');
-    } finally {
-      setCopyingSettings(false);
-      setShowCopySettings(false);
     }
   };
 
@@ -6373,185 +6313,47 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                 </div>
               </div>
 
-              {/* Schedule Configuration */}
+              {/* Schedule Configuration Link */}
               <div className="border-t pt-4 mt-4">
                 <h4 className="font-medium text-gray-900 mb-3">Schedule Configuration</h4>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Type</label>
-                  <select
-                    value={editingDivision.scheduleType || ''}
-                    onChange={(e) => setEditingDivision({ ...editingDivision, scheduleType: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 mb-3">
+                    Configure schedules, generate brackets, and manage drawings in Tournament Management.
+                  </p>
+                  <Link
+                    to={`/tournament/${event.id}/manage`}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                    onClick={() => {
+                      setShowEditDivision(false);
+                      setEditingDivision(null);
+                    }}
                   >
-                    <option value="">Select schedule type...</option>
-                    <option value="RoundRobin">Round Robin</option>
-                    <option value="RoundRobinPlayoff">Round Robin + Playoff</option>
-                    <option value="SingleElimination">Single Elimination</option>
-                    <option value="DoubleElimination">Double Elimination</option>
-                    <option value="RandomPairing">Random Pairing</option>
-                  </select>
+                    <Settings className="w-4 h-4" />
+                    Open Tournament Management
+                  </Link>
                 </div>
 
-                {(editingDivision.scheduleType === 'RoundRobin' || editingDivision.scheduleType === 'RoundRobinPlayoff') && (
-                  <div className="grid grid-cols-2 gap-4 mt-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Number of Pools</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={editingDivision.poolCount || ''}
-                        onChange={(e) => setEditingDivision({ ...editingDivision, poolCount: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                        placeholder="1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Pool Size</label>
-                      <input
-                        type="number"
-                        min="2"
-                        value={editingDivision.poolSize || ''}
-                        onChange={(e) => setEditingDivision({ ...editingDivision, poolSize: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg p-2"
-                        placeholder="Auto"
-                      />
-                    </div>
+                {/* Schedule Status Display */}
+                {editingDivision.scheduleStatus && editingDivision.scheduleStatus !== 'NotGenerated' && (
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg mt-3">
+                    <span className="text-sm text-gray-700">
+                      Schedule Status: <strong>{editingDivision.scheduleStatus}</strong>
+                    </span>
                   </div>
                 )}
-
-                {editingDivision.scheduleType === 'RoundRobinPlayoff' && (
-                  <div className="mt-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Teams Advancing per Pool</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={editingDivision.playoffFromPools || ''}
-                      onChange={(e) => setEditingDivision({ ...editingDivision, playoffFromPools: e.target.value })}
-                      className="w-full border border-gray-300 rounded-lg p-2"
-                      placeholder="2"
-                    />
-                  </div>
-                )}
-
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Games per Match</label>
-                  <select
-                    value={editingDivision.gamesPerMatch || 1}
-                    onChange={(e) => setEditingDivision({ ...editingDivision, gamesPerMatch: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                  >
-                    <option value="1">Single Game</option>
-                    <option value="3">Best of 3</option>
-                    <option value="5">Best of 5</option>
-                  </select>
-                </div>
-
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Game Format</label>
-                  <select
-                    value={editingDivision.defaultScoreFormatId || ''}
-                    onChange={(e) => setEditingDivision({ ...editingDivision, defaultScoreFormatId: e.target.value ? parseInt(e.target.value) : null })}
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                  >
-                    <option value="">Use event default</option>
-                    {scoreFormats.map(format => (
-                      <option key={format.id} value={format.id}>
-                        {format.name} ({format.pointsToWin} pts, win by {format.winByPoints})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Applied to all games when created. Individual game formats can be edited later.</p>
-                </div>
               </div>
-
-              {/* Schedule Status Display */}
-              {editingDivision.scheduleStatus && editingDivision.scheduleStatus !== 'NotGenerated' && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <span className="text-sm text-blue-700">
-                    Schedule Status: <strong>{editingDivision.scheduleStatus}</strong>
-                  </span>
-                </div>
-              )}
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between">
-              {/* Copy to Other Divisions Button */}
-              <div className="relative">
-                {event.divisions?.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCopySettings(!showCopySettings)}
-                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex items-center gap-1"
-                    title="Copy match settings to other divisions"
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy to Others
-                  </button>
-                )}
-
-                {/* Copy Settings Dropdown */}
-                {showCopySettings && event.divisions?.length > 1 && (
-                  <div className="absolute bottom-full left-0 mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                    <div className="p-3 border-b">
-                      <p className="text-sm font-medium text-gray-900">Copy Match Settings To:</p>
-                      <p className="text-xs text-gray-500 mt-1">Schedule type, games per match, and game formats</p>
-                    </div>
-                    <div className="p-2 max-h-48 overflow-y-auto">
-                      {event.divisions
-                        .filter(d => d.id !== editingDivision?.id)
-                        .map(div => (
-                          <label key={div.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                            <input
-                              type="checkbox"
-                              className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                              data-division-id={div.id}
-                            />
-                            <span className="text-sm text-gray-700">{div.name}</span>
-                          </label>
-                        ))}
-                    </div>
-                    <div className="p-2 border-t flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowCopySettings(false)}
-                        className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const checkboxes = document.querySelectorAll('[data-division-id]:checked');
-                          const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.divisionId));
-                          if (selectedIds.length > 0) {
-                            handleCopySettingsToOther(selectedIds);
-                          } else {
-                            toast.error('Select at least one division');
-                          }
-                        }}
-                        disabled={copyingSettings}
-                        className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {copyingSettings && <Loader2 className="w-3 h-3 animate-spin" />}
-                        Apply
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowEditDivision(false);
-                    setEditingDivision(null);
-                    setShowCopySettings(false);
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEditDivision(false);
+                  setEditingDivision(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
+              >
+                Cancel
+              </button>
                 <button
                   onClick={handleSaveDivision}
                   disabled={savingDivision}
