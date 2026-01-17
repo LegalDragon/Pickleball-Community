@@ -3475,20 +3475,50 @@ public class TournamentController : ControllerBase
             .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
+        // Include members to show team composition
         var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
             .OrderBy(u => u.PoolNumber)
             .ThenByDescending(u => u.MatchesWon)
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
             .ToListAsync();
 
+        // Build lookup for unit pool/rank info (for playoff seed descriptions)
+        var unitPoolInfo = new Dictionary<int, (string PoolName, int Rank)>();
+        var poolGroups = units.GroupBy(u => u.PoolNumber ?? 0).OrderBy(g => g.Key);
+        foreach (var poolGroup in poolGroups)
+        {
+            var poolName = poolGroup.First().PoolName ?? $"Pool {poolGroup.Key}";
+            int rank = 1;
+            foreach (var unit in poolGroup)
+            {
+                if (unit.Id > 0)
+                    unitPoolInfo[unit.Id] = (poolName, rank);
+                rank++;
+            }
+        }
+
+        // Helper to get seed info for a unit in playoff matches
+        string? GetSeedInfo(int? unitId)
+        {
+            if (!unitId.HasValue || !unitPoolInfo.ContainsKey(unitId.Value))
+                return null;
+            var info = unitPoolInfo[unitId.Value];
+            return $"{info.PoolName} #{info.Rank}";
+        }
+
         var schedule = new ScheduleExportDto
         {
             DivisionId = divisionId,
             DivisionName = division.Name,
             EventName = division.Event?.Name ?? "",
+            ScheduleType = division.ScheduleType,
+            PlayoffFromPools = division.PlayoffFromPools,
             ExportedAt = DateTime.Now,
-            Rounds = matches.GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
+            Rounds = matches
+                .Where(m => !(m.Unit1Id == null && m.Unit2Id == null)) // Filter out empty placeholder matches
+                .GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
                 .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : g.Key.RoundType == "Bracket" ? 1 : 2)
                 .ThenBy(g => g.Key.RoundNumber)
                 .Select(g => new ScheduleRoundDto
@@ -3503,6 +3533,10 @@ public class TournamentController : ControllerBase
                         Unit2Number = m.Unit2Number,
                         Unit1Name = m.Unit1?.Name,
                         Unit2Name = m.Unit2?.Name,
+                        // Add seed info for playoff (Bracket) matches
+                        Unit1SeedInfo = g.Key.RoundType == "Bracket" ? GetSeedInfo(m.Unit1Id) : null,
+                        Unit2SeedInfo = g.Key.RoundType == "Bracket" ? GetSeedInfo(m.Unit2Id) : null,
+                        IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
                         Status = m.Status,
                         Score = GetMatchScore(m),
                         WinnerName = m.Winner?.Name
@@ -3519,6 +3553,11 @@ public class TournamentController : ControllerBase
                         Rank = idx + 1,
                         UnitNumber = u.UnitNumber,
                         UnitName = u.Name,
+                        Members = u.Members
+                            .Where(m => m.User != null)
+                            .Select(m => $"{m.User!.FirstName} {m.User.LastName}".Trim())
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .ToList(),
                         MatchesPlayed = u.MatchesPlayed,
                         MatchesWon = u.MatchesWon,
                         MatchesLost = u.MatchesLost,

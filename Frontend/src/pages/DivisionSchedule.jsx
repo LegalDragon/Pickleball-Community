@@ -157,7 +157,7 @@ export default function DivisionSchedule() {
           </p>
         </div>
 
-        {/* Drawing Results - Units with their numbers */}
+        {/* Drawing Results - Units with their numbers and members */}
         {schedule?.poolStandings && schedule.poolStandings.length > 0 && (
           <div className="mb-8 print:mb-4">
             <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2 print:text-lg">
@@ -168,15 +168,22 @@ export default function DivisionSchedule() {
               {schedule.poolStandings.map((pool) => (
                 <div key={pool.poolNumber} className="bg-gray-50 rounded-lg p-4 border border-gray-200 print:p-2">
                   {pool.poolName && (
-                    <h4 className="font-semibold text-gray-800 mb-2 print:text-sm">{pool.poolName}</h4>
+                    <h4 className="font-semibold text-gray-800 mb-3 print:text-sm">{pool.poolName}</h4>
                   )}
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {pool.standings.map((entry) => (
-                      <div key={entry.unitNumber} className="flex items-center gap-2 text-sm">
-                        <span className="w-8 h-8 flex items-center justify-center bg-orange-500 text-white font-bold rounded print:w-6 print:h-6 print:text-xs">
+                      <div key={entry.unitNumber} className="flex items-start gap-2 text-sm">
+                        <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-orange-500 text-white font-bold rounded print:w-6 print:h-6 print:text-xs">
                           {entry.unitNumber}
                         </span>
-                        <span className="text-gray-700 print:text-xs">{entry.unitName}</span>
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 print:text-xs">{entry.unitName}</div>
+                          {entry.members && entry.members.length > 0 && (
+                            <div className="text-xs text-gray-500 print:text-[10px]">
+                              {entry.members.join(', ')}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
