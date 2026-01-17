@@ -269,6 +269,14 @@ public class EventDivisionDto
     public int? PlayoffFromPools { get; set; }
     public int GamesPerMatch { get; set; } = 1;
 
+    // Encounter settings (for multi-match team scrimmages)
+    public int MatchesPerEncounter { get; set; } = 1;
+    public bool AllowPlayerReuseInEncounter { get; set; } = true;
+    public bool AllowLineupChangePerEncounter { get; set; } = true;
+
+    // Encounter match formats (for multi-match encounters)
+    public List<EncounterMatchFormatDto> EncounterMatchFormats { get; set; } = new();
+
     // Rewards
     public List<DivisionRewardDto> Rewards { get; set; } = new();
 }
@@ -293,6 +301,11 @@ public class UpdateDivisionDto
     public string? BracketType { get; set; }
     public int? PlayoffFromPools { get; set; }
     public int? GamesPerMatch { get; set; }
+
+    // Encounter settings (for multi-match team scrimmages)
+    public int? MatchesPerEncounter { get; set; }
+    public bool? AllowPlayerReuseInEncounter { get; set; }
+    public bool? AllowLineupChangePerEncounter { get; set; }
 }
 
 // Division with registrations
@@ -421,6 +434,11 @@ public class CreateEventDivisionDto
     public int? PoolCount { get; set; }
     public int? PoolSize { get; set; }
     public int? PlayoffFromPools { get; set; }
+
+    // Encounter settings (for multi-match team scrimmages)
+    public int? MatchesPerEncounter { get; set; }
+    public bool? AllowPlayerReuseInEncounter { get; set; }
+    public bool? AllowLineupChangePerEncounter { get; set; }
 
     // Rewards to create with this division
     public List<CreateDivisionRewardDto> Rewards { get; set; } = new();

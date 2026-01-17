@@ -527,6 +527,9 @@ public class EventsController : ControllerBase
                     .ThenInclude(d => d.SkillLevel)
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Rewards)
+                .Include(e => e.Divisions)
+                    .ThenInclude(d => d.EncounterMatchFormats)
+                        .ThenInclude(f => f.ScoreFormat)
                 .FirstOrDefaultAsync(e => e.Id == id && e.IsActive);
 
             if (evt == null)
@@ -733,6 +736,25 @@ public class EventsController : ControllerBase
                         BracketType = d.BracketType,
                         PlayoffFromPools = d.PlayoffFromPools,
                         GamesPerMatch = d.GamesPerMatch,
+                        // Encounter settings
+                        MatchesPerEncounter = d.MatchesPerEncounter,
+                        AllowPlayerReuseInEncounter = d.AllowPlayerReuseInEncounter,
+                        AllowLineupChangePerEncounter = d.AllowLineupChangePerEncounter,
+                        EncounterMatchFormats = d.EncounterMatchFormats
+                            .OrderBy(f => f.MatchOrder)
+                            .Select(f => new EncounterMatchFormatDto
+                            {
+                                Id = f.Id,
+                                DivisionId = f.DivisionId,
+                                MatchOrder = f.MatchOrder,
+                                Name = f.Name,
+                                MaleCount = f.MaleCount,
+                                FemaleCount = f.FemaleCount,
+                                UnisexCount = f.UnisexCount,
+                                GamesPerMatch = f.GamesPerMatch,
+                                ScoreFormatId = f.ScoreFormatId,
+                                ScoreFormatName = f.ScoreFormat?.Name
+                            }).ToList(),
                         Rewards = d.Rewards.Where(r => r.IsActive).OrderBy(r => r.Placement).Select(r => new DivisionRewardDto
                         {
                             Id = r.Id,
@@ -1666,7 +1688,11 @@ public class EventsController : ControllerBase
                 ScheduleType = dto.ScheduleType,
                 PoolCount = dto.PoolCount,
                 PoolSize = dto.PoolSize,
-                PlayoffFromPools = dto.PlayoffFromPools
+                PlayoffFromPools = dto.PlayoffFromPools,
+                // Encounter settings
+                MatchesPerEncounter = dto.MatchesPerEncounter ?? 1,
+                AllowPlayerReuseInEncounter = dto.AllowPlayerReuseInEncounter ?? true,
+                AllowLineupChangePerEncounter = dto.AllowLineupChangePerEncounter ?? true
             };
 
             _context.EventDivisions.Add(division);
@@ -1735,6 +1761,11 @@ public class EventsController : ControllerBase
                     BracketType = division.BracketType,
                     PlayoffFromPools = division.PlayoffFromPools,
                     GamesPerMatch = division.GamesPerMatch,
+                    // Encounter settings
+                    MatchesPerEncounter = division.MatchesPerEncounter,
+                    AllowPlayerReuseInEncounter = division.AllowPlayerReuseInEncounter,
+                    AllowLineupChangePerEncounter = division.AllowLineupChangePerEncounter,
+                    EncounterMatchFormats = new List<EncounterMatchFormatDto>(),
                     Rewards = dto.Rewards.Select((r, i) => new DivisionRewardDto
                     {
                         Id = i + 1, // Placeholder - actual IDs are in the database
@@ -1806,6 +1837,11 @@ public class EventsController : ControllerBase
             if (dto.PlayoffFromPools.HasValue) division.PlayoffFromPools = dto.PlayoffFromPools;
             if (dto.GamesPerMatch.HasValue) division.GamesPerMatch = dto.GamesPerMatch.Value;
 
+            // Encounter settings
+            if (dto.MatchesPerEncounter.HasValue) division.MatchesPerEncounter = dto.MatchesPerEncounter.Value;
+            if (dto.AllowPlayerReuseInEncounter.HasValue) division.AllowPlayerReuseInEncounter = dto.AllowPlayerReuseInEncounter.Value;
+            if (dto.AllowLineupChangePerEncounter.HasValue) division.AllowLineupChangePerEncounter = dto.AllowLineupChangePerEncounter.Value;
+
             await _context.SaveChangesAsync();
 
             // Reload with navigation properties
@@ -1848,7 +1884,11 @@ public class EventsController : ControllerBase
                     ScheduleStatus = division.ScheduleStatus,
                     BracketType = division.BracketType,
                     PlayoffFromPools = division.PlayoffFromPools,
-                    GamesPerMatch = division.GamesPerMatch
+                    GamesPerMatch = division.GamesPerMatch,
+                    // Encounter settings
+                    MatchesPerEncounter = division.MatchesPerEncounter,
+                    AllowPlayerReuseInEncounter = division.AllowPlayerReuseInEncounter,
+                    AllowLineupChangePerEncounter = division.AllowLineupChangePerEncounter
                 },
                 Message = "Division updated successfully"
             });
