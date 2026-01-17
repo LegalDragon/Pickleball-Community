@@ -81,7 +81,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventUnitMember> EventUnitMembers { get; set; }
     public DbSet<EventUnitJoinRequest> EventUnitJoinRequests { get; set; }
     public DbSet<UserPayment> UserPayments { get; set; }
-    public DbSet<EventMatch> EventMatches { get; set; }
+    public DbSet<EventEncounter> EventEncounters { get; set; }
+    public DbSet<EncounterMatchFormat> EncounterMatchFormats { get; set; }
+    public DbSet<EncounterMatch> EncounterMatches { get; set; }
+    public DbSet<EncounterMatchPlayer> EncounterMatchPlayers { get; set; }
     public DbSet<EventGame> EventGames { get; set; }
     public DbSet<EventGamePlayer> EventGamePlayers { get; set; }
     public DbSet<EventGameScoreHistory> EventGameScoreHistories { get; set; }
@@ -845,9 +848,10 @@ public class ApplicationDbContext : DbContext
                   .OnDelete(DeleteBehavior.SetNull);
         });
 
-        // Event Match configuration
-        modelBuilder.Entity<EventMatch>(entity =>
+        // Event Encounter configuration (renamed from EventMatch)
+        modelBuilder.Entity<EventEncounter>(entity =>
         {
+            entity.ToTable("EventEncounters");
             entity.Property(m => m.RoundType).HasMaxLength(20);
             entity.Property(m => m.Status).HasMaxLength(20);
             entity.HasIndex(m => m.EventId);
@@ -856,12 +860,12 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(m => new { m.DivisionId, m.RoundType, m.RoundNumber });
 
             entity.HasOne(m => m.Event)
-                  .WithMany(e => e.Matches)
+                  .WithMany(e => e.Encounters)
                   .HasForeignKey(m => m.EventId)
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(m => m.Division)
-                  .WithMany(d => d.Matches)
+                  .WithMany(d => d.Encounters)
                   .HasForeignKey(m => m.DivisionId)
                   .OnDelete(DeleteBehavior.NoAction);
 
@@ -891,18 +895,87 @@ public class ApplicationDbContext : DbContext
                   .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Encounter Match Format configuration (defines match types within encounters)
+        modelBuilder.Entity<EncounterMatchFormat>(entity =>
+        {
+            entity.Property(f => f.Name).IsRequired().HasMaxLength(100);
+            entity.HasIndex(f => f.DivisionId);
+            entity.HasIndex(f => new { f.DivisionId, f.MatchOrder });
+
+            entity.HasOne(f => f.Division)
+                  .WithMany(d => d.EncounterMatchFormats)
+                  .HasForeignKey(f => f.DivisionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(f => f.ScoreFormat)
+                  .WithMany()
+                  .HasForeignKey(f => f.ScoreFormatId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Encounter Match configuration (individual matches within an encounter)
+        modelBuilder.Entity<EncounterMatch>(entity =>
+        {
+            entity.Property(m => m.Status).HasMaxLength(20);
+            entity.Property(m => m.HandicapReason).HasMaxLength(200);
+            entity.HasIndex(m => m.EncounterId);
+            entity.HasIndex(m => new { m.EncounterId, m.MatchOrder });
+
+            entity.HasOne(m => m.Encounter)
+                  .WithMany(e => e.Matches)
+                  .HasForeignKey(m => m.EncounterId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.Format)
+                  .WithMany()
+                  .HasForeignKey(m => m.FormatId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(m => m.Winner)
+                  .WithMany()
+                  .HasForeignKey(m => m.WinnerUnitId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Encounter Match Player configuration (player assignments to matches)
+        modelBuilder.Entity<EncounterMatchPlayer>(entity =>
+        {
+            entity.Property(p => p.Gender).HasMaxLength(1);
+            entity.HasIndex(p => p.MatchId);
+            entity.HasIndex(p => p.UserId);
+            entity.HasIndex(p => new { p.MatchId, p.UserId }).IsUnique();
+
+            entity.HasOne(p => p.Match)
+                  .WithMany(m => m.Players)
+                  .HasForeignKey(p => p.MatchId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
         // Event Game configuration
         modelBuilder.Entity<EventGame>(entity =>
         {
             entity.Property(g => g.Status).HasMaxLength(20);
             entity.HasIndex(g => g.MatchId);
+            entity.HasIndex(g => g.EncounterMatchId);
             entity.HasIndex(g => g.Status);
             entity.HasIndex(g => g.TournamentCourtId);
 
-            entity.HasOne(g => g.Match)
+            // Legacy: Reference to EventEncounter (for backward compatibility)
+            entity.HasOne(g => g.Encounter)
                   .WithMany(m => m.Games)
                   .HasForeignKey(g => g.MatchId)
                   .OnDelete(DeleteBehavior.Cascade);
+
+            // New: Reference to EncounterMatch (for multi-match encounters)
+            entity.HasOne(g => g.EncounterMatch)
+                  .WithMany(m => m.Games)
+                  .HasForeignKey(g => g.EncounterMatchId)
+                  .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(g => g.ScoreFormat)
                   .WithMany()

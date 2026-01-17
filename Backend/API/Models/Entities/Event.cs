@@ -142,7 +142,7 @@ public class Event
     public ICollection<EventRegistration> Registrations { get; set; } = new List<EventRegistration>();
     public ICollection<EventUnit> Units { get; set; } = new List<EventUnit>();
     public ICollection<TournamentCourt> TournamentCourts { get; set; } = new List<TournamentCourt>();
-    public ICollection<EventMatch> Matches { get; set; } = new List<EventMatch>();
+    public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
     public ICollection<EventDocument> Documents { get; set; } = new List<EventDocument>();
 }
 
@@ -236,6 +236,26 @@ public class EventDivision
     /// </summary>
     public int DrawingSequence { get; set; } = 0;
 
+    // =====================================================
+    // Encounter Settings (for multi-match team scrimmages)
+    // =====================================================
+
+    /// <summary>
+    /// Number of matches per encounter. Default 1 for typical tournaments.
+    /// > 1 for team scrimmage format (e.g., Men's Doubles + Women's Doubles + Mixed)
+    /// </summary>
+    public int MatchesPerEncounter { get; set; } = 1;
+
+    /// <summary>
+    /// Whether the same player can play in multiple matches within one encounter
+    /// </summary>
+    public bool AllowPlayerReuseInEncounter { get; set; } = true;
+
+    /// <summary>
+    /// Whether captain can change lineup for each encounter (vs fixed lineup)
+    /// </summary>
+    public bool AllowLineupChangePerEncounter { get; set; } = true;
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 
@@ -279,7 +299,8 @@ public class EventDivision
     public ICollection<EventPartnerRequest> PartnerRequests { get; set; } = new List<EventPartnerRequest>();
     public ICollection<DivisionReward> Rewards { get; set; } = new List<DivisionReward>();
     public ICollection<EventUnit> Units { get; set; } = new List<EventUnit>();
-    public ICollection<EventMatch> Matches { get; set; } = new List<EventMatch>();
+    public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
+    public ICollection<EncounterMatchFormat> EncounterMatchFormats { get; set; } = new List<EncounterMatchFormat>();
 }
 
 public class EventRegistration

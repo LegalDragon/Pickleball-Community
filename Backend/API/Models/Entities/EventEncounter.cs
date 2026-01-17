@@ -4,9 +4,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// A scheduled match between two units in a division
+/// A scheduled encounter between two units in a division.
+/// An encounter can contain multiple matches (e.g., team scrimmage format).
 /// </summary>
-public class EventMatch
+public class EventEncounter
 {
     public int Id { get; set; }
 
@@ -31,9 +32,9 @@ public class EventMatch
     public string? RoundName { get; set; }
 
     /// <summary>
-    /// Match number within the round
+    /// Encounter number within the round (was MatchNumber)
     /// </summary>
-    public int MatchNumber { get; set; } = 1;
+    public int EncounterNumber { get; set; } = 1;
 
     /// <summary>
     /// Position in bracket (for elimination brackets)
@@ -41,29 +42,36 @@ public class EventMatch
     public int? BracketPosition { get; set; }
 
     /// <summary>
-    /// Unit number placeholder (before units are assigned)
+    /// Unit number placeholder (before units are assigned via drawing)
     /// </summary>
     public int? Unit1Number { get; set; }
     public int? Unit2Number { get; set; }
 
     /// <summary>
-    /// Actual unit IDs (after assignment)
+    /// Actual unit IDs (after drawing assignment)
     /// </summary>
     public int? Unit1Id { get; set; }
     public int? Unit2Id { get; set; }
 
     /// <summary>
-    /// Best of X games (1, 3, 5, etc.)
+    /// Encounter-level score: number of matches won by each unit
+    /// Only relevant when MatchesPerEncounter > 1
+    /// </summary>
+    public int Unit1EncounterScore { get; set; } = 0;
+    public int Unit2EncounterScore { get; set; } = 0;
+
+    /// <summary>
+    /// Best of X games (legacy - now defined per match in EncounterMatchFormat)
     /// </summary>
     public int BestOf { get; set; } = 1;
 
     /// <summary>
-    /// Winner of the match
+    /// Winner of the encounter
     /// </summary>
     public int? WinnerUnitId { get; set; }
 
     /// <summary>
-    /// Status: Scheduled, Ready, InProgress, Completed, Cancelled
+    /// Status: Scheduled, Ready, InProgress, Completed, Cancelled, Bye
     /// </summary>
     [MaxLength(20)]
     public string Status { get; set; } = "Scheduled";
@@ -81,7 +89,7 @@ public class EventMatch
     public int? TournamentCourtId { get; set; }
 
     /// <summary>
-    /// Score format (can override division default)
+    /// Score format (can override division default) - legacy for simple encounters
     /// </summary>
     public int? ScoreFormatId { get; set; }
 
@@ -89,7 +97,7 @@ public class EventMatch
     public string? Notes { get; set; }
 
     /// <summary>
-    /// Whether winning this match qualifies a unit for playoffs
+    /// Whether winning this encounter qualifies a unit for playoffs
     /// </summary>
     public bool IsPlayoffQualifier { get; set; } = false;
 
@@ -123,5 +131,14 @@ public class EventMatch
     [ForeignKey("ScoreFormatId")]
     public ScoreFormat? ScoreFormat { get; set; }
 
+    /// <summary>
+    /// Matches within this encounter (1 for simple, multiple for team scrimmages)
+    /// </summary>
+    public ICollection<EncounterMatch> Matches { get; set; } = new List<EncounterMatch>();
+
+    /// <summary>
+    /// Legacy: Games directly on encounter (for backward compatibility during migration)
+    /// New code should use Matches[].Games
+    /// </summary>
     public ICollection<EventGame> Games { get; set; } = new List<EventGame>();
 }

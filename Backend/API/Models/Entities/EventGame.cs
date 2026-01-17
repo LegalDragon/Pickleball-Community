@@ -11,7 +11,16 @@ public class EventGame
 {
     public int Id { get; set; }
 
+    /// <summary>
+    /// Legacy: Reference to EventEncounter (was EventMatch).
+    /// For new code, use EncounterMatchId instead.
+    /// </summary>
     public int MatchId { get; set; }
+
+    /// <summary>
+    /// Reference to EncounterMatch (the new match-within-encounter entity)
+    /// </summary>
+    public int? EncounterMatchId { get; set; }
 
     /// <summary>
     /// Game number within match (1, 2, 3...)
@@ -94,7 +103,10 @@ public class EventGame
 
     // Navigation
     [ForeignKey("MatchId")]
-    public EventMatch? Match { get; set; }
+    public EventEncounter? Encounter { get; set; }
+
+    [ForeignKey("EncounterMatchId")]
+    public EncounterMatch? EncounterMatch { get; set; }
 
     [ForeignKey("ScoreFormatId")]
     public ScoreFormat? ScoreFormat { get; set; }
