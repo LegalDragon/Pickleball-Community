@@ -91,7 +91,8 @@ public class GameDayController : ControllerBase
                     .ThenInclude(mem => mem.User)
             .Include(m => m.Division)
             .Include(m => m.TournamentCourt)
-            .Include(m => m.Games)
+            .Include(m => m.Matches)
+                .ThenInclude(match => match.Games)
             .Where(m => m.EventId == eventId)
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
@@ -361,7 +362,7 @@ public class GameDayController : ControllerBase
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Division)
             .Include(m => m.TournamentCourt)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .FirstOrDefaultAsync(m => m.Id == match.Id);
 
         return Ok(new { success = true, data = MapToGameDto(match!) });
@@ -378,7 +379,7 @@ public class GameDayController : ControllerBase
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
@@ -440,7 +441,7 @@ public class GameDayController : ControllerBase
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
@@ -532,7 +533,7 @@ public class GameDayController : ControllerBase
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
@@ -588,7 +589,7 @@ public class GameDayController : ControllerBase
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
@@ -968,7 +969,7 @@ public class GameDayController : ControllerBase
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Division)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.EventId == eventId)
             .ToListAsync())
             .Where(m => matchIdSet.Contains(m.Id))
@@ -1221,7 +1222,7 @@ public class GameDayController : ControllerBase
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Division)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .FirstOrDefaultAsync(m => m.Id == match.Id);
 
         return Ok(new

@@ -12,15 +12,9 @@ public class EventGame
     public int Id { get; set; }
 
     /// <summary>
-    /// Legacy: Reference to EventEncounter (was EventMatch).
-    /// For new code, use EncounterMatchId instead.
+    /// Reference to EncounterMatch - required for all games.
     /// </summary>
-    public int MatchId { get; set; }
-
-    /// <summary>
-    /// Reference to EncounterMatch (the new match-within-encounter entity)
-    /// </summary>
-    public int? EncounterMatchId { get; set; }
+    public int EncounterMatchId { get; set; }
 
     /// <summary>
     /// Game number within match (1, 2, 3...)
@@ -102,9 +96,6 @@ public class EventGame
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
     // Navigation
-    [ForeignKey("MatchId")]
-    public EventEncounter? Encounter { get; set; }
-
     [ForeignKey("EncounterMatchId")]
     public EncounterMatch? EncounterMatch { get; set; }
 

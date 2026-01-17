@@ -3161,7 +3161,7 @@ public class TournamentController : ControllerBase
 
         // Clear existing matches and games for this division
         var existingMatches = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
 
@@ -3271,7 +3271,7 @@ public class TournamentController : ControllerBase
 
         // Reload with games
         var result = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundNumber)
             .ThenBy(m => m.MatchNumber)
@@ -3437,7 +3437,7 @@ public class TournamentController : ControllerBase
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.Winner)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundType)
             .ThenBy(m => m.RoundNumber)
@@ -3510,7 +3510,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<EventGameDto>>> AssignGameToCourt([FromBody] AssignGameToCourtRequest request)
     {
         var game = await _context.EventGames
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
         if (game == null)
@@ -3549,7 +3549,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<EventGameDto>>> UpdateGameStatus([FromBody] UpdateGameStatusRequest request)
     {
         var game = await _context.EventGames
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
             .Include(g => g.TournamentCourt)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
@@ -3597,10 +3597,10 @@ public class TournamentController : ControllerBase
             return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
 
         var game = await _context.EventGames
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit1)
                     .ThenInclude(u => u!.Members)
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit2)
                     .ThenInclude(u => u!.Members)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
@@ -3609,8 +3609,9 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
 
         // Check if user is in one of the units
-        var userUnit = game.Encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? game.Encounter.Unit1 :
-                       game.Encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? game.Encounter.Unit2 : null;
+        var encounter = game.EncounterMatch?.Encounter;
+        var userUnit = encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit1 :
+                       encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit2 : null;
 
         if (userUnit == null)
             return Forbid();
@@ -3639,10 +3640,10 @@ public class TournamentController : ControllerBase
             return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
 
         var game = await _context.EventGames
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit1)
                     .ThenInclude(u => u!.Members)
-            .Include(g => g.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit2)
                     .ThenInclude(u => u!.Members)
             .Include(g => g.ScoreFormat)
@@ -3652,8 +3653,9 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
 
         // Check if user is in the OTHER unit (not the one that submitted)
-        var userUnit = game.Encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? game.Encounter.Unit1 :
-                       game.Encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? game.Encounter.Unit2 : null;
+        var encounter = game.EncounterMatch?.Encounter;
+        var userUnit = encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit1 :
+                       encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit2 : null;
 
         if (userUnit == null || userUnit.Id == game.ScoreSubmittedByUnitId)
             return Forbid();
@@ -3666,8 +3668,8 @@ public class TournamentController : ControllerBase
             game.FinishedAt = DateTime.Now;
 
             // Determine winner
-            var unit1Id = game.Encounter!.Unit1Id;
-            var unit2Id = game.Encounter!.Unit2Id;
+            var unit1Id = encounter!.Unit1Id;
+            var unit2Id = encounter!.Unit2Id;
             game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? unit1Id : unit2Id;
 
             // Update unit stats
@@ -3804,8 +3806,8 @@ public class TournamentController : ControllerBase
             .ToListAsync();
 
         var games = await _context.EventGames
-            .Include(g => g.Encounter)
-            .Where(g => g.Encounter!.EventId == eventId)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
             .ToListAsync();
 
         var courts = await _context.TournamentCourts
@@ -4488,11 +4490,11 @@ public class TournamentController : ControllerBase
 
     private async Task UpdateUnitStats(EventGame game)
     {
-        var match = game.Encounter;
-        if (match == null) return;
+        var encounter = game.EncounterMatch?.Encounter;
+        if (encounter == null) return;
 
-        var unit1 = await _context.EventUnits.FindAsync(match.Unit1Id);
-        var unit2 = await _context.EventUnits.FindAsync(match.Unit2Id);
+        var unit1 = await _context.EventUnits.FindAsync(encounter.Unit1Id);
+        var unit2 = await _context.EventUnits.FindAsync(encounter.Unit2Id);
 
         if (unit1 != null)
         {
@@ -4522,7 +4524,7 @@ public class TournamentController : ControllerBase
     private async Task CheckMatchComplete(int matchId)
     {
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return;

@@ -962,22 +962,15 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<EventGame>(entity =>
         {
             entity.Property(g => g.Status).HasMaxLength(20);
-            entity.HasIndex(g => g.MatchId);
             entity.HasIndex(g => g.EncounterMatchId);
             entity.HasIndex(g => g.Status);
             entity.HasIndex(g => g.TournamentCourtId);
 
-            // Legacy: Reference to EventEncounter (for backward compatibility)
-            entity.HasOne(g => g.Encounter)
-                  .WithMany(m => m.Games)
-                  .HasForeignKey(g => g.MatchId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            // New: Reference to EncounterMatch (for multi-match encounters)
+            // Reference to EncounterMatch
             entity.HasOne(g => g.EncounterMatch)
                   .WithMany(m => m.Games)
                   .HasForeignKey(g => g.EncounterMatchId)
-                  .OnDelete(DeleteBehavior.NoAction);
+                  .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(g => g.ScoreFormat)
                   .WithMany()

@@ -1188,7 +1188,7 @@ public class TournamentGameDayController : ControllerBase
     private async Task CheckMatchCompletion(int matchId)
     {
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .FirstOrDefaultAsync(m => m.Id == matchId);

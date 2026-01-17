@@ -59,7 +59,7 @@ public class ScoreboardController : ControllerBase
             .Include(m => m.Division)
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
             .OrderBy(m => m.Status == "InProgress" ? 0 : (m.Status == "Ready" ? 1 : (m.Status == "Scheduled" ? 2 : 3)))
             .ThenBy(m => m.RoundNumber)
@@ -130,27 +130,30 @@ public class ScoreboardController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<LiveGameDto>>>> GetLiveScores(int eventId)
     {
         var liveGames = await _context.EventGames
-            .Where(g => g.Encounter!.EventId == eventId && (g.Status == "Playing" || g.Status == "Queued"))
-            .Include(g => g.Encounter)
-                .ThenInclude(m => m!.Unit1)
-            .Include(g => g.Encounter)
-                .ThenInclude(m => m!.Unit2)
-            .Include(g => g.Encounter)
-                .ThenInclude(m => m!.Division)
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId && (g.Status == "Playing" || g.Status == "Queued"))
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit1)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit2)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Division)
             .Include(g => g.TournamentCourt)
             .OrderBy(g => g.TournamentCourt!.SortOrder)
             .Select(g => new LiveGameDto
             {
                 GameId = g.Id,
-                MatchId = g.MatchId,
+                MatchId = g.EncounterMatch!.EncounterId,
                 GameNumber = g.GameNumber,
                 Status = g.Status,
                 Unit1Score = g.Unit1Score,
                 Unit2Score = g.Unit2Score,
-                Unit1Name = g.Encounter!.Unit1!.Name,
-                Unit2Name = g.Encounter.Unit2!.Name,
-                DivisionName = g.Encounter.Division!.Name,
-                RoundName = g.Encounter.RoundName,
+                Unit1Name = g.EncounterMatch.Encounter!.Unit1!.Name,
+                Unit2Name = g.EncounterMatch.Encounter.Unit2!.Name,
+                DivisionName = g.EncounterMatch.Encounter.Division!.Name,
+                RoundName = g.EncounterMatch.Encounter.RoundName,
                 CourtName = g.TournamentCourt != null ? g.TournamentCourt.CourtLabel : null,
                 CourtNumber = g.TournamentCourt != null ? g.TournamentCourt.SortOrder : null,
                 StartedAt = g.StartedAt
@@ -294,7 +297,7 @@ public class ScoreboardController : ControllerBase
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket")
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .OrderBy(m => m.RoundNumber)
             .ThenBy(m => m.BracketPosition)
             .Select(m => new BracketMatchDto
@@ -397,7 +400,7 @@ public class ScoreboardController : ControllerBase
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool")
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .OrderBy(m => m.RoundNumber)
             .ThenBy(m => m.EncounterNumber)
             .Select(m => new PoolMatchDto

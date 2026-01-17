@@ -143,12 +143,15 @@ public class EventEncounter
 
     /// <summary>
     /// Matches within this encounter (1 for simple, multiple for team scrimmages)
+    /// Always has at least 1 match - simple divisions auto-create 1 match.
     /// </summary>
     public ICollection<EncounterMatch> Matches { get; set; } = new List<EncounterMatch>();
 
     /// <summary>
-    /// Legacy: Games directly on encounter (for backward compatibility during migration)
-    /// New code should use Matches[].Games
+    /// Computed property: All games across all matches in this encounter.
+    /// For simple divisions (1 match per encounter), returns games from the single match.
+    /// For multi-match encounters, returns games from all matches.
     /// </summary>
-    public ICollection<EventGame> Games { get; set; } = new List<EventGame>();
+    [NotMapped]
+    public IEnumerable<EventGame> Games => Matches.SelectMany(m => m.Games);
 }

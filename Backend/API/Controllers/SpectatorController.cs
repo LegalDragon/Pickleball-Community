@@ -237,11 +237,13 @@ public class SpectatorController : ControllerBase
 
         // Get recent completed games
         var recentGames = await _context.EventGames
-            .Where(g => g.Encounter!.EventId == eventId && g.Status == "Finished")
-            .Include(g => g.Encounter)
-                .ThenInclude(m => m!.Unit1)
-            .Include(g => g.Encounter)
-                .ThenInclude(m => m!.Unit2)
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId && g.Status == "Finished")
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit1)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit2)
             .OrderByDescending(g => g.FinishedAt)
             .Take(10)
             .Select(g => new SpectatorGameDto
@@ -250,9 +252,9 @@ public class SpectatorController : ControllerBase
                 Status = g.Status,
                 Unit1Score = g.Unit1Score,
                 Unit2Score = g.Unit2Score,
-                Unit1Name = g.Encounter!.Unit1!.Name,
-                Unit2Name = g.Encounter.Unit2!.Name,
-                RoundName = g.Encounter.RoundName,
+                Unit1Name = g.EncounterMatch!.Encounter!.Unit1!.Name,
+                Unit2Name = g.EncounterMatch.Encounter.Unit2!.Name,
+                RoundName = g.EncounterMatch.Encounter.RoundName,
                 FinishedAt = g.FinishedAt
             })
             .ToListAsync();
