@@ -13,6 +13,9 @@ export function useDrawingHub() {
   const [viewers, setViewers] = useState([]);
   const [divisionStates, setDivisionStates] = useState({});
   const [countdownDivisionId, setCountdownDivisionId] = useState(null); // Division that just started drawing (for countdown)
+  const [fanfareEvent, setFanfareEvent] = useState(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [sessionEndedMessage, setSessionEndedMessage] = useState(null);
   const connectionRef = useRef(null);
   const maxReconnectAttempts = 5;
 
@@ -171,6 +174,25 @@ export function useDrawingHub() {
       setViewers(viewerList);
     });
 
+    // Division fanfare - triggered when any division completes drawing
+    newConnection.on('DivisionFanfare', (data) => {
+      console.log('DrawingHub: Division fanfare', data);
+      setFanfareEvent({
+        divisionId: data.divisionId,
+        divisionName: data.divisionName,
+        timestamp: Date.now()
+      });
+      // Auto-clear fanfare after 5 seconds
+      setTimeout(() => setFanfareEvent(null), 5000);
+    });
+
+    // Drawing session ended - admin has ended the drawing session
+    newConnection.on('DrawingSessionEnded', (data) => {
+      console.log('DrawingHub: Drawing session ended', data);
+      setSessionEnded(true);
+      setSessionEndedMessage(data.message);
+    });
+
     try {
       setConnectionState('connecting');
       await newConnection.start();
@@ -290,6 +312,17 @@ export function useDrawingHub() {
     setCountdownDivisionId(null);
   }, []);
 
+  // Clear fanfare event
+  const clearFanfare = useCallback(() => {
+    setFanfareEvent(null);
+  }, []);
+
+  // Reset session ended state
+  const resetSessionEnded = useCallback(() => {
+    setSessionEnded(false);
+    setSessionEndedMessage(null);
+  }, []);
+
   return {
     connection,
     connectionState,
@@ -306,7 +339,13 @@ export function useDrawingHub() {
     leaveDrawingRoom,
     joinEventDrawing,
     leaveEventDrawing,
-    isConnected: connectionState === 'connected'
+    isConnected: connectionState === 'connected',
+    // New fanfare and session end state
+    fanfareEvent,
+    clearFanfare,
+    sessionEnded,
+    sessionEndedMessage,
+    resetSessionEnded
   };
 }
 
@@ -320,5 +359,7 @@ export const DrawingEvents = {
   EventUnitDrawn: 'EventUnitDrawn',
   EventDrawingCompleted: 'EventDrawingCompleted',
   EventDrawingCancelled: 'EventDrawingCancelled',
-  ViewersUpdated: 'ViewersUpdated'
+  ViewersUpdated: 'ViewersUpdated',
+  DivisionFanfare: 'DivisionFanfare',
+  DrawingSessionEnded: 'DrawingSessionEnded'
 };

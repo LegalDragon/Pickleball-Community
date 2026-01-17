@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Radio, Users, ChevronLeft, Play, Check, X, Loader2,
   AlertCircle, User, Wifi, WifiOff, Eye, Shuffle, Trophy, Clock,
-  RotateCcw, ChevronRight
+  RotateCcw, ChevronRight, StopCircle, PartyPopper
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useDrawingHub } from '../hooks/useDrawingHub';
 import { tournamentApi, getSharedAssetUrl } from '../services/api';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 // Confetti effect component
 function Confetti({ active }) {
@@ -101,6 +102,12 @@ export default function DrawingMonitor() {
   // Viewer tracking
   const previousViewersRef = useRef([]);
 
+  // Profile modal state
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
+
+  // Session ended modal state
+  const [showSessionEndedModal, setShowSessionEndedModal] = useState(false);
+
   const {
     connect,
     disconnect,
@@ -113,7 +120,12 @@ export default function DrawingMonitor() {
     isConnected,
     connection,
     countdownDivisionId,
-    clearCountdown
+    clearCountdown,
+    fanfareEvent,
+    clearFanfare,
+    sessionEnded,
+    sessionEndedMessage,
+    resetSessionEnded
   } = useDrawingHub();
 
   // Load event drawing state
@@ -258,6 +270,41 @@ export default function DrawingMonitor() {
       return () => clearInterval(interval);
     }
   }, [countdownDivisionId, isOrganizer, isAdmin, clearCountdown]);
+
+  // Show confetti and toast when a division's drawing completes (fanfare event)
+  useEffect(() => {
+    if (fanfareEvent && fanfareEvent.divisionName) {
+      setShowConfetti(true);
+      toast.success(`🎉 ${fanfareEvent.divisionName} drawing completed!`);
+      setTimeout(() => setShowConfetti(false), 4000);
+    }
+  }, [fanfareEvent, toast]);
+
+  // Handle session ended event
+  useEffect(() => {
+    if (sessionEnded) {
+      setShowSessionEndedModal(true);
+    }
+  }, [sessionEnded]);
+
+  // End Drawing handler
+  const handleEndDrawing = async () => {
+    if (!confirm('Are you sure you want to end the drawing session? All viewers will be notified.')) return;
+
+    try {
+      setDrawingLoading(true);
+      const response = await tournamentApi.endDrawingMode(eventId);
+      if (response.success) {
+        toast.success('Drawing session ended');
+      } else {
+        toast.error(response.message || 'Failed to end drawing session');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to end drawing session');
+    } finally {
+      setDrawingLoading(false);
+    }
+  };
 
   // Start drawing (organizer/admin only - countdown comes via SignalR for everyone)
   const handleStartDrawing = async (divisionId) => {
@@ -410,6 +457,41 @@ export default function DrawingMonitor() {
       <Confetti active={showConfetti} />
       {countdown !== null && <Countdown count={countdown} />}
 
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
+        />
+      )}
+
+      {/* Session Ended Modal */}
+      {showSessionEndedModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl max-w-lg w-full p-8 text-center border border-gray-700">
+            <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <PartyPopper className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Drawing Session Ended</h2>
+            <p className="text-gray-400 mb-6">
+              {sessionEndedMessage || 'The drawing session has been completed. You can now review the results for each division.'}
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Feel free to take screenshots of the drawing results before leaving.
+            </p>
+            <button
+              onClick={() => {
+                setShowSessionEndedModal(false);
+                resetSessionEnded();
+              }}
+              className="px-8 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-xl hover:from-orange-600 hover:to-red-600 transition-colors"
+            >
+              View Results
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-40 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -440,12 +522,26 @@ export default function DrawingMonitor() {
               </div>
             </div>
 
-            {/* Connection Status */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              isConnected ? 'bg-green-900/50 text-green-400' : 'bg-gray-800 text-gray-500'
-            }`}>
-              {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-              {isConnected ? 'Live' : connectionState === 'connecting' ? 'Connecting...' : 'Offline'}
+            <div className="flex items-center gap-3">
+              {/* End Drawing Button - for organizer when all divisions are done */}
+              {(isOrganizer || isAdmin) && divisions.length > 0 && divisions.every(d => d.scheduleStatus === 'UnitsAssigned') && (
+                <button
+                  onClick={handleEndDrawing}
+                  disabled={drawingLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                >
+                  <StopCircle className="w-4 h-4" />
+                  End Drawing
+                </button>
+              )}
+
+              {/* Connection Status */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                isConnected ? 'bg-green-900/50 text-green-400' : 'bg-gray-800 text-gray-500'
+              }`}>
+                {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                {isConnected ? 'Live' : connectionState === 'connecting' ? 'Connecting...' : 'Offline'}
+              </div>
             </div>
           </div>
         </div>
@@ -461,9 +557,11 @@ export default function DrawingMonitor() {
             </div>
             <div className="flex-1 flex items-center gap-2 overflow-x-auto">
               {authenticatedViewers.map((viewer) => (
-                <div
+                <button
                   key={viewer.connectionId}
-                  className="flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-full flex-shrink-0"
+                  onClick={() => viewer.userId && setProfileModalUserId(viewer.userId)}
+                  className={`flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-full flex-shrink-0 ${viewer.userId ? 'hover:bg-gray-600 cursor-pointer' : ''} transition-colors`}
+                  title={viewer.userId ? `View ${viewer.displayName}'s profile` : viewer.displayName}
                 >
                   {viewer.avatarUrl ? (
                     <img
@@ -477,7 +575,7 @@ export default function DrawingMonitor() {
                     </div>
                   )}
                   <span className="text-xs text-white">{viewer.displayName}</span>
-                </div>
+                </button>
               ))}
               {anonymousCount > 0 && (
                 <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-full flex-shrink-0">
@@ -535,10 +633,15 @@ export default function DrawingMonitor() {
                           </span>
                         )}
                       </div>
-                      {/* Show all members with avatar and name */}
+                      {/* Show all members with avatar and name - clickable for profile */}
                       <div className="space-y-1.5">
                         {unit.members?.map((member) => (
-                          <div key={member.userId} className="flex items-center gap-2">
+                          <button
+                            key={member.userId}
+                            onClick={() => setProfileModalUserId(member.userId)}
+                            className="flex items-center gap-2 w-full text-left hover:bg-gray-700/50 rounded px-1 py-0.5 -mx-1 transition-colors"
+                            title={`View ${member.name}'s profile`}
+                          >
                             {member.avatarUrl ? (
                               <img
                                 src={getSharedAssetUrl(member.avatarUrl)}
@@ -551,7 +654,7 @@ export default function DrawingMonitor() {
                               </div>
                             )}
                             <span className="text-xs text-gray-300 truncate">{member.name}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -718,9 +821,14 @@ export default function DrawingMonitor() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-white truncate mb-1">{unit.unitName}</p>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 {fullUnit?.members?.map((member) => (
-                                  <div key={member.userId} className="flex items-center gap-1.5">
+                                  <button
+                                    key={member.userId}
+                                    onClick={() => setProfileModalUserId(member.userId)}
+                                    className="flex items-center gap-1.5 hover:bg-gray-700/50 rounded px-1 py-0.5 -mx-1 transition-colors"
+                                    title={`View ${member.name}'s profile`}
+                                  >
                                     {member.avatarUrl ? (
                                       <img
                                         src={getSharedAssetUrl(member.avatarUrl)}
@@ -733,7 +841,7 @@ export default function DrawingMonitor() {
                                       </div>
                                     )}
                                     <span className="text-xs text-gray-400">{member.name}</span>
-                                  </div>
+                                  </button>
                                 )) || unit.memberNames?.map((name, idx) => (
                                   <span key={idx} className="text-xs text-gray-400">{name}</span>
                                 ))}
