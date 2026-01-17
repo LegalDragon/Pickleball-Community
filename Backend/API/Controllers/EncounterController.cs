@@ -334,7 +334,7 @@ public class EncounterController : ControllerBase
                         .Select(g => new EncounterMatchGameDto
                         {
                             Id = g.Id,
-                            MatchId = g.EncounterMatchId ?? 0,
+                            MatchId = g.EncounterMatchId,
                             GameNumber = g.GameNumber,
                             Unit1Score = g.Unit1Score,
                             Unit2Score = g.Unit2Score,
@@ -426,7 +426,6 @@ public class EncounterController : ControllerBase
             {
                 _context.EventGames.Add(new EventGame
                 {
-                    MatchId = 0, // Legacy field, not used for EncounterMatch games
                     EncounterMatchId = match.Id,
                     GameNumber = i,
                     ScoreFormatId = format.ScoreFormatId

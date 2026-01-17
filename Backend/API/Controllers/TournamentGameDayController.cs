@@ -1227,12 +1227,13 @@ public class TournamentGameDayController : ControllerBase
 
         if (match == null) return;
 
-        var finishedGames = match.Games.Where(g => g.Status == "Finished").ToList();
+        var allGames = match.Matches.SelectMany(m => m.Games).ToList();
+        var finishedGames = allGames.Where(g => g.Status == "Finished").ToList();
         var unit1Wins = finishedGames.Count(g => g.WinnerUnitId == match.Unit1Id);
         var unit2Wins = finishedGames.Count(g => g.WinnerUnitId == match.Unit2Id);
         var winsNeeded = (match.BestOf / 2) + 1;
 
-        if (unit1Wins >= winsNeeded || unit2Wins >= winsNeeded || finishedGames.Count == match.Games.Count)
+        if (unit1Wins >= winsNeeded || unit2Wins >= winsNeeded || finishedGames.Count == allGames.Count)
         {
             match.Status = "Completed";
             match.CompletedAt = DateTime.Now;

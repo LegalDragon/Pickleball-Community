@@ -332,12 +332,24 @@ public class GameDayController : ControllerBase
         _context.EventMatches.Add(match);
         await _context.SaveChangesAsync();
 
+        // Create default EncounterMatch for this encounter
+        var encounterMatch = new EncounterMatch
+        {
+            EncounterId = match.Id,
+            MatchOrder = 1,
+            Status = "Scheduled",
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+        _context.EncounterMatches.Add(encounterMatch);
+        await _context.SaveChangesAsync();
+
         // Create game(s) based on BestOf
         for (int i = 1; i <= match.BestOf; i++)
         {
             var game = new EventGame
             {
-                MatchId = match.Id,
+                EncounterMatchId = encounterMatch.Id,
                 GameNumber = i,
                 ScoreFormatId = match.ScoreFormatId,
                 TournamentCourtId = i == 1 ? dto.CourtId : null, // Only first game gets court
@@ -394,7 +406,7 @@ public class GameDayController : ControllerBase
         match.UpdatedAt = now;
 
         // Update current game status
-        var currentGame = match.Games.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
+        var currentGame = match.Matches.SelectMany(m => m.Games).OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
         if (currentGame != null)
         {
             if (dto.Status == "InProgress")
@@ -453,7 +465,7 @@ public class GameDayController : ControllerBase
         if (!await IsEventOrganizer(match.EventId, userId.Value))
             return Forbid();
 
-        var game = match.Games.FirstOrDefault(g => g.GameNumber == (dto.GameNumber ?? 1));
+        var game = match.Matches.SelectMany(m => m.Games).FirstOrDefault(g => g.GameNumber == (dto.GameNumber ?? 1));
         if (game == null)
             return BadRequest(new { success = false, message = "Invalid game number" });
 
@@ -474,8 +486,9 @@ public class GameDayController : ControllerBase
                 game.WinnerUnitId = match.Unit2Id;
 
             // Check if match is complete (for best of X)
-            var unit1Wins = match.Games.Count(g => g.WinnerUnitId == match.Unit1Id);
-            var unit2Wins = match.Games.Count(g => g.WinnerUnitId == match.Unit2Id);
+            var allGames = match.Matches.SelectMany(m => m.Games).ToList();
+            var unit1Wins = allGames.Count(g => g.WinnerUnitId == match.Unit1Id);
+            var unit2Wins = allGames.Count(g => g.WinnerUnitId == match.Unit2Id);
             var winsNeeded = (match.BestOf / 2) + 1;
 
             if (unit1Wins >= winsNeeded || unit2Wins >= winsNeeded)
@@ -565,7 +578,7 @@ public class GameDayController : ControllerBase
         match.UpdatedAt = DateTime.Now;
 
         // Update current game
-        var currentGame = match.Games.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
+        var currentGame = match.Matches.SelectMany(m => m.Games).OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
         if (currentGame != null)
         {
             currentGame.TournamentCourtId = dto.CourtId;
@@ -606,8 +619,10 @@ public class GameDayController : ControllerBase
             match.TournamentCourt.CurrentGameId = null;
         }
 
-        // Delete games first
-        _context.EventGames.RemoveRange(match.Games);
+        // Delete games first (get all games from all EncounterMatches)
+        var allGames = match.Matches.SelectMany(m => m.Games).ToList();
+        _context.EventGames.RemoveRange(allGames);
+        _context.EncounterMatches.RemoveRange(match.Matches);
         _context.EventMatches.Remove(match);
         await _context.SaveChangesAsync();
 
@@ -923,8 +938,8 @@ public class GameDayController : ControllerBase
                 });
             }
 
-            // Create the match
-            var match = new EventEncounter
+            // Create the encounter
+            var encounter = new EventEncounter
             {
                 EventId = eventId,
                 DivisionId = divisionId,
@@ -935,15 +950,27 @@ public class GameDayController : ControllerBase
                 BestOf = dto.BestOf ?? 1,
                 CreatedAt = DateTime.Now
             };
-            _context.EventMatches.Add(match);
-            await _context.SaveChangesAsync(); // Save to get match.Id
+            _context.EventMatches.Add(encounter);
+            await _context.SaveChangesAsync(); // Save to get encounter.Id
+
+            // Create default EncounterMatch for this encounter
+            var encounterMatch = new EncounterMatch
+            {
+                EncounterId = encounter.Id,
+                MatchOrder = 1,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EncounterMatches.Add(encounterMatch);
+            await _context.SaveChangesAsync(); // Save to get encounterMatch.Id
 
             // Create game(s) based on BestOf
-            for (int i = 1; i <= match.BestOf; i++)
+            for (int i = 1; i <= encounter.BestOf; i++)
             {
                 var game = new EventGame
                 {
-                    MatchId = match.Id,
+                    EncounterMatchId = encounterMatch.Id,
                     GameNumber = i,
                     TournamentCourtId = i == 1 ? court.Id : null,
                     Status = i == 1 ? "Scheduled" : "New",
@@ -956,7 +983,7 @@ public class GameDayController : ControllerBase
             // Update court status
             court.Status = "InUse";
 
-            createdMatches.Add(match);
+            createdMatches.Add(encounter);
         }
 
         await _context.SaveChangesAsync();
@@ -1174,8 +1201,8 @@ public class GameDayController : ControllerBase
             });
         }
 
-        // Create the match
-        var match = new EventEncounter
+        // Create the encounter
+        var encounter = new EventEncounter
         {
             EventId = eventId,
             DivisionId = divisionId,
@@ -1189,7 +1216,7 @@ public class GameDayController : ControllerBase
             CreatedAt = DateTime.Now,
             UpdatedAt = DateTime.Now
         };
-        _context.EventMatches.Add(match);
+        _context.EventMatches.Add(encounter);
 
         // Update court status if assigned
         if (court != null)
@@ -1199,12 +1226,24 @@ public class GameDayController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Create default EncounterMatch for this encounter
+        var encounterMatch = new EncounterMatch
+        {
+            EncounterId = encounter.Id,
+            MatchOrder = 1,
+            Status = "Scheduled",
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+        _context.EncounterMatches.Add(encounterMatch);
+        await _context.SaveChangesAsync();
+
         // Create game(s) based on BestOf
-        for (int i = 1; i <= match.BestOf; i++)
+        for (int i = 1; i <= encounter.BestOf; i++)
         {
             var game = new EventGame
             {
-                MatchId = match.Id,
+                EncounterMatchId = encounterMatch.Id,
                 GameNumber = i,
                 TournamentCourtId = i == 1 ? dto.CourtId : null,
                 Status = i == 1 && dto.CourtId.HasValue ? "Queued" : "New",
@@ -1216,19 +1255,19 @@ public class GameDayController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // Load the created match with all related data
-        var loadedMatch = await _context.EventMatches
+        // Load the created encounter with all related data
+        var loadedEncounter = await _context.EventMatches
             .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Division)
             .Include(m => m.Matches).ThenInclude(match => match.Games)
-            .FirstOrDefaultAsync(m => m.Id == match.Id);
+            .FirstOrDefaultAsync(m => m.Id == encounter.Id);
 
         return Ok(new
         {
             success = true,
-            data = MapToGameDto(loadedMatch!),
+            data = MapToGameDto(loadedEncounter!),
             message = "Game created successfully"
         });
     }

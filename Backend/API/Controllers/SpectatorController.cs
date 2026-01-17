@@ -209,11 +209,13 @@ public class SpectatorController : ControllerBase
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Encounter)
-                    .ThenInclude(m => m!.Unit1)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
+                        .ThenInclude(e => e!.Unit1)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Encounter)
-                    .ThenInclude(m => m!.Unit2)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
+                        .ThenInclude(e => e!.Unit2)
             .OrderBy(c => c.SortOrder)
             .Select(c => new SpectatorCourtDto
             {
@@ -227,9 +229,9 @@ public class SpectatorController : ControllerBase
                     Status = c.CurrentGame.Status,
                     Unit1Score = c.CurrentGame.Unit1Score,
                     Unit2Score = c.CurrentGame.Unit2Score,
-                    Unit1Name = c.CurrentGame.Encounter!.Unit1!.Name,
-                    Unit2Name = c.CurrentGame.Encounter.Unit2!.Name,
-                    RoundName = c.CurrentGame.Encounter.RoundName,
+                    Unit1Name = c.CurrentGame.EncounterMatch!.Encounter!.Unit1!.Name,
+                    Unit2Name = c.CurrentGame.EncounterMatch.Encounter.Unit2!.Name,
+                    RoundName = c.CurrentGame.EncounterMatch.Encounter.RoundName,
                     StartedAt = c.CurrentGame.StartedAt
                 } : null
             })

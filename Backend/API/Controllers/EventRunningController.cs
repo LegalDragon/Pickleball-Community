@@ -403,7 +403,7 @@ public class EventRunningController : ControllerBase
                 userUnitId);
 
             // Notify the other team to verify
-            var otherUnitId = userUnitId == match.Unit1Id ? match.Unit2Id : match.Unit1Id;
+            var otherUnitId = userUnitId == encounter.Unit1Id ? encounter.Unit2Id : encounter.Unit1Id;
             if (otherUnitId.HasValue)
             {
                 var otherMembers = await _context.EventUnitMembers
@@ -416,7 +416,7 @@ public class EventRunningController : ControllerBase
                     "GameReady",
                     "Score Submitted - Please Verify",
                     $"Your opponent submitted score: {dto.Unit1Score}-{dto.Unit2Score}. Please verify.",
-                    $"/event-dashboard/{match.EventId}",
+                    $"/event-dashboard/{encounter.EventId}",
                     "Game",
                     game.Id
                 );
@@ -433,7 +433,7 @@ public class EventRunningController : ControllerBase
                 game.ScoreConfirmedAt = now;
                 game.Status = "Finished";
                 game.FinishedAt = now;
-                game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? match.Unit1Id : match.Unit2Id;
+                game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
                 game.UpdatedAt = now;
 
                 // Update match if needed
@@ -475,7 +475,7 @@ public class EventRunningController : ControllerBase
                     dto.DisputeReason);
 
                 // Notify TD about dispute
-                var evt = await _context.Events.FindAsync(match.EventId);
+                var evt = await _context.Events.FindAsync(encounter.EventId);
                 if (evt != null)
                 {
                     await _notificationService.CreateAndSendAsync(
@@ -483,7 +483,7 @@ public class EventRunningController : ControllerBase
                         "EventUpdate",
                         "Score Dispute",
                         $"Game score disputed. Reason: {dto.DisputeReason}",
-                        $"/event-running/{match.EventId}/admin",
+                        $"/event-running/{encounter.EventId}/admin",
                         "Game",
                         game.Id
                     );
@@ -547,7 +547,8 @@ public class EventRunningController : ControllerBase
         // Get courts
         var courts = await _context.TournamentCourts
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Encounter)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
             .Where(c => c.EventId == eventId && c.IsActive)
             .OrderBy(c => c.SortOrder)
             .ToListAsync();
@@ -581,7 +582,7 @@ public class EventRunningController : ControllerBase
                 CompletedMatches = matches.Count(m => m.Status == "Completed"),
                 InProgressMatches = matches.Count(m => m.Status == "InProgress"),
                 QueuedMatches = matches.Count(m => m.Status == "Queued" || m.Status == "Ready"),
-                DisputedGames = matches.SelectMany(m => m.Games)
+                DisputedGames = matches.SelectMany(m => m.Matches.SelectMany(em => em.Games))
                     .Count(g => g.ScoreDisputedAt.HasValue && g.Status != "Finished")
             },
             Divisions = divisions.Select(d => new AdminDivisionDto
@@ -732,7 +733,7 @@ public class EventRunningController : ControllerBase
         match.UpdatedAt = DateTime.Now;
 
         // Update first unfinished game
-        var currentGame = match.Games.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
+        var currentGame = match.Matches.SelectMany(m => m.Games).OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
         if (currentGame != null)
         {
             currentGame.TournamentCourtId = dto.CourtId;
@@ -805,7 +806,7 @@ public class EventRunningController : ControllerBase
         match.TournamentCourtId = dto.CourtId;
         match.UpdatedAt = DateTime.Now;
 
-        var currentGame = match.Games.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
+        var currentGame = match.Matches.SelectMany(m => m.Games).OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
         if (currentGame != null)
         {
             currentGame.TournamentCourtId = dto.CourtId;
@@ -864,7 +865,7 @@ public class EventRunningController : ControllerBase
         match.UpdatedAt = now;
 
         // Update current game and court
-        var currentGame = match.Games.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
+        var currentGame = match.Matches.SelectMany(m => m.Games).OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished");
         if (currentGame != null)
         {
             currentGame.Status = "Playing";

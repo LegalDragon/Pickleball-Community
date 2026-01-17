@@ -902,7 +902,7 @@ public class ApplicationDbContext : DbContext
         {
             entity.Property(f => f.Name).IsRequired().HasMaxLength(100);
             entity.HasIndex(f => f.DivisionId);
-            entity.HasIndex(f => new { f.DivisionId, f.MatchOrder });
+            entity.HasIndex(f => new { f.DivisionId, f.MatchNumber });
 
             entity.HasOne(f => f.Division)
                   .WithMany(d => d.EncounterMatchFormats)

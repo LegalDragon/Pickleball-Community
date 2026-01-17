@@ -2973,7 +2973,8 @@ public class TournamentController : ControllerBase
         var courts = await _context.TournamentCourts
             .Include(c => c.Venue)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Encounter)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
             .Where(c => c.EventId == eventId && c.IsActive)
             .OrderBy(c => c.SortOrder)
             .Select(c => new TournamentCourtDto
@@ -3244,30 +3245,57 @@ public class TournamentController : ControllerBase
         division.TargetUnitCount = targetUnitCount;
         await _context.SaveChangesAsync();
 
-        // Create games for each match based on phase
-        foreach (var match in matches)
+        // Create EncounterMatch and games for each encounter based on phase
+        foreach (var encounter in matches)
         {
             // Determine if this is a pool match or playoff match
-            var isPoolMatch = match.RoundType == "Pool";
+            var isPoolMatch = encounter.RoundType == "Pool";
             var gamesPerMatch = isPoolMatch ? poolGamesPerMatch : playoffGamesPerMatch;
             var scoreFormatId = isPoolMatch ? poolScoreFormatId : playoffScoreFormatId;
 
-            // Update match with correct games per match
-            match.BestOf = gamesPerMatch;
-            match.ScoreFormatId = scoreFormatId;
+            // Update encounter with correct games per match
+            encounter.BestOf = gamesPerMatch;
+            encounter.ScoreFormatId = scoreFormatId;
 
-            for (int g = 1; g <= gamesPerMatch; g++)
+            // Create default EncounterMatch for simple divisions (MatchesPerEncounter=1)
+            var encounterMatch = new EncounterMatch
             {
-                var game = new EventGame
+                EncounterId = encounter.Id,
+                MatchOrder = 1,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EncounterMatches.Add(encounterMatch);
+        }
+        await _context.SaveChangesAsync();
+
+        // Now create games for each EncounterMatch
+        foreach (var encounter in matches)
+        {
+            var isPoolMatch = encounter.RoundType == "Pool";
+            var gamesPerMatch = isPoolMatch ? poolGamesPerMatch : playoffGamesPerMatch;
+            var scoreFormatId = isPoolMatch ? poolScoreFormatId : playoffScoreFormatId;
+
+            // Get the EncounterMatch we just created
+            var encounterMatch = await _context.EncounterMatches
+                .FirstOrDefaultAsync(m => m.EncounterId == encounter.Id);
+
+            if (encounterMatch != null)
+            {
+                for (int g = 1; g <= gamesPerMatch; g++)
                 {
-                    MatchId = match.Id,
-                    GameNumber = g,
-                    ScoreFormatId = scoreFormatId,
-                    Status = "New",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-                _context.EventGames.Add(game);
+                    var game = new EventGame
+                    {
+                        EncounterMatchId = encounterMatch.Id,
+                        GameNumber = g,
+                        ScoreFormatId = scoreFormatId,
+                        Status = "New",
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
+                    };
+                    _context.EventGames.Add(game);
+                }
             }
         }
         await _context.SaveChangesAsync();
@@ -4031,7 +4059,7 @@ public class TournamentController : ControllerBase
 
     private EventMatchDto MapToMatchDto(EventEncounter m)
     {
-        return new EventEncounterDto
+        return new EventMatchDto
         {
             Id = m.Id,
             EventId = m.EventId,
