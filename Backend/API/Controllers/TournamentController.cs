@@ -3685,7 +3685,7 @@ public class TournamentController : ControllerBase
             }
 
             // Check if match is complete
-            await CheckMatchComplete(game.EncounterId);
+            await CheckMatchComplete(game.MatchId);
         }
         else
         {
@@ -3805,7 +3805,7 @@ public class TournamentController : ControllerBase
 
         var games = await _context.EventGames
             .Include(g => g.Encounter)
-            .Where(g => g.Match!.EventId == eventId)
+            .Where(g => g.Encounter!.EventId == eventId)
             .ToListAsync();
 
         var courts = await _context.TournamentCourts
@@ -4026,7 +4026,7 @@ public class TournamentController : ControllerBase
 
     private EventMatchDto MapToMatchDto(EventEncounter m)
     {
-        return new EventMatchDto
+        return new EventEncounterDto
         {
             Id = m.Id,
             EventId = m.EventId,
@@ -4099,7 +4099,7 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnits.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
@@ -4144,7 +4144,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4205,7 +4205,7 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnitNumbers.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
@@ -4249,7 +4249,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4294,7 +4294,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4392,7 +4392,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4421,7 +4421,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4440,7 +4440,7 @@ public class TournamentController : ControllerBase
         }
 
         // Grand Final
-        matches.Add(new EventMatch
+        matches.Add(new EventEncounter
         {
             EventId = division.EventId,
             DivisionId = division.Id,
