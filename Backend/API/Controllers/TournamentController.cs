@@ -1404,7 +1404,7 @@ public class TournamentController : ControllerBase
         var unit = membership.Unit;
 
         // Check if tournament has started (matches scheduled)
-        var hasScheduledMatches = await _context.EventMatches
+        var hasScheduledMatches = await _context.EventEncounters
             .AnyAsync(m => m.DivisionId == divisionId && (m.Unit1Id == unit.Id || m.Unit2Id == unit.Id) && m.Status != "Cancelled");
 
         if (hasScheduledMatches)
@@ -1459,7 +1459,7 @@ public class TournamentController : ControllerBase
             return Forbid();
 
         // Check if unit has scheduled matches
-        var hasScheduledMatches = await _context.EventMatches
+        var hasScheduledMatches = await _context.EventEncounters
             .AnyAsync(m => (m.Unit1Id == unitId || m.Unit2Id == unitId) && m.Status != "Cancelled");
 
         if (hasScheduledMatches)
@@ -3093,7 +3093,7 @@ public class TournamentController : ControllerBase
 
     [Authorize]
     [HttpPost("divisions/{divisionId}/generate-schedule")]
-    public async Task<ActionResult<ApiResponse<List<EventMatchDto>>>> GenerateSchedule(int divisionId, [FromBody] CreateMatchScheduleRequest request)
+    public async Task<ActionResult<ApiResponse<List<EventEncounterDto>>>> GenerateSchedule(int divisionId, [FromBody] CreateMatchScheduleRequest request)
     {
         var division = await _context.EventDivisions
             .Include(d => d.Event)
@@ -3101,11 +3101,11 @@ public class TournamentController : ControllerBase
             .FirstOrDefaultAsync(d => d.Id == divisionId);
 
         if (division == null)
-            return NotFound(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Division not found" });
+            return NotFound(new ApiResponse<List<EventEncounterDto>> { Success = false, Message = "Division not found" });
 
         var evt = division.Event;
         if (evt == null)
-            return NotFound(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Event not found" });
+            return NotFound(new ApiResponse<List<EventEncounterDto>> { Success = false, Message = "Event not found" });
 
         // Validation: Check if registration is closed (unless using placeholder units)
         var now = DateTime.Now;
@@ -3116,7 +3116,7 @@ public class TournamentController : ControllerBase
         // But warn if actual units are being assigned while registration is open
         if (isRegistrationOpen && request.TargetUnits == null)
         {
-            return BadRequest(new ApiResponse<List<EventMatchDto>>
+            return BadRequest(new ApiResponse<List<EventEncounterDto>>
             {
                 Success = false,
                 Message = "Cannot generate final schedule while registration is still open. Either close registration first, or use TargetUnits to generate a template schedule."
@@ -3145,7 +3145,7 @@ public class TournamentController : ControllerBase
                 var message = incompleteUnits.Count > 5
                     ? $"Units not complete: {unitNames} and {incompleteUnits.Count - 5} more"
                     : $"Units not complete: {unitNames}";
-                return BadRequest(new ApiResponse<List<EventMatchDto>>
+                return BadRequest(new ApiResponse<List<EventEncounterDto>>
                 {
                     Success = false,
                     Message = $"Cannot generate schedule. {message}. Each unit needs {requiredMembers} accepted member(s)."
@@ -3157,10 +3157,10 @@ public class TournamentController : ControllerBase
         var targetUnitCount = request.TargetUnits ?? units.Count;
 
         if (targetUnitCount < 2)
-            return BadRequest(new ApiResponse<List<EventMatchDto>> { Success = false, Message = "Need at least 2 units/placeholders to generate schedule" });
+            return BadRequest(new ApiResponse<List<EventEncounterDto>> { Success = false, Message = "Need at least 2 units/placeholders to generate schedule" });
 
         // Clear existing matches and games for this division
-        var existingMatches = await _context.EventMatches
+        var existingMatches = await _context.EventEncounters
             .Include(m => m.Games)
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
@@ -3172,7 +3172,7 @@ public class TournamentController : ControllerBase
             var courtsWithGames = await _context.TournamentCourts
                 .Where(c => c.CurrentGameId != null &&
                     _context.EventGames.Any(g => g.Id == c.CurrentGameId &&
-                        _context.EventMatches.Any(m => m.Id == g.MatchId && m.DivisionId == divisionId)))
+                        _context.EventEncounters.Any(m => m.Id == g.MatchId && m.DivisionId == divisionId)))
                 .ToListAsync();
 
             foreach (var court in courtsWithGames)
@@ -3186,7 +3186,7 @@ public class TournamentController : ControllerBase
             {
                 _context.EventGames.RemoveRange(match.Games);
             }
-            _context.EventMatches.RemoveRange(existingMatches);
+            _context.EventEncounters.RemoveRange(existingMatches);
             await _context.SaveChangesAsync();
         }
 
@@ -3198,7 +3198,7 @@ public class TournamentController : ControllerBase
             unit.PoolName = null;
         }
 
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         if (request.ScheduleType == "RoundRobin" || request.ScheduleType == "Hybrid")
         {
@@ -3223,7 +3223,7 @@ public class TournamentController : ControllerBase
             matches.AddRange(GenerateDoubleEliminationMatchesForTarget(division, targetUnitCount, request));
         }
 
-        _context.EventMatches.AddRange(matches);
+        _context.EventEncounters.AddRange(matches);
         await _context.SaveChangesAsync();
 
         // Determine phase-specific configurations
@@ -3270,17 +3270,17 @@ public class TournamentController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Reload with games
-        var result = await _context.EventMatches
+        var result = await _context.EventEncounters
             .Include(m => m.Games)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
-        return Ok(new ApiResponse<List<EventMatchDto>>
+        return Ok(new ApiResponse<List<EventEncounterDto>>
         {
             Success = true,
-            Data = result.Select(m => MapToMatchDto(m)).ToList()
+            Data = result.Select(m => MapToEncounterDto(m)).ToList()
         });
     }
 
@@ -3377,7 +3377,7 @@ public class TournamentController : ControllerBase
         }
 
         // Update matches with actual unit IDs based on assigned numbers
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
 
@@ -3433,7 +3433,7 @@ public class TournamentController : ControllerBase
         if (division == null)
             return NotFound(new ApiResponse<ScheduleExportDto> { Success = false, Message = "Division not found" });
 
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.Winner)
@@ -3441,7 +3441,7 @@ public class TournamentController : ControllerBase
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundType)
             .ThenBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
         var units = await _context.EventUnits
@@ -3467,7 +3467,7 @@ public class TournamentController : ControllerBase
                     RoundName = g.Key.RoundName,
                     Matches = g.Select(m => new ScheduleMatchDto
                     {
-                        MatchNumber = m.MatchNumber,
+                        EncounterNumber = m.EncounterNumber,
                         Unit1Number = m.Unit1Number,
                         Unit2Number = m.Unit2Number,
                         Unit1Name = m.Unit1?.Name,
@@ -3799,7 +3799,7 @@ public class TournamentController : ControllerBase
             .Where(u => u.EventId == eventId)
             .ToListAsync();
 
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Where(m => m.EventId == eventId)
             .ToListAsync();
 
@@ -4024,9 +4024,9 @@ public class TournamentController : ControllerBase
         return "Unknown";
     }
 
-    private EventMatchDto MapToMatchDto(EventMatch m)
+    private EventEncounterDto MapToEncounterDto(EventEncounter m)
     {
-        return new EventMatchDto
+        return new EventEncounterDto
         {
             Id = m.Id,
             EventId = m.EventId,
@@ -4034,12 +4034,14 @@ public class TournamentController : ControllerBase
             RoundType = m.RoundType,
             RoundNumber = m.RoundNumber,
             RoundName = m.RoundName,
-            MatchNumber = m.MatchNumber,
+            EncounterNumber = m.EncounterNumber,
             BracketPosition = m.BracketPosition,
             Unit1Number = m.Unit1Number,
             Unit2Number = m.Unit2Number,
             Unit1Id = m.Unit1Id,
             Unit2Id = m.Unit2Id,
+            Unit1EncounterScore = m.Unit1EncounterScore,
+            Unit2EncounterScore = m.Unit2EncounterScore,
             BestOf = m.BestOf,
             WinnerUnitId = m.WinnerUnitId,
             Status = m.Status,
@@ -4077,9 +4079,9 @@ public class TournamentController : ControllerBase
         };
     }
 
-    private List<EventMatch> GenerateRoundRobinMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateRoundRobinMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var poolCount = request.PoolCount ?? 1;
 
         // Distribute units to pools
@@ -4099,14 +4101,14 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnits.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
                         RoundType = "Pool",
                         RoundNumber = pool,
                         RoundName = $"Pool {(char)('A' + pool - 1)}",
-                        MatchNumber = matchNum++,
+                        EncounterNumber = matchNum++,
                         Unit1Number = poolUnits[i].UnitNumber ?? i + 1,
                         Unit2Number = poolUnits[j].UnitNumber ?? j + 1,
                         BestOf = request.BestOf,
@@ -4122,9 +4124,9 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private List<EventMatch> GenerateSingleEliminationMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateSingleEliminationMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var unitCount = units.Count;
 
         // Find next power of 2
@@ -4144,14 +4146,14 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
                     RoundType = "Bracket",
                     RoundNumber = round,
                     RoundName = roundName,
-                    MatchNumber = matchNum++,
+                    EncounterNumber = matchNum++,
                     BracketPosition = m,
                     BestOf = request.BestOf,
                     ScoreFormatId = request.ScoreFormatId,
@@ -4181,9 +4183,9 @@ public class TournamentController : ControllerBase
     }
 
     // New methods for generating schedules based on target unit count (with placeholders)
-    private List<EventMatch> GenerateRoundRobinMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateRoundRobinMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var poolCount = request.PoolCount ?? 1;
 
         // Generate round robin within each pool using placeholder numbers
@@ -4205,14 +4207,14 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnitNumbers.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
                         RoundType = "Pool",
                         RoundNumber = pool,
                         RoundName = $"Pool {(char)('A' + pool - 1)}",
-                        MatchNumber = matchNum++,
+                        EncounterNumber = matchNum++,
                         Unit1Number = poolUnitNumbers[i],
                         Unit2Number = poolUnitNumbers[j],
                         BestOf = request.BestOf,
@@ -4228,9 +4230,9 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private List<EventMatch> GeneratePlayoffMatchesForTarget(EventDivision division, int playoffUnits, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GeneratePlayoffMatchesForTarget(EventDivision division, int playoffUnits, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2 for bracket size
         var bracketSize = 1;
@@ -4249,14 +4251,14 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
                     RoundType = "Bracket",
                     RoundNumber = round,
                     RoundName = roundName,
-                    MatchNumber = matchNum++,
+                    EncounterNumber = matchNum++,
                     BracketPosition = m,
                     BestOf = request.PlayoffGamesPerMatch ?? request.BestOf,
                     ScoreFormatId = request.PlayoffScoreFormatId ?? request.ScoreFormatId,
@@ -4273,9 +4275,9 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private List<EventMatch> GenerateSingleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateSingleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2
         var bracketSize = 1;
@@ -4294,14 +4296,14 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
                     RoundType = "Bracket",
                     RoundNumber = round,
                     RoundName = roundName,
-                    MatchNumber = matchNum++,
+                    EncounterNumber = matchNum++,
                     BracketPosition = m,
                     BestOf = request.BestOf,
                     ScoreFormatId = request.ScoreFormatId,
@@ -4371,9 +4373,9 @@ public class TournamentController : ControllerBase
         return matchups;
     }
 
-    private List<EventMatch> GenerateDoubleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateDoubleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2
         var bracketSize = 1;
@@ -4392,14 +4394,14 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
                     RoundType = "Winners",
                     RoundNumber = round,
                     RoundName = roundName,
-                    MatchNumber = matchNum++,
+                    EncounterNumber = matchNum++,
                     BracketPosition = m,
                     BestOf = request.BestOf,
                     ScoreFormatId = request.ScoreFormatId,
@@ -4421,14 +4423,14 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
                     RoundType = "Losers",
                     RoundNumber = round,
                     RoundName = roundName,
-                    MatchNumber = matchNum++,
+                    EncounterNumber = matchNum++,
                     BracketPosition = m,
                     BestOf = request.BestOf,
                     ScoreFormatId = request.ScoreFormatId,
@@ -4440,14 +4442,14 @@ public class TournamentController : ControllerBase
         }
 
         // Grand Final
-        matches.Add(new EventMatch
+        matches.Add(new EventEncounter
         {
             EventId = division.EventId,
             DivisionId = division.Id,
             RoundType = "GrandFinal",
             RoundNumber = 1,
             RoundName = "Grand Final",
-            MatchNumber = matchNum++,
+            EncounterNumber = matchNum++,
             BracketPosition = 1,
             BestOf = request.BestOf,
             ScoreFormatId = request.ScoreFormatId,
@@ -4476,7 +4478,7 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private string? GetMatchScore(EventMatch match)
+    private string? GetMatchScore(EventEncounter encounter)
     {
         if (!match.Games.Any(g => g.Status == "Finished")) return null;
 
@@ -4521,7 +4523,7 @@ public class TournamentController : ControllerBase
 
     private async Task CheckMatchComplete(int matchId)
     {
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
@@ -4900,7 +4902,7 @@ public class TournamentController : ControllerBase
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled" && u.Status != "Waitlisted")
             .ToListAsync();
 
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
 

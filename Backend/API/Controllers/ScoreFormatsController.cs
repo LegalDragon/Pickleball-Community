@@ -367,7 +367,7 @@ public class ScoreFormatsController : ControllerBase
 
             // Check if in use by any games, matches, or divisions
             var inUseByGames = await _context.EventGames.AnyAsync(g => g.ScoreFormatId == id);
-            var inUseByMatches = await _context.EventMatches.AnyAsync(m => m.ScoreFormatId == id);
+            var inUseByMatches = await _context.EventEncounters.AnyAsync(m => m.ScoreFormatId == id);
             var inUseByDivisions = await _context.Set<EventDivision>().AnyAsync(d => d.DefaultScoreFormatId == id);
 
             if (inUseByGames || inUseByMatches || inUseByDivisions)

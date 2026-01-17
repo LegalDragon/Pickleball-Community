@@ -71,9 +71,9 @@ public static class UnitStatus
 }
 
 /// <summary>
-/// Status values for EventMatch.Status
+/// Status values for EventEncounter.Status (encounter between 2 units)
 /// </summary>
-public static class MatchStatus
+public static class EncounterStatus
 {
     public const string Pending = "Pending";
     public const string Ready = "Ready";
@@ -162,7 +162,7 @@ public static class PaymentStatus
 }
 
 /// <summary>
-/// Round type values for EventMatch.RoundType
+/// Round type values for EventEncounter.RoundType
 /// </summary>
 public static class RoundType
 {

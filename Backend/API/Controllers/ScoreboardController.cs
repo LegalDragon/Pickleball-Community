@@ -41,7 +41,7 @@ public class ScoreboardController : ControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<ScoreboardDto> { Success = false, Message = "Event not found" });
 
-        var query = _context.EventMatches
+        var query = _context.EventEncounters
             .Where(m => m.EventId == eventId);
 
         if (divisionId.HasValue)
@@ -290,7 +290,7 @@ public class ScoreboardController : ControllerBase
         if (division == null)
             return NotFound(new ApiResponse<BracketDto> { Success = false, Message = "Division not found" });
 
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket")
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
@@ -393,7 +393,7 @@ public class ScoreboardController : ControllerBase
             .ToList();
 
         // Get pool matches
-        var poolMatches = await _context.EventMatches
+        var poolMatches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool")
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)

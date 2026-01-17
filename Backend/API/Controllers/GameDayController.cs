@@ -82,7 +82,7 @@ public class GameDayController : ControllerBase
             .ToListAsync();
 
         // Get all games (via matches)
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Include(m => m.Unit1)
                 .ThenInclude(u => u.Members)
                     .ThenInclude(mem => mem.User)
@@ -312,7 +312,7 @@ public class GameDayController : ControllerBase
         }
 
         // Create match
-        var match = new EventMatch
+        var match = new EventEncounter
         {
             EventId = eventId,
             DivisionId = unit1.DivisionId,
@@ -328,7 +328,7 @@ public class GameDayController : ControllerBase
             UpdatedAt = DateTime.Now
         };
 
-        _context.EventMatches.Add(match);
+        _context.EventEncounters.Add(match);
         await _context.SaveChangesAsync();
 
         // Create game(s) based on BestOf
@@ -356,7 +356,7 @@ public class GameDayController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Reload match with all relations
-        match = await _context.EventMatches
+        match = await _context.EventEncounters
             .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Division)
@@ -377,7 +377,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
@@ -439,7 +439,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Unit1)
@@ -531,7 +531,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
@@ -587,7 +587,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .FirstOrDefaultAsync(m => m.Id == matchId);
@@ -607,7 +607,7 @@ public class GameDayController : ControllerBase
 
         // Delete games first
         _context.EventGames.RemoveRange(match.Games);
-        _context.EventMatches.Remove(match);
+        _context.EventEncounters.Remove(match);
         await _context.SaveChangesAsync();
 
         return Ok(new { success = true });
@@ -786,7 +786,7 @@ public class GameDayController : ControllerBase
         {
             foreach (var court in availableCourts)
             {
-                var lastGame = await _context.EventMatches
+                var lastGame = await _context.EventEncounters
                     .Where(m => m.TournamentCourtId == court.Id && m.Status == "Finished")
                     .OrderByDescending(m => m.CompletedAt)
                     .FirstOrDefaultAsync();
@@ -810,7 +810,7 @@ public class GameDayController : ControllerBase
         var shuffledPlayers = allPlayers.OrderBy(_ => random.Next()).ToList();
 
         // Create temporary units for ad-hoc games
-        var createdMatches = new List<EventMatch>();
+        var createdMatches = new List<EventEncounter>();
         var usedPlayerIds = new HashSet<int>();
         var divisionId = dto.DivisionId ?? evt.Divisions.FirstOrDefault()?.Id ?? 0;
 
@@ -923,7 +923,7 @@ public class GameDayController : ControllerBase
             }
 
             // Create the match
-            var match = new EventMatch
+            var match = new EventEncounter
             {
                 EventId = eventId,
                 DivisionId = divisionId,
@@ -934,7 +934,7 @@ public class GameDayController : ControllerBase
                 BestOf = dto.BestOf ?? 1,
                 CreatedAt = DateTime.Now
             };
-            _context.EventMatches.Add(match);
+            _context.EventEncounters.Add(match);
             await _context.SaveChangesAsync(); // Save to get match.Id
 
             // Create game(s) based on BestOf
@@ -963,7 +963,7 @@ public class GameDayController : ControllerBase
         // Load the created matches with all related data for response
         // Use HashSet for efficient Contains check in memory (avoids EF Core CTE generation issues)
         var matchIdSet = createdMatches.Select(m => m.Id).ToHashSet();
-        var loadedMatches = (await _context.EventMatches
+        var loadedMatches = (await _context.EventEncounters
             .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
@@ -1035,7 +1035,7 @@ public class GameDayController : ControllerBase
         }
 
         // Get players currently in active games
-        var activeMatches = await _context.EventMatches
+        var activeMatches = await _context.EventEncounters
             .Where(m => m.EventId == eventId && (m.Status == "InProgress" || m.Status == "Scheduled" || m.Status == "Queued"))
             .Include(m => m.Unit1).ThenInclude(u => u!.Members)
             .Include(m => m.Unit2).ThenInclude(u => u!.Members)
@@ -1174,7 +1174,7 @@ public class GameDayController : ControllerBase
         }
 
         // Create the match
-        var match = new EventMatch
+        var match = new EventEncounter
         {
             EventId = eventId,
             DivisionId = divisionId,
@@ -1188,7 +1188,7 @@ public class GameDayController : ControllerBase
             CreatedAt = DateTime.Now,
             UpdatedAt = DateTime.Now
         };
-        _context.EventMatches.Add(match);
+        _context.EventEncounters.Add(match);
 
         // Update court status if assigned
         if (court != null)
@@ -1216,7 +1216,7 @@ public class GameDayController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Load the created match with all related data
-        var loadedMatch = await _context.EventMatches
+        var loadedMatch = await _context.EventEncounters
             .Include(m => m.Unit1).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u.Members).ThenInclude(mem => mem.User)
             .Include(m => m.TournamentCourt)
@@ -1556,7 +1556,7 @@ public class GameDayController : ControllerBase
     // Helper Methods
     // ==========================================
 
-    private GameDayGameDto MapToGameDto(EventMatch m)
+    private GameDayGameDto MapToGameDto(EventEncounter m)
     {
         var currentGame = m.Games?.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished")
             ?? m.Games?.OrderByDescending(g => g.GameNumber).FirstOrDefault();

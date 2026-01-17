@@ -648,7 +648,7 @@ public class TournamentGameDayController : ControllerBase
             .ToListAsync();
 
         // Get head-to-head results for tiebreakers
-        var poolMatches = await _context.EventMatches
+        var poolMatches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool" && m.Status == "Completed")
             .ToListAsync();
 
@@ -775,7 +775,7 @@ public class TournamentGameDayController : ControllerBase
         division.ScheduleStatus = "PoolsFinalized";
 
         // Get playoff matches and assign units based on seeding
-        var playoffMatches = await _context.EventMatches
+        var playoffMatches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
             .OrderBy(m => m.BracketPosition)
             .ToListAsync();
@@ -864,7 +864,7 @@ public class TournamentGameDayController : ControllerBase
             return NotFound(new ApiResponse<object> { Success = false, Message = "Division not found" });
 
         // Check if any playoff matches have been played
-        var playedPlayoffMatches = await _context.EventMatches
+        var playedPlayoffMatches = await _context.EventEncounters
             .AnyAsync(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.Status == "Completed");
 
         if (playedPlayoffMatches)
@@ -884,7 +884,7 @@ public class TournamentGameDayController : ControllerBase
         }
 
         // Clear playoff match assignments
-        var playoffMatches = await _context.EventMatches
+        var playoffMatches = await _context.EventEncounters
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
             .ToListAsync();
 
@@ -903,7 +903,7 @@ public class TournamentGameDayController : ControllerBase
         return Ok(new ApiResponse<object> { Success = true, Message = "Pool finalization reset" });
     }
 
-    private List<EventUnit> ApplyHeadToHeadTiebreaker(List<EventUnit> units, List<EventMatch> matches)
+    private List<EventUnit> ApplyHeadToHeadTiebreaker(List<EventUnit> units, List<EventEncounter> encounters)
     {
         // Simple implementation: when two teams are tied, check head-to-head
         var result = new List<EventUnit>();
@@ -934,10 +934,10 @@ public class TournamentGameDayController : ControllerBase
                     var h2hWins = 0;
                     foreach (var opponent in tiedGroup.Where(o => o.Id != u.Id))
                     {
-                        var h2hMatch = matches.FirstOrDefault(m =>
+                        var h2hEncounter = encounters.FirstOrDefault(m =>
                             (m.Unit1Id == u.Id && m.Unit2Id == opponent.Id) ||
                             (m.Unit2Id == u.Id && m.Unit1Id == opponent.Id));
-                        if (h2hMatch?.WinnerUnitId == u.Id)
+                        if (h2hEncounter?.WinnerUnitId == u.Id)
                             h2hWins++;
                     }
                     return h2hWins;
@@ -1069,7 +1069,7 @@ public class TournamentGameDayController : ControllerBase
     // Helper methods
     private async Task NotifyPlayersGameQueued(EventGame game, TournamentCourt court)
     {
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Unit1)
                 .ThenInclude(u => u!.Members)
             .Include(m => m.Unit2)
@@ -1100,7 +1100,7 @@ public class TournamentGameDayController : ControllerBase
 
     private async Task NotifyPlayersGameStarted(EventGame game)
     {
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Unit1)
                 .ThenInclude(u => u!.Members)
             .Include(m => m.Unit2)
@@ -1187,7 +1187,7 @@ public class TournamentGameDayController : ControllerBase
 
     private async Task CheckMatchCompletion(int matchId)
     {
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)

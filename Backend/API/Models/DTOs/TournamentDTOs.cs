@@ -331,9 +331,9 @@ public class BulkCreateCourtsRequest
 }
 
 // ============================================
-// Event Match DTOs
+// Event Encounter DTOs (renamed from Event Match)
 // ============================================
-public class EventMatchDto
+public class EventEncounterDto
 {
     public int Id { get; set; }
     public int EventId { get; set; }
@@ -342,7 +342,7 @@ public class EventMatchDto
     public string RoundType { get; set; } = "Pool";
     public int RoundNumber { get; set; }
     public string? RoundName { get; set; }
-    public int MatchNumber { get; set; }
+    public int EncounterNumber { get; set; }
     public int? BracketPosition { get; set; }
 
     // Units
@@ -352,6 +352,10 @@ public class EventMatchDto
     public int? Unit2Id { get; set; }
     public EventUnitDto? Unit1 { get; set; }
     public EventUnitDto? Unit2 { get; set; }
+
+    // For multi-match encounters (team scrimmages): encounter-level score (matches won)
+    public int Unit1EncounterScore { get; set; }
+    public int Unit2EncounterScore { get; set; }
 
     public int BestOf { get; set; }
     public int? WinnerUnitId { get; set; }
@@ -365,11 +369,82 @@ public class EventMatchDto
     public string? CourtLabel { get; set; }
     public int? ScoreFormatId { get; set; }
 
+    // For simple encounters (MatchesPerEncounter=1): games within the single match
     public List<EventGameDto> Games { get; set; } = new();
 
-    // Calculated
+    // For multi-match encounters: individual matches within the encounter
+    public List<EncounterMatchDto> Matches { get; set; } = new();
+
+    // Calculated (for simple encounters)
     public int Unit1GamesWon { get; set; }
     public int Unit2GamesWon { get; set; }
+}
+
+/// <summary>
+/// An individual match within an encounter (for multi-match encounters like team scrimmages)
+/// </summary>
+public class EncounterMatchDto
+{
+    public int Id { get; set; }
+    public int EncounterId { get; set; }
+    public int? FormatId { get; set; }
+    public string? FormatName { get; set; }
+    public int MatchOrder { get; set; }
+
+    // Match-level score (games won by each unit)
+    public int Unit1Score { get; set; }
+    public int Unit2Score { get; set; }
+
+    public int? WinnerUnitId { get; set; }
+    public string Status { get; set; } = "Scheduled";
+
+    // Handicap for gender shortage
+    public int Unit1HandicapPoints { get; set; }
+    public int Unit2HandicapPoints { get; set; }
+    public string? HandicapReason { get; set; }
+
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+
+    // Players assigned to this match
+    public List<EncounterMatchPlayerDto> Players { get; set; } = new();
+
+    // Games within this match
+    public List<EventGameDto> Games { get; set; } = new();
+}
+
+/// <summary>
+/// A player assigned to a specific match within an encounter
+/// </summary>
+public class EncounterMatchPlayerDto
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public int UserId { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public int UnitSide { get; set; } // 1 or 2
+    public string? Gender { get; set; } // M, F, or null
+    public bool IsSubstitute { get; set; }
+}
+
+/// <summary>
+/// Match format template for multi-match encounters
+/// </summary>
+public class EncounterMatchFormatDto
+{
+    public int Id { get; set; }
+    public int DivisionId { get; set; }
+    public int MatchOrder { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int MaleCount { get; set; }
+    public int FemaleCount { get; set; }
+    public int UnisexCount { get; set; }
+    public int PlayersPerSide => MaleCount + FemaleCount + UnisexCount;
+    public int GamesPerMatch { get; set; }
+    public int? ScoreFormatId { get; set; }
+    public string? ScoreFormatName { get; set; }
 }
 
 public class CreateMatchScheduleRequest

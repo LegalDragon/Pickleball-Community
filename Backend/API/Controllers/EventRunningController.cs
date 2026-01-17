@@ -131,7 +131,7 @@ public class EventRunningController : ControllerBase
 
         // Get all matches for user's units
         var unitIds = myUnits.Select(u => u.Id).ToList();
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Include(m => m.Unit1).ThenInclude(u => u!.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u!.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Division)
@@ -532,7 +532,7 @@ public class EventRunningController : ControllerBase
             .ToListAsync();
 
         // Get all matches
-        var matches = await _context.EventMatches
+        var matches = await _context.EventEncounters
             .Include(m => m.Unit1).ThenInclude(u => u!.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Unit2).ThenInclude(u => u!.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Division)
@@ -708,7 +708,7 @@ public class EventRunningController : ControllerBase
         if (!await IsEventOrganizerAsync(eventId, userId.Value) && !await IsAdminAsync())
             return Forbid();
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.Unit1).ThenInclude(u => u!.Members)
             .Include(m => m.Unit2).ThenInclude(u => u!.Members)
@@ -775,7 +775,7 @@ public class EventRunningController : ControllerBase
         if (!await IsEventOrganizerAsync(eventId, userId.Value) && !await IsAdminAsync())
             return Forbid();
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Unit1).ThenInclude(u => u!.Members)
@@ -846,7 +846,7 @@ public class EventRunningController : ControllerBase
         if (!await IsEventOrganizerAsync(eventId, userId.Value) && !await IsAdminAsync())
             return Forbid();
 
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Unit1).ThenInclude(u => u!.Members)
@@ -1198,7 +1198,7 @@ public class EventRunningController : ControllerBase
 
     private async Task UpdateMatchAfterGameComplete(EventGame game)
     {
-        var match = await _context.EventMatches
+        var match = await _context.EventEncounters
             .Include(m => m.Games)
             .Include(m => m.TournamentCourt)
             .Include(m => m.Unit1)
@@ -1250,7 +1250,7 @@ public class EventRunningController : ControllerBase
         }
     }
 
-    private PlayerMatchDto MapToMatchDto(EventMatch m, List<int> myUnitIds)
+    private PlayerMatchDto MapToMatchDto(EventEncounter m, List<int> myUnitIds)
     {
         var currentGame = m.Games?.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished")
             ?? m.Games?.OrderByDescending(g => g.GameNumber).FirstOrDefault();
@@ -1297,7 +1297,7 @@ public class EventRunningController : ControllerBase
         };
     }
 
-    private AdminMatchDto MapToAdminMatchDto(EventMatch m)
+    private AdminMatchDto MapToAdminMatchDto(EventEncounter m)
     {
         var currentGame = m.Games?.OrderBy(g => g.GameNumber).FirstOrDefault(g => g.Status != "Finished")
             ?? m.Games?.OrderByDescending(g => g.GameNumber).FirstOrDefault();
