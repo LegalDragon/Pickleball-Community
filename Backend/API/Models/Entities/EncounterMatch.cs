@@ -80,6 +80,14 @@ public class EncounterMatch
     [MaxLength(500)]
     public string? ScoreDisputeReason { get; set; }
 
+    /// <summary>
+    /// Scheduled start time for this match
+    /// </summary>
+    public DateTime? ScheduledTime { get; set; }
+
+    [MaxLength(500)]
+    public string? Notes { get; set; }
+
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 

@@ -164,7 +164,7 @@ public class EncounterMatchDto
 {
     public int Id { get; set; }
     public int EncounterId { get; set; }
-    public int FormatId { get; set; }
+    public int? FormatId { get; set; }
     public string FormatName { get; set; } = string.Empty;
     public int MaleCount { get; set; }
     public int FemaleCount { get; set; }

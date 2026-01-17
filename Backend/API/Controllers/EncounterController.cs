@@ -309,7 +309,7 @@ public class EncounterController : ControllerBase
                         {
                             Id = p.Id,
                             UserId = p.UserId,
-                            Name = p.User?.DisplayName ?? p.User?.FirstName ?? "Unknown",
+                            Name = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
                             ProfileImageUrl = p.User?.ProfileImageUrl,
                             UnitId = p.UnitId,
                             UnitSide = p.UnitSide,
@@ -322,7 +322,7 @@ public class EncounterController : ControllerBase
                         {
                             Id = p.Id,
                             UserId = p.UserId,
-                            Name = p.User?.DisplayName ?? p.User?.FirstName ?? "Unknown",
+                            Name = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
                             ProfileImageUrl = p.User?.ProfileImageUrl,
                             UnitId = p.UnitId,
                             UnitSide = p.UnitSide,
