@@ -210,12 +210,12 @@ public class PlayerHistoryController : ControllerBase
 
         if (!string.IsNullOrEmpty(request.EventType))
         {
-            query = query.Where(gp => gp.Game!.Match!.Event!.EventType!.Name == request.EventType);
+            query = query.Where(gp => gp.Game!.Encounter!.Event!.EventType!.Name == request.EventType);
         }
 
         if (request.EventId.HasValue)
         {
-            query = query.Where(gp => gp.Game!.Match!.EventId == request.EventId.Value);
+            query = query.Where(gp => gp.Game!.Encounter!.EventId == request.EventId.Value);
         }
 
         if (request.WinsOnly == true)
@@ -234,7 +234,7 @@ public class PlayerHistoryController : ControllerBase
         foreach (var gp in allGames)
         {
             var game = gp.Game!;
-            var match = game.Match!;
+            var match = game.Encounter!;
             var evt = match.Event!;
             var division = match.Division!;
 
@@ -309,7 +309,7 @@ public class PlayerHistoryController : ControllerBase
                 Opponents = opponents,
                 RoundType = match.RoundType,
                 RoundName = match.RoundName,
-                MatchNumber = match.MatchNumber
+                MatchNumber = match.EncounterNumber
             });
         }
 

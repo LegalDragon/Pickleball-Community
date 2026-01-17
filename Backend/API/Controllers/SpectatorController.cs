@@ -209,10 +209,10 @@ public class SpectatorController : ControllerBase
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Match)
+                .ThenInclude(g => g!.Encounter)
                     .ThenInclude(m => m!.Unit1)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Match)
+                .ThenInclude(g => g!.Encounter)
                     .ThenInclude(m => m!.Unit2)
             .OrderBy(c => c.SortOrder)
             .Select(c => new SpectatorCourtDto
@@ -227,9 +227,9 @@ public class SpectatorController : ControllerBase
                     Status = c.CurrentGame.Status,
                     Unit1Score = c.CurrentGame.Unit1Score,
                     Unit2Score = c.CurrentGame.Unit2Score,
-                    Unit1Name = c.CurrentGame.Match!.Unit1!.Name,
-                    Unit2Name = c.CurrentGame.Match.Unit2!.Name,
-                    RoundName = c.CurrentGame.Match.RoundName,
+                    Unit1Name = c.CurrentGame.Encounter!.Unit1!.Name,
+                    Unit2Name = c.CurrentGame.Encounter.Unit2!.Name,
+                    RoundName = c.CurrentGame.Encounter.RoundName,
                     StartedAt = c.CurrentGame.StartedAt
                 } : null
             })
@@ -237,10 +237,10 @@ public class SpectatorController : ControllerBase
 
         // Get recent completed games
         var recentGames = await _context.EventGames
-            .Where(g => g.Match!.EventId == eventId && g.Status == "Finished")
-            .Include(g => g.Match)
+            .Where(g => g.Encounter!.EventId == eventId && g.Status == "Finished")
+            .Include(g => g.Encounter)
                 .ThenInclude(m => m!.Unit1)
-            .Include(g => g.Match)
+            .Include(g => g.Encounter)
                 .ThenInclude(m => m!.Unit2)
             .OrderByDescending(g => g.FinishedAt)
             .Take(10)
@@ -250,9 +250,9 @@ public class SpectatorController : ControllerBase
                 Status = g.Status,
                 Unit1Score = g.Unit1Score,
                 Unit2Score = g.Unit2Score,
-                Unit1Name = g.Match!.Unit1!.Name,
-                Unit2Name = g.Match.Unit2!.Name,
-                RoundName = g.Match.RoundName,
+                Unit1Name = g.Encounter!.Unit1!.Name,
+                Unit2Name = g.Encounter.Unit2!.Name,
+                RoundName = g.Encounter.RoundName,
                 FinishedAt = g.FinishedAt
             })
             .ToListAsync();

@@ -63,7 +63,7 @@ public class ScoreboardController : ControllerBase
             .Include(m => m.TournamentCourt)
             .OrderBy(m => m.Status == "InProgress" ? 0 : (m.Status == "Ready" ? 1 : (m.Status == "Scheduled" ? 2 : 3)))
             .ThenBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(m => new ScoreboardMatchDto
@@ -74,7 +74,7 @@ public class ScoreboardController : ControllerBase
                 RoundType = m.RoundType,
                 RoundNumber = m.RoundNumber,
                 RoundName = m.RoundName,
-                MatchNumber = m.MatchNumber,
+                MatchNumber = m.EncounterNumber,
                 BracketPosition = m.BracketPosition,
                 Status = m.Status,
                 BestOf = m.BestOf,
@@ -130,27 +130,27 @@ public class ScoreboardController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<LiveGameDto>>>> GetLiveScores(int eventId)
     {
         var liveGames = await _context.EventGames
-            .Where(g => g.Match!.EventId == eventId && (g.Status == "Playing" || g.Status == "Queued"))
-            .Include(g => g.Match)
+            .Where(g => g.Encounter!.EventId == eventId && (g.Status == "Playing" || g.Status == "Queued"))
+            .Include(g => g.Encounter)
                 .ThenInclude(m => m!.Unit1)
-            .Include(g => g.Match)
+            .Include(g => g.Encounter)
                 .ThenInclude(m => m!.Unit2)
-            .Include(g => g.Match)
+            .Include(g => g.Encounter)
                 .ThenInclude(m => m!.Division)
             .Include(g => g.TournamentCourt)
             .OrderBy(g => g.TournamentCourt!.SortOrder)
             .Select(g => new LiveGameDto
             {
                 GameId = g.Id,
-                MatchId = g.MatchId,
+                MatchId = g.EncounterId,
                 GameNumber = g.GameNumber,
                 Status = g.Status,
                 Unit1Score = g.Unit1Score,
                 Unit2Score = g.Unit2Score,
-                Unit1Name = g.Match!.Unit1!.Name,
-                Unit2Name = g.Match.Unit2!.Name,
-                DivisionName = g.Match.Division!.Name,
-                RoundName = g.Match.RoundName,
+                Unit1Name = g.Encounter!.Unit1!.Name,
+                Unit2Name = g.Encounter.Unit2!.Name,
+                DivisionName = g.Encounter.Division!.Name,
+                RoundName = g.Encounter.RoundName,
                 CourtName = g.TournamentCourt != null ? g.TournamentCourt.CourtLabel : null,
                 CourtNumber = g.TournamentCourt != null ? g.TournamentCourt.SortOrder : null,
                 StartedAt = g.StartedAt
@@ -186,7 +186,7 @@ public class ScoreboardController : ControllerBase
             .OrderBy(u => u.DivisionId)
             .ThenBy(u => u.FinalPlacement ?? 999)
             .ThenBy(u => u.OverallRank ?? 999)
-            .ThenByDescending(u => u.MatchesWon)
+            .ThenByDescending(u => u.EncounteresWon)
             .ThenByDescending(u => u.GamesWon - u.GamesLost)
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
             .Select(u => new UnitResultDto
@@ -205,9 +205,9 @@ public class ScoreboardController : ControllerBase
                 OverallRank = u.OverallRank,
                 FinalPlacement = u.FinalPlacement,
                 AdvancedToPlayoff = u.AdvancedToPlayoff,
-                MatchesPlayed = u.MatchesPlayed,
-                MatchesWon = u.MatchesWon,
-                MatchesLost = u.MatchesLost,
+                MatchesPlayed = u.EncounteresPlayed,
+                MatchesWon = u.EncounteresWon,
+                MatchesLost = u.EncounteresLost,
                 GamesWon = u.GamesWon,
                 GamesLost = u.GamesLost,
                 PointsFor = u.PointsScored,
@@ -259,7 +259,7 @@ public class ScoreboardController : ControllerBase
                 .ThenInclude(m => m.User)
             .OrderBy(u => u.DivisionId)
             .ThenBy(u => u.FinalPlacement ?? 999)
-            .ThenByDescending(u => u.MatchesWon)
+            .ThenByDescending(u => u.EncounteresWon)
             .ToListAsync();
 
         var csv = new StringBuilder();
@@ -271,7 +271,7 @@ public class ScoreboardController : ControllerBase
                 .Where(m => m.InviteStatus == "Accepted")
                 .Select(m => $"{m.User?.FirstName} {m.User?.LastName}"));
 
-            csv.AppendLine($"\"{unit.Division?.Name}\",{unit.FinalPlacement ?? unit.OverallRank},\"{unit.Name}\",\"{players}\",{unit.MatchesWon},{unit.MatchesLost},{unit.GamesWon},{unit.GamesLost},{unit.PointsScored},{unit.PointsAgainst},{unit.PointsScored - unit.PointsAgainst}");
+            csv.AppendLine($"\"{unit.Division?.Name}\",{unit.FinalPlacement ?? unit.OverallRank},\"{unit.Name}\",\"{players}\",{unit.EncounteresWon},{unit.EncounteresLost},{unit.GamesWon},{unit.GamesLost},{unit.PointsScored},{unit.PointsAgainst},{unit.PointsScored - unit.PointsAgainst}");
         }
 
         var fileName = $"{evt.Name.Replace(" ", "_")}_Results_{DateTime.Now:yyyyMMdd}.csv";
@@ -358,7 +358,7 @@ public class ScoreboardController : ControllerBase
             .Include(u => u.Members)
                 .ThenInclude(m => m.User)
             .OrderBy(u => u.PoolNumber)
-            .ThenByDescending(u => u.MatchesWon)
+            .ThenByDescending(u => u.EncounteresWon)
             .ThenByDescending(u => u.GamesWon - u.GamesLost)
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
             .ToListAsync();
@@ -379,9 +379,9 @@ public class ScoreboardController : ControllerBase
                         .Where(m => m.InviteStatus == "Accepted")
                         .Select(m => m.User!.FirstName + " " + m.User.LastName)
                         .ToList(),
-                    MatchesPlayed = u.MatchesPlayed,
-                    MatchesWon = u.MatchesWon,
-                    MatchesLost = u.MatchesLost,
+                    MatchesPlayed = u.EncounteresPlayed,
+                    MatchesWon = u.EncounteresWon,
+                    MatchesLost = u.EncounteresLost,
                     GamesWon = u.GamesWon,
                     GamesLost = u.GamesLost,
                     PointsFor = u.PointsScored,
@@ -399,7 +399,7 @@ public class ScoreboardController : ControllerBase
             .Include(m => m.Unit2)
             .Include(m => m.Games)
             .OrderBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .Select(m => new PoolMatchDto
             {
                 MatchId = m.Id,
