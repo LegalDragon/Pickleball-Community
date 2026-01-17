@@ -9,7 +9,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useDrawingHub } from '../hooks/useDrawingHub';
 import { tournamentApi, getSharedAssetUrl } from '../services/api';
-import DrawingModal from '../components/DrawingModal';
 
 // Confetti effect component
 function Confetti({ active }) {
@@ -411,22 +410,6 @@ export default function DrawingMonitor() {
       <Confetti active={showConfetti} />
       {countdown !== null && <Countdown count={countdown} />}
 
-      {/* Drawing Modal */}
-      {showDrawingModal && drawingUnit && (
-        <DrawingModal
-          isOpen={showDrawingModal}
-          onClose={() => {
-            setShowDrawingModal(false);
-            setDrawingUnit(null);
-          }}
-          drawStyle={drawingStyle}
-          unitNames={drawingUnit.remainingNames}
-          selectedUnit={drawingUnit}
-          onComplete={() => {}}
-          slotNumber={drawingUnit.unitNumber}
-        />
-      )}
-
       {/* Header */}
       <div className="sticky top-0 z-40 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -468,59 +451,71 @@ export default function DrawingMonitor() {
         </div>
       </div>
 
+      {/* Watchers Bar - Top */}
+      <div className="border-b border-gray-700 bg-gray-800/50">
+        <div className="max-w-7xl mx-auto px-4 py-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-gray-400">
+              <Eye className="w-4 h-4 text-orange-400" />
+              <span className="text-sm font-medium">Watching ({viewers.length})</span>
+            </div>
+            <div className="flex-1 flex items-center gap-2 overflow-x-auto">
+              {authenticatedViewers.map((viewer) => (
+                <div
+                  key={viewer.connectionId}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-full flex-shrink-0"
+                >
+                  {viewer.avatarUrl ? (
+                    <img
+                      src={getSharedAssetUrl(viewer.avatarUrl)}
+                      alt={viewer.displayName}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-orange-500/20 flex items-center justify-center">
+                      <User className="w-2.5 h-2.5 text-orange-400" />
+                    </div>
+                  )}
+                  <span className="text-xs text-white">{viewer.displayName}</span>
+                </div>
+              ))}
+              {anonymousCount > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-700/50 rounded-full flex-shrink-0">
+                  <Users className="w-4 h-4 text-gray-400" />
+                  <span className="text-xs text-gray-400">{anonymousCount} anonymous</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full">
         <div className="flex-1 flex">
-          {/* Left Panel */}
+          {/* Left Panel - Teams List */}
           <div className="w-80 border-r border-gray-700 flex flex-col">
-            {/* Divisions List */}
-            <div className="p-4 border-b border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Divisions</h3>
-              <div className="space-y-2">
+            {/* Division Dropdown */}
+            <div className="p-3 border-b border-gray-700">
+              <select
+                value={selectedDivisionId || ''}
+                onChange={(e) => setSelectedDivisionId(parseInt(e.target.value))}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-orange-500"
+              >
                 {divisions.map((division) => (
-                  <button
-                    key={division.divisionId}
-                    onClick={() => setSelectedDivisionId(division.divisionId)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                      selectedDivisionId === division.divisionId
-                        ? 'bg-orange-500/20 border border-orange-500/50'
-                        : 'bg-gray-800/50 hover:bg-gray-700/50 border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        division.drawingInProgress
-                          ? 'bg-orange-500'
-                          : division.scheduleStatus === 'UnitsAssigned'
-                          ? 'bg-green-500'
-                          : 'bg-gray-700'
-                      }`}>
-                        {division.drawingInProgress ? (
-                          <Shuffle className="w-4 h-4 text-white animate-pulse" />
-                        ) : division.scheduleStatus === 'UnitsAssigned' ? (
-                          <Check className="w-4 h-4 text-white" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-sm font-medium text-white">{division.divisionName}</div>
-                        <div className="text-xs text-gray-400">{division.totalUnits} units</div>
-                      </div>
-                    </div>
-                    <ChevronRight className={`w-4 h-4 ${
-                      selectedDivisionId === division.divisionId ? 'text-orange-400' : 'text-gray-600'
-                    }`} />
-                  </button>
+                  <option key={division.divisionId} value={division.divisionId}>
+                    {division.divisionName} ({division.totalUnits} teams)
+                    {division.drawingInProgress ? ' 🔴' : division.scheduleStatus === 'UnitsAssigned' ? ' ✓' : ''}
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            {/* Units List (when division selected) */}
+            {/* Teams List */}
             {selectedDivision && (
-              <div className="flex-1 overflow-y-auto p-4">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Units ({selectedDivision.units?.length || 0})
+              <div className="flex-1 overflow-y-auto p-3">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  Teams ({selectedDivision.units?.length || 0})
                 </h3>
                 <div className="space-y-2">
                   {selectedDivision.units?.map((unit) => (
@@ -540,23 +535,22 @@ export default function DrawingMonitor() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
+                      {/* Show all members with avatar and name */}
+                      <div className="space-y-1.5">
                         {unit.members?.map((member) => (
-                          <div key={member.userId} className="relative group">
+                          <div key={member.userId} className="flex items-center gap-2">
                             {member.avatarUrl ? (
                               <img
                                 src={getSharedAssetUrl(member.avatarUrl)}
                                 alt={member.name}
-                                className="w-7 h-7 rounded-full object-cover border-2 border-gray-700"
+                                className="w-6 h-6 rounded-full object-cover border border-gray-600"
                               />
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center border-2 border-gray-600">
+                              <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center border border-gray-600">
                                 <User className="w-3 h-3 text-gray-400" />
                               </div>
                             )}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                              {member.name}
-                            </div>
+                            <span className="text-xs text-gray-300 truncate">{member.name}</span>
                           </div>
                         ))}
                       </div>
@@ -705,23 +699,49 @@ export default function DrawingMonitor() {
 
                 {/* Drawn Units Display */}
                 {selectedDivision.drawnUnits?.length > 0 && (
-                  <div className="mt-8 w-full max-w-2xl">
+                  <div className="mt-8 w-full max-w-3xl">
                     <h3 className="text-lg font-semibold text-gray-400 mb-4 flex items-center gap-2">
                       <Trophy className="w-5 h-5 text-orange-400" />
                       Draw Results
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {selectedDivision.drawnUnits.map((unit) => (
-                        <div
-                          key={unit.unitId}
-                          className="bg-gray-800/50 rounded-lg p-3 border border-gray-700"
-                        >
-                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center mx-auto mb-2">
-                            <span className="text-lg font-bold text-white">#{unit.unitNumber}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {selectedDivision.drawnUnits.map((unit) => {
+                        // Get full unit data with member avatars from units list
+                        const fullUnit = selectedDivision.units?.find(u => u.unitId === unit.unitId);
+                        return (
+                          <div
+                            key={unit.unitId}
+                            className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 flex items-center gap-4"
+                          >
+                            <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <span className="text-xl font-bold text-white">#{unit.unitNumber}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white truncate mb-1">{unit.unitName}</p>
+                              <div className="flex items-center gap-2">
+                                {fullUnit?.members?.map((member) => (
+                                  <div key={member.userId} className="flex items-center gap-1.5">
+                                    {member.avatarUrl ? (
+                                      <img
+                                        src={getSharedAssetUrl(member.avatarUrl)}
+                                        alt={member.name}
+                                        className="w-5 h-5 rounded-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-gray-700 flex items-center justify-center">
+                                        <User className="w-2.5 h-2.5 text-gray-400" />
+                                      </div>
+                                    )}
+                                    <span className="text-xs text-gray-400">{member.name}</span>
+                                  </div>
+                                )) || unit.memberNames?.map((name, idx) => (
+                                  <span key={idx} className="text-xs text-gray-400">{name}</span>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                          <p className="text-sm font-medium text-white text-center truncate">{unit.unitName}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -735,44 +755,6 @@ export default function DrawingMonitor() {
           </div>
         </div>
 
-        {/* Bottom Panel - Watchers */}
-        <div className="border-t border-gray-700 bg-gray-900/50">
-          <div className="max-w-7xl mx-auto px-4 py-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-gray-400">
-                <Eye className="w-5 h-5 text-orange-400" />
-                <span className="font-medium">Watching ({viewers.length})</span>
-              </div>
-              <div className="flex-1 flex items-center gap-2 overflow-x-auto pb-1">
-                {authenticatedViewers.map((viewer) => (
-                  <div
-                    key={viewer.connectionId}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full flex-shrink-0"
-                  >
-                    {viewer.avatarUrl ? (
-                      <img
-                        src={getSharedAssetUrl(viewer.avatarUrl)}
-                        alt={viewer.displayName}
-                        className="w-6 h-6 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center">
-                        <User className="w-3 h-3 text-orange-400" />
-                      </div>
-                    )}
-                    <span className="text-sm text-white">{viewer.displayName}</span>
-                  </div>
-                ))}
-                {anonymousCount > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full flex-shrink-0">
-                    <Users className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-400">{anonymousCount} anonymous</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
