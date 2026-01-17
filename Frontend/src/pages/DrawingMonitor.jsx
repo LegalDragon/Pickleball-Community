@@ -102,6 +102,15 @@ export default function DrawingMonitor() {
   // Viewer tracking
   const previousViewersRef = useRef([]);
 
+  // Ref to prevent concurrent auto-draw executions
+  const isAutoDrawingRef = useRef(false);
+
+  // Ref to track which division countdown is being processed (prevents duplicate countdowns)
+  const countdownProcessedRef = useRef(null);
+
+  // Ref to prevent concurrent complete drawing calls
+  const isCompletingRef = useRef(false);
+
   // Profile modal state
   const [profileModalUserId, setProfileModalUserId] = useState(null);
 
@@ -199,14 +208,24 @@ export default function DrawingMonitor() {
 
   // Auto-draw all units with animation pauses
   const handleAutoDrawAll = async (divisionId) => {
+    // Prevent concurrent executions using ref (state updates are async and unreliable for this)
+    if (isAutoDrawingRef.current) {
+      console.log('Auto-draw already in progress, skipping duplicate call');
+      return;
+    }
+
     const divState = divisionStates[divisionId];
     if (!divState) return;
 
+    // Set both ref and state - ref for immediate blocking, state for UI
+    isAutoDrawingRef.current = true;
     setIsAutoDrawing(true);
 
     const totalUnits = divState.totalUnits;
     const alreadyDrawn = divState.drawnCount || 0;
     const remaining = totalUnits - alreadyDrawn;
+
+    let allSucceeded = true;
 
     for (let i = 0; i < remaining; i++) {
       try {
@@ -231,22 +250,34 @@ export default function DrawingMonitor() {
           await new Promise(resolve => setTimeout(resolve, 500));
         } else {
           toast.error(response.message || 'Failed to draw unit');
+          allSucceeded = false;
           break;
         }
       } catch (err) {
         toast.error(err?.response?.data?.message || 'Failed to draw unit');
+        allSucceeded = false;
         break;
       }
     }
 
     setIsAutoDrawing(false);
-    // Auto-complete the drawing when done
-    handleCompleteDrawing(divisionId);
+    isAutoDrawingRef.current = false;
+
+    // Only auto-complete the drawing if all draws succeeded
+    if (allSucceeded && remaining > 0) {
+      await handleCompleteDrawing(divisionId);
+    }
   };
 
   // Handle countdown for ALL viewers when drawing starts (via SignalR)
   useEffect(() => {
     if (countdownDivisionId) {
+      // Prevent processing the same countdown multiple times
+      if (countdownProcessedRef.current === countdownDivisionId) {
+        return;
+      }
+      countdownProcessedRef.current = countdownDivisionId;
+
       // Auto-select the division that's starting
       setSelectedDivisionId(countdownDivisionId);
 
@@ -267,7 +298,13 @@ export default function DrawingMonitor() {
         });
       }, 1000);
 
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        // Reset processed ref when effect cleans up (allows new countdown for same division later)
+        if (countdownProcessedRef.current === countdownDivisionId) {
+          countdownProcessedRef.current = null;
+        }
+      };
     }
   }, [countdownDivisionId, isOrganizer, isAdmin, clearCountdown]);
 
@@ -375,6 +412,13 @@ export default function DrawingMonitor() {
   };
 
   const handleCompleteDrawing = async (divisionId) => {
+    // Prevent concurrent completion calls
+    if (isCompletingRef.current) {
+      console.log('Complete drawing already in progress, skipping duplicate call');
+      return;
+    }
+
+    isCompletingRef.current = true;
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.completeDrawing(divisionId);
@@ -389,6 +433,7 @@ export default function DrawingMonitor() {
       toast.error(err?.response?.data?.message || 'Failed to complete drawing');
     } finally {
       setDrawingLoading(false);
+      isCompletingRef.current = false;
     }
   };
 
