@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
-  Radio, Users, ChevronLeft, Play, SkipForward, Check, X, Loader2,
-  AlertCircle, User, Wifi, WifiOff, Eye, Shuffle, Trophy, Clock
+  Radio, Users, ChevronLeft, Play, Check, X, Loader2,
+  AlertCircle, User, Wifi, WifiOff, Eye, Shuffle, Trophy, Clock,
+  RotateCcw, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useDrawingHub } from '../hooks/useDrawingHub';
 import { tournamentApi, getSharedAssetUrl } from '../services/api';
+import DrawingModal from '../components/DrawingModal';
 
 // Confetti effect component
 function Confetti({ active }) {
@@ -46,20 +49,56 @@ function Confetti({ active }) {
   );
 }
 
+// Countdown component
+function Countdown({ count, onComplete }) {
+  useEffect(() => {
+    if (count === 0) {
+      onComplete?.();
+    }
+  }, [count, onComplete]);
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+      <div className="text-center">
+        <div className="text-[200px] font-bold text-orange-500 leading-none animate-pulse">
+          {count}
+        </div>
+        <p className="text-2xl text-gray-400 mt-4">Get Ready!</p>
+      </div>
+    </div>
+  );
+}
+
+// Drawing styles
+const DRAWING_STYLES = [
+  { id: 'wheel', name: 'Spin Wheel', icon: '🎡' },
+  { id: 'cardFlip', name: 'Card Flip', icon: '🃏' },
+  { id: 'slotMachine', name: 'Slot Machine', icon: '🎰' },
+  { id: 'lottery', name: 'Ball Drop', icon: '🎱' }
+];
+
 export default function DrawingMonitor() {
   const { eventId } = useParams();
-  const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+  const toast = useToast();
 
   const [eventData, setEventData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
-  const [selectedDivision, setSelectedDivision] = useState(null);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
   const [drawingLoading, setDrawingLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [latestUnit, setLatestUnit] = useState(null);
-  const lastDrawnRef = useRef({});
+
+  // Drawing animation state
+  const [drawingStyle, setDrawingStyle] = useState('wheel');
+  const [countdown, setCountdown] = useState(null);
+  const [showDrawingModal, setShowDrawingModal] = useState(false);
+  const [pendingDrawResult, setPendingDrawResult] = useState(null);
+  const [drawingUnit, setDrawingUnit] = useState(null);
+
+  // Viewer tracking
+  const previousViewersRef = useRef([]);
 
   const {
     connect,
@@ -70,7 +109,8 @@ export default function DrawingMonitor() {
     divisionStates,
     initializeDivisionStates,
     connectionState,
-    isConnected
+    isConnected,
+    connection
   } = useDrawingHub();
 
   // Load event drawing state
@@ -83,11 +123,13 @@ export default function DrawingMonitor() {
       if (response.success && response.data) {
         const data = response.data;
         setEventData(data);
+        setIsOrganizer(data.isOrganizer);
         initializeDivisionStates(data.divisions);
 
-        // Check if user is organizer
-        // This would typically come from the event data or a separate check
-        setIsOrganizer(isAuthenticated); // Simplified - you'd check actual organizer status
+        // Auto-select first division if none selected
+        if (!selectedDivisionId && data.divisions.length > 0) {
+          setSelectedDivisionId(data.divisions[0].divisionId);
+        }
       } else {
         setError('Failed to load event data');
       }
@@ -126,31 +168,46 @@ export default function DrawingMonitor() {
     };
   }, [eventId, user]);
 
-  // Track latest drawn unit for animation
+  // Listen for ViewerJoined events
   useEffect(() => {
-    Object.entries(divisionStates).forEach(([divId, state]) => {
-      if (state.drawnUnits && state.drawnUnits.length > 0) {
-        const newest = state.drawnUnits[state.drawnUnits.length - 1];
-        const key = `${divId}-${newest.unitId}`;
-        if (!lastDrawnRef.current[key]) {
-          lastDrawnRef.current[key] = true;
-          setLatestUnit({ divisionId: parseInt(divId), ...newest });
-          setTimeout(() => setLatestUnit(null), 3000);
+    if (connection) {
+      const handleViewerJoined = (viewer) => {
+        if (viewer.isAuthenticated && viewer.displayName) {
+          toast.success(`${viewer.displayName} joined the drawing`);
         }
-      }
-    });
-  }, [divisionStates]);
+      };
 
-  // Drawing actions (for organizers)
+      connection.on('ViewerJoined', handleViewerJoined);
+      return () => connection.off('ViewerJoined', handleViewerJoined);
+    }
+  }, [connection, toast]);
+
+  // Start drawing with countdown
   const handleStartDrawing = async (divisionId) => {
+    if (!isOrganizer) return;
+
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.startDrawing(divisionId);
-      if (!response.success) {
-        alert(response.message || 'Failed to start drawing');
+      if (response.success) {
+        // Start countdown
+        setCountdown(10);
+        const interval = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              // Start first draw after countdown
+              handleDrawNext(divisionId);
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        toast.error(response.message || 'Failed to start drawing');
       }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to start drawing');
+      toast.error(err?.response?.data?.message || 'Failed to start drawing');
     } finally {
       setDrawingLoading(false);
     }
@@ -160,13 +217,49 @@ export default function DrawingMonitor() {
     try {
       setDrawingLoading(true);
       const response = await tournamentApi.drawNextUnit(divisionId);
-      if (!response.success) {
-        alert(response.message || 'Failed to draw unit');
+      if (response.success && response.data) {
+        // Show drawing animation
+        const divState = divisionStates[divisionId];
+        setDrawingUnit({
+          ...response.data,
+          divisionId,
+          remainingNames: divState?.remainingUnitNames || []
+        });
+        setShowDrawingModal(true);
+        setPendingDrawResult(response.data);
+      } else {
+        toast.error(response.message || 'Failed to draw unit');
       }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to draw unit');
+      toast.error(err?.response?.data?.message || 'Failed to draw unit');
     } finally {
       setDrawingLoading(false);
+    }
+  };
+
+  const handleAcceptDraw = () => {
+    setShowDrawingModal(false);
+    setPendingDrawResult(null);
+    setDrawingUnit(null);
+
+    // Check if all units drawn
+    const divState = divisionStates[selectedDivisionId];
+    if (divState && divState.drawnCount >= divState.totalUnits) {
+      handleCompleteDrawing(selectedDivisionId);
+    }
+  };
+
+  const handleRedraw = async () => {
+    // Cancel current drawing and restart
+    setShowDrawingModal(false);
+    setPendingDrawResult(null);
+    setDrawingUnit(null);
+
+    try {
+      await tournamentApi.cancelDrawing(selectedDivisionId);
+      toast.success('Drawing cancelled. You can start again.');
+    } catch (err) {
+      toast.error('Failed to cancel drawing');
     }
   };
 
@@ -177,11 +270,12 @@ export default function DrawingMonitor() {
       if (response.success) {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 4000);
+        toast.success('Drawing completed!');
       } else {
-        alert(response.message || 'Failed to complete drawing');
+        toast.error(response.message || 'Failed to complete drawing');
       }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to complete drawing');
+      toast.error(err?.response?.data?.message || 'Failed to complete drawing');
     } finally {
       setDrawingLoading(false);
     }
@@ -193,8 +287,9 @@ export default function DrawingMonitor() {
     try {
       setDrawingLoading(true);
       await tournamentApi.cancelDrawing(divisionId);
+      toast.success('Drawing cancelled');
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to cancel drawing');
+      toast.error(err?.response?.data?.message || 'Failed to cancel drawing');
     } finally {
       setDrawingLoading(false);
     }
@@ -231,11 +326,12 @@ export default function DrawingMonitor() {
   }
 
   const divisions = Object.values(divisionStates);
+  const selectedDivision = selectedDivisionId ? divisionStates[selectedDivisionId] : null;
   const authenticatedViewers = viewers.filter(v => v.isAuthenticated);
   const anonymousCount = viewers.filter(v => !v.isAuthenticated).length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col">
       <style>{`
         @keyframes confetti {
           0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
@@ -245,15 +341,23 @@ export default function DrawingMonitor() {
           0%, 100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.5); }
           50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.8); }
         }
-        @keyframes slide-in {
-          0% { transform: translateX(100%); opacity: 0; }
-          100% { transform: translateX(0); opacity: 1; }
-        }
-        .animate-slide-in { animation: slide-in 0.5s ease-out; }
-        .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
       `}</style>
 
       <Confetti active={showConfetti} />
+      {countdown !== null && <Countdown count={countdown} />}
+
+      {/* Drawing Modal */}
+      {showDrawingModal && drawingUnit && (
+        <DrawingModal
+          isOpen={showDrawingModal}
+          onClose={() => {}}
+          drawStyle={drawingStyle}
+          unitNames={drawingUnit.remainingNames}
+          selectedUnit={drawingUnit}
+          onComplete={() => {}}
+          slotNumber={drawingUnit.unitNumber}
+        />
+      )}
 
       {/* Header */}
       <div className="sticky top-0 z-40 bg-gray-900/95 backdrop-blur-sm border-b border-gray-700">
@@ -296,305 +400,300 @@ export default function DrawingMonitor() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main Content - Divisions */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Latest Draw Highlight */}
-            {latestUnit && (
-              <div className="animate-slide-in">
-                <div className="p-4 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 rounded-xl">
-                  <div className="flex items-center justify-center gap-4">
-                    <div className="text-center">
-                      <div className="text-sm text-orange-400 mb-1">Just Drawn!</div>
-                      <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center animate-pulse-glow">
-                        <span className="text-2xl font-bold text-white">#{latestUnit.unitNumber}</span>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full">
+        <div className="flex-1 flex">
+          {/* Left Panel */}
+          <div className="w-80 border-r border-gray-700 flex flex-col">
+            {/* Divisions List */}
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Divisions</h3>
+              <div className="space-y-2">
+                {divisions.map((division) => (
+                  <button
+                    key={division.divisionId}
+                    onClick={() => setSelectedDivisionId(division.divisionId)}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                      selectedDivisionId === division.divisionId
+                        ? 'bg-orange-500/20 border border-orange-500/50'
+                        : 'bg-gray-800/50 hover:bg-gray-700/50 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        division.drawingInProgress
+                          ? 'bg-orange-500'
+                          : division.scheduleStatus === 'UnitsAssigned'
+                          ? 'bg-green-500'
+                          : 'bg-gray-700'
+                      }`}>
+                        {division.drawingInProgress ? (
+                          <Shuffle className="w-4 h-4 text-white animate-pulse" />
+                        ) : division.scheduleStatus === 'UnitsAssigned' ? (
+                          <Check className="w-4 h-4 text-white" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm font-medium text-white">{division.divisionName}</div>
+                        <div className="text-xs text-gray-400">{division.totalUnits} units</div>
                       </div>
                     </div>
-                    <div className="text-left">
-                      <div className="text-lg font-bold text-white">{latestUnit.unitName}</div>
-                      {latestUnit.memberNames && latestUnit.memberNames.length > 0 && (
-                        <div className="text-sm text-gray-400">
-                          {latestUnit.memberNames.join(' & ')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                    <ChevronRight className={`w-4 h-4 ${
+                      selectedDivisionId === division.divisionId ? 'text-orange-400' : 'text-gray-600'
+                    }`} />
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
 
-            {/* Divisions */}
-            {divisions.map((division) => (
-              <div
-                key={division.divisionId}
-                className={`bg-gray-800/50 rounded-xl overflow-hidden border ${
-                  division.drawingInProgress
-                    ? 'border-orange-500/50 shadow-lg shadow-orange-500/10'
-                    : 'border-gray-700'
-                }`}
-              >
-                {/* Division Header */}
-                <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      division.drawingInProgress
-                        ? 'bg-orange-500'
-                        : division.scheduleStatus === 'UnitsAssigned'
-                        ? 'bg-green-500'
-                        : 'bg-gray-700'
-                    }`}>
-                      {division.drawingInProgress ? (
-                        <Shuffle className="w-5 h-5 text-white animate-pulse" />
-                      ) : division.scheduleStatus === 'UnitsAssigned' ? (
-                        <Check className="w-5 h-5 text-white" />
-                      ) : (
-                        <Clock className="w-5 h-5 text-gray-400" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white">{division.divisionName}</h3>
-                      <p className="text-sm text-gray-400">
-                        {division.teamSize === 1 ? 'Singles' : `${division.teamSize} players/team`}
-                        {' '}&bull;{' '}
-                        {division.totalUnits} {division.totalUnits === 1 ? 'team' : 'teams'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Status Badge */}
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    division.drawingInProgress
-                      ? 'bg-orange-500/20 text-orange-400'
-                      : division.scheduleStatus === 'UnitsAssigned'
-                      ? 'bg-green-500/20 text-green-400'
-                      : 'bg-gray-700 text-gray-400'
-                  }`}>
-                    {division.drawingInProgress
-                      ? `Drawing ${division.drawnCount}/${division.totalUnits}`
-                      : division.scheduleStatus === 'UnitsAssigned'
-                      ? 'Complete'
-                      : 'Pending'}
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                {(division.drawingInProgress || division.drawnCount > 0) && (
-                  <div className="px-4 py-3 bg-gray-900/30">
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm text-gray-400">
-                        {division.drawnCount}/{division.totalUnits}
+            {/* Units List (when division selected) */}
+            {selectedDivision && (
+              <div className="flex-1 overflow-y-auto p-4">
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                  Units ({selectedDivision.units?.length || 0})
+                </h3>
+                <div className="space-y-2">
+                  {selectedDivision.units?.map((unit) => (
+                    <div
+                      key={unit.unitId}
+                      className={`p-3 rounded-lg ${
+                        unit.unitNumber
+                          ? 'bg-green-900/20 border border-green-500/30'
+                          : 'bg-gray-800/50 border border-gray-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-white">{unit.unitName}</span>
+                        {unit.unitNumber && (
+                          <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded">
+                            #{unit.unitNumber}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-orange-400 to-red-500 transition-all duration-500"
-                          style={{ width: `${(division.drawnCount / division.totalUnits) * 100}%` }}
-                        />
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {Math.round((division.drawnCount / division.totalUnits) * 100)}%
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Drawn Units */}
-                {division.drawnUnits && division.drawnUnits.length > 0 && (
-                  <div className="p-4">
-                    <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                      <Trophy className="w-4 h-4" />
-                      Draw Order
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {division.drawnUnits.map((unit) => (
-                        <div
-                          key={unit.unitId}
-                          className={`flex items-center gap-2 p-2 rounded-lg transition-all ${
-                            latestUnit?.unitId === unit.unitId && latestUnit?.divisionId === division.divisionId
-                              ? 'bg-orange-500/20 border border-orange-500/50'
-                              : 'bg-gray-700/50'
-                          }`}
-                        >
-                          <div className="w-7 h-7 bg-gradient-to-br from-orange-400 to-red-500 rounded flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-white">#{unit.unitNumber}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-white truncate">{unit.unitName}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Remaining Units */}
-                {division.remainingUnitNames && division.remainingUnitNames.length > 0 && (
-                  <div className="p-4 border-t border-gray-700/50">
-                    <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-                      <Shuffle className="w-4 h-4" />
-                      Still in the Draw ({division.remainingUnitNames.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {division.remainingUnitNames.map((name, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-1 bg-gray-700/50 rounded text-sm text-gray-300"
-                        >
-                          {name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Admin Controls */}
-                {isOrganizer && isAuthenticated && (
-                  <div className="p-4 border-t border-gray-700 bg-gray-900/30">
-                    <div className="flex flex-wrap gap-2">
-                      {!division.drawingInProgress && division.scheduleStatus !== 'UnitsAssigned' && (
-                        <button
-                          onClick={() => handleStartDrawing(division.divisionId)}
-                          disabled={drawingLoading}
-                          className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
-                        >
-                          <Play className="w-4 h-4" />
-                          Start Drawing
-                        </button>
-                      )}
-                      {division.drawingInProgress && (
-                        <>
-                          <button
-                            onClick={() => handleDrawNext(division.divisionId)}
-                            disabled={drawingLoading || division.drawnCount >= division.totalUnits}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                          >
-                            {drawingLoading ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                      <div className="flex items-center gap-1">
+                        {unit.members?.map((member) => (
+                          <div key={member.userId} className="relative group">
+                            {member.avatarUrl ? (
+                              <img
+                                src={getSharedAssetUrl(member.avatarUrl)}
+                                alt={member.name}
+                                className="w-7 h-7 rounded-full object-cover border-2 border-gray-700"
+                              />
                             ) : (
-                              <SkipForward className="w-4 h-4" />
+                              <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center border-2 border-gray-600">
+                                <User className="w-3 h-3 text-gray-400" />
+                              </div>
                             )}
-                            Draw Next
-                          </button>
-                          {division.drawnCount >= division.totalUnits && (
-                            <button
-                              onClick={() => handleCompleteDrawing(division.divisionId)}
-                              disabled={drawingLoading}
-                              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
-                            >
-                              <Check className="w-4 h-4" />
-                              Complete
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleCancelDrawing(division.divisionId)}
-                            disabled={drawingLoading}
-                            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                            Cancel
-                          </button>
-                        </>
-                      )}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                              {member.name}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {divisions.length === 0 && (
-              <div className="bg-gray-800/50 rounded-xl p-12 text-center border border-gray-700">
-                <AlertCircle className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-400">No divisions found</h3>
-                <p className="text-sm text-gray-500 mt-2">This event doesn't have any divisions set up yet.</p>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Sidebar - Viewers */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              {/* Viewers Panel */}
-              <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-                <div className="p-4 border-b border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-white flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-orange-400" />
-                      Watching
-                    </h3>
-                    <span className="text-sm text-gray-400">{viewers.length}</span>
-                  </div>
-                </div>
+          {/* Center Panel */}
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            {selectedDivision ? (
+              <>
+                <h2 className="text-4xl font-bold text-white mb-2">{selectedDivision.divisionName}</h2>
+                <p className="text-gray-400 mb-8">
+                  {selectedDivision.teamSize === 1 ? 'Singles' : `${selectedDivision.teamSize} players/team`}
+                  {' '}&bull;{' '}
+                  {selectedDivision.totalUnits} units to draw
+                </p>
 
-                <div className="p-4 max-h-96 overflow-y-auto">
-                  {authenticatedViewers.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                      {authenticatedViewers.map((viewer) => (
-                        <div
-                          key={viewer.connectionId}
-                          className="flex items-center gap-3 p-2 bg-gray-700/30 rounded-lg"
+                {/* Progress */}
+                {selectedDivision.drawingInProgress && (
+                  <div className="w-full max-w-md mb-8">
+                    <div className="flex items-center justify-between text-sm text-gray-400 mb-2">
+                      <span>Progress</span>
+                      <span>{selectedDivision.drawnCount} / {selectedDivision.totalUnits}</span>
+                    </div>
+                    <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-orange-400 to-red-500 transition-all duration-500"
+                        style={{ width: `${(selectedDivision.drawnCount / selectedDivision.totalUnits) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Drawing completed state */}
+                {selectedDivision.scheduleStatus === 'UnitsAssigned' && (
+                  <div className="text-center mb-8">
+                    <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trophy className="w-10 h-10 text-white" />
+                    </div>
+                    <p className="text-xl text-green-400 font-semibold">Drawing Complete!</p>
+                  </div>
+                )}
+
+                {/* Admin Controls */}
+                {isOrganizer && (
+                  <div className="space-y-6">
+                    {/* Drawing Style Selector */}
+                    {!selectedDivision.drawingInProgress && selectedDivision.scheduleStatus !== 'UnitsAssigned' && (
+                      <div className="flex flex-wrap justify-center gap-2 mb-4">
+                        {DRAWING_STYLES.map((style) => (
+                          <button
+                            key={style.id}
+                            onClick={() => setDrawingStyle(style.id)}
+                            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                              drawingStyle === style.id
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                          >
+                            <span>{style.icon}</span>
+                            <span>{style.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Start Drawing Button */}
+                    {!selectedDivision.drawingInProgress && selectedDivision.scheduleStatus !== 'UnitsAssigned' && (
+                      <button
+                        onClick={() => handleStartDrawing(selectedDivision.divisionId)}
+                        disabled={drawingLoading}
+                        className="px-12 py-6 bg-gradient-to-r from-orange-500 to-red-500 text-white text-2xl font-bold rounded-2xl hover:from-orange-600 hover:to-red-600 disabled:opacity-50 transition-all transform hover:scale-105 shadow-lg shadow-orange-500/30"
+                      >
+                        {drawingLoading ? (
+                          <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+                        ) : (
+                          <>
+                            <Play className="w-8 h-8 inline-block mr-3" />
+                            Start Drawing
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* During Drawing Controls */}
+                    {selectedDivision.drawingInProgress && (
+                      <div className="flex flex-wrap justify-center gap-4">
+                        {selectedDivision.drawnCount < selectedDivision.totalUnits && (
+                          <button
+                            onClick={() => handleDrawNext(selectedDivision.divisionId)}
+                            disabled={drawingLoading}
+                            className="px-8 py-4 bg-blue-500 text-white text-xl font-semibold rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                          >
+                            {drawingLoading ? (
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                            ) : (
+                              <Shuffle className="w-6 h-6" />
+                            )}
+                            Draw Next
+                          </button>
+                        )}
+
+                        {selectedDivision.drawnCount >= selectedDivision.totalUnits && (
+                          <button
+                            onClick={() => handleCompleteDrawing(selectedDivision.divisionId)}
+                            disabled={drawingLoading}
+                            className="px-8 py-4 bg-green-500 text-white text-xl font-semibold rounded-xl hover:bg-green-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                          >
+                            <Check className="w-6 h-6" />
+                            Accept & Complete
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleCancelDrawing(selectedDivision.divisionId)}
+                          disabled={drawingLoading}
+                          className="px-8 py-4 bg-gray-700 text-gray-300 text-xl font-semibold rounded-xl hover:bg-gray-600 disabled:opacity-50 transition-colors flex items-center gap-2"
                         >
-                          {viewer.avatarUrl ? (
-                            <img
-                              src={getSharedAssetUrl(viewer.avatarUrl)}
-                              alt={viewer.displayName}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
-                              <User className="w-4 h-4 text-orange-400" />
-                            </div>
-                          )}
-                          <span className="text-sm text-white truncate">{viewer.displayName}</span>
+                          <RotateCcw className="w-6 h-6" />
+                          Redraw All
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Non-organizer view during drawing */}
+                {!isOrganizer && selectedDivision.drawingInProgress && (
+                  <div className="text-center">
+                    <Loader2 className="w-16 h-16 text-orange-500 animate-spin mx-auto mb-4" />
+                    <p className="text-xl text-gray-400">Drawing in progress...</p>
+                    <p className="text-gray-500 mt-2">Watch as units are drawn live!</p>
+                  </div>
+                )}
+
+                {/* Drawn Units Display */}
+                {selectedDivision.drawnUnits?.length > 0 && (
+                  <div className="mt-8 w-full max-w-2xl">
+                    <h3 className="text-lg font-semibold text-gray-400 mb-4 flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-orange-400" />
+                      Draw Results
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {selectedDivision.drawnUnits.map((unit) => (
+                        <div
+                          key={unit.unitId}
+                          className="bg-gray-800/50 rounded-lg p-3 border border-gray-700"
+                        >
+                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <span className="text-lg font-bold text-white">#{unit.unitNumber}</span>
+                          </div>
+                          <p className="text-sm font-medium text-white text-center truncate">{unit.unitName}</p>
                         </div>
                       ))}
                     </div>
-                  )}
-
-                  {anonymousCount > 0 && (
-                    <div className="flex items-center gap-3 p-2 bg-gray-700/30 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-                        <Users className="w-4 h-4 text-gray-400" />
-                      </div>
-                      <span className="text-sm text-gray-400">
-                        {anonymousCount} Anonymous {anonymousCount === 1 ? 'viewer' : 'viewers'}
-                      </span>
-                    </div>
-                  )}
-
-                  {viewers.length === 0 && (
-                    <div className="text-center py-6">
-                      <Eye className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">No viewers yet</p>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center">
+                <Shuffle className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-xl text-gray-400">Select a division to begin</p>
               </div>
+            )}
+          </div>
+        </div>
 
-              {/* Event Info */}
-              <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-4">
-                <h3 className="font-semibold text-white mb-3">Event Status</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Status</span>
-                    <span className={`font-medium ${
-                      eventData?.tournamentStatus === 'Drawing'
-                        ? 'text-orange-400'
-                        : 'text-gray-300'
-                    }`}>
-                      {eventData?.tournamentStatus || 'Unknown'}
-                    </span>
+        {/* Bottom Panel - Watchers */}
+        <div className="border-t border-gray-700 bg-gray-900/50">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-gray-400">
+                <Eye className="w-5 h-5 text-orange-400" />
+                <span className="font-medium">Watching ({viewers.length})</span>
+              </div>
+              <div className="flex-1 flex items-center gap-2 overflow-x-auto pb-1">
+                {authenticatedViewers.map((viewer) => (
+                  <div
+                    key={viewer.connectionId}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full flex-shrink-0"
+                  >
+                    {viewer.avatarUrl ? (
+                      <img
+                        src={getSharedAssetUrl(viewer.avatarUrl)}
+                        alt={viewer.displayName}
+                        className="w-6 h-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center">
+                        <User className="w-3 h-3 text-orange-400" />
+                      </div>
+                    )}
+                    <span className="text-sm text-white">{viewer.displayName}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Divisions</span>
-                    <span className="text-gray-300">{divisions.length}</span>
+                ))}
+                {anonymousCount > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 rounded-full flex-shrink-0">
+                    <Users className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-400">{anonymousCount} anonymous</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Completed</span>
-                    <span className="text-gray-300">
-                      {divisions.filter(d => d.scheduleStatus === 'UnitsAssigned').length}/{divisions.length}
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

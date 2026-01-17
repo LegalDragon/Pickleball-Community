@@ -801,4 +801,70 @@ public class PaymentRecordDto
     public string? Status { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? VerifiedAt { get; set; }
+
+    /// <summary>
+    /// Total amount applied to members
+    /// </summary>
+    public decimal TotalApplied { get; set; }
+
+    /// <summary>
+    /// Whether total applied equals amount paid
+    /// </summary>
+    public bool IsFullyApplied { get; set; }
+
+    /// <summary>
+    /// List of members this payment was applied to
+    /// </summary>
+    public List<PaymentApplicationDto> AppliedTo { get; set; } = new();
+}
+
+public class PaymentApplicationDto
+{
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public decimal AmountApplied { get; set; }
+}
+
+// ============================================
+// Admin Registration DTOs
+// ============================================
+
+/// <summary>
+/// Request to add a user registration to an event (admin/organizer only)
+/// </summary>
+public class AdminAddRegistrationRequest
+{
+    /// <summary>
+    /// The user ID to register for the event
+    /// </summary>
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// The division ID to register the user for
+    /// </summary>
+    public int DivisionId { get; set; }
+
+    /// <summary>
+    /// Optional partner user ID for doubles/team events
+    /// </summary>
+    public int? PartnerUserId { get; set; }
+
+    /// <summary>
+    /// Whether to auto-check-in the user (for on-site registrations)
+    /// </summary>
+    public bool AutoCheckIn { get; set; } = false;
+}
+
+/// <summary>
+/// User search result for admin registration
+/// </summary>
+public class UserSearchResultDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public bool IsAlreadyRegistered { get; set; }
 }

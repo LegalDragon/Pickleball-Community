@@ -493,6 +493,239 @@ public class TournamentController : ControllerBase
     }
 
     // ============================================
+    // Admin Registration (Organizer adds users to event)
+    // ============================================
+
+    /// <summary>
+    /// Search for users to add to event registration (organizer only)
+    /// </summary>
+    [Authorize]
+    [HttpGet("events/{eventId}/search-users")]
+    public async Task<ActionResult<ApiResponse<List<UserSearchResultDto>>>> SearchUsersForRegistration(int eventId, [FromQuery] string query)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<UserSearchResultDto>> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is organizer or admin
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<List<UserSearchResultDto>> { Success = false, Message = "Event not found" });
+
+        var isOrganizer = evt.OrganizedByUserId == userId.Value;
+        var isAdmin = await IsAdminAsync();
+
+        if (!isOrganizer && !isAdmin)
+            return Forbid();
+
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            return Ok(new ApiResponse<List<UserSearchResultDto>> { Success = true, Data = new List<UserSearchResultDto>() });
+
+        // Get users already registered for this event
+        var registeredUserIds = (await _context.EventUnitMembers
+            .Where(m => m.Unit!.EventId == eventId && m.InviteStatus == "Accepted")
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync()).ToHashSet();
+
+        // Search for users by name or email
+        var queryLower = query.ToLower();
+        var users = await _context.Users
+            .Where(u => (u.FirstName != null && u.FirstName.ToLower().Contains(queryLower)) ||
+                       (u.LastName != null && u.LastName.ToLower().Contains(queryLower)) ||
+                       (u.Email != null && u.Email.ToLower().Contains(queryLower)))
+            .Take(20)
+            .Select(u => new UserSearchResultDto
+            {
+                UserId = u.Id,
+                Name = Utility.FormatName(u.LastName, u.FirstName) ?? "",
+                Email = u.Email,
+                ProfileImageUrl = u.ProfileImageUrl,
+                City = u.City,
+                State = u.State,
+                IsAlreadyRegistered = registeredUserIds.Contains(u.Id)
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<UserSearchResultDto>> { Success = true, Data = users });
+    }
+
+    /// <summary>
+    /// Add a user registration to event (organizer only)
+    /// </summary>
+    [Authorize]
+    [HttpPost("events/{eventId}/admin-register")]
+    public async Task<ActionResult<ApiResponse<EventUnitDto>>> AdminRegisterUser(int eventId, [FromBody] AdminAddRegistrationRequest request)
+    {
+        var organizerId = GetUserId();
+        if (!organizerId.HasValue)
+            return Unauthorized(new ApiResponse<EventUnitDto> { Success = false, Message = "Unauthorized" });
+
+        // Get event with divisions
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+                .ThenInclude(d => d.TeamUnit)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Event not found" });
+
+        // Check if user is organizer or admin
+        var isOrganizer = evt.OrganizedByUserId == organizerId.Value;
+        var isAdmin = await IsAdminAsync();
+
+        if (!isOrganizer && !isAdmin)
+            return Forbid();
+
+        // Validate user exists
+        var user = await _context.Users.FindAsync(request.UserId);
+        if (user == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "User not found" });
+
+        // Validate division
+        var division = evt.Divisions.FirstOrDefault(d => d.Id == request.DivisionId);
+        if (division == null || !division.IsActive)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Division not found" });
+
+        // Check if user is already registered in this division
+        var existingMember = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .FirstOrDefaultAsync(m => m.UserId == request.UserId &&
+                m.Unit!.DivisionId == request.DivisionId &&
+                m.Unit.EventId == eventId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+
+        if (existingMember != null)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "User is already registered in this division" });
+
+        // Get team size from division
+        var teamSize = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
+        var isSingles = teamSize == 1;
+
+        // Check capacity (admin can override waitlist)
+        var completedUnitCount = await _context.EventUnits
+            .Include(u => u.Members)
+            .CountAsync(u => u.DivisionId == request.DivisionId &&
+                u.Status != "Cancelled" &&
+                u.Status != "Waitlisted" &&
+                u.Members.Count(m => m.InviteStatus == "Accepted") >= teamSize);
+
+        var isWaitlistedByUnits = division.MaxUnits.HasValue && completedUnitCount >= division.MaxUnits.Value;
+
+        // Check MaxPlayers capacity
+        var isWaitlistedByPlayers = false;
+        if (division.MaxPlayers.HasValue)
+        {
+            var currentPlayerCount = await _context.EventUnitMembers
+                .Include(m => m.Unit)
+                .CountAsync(m => m.Unit!.DivisionId == request.DivisionId &&
+                    m.Unit.EventId == eventId &&
+                    m.Unit.Status != "Cancelled" &&
+                    m.Unit.Status != "Waitlisted" &&
+                    m.InviteStatus == "Accepted");
+
+            isWaitlistedByPlayers = currentPlayerCount >= division.MaxPlayers.Value;
+        }
+
+        // Admin registrations go to waitlist if division is full (they can promote later)
+        var isWaitlisted = isWaitlistedByPlayers || isWaitlistedByUnits;
+
+        // Create unit
+        var unitName = isSingles
+            ? Utility.FormatName(user.LastName, user.FirstName)
+            : $"{user.FirstName}'s Team";
+
+        var unit = new EventUnit
+        {
+            EventId = eventId,
+            DivisionId = request.DivisionId,
+            Name = unitName,
+            Status = isWaitlisted ? "Waitlisted" : "Registered",
+            WaitlistPosition = isWaitlisted ? await GetNextWaitlistPosition(request.DivisionId) : null,
+            CaptainUserId = request.UserId,
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        };
+
+        _context.EventUnits.Add(unit);
+        await _context.SaveChangesAsync();
+
+        // Set unit ReferenceId
+        unit.ReferenceId = $"E{eventId}-U{unit.Id}";
+
+        // Add captain as member
+        var member = new EventUnitMember
+        {
+            UnitId = unit.Id,
+            UserId = request.UserId,
+            Role = "Captain",
+            InviteStatus = "Accepted",
+            IsCheckedIn = request.AutoCheckIn,
+            CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+            CreatedAt = DateTime.Now,
+            ReferenceId = $"E{eventId}-U{unit.Id}-P{request.UserId}"
+        };
+        _context.EventUnitMembers.Add(member);
+
+        // If partner specified, add them too
+        if (!isSingles && request.PartnerUserId.HasValue)
+        {
+            var partnerUser = await _context.Users.FindAsync(request.PartnerUserId.Value);
+            if (partnerUser != null)
+            {
+                // Check if partner is already registered
+                var partnerExisting = await _context.EventUnitMembers
+                    .Include(m => m.Unit)
+                    .FirstOrDefaultAsync(m => m.UserId == request.PartnerUserId.Value &&
+                        m.Unit!.DivisionId == request.DivisionId &&
+                        m.Unit.EventId == eventId &&
+                        m.Unit.Status != "Cancelled" &&
+                        m.InviteStatus == "Accepted");
+
+                if (partnerExisting == null)
+                {
+                    var partnerMember = new EventUnitMember
+                    {
+                        UnitId = unit.Id,
+                        UserId = request.PartnerUserId.Value,
+                        Role = "Player",
+                        InviteStatus = "Accepted", // Admin registration = auto-accept partner
+                        IsCheckedIn = request.AutoCheckIn,
+                        CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+                        CreatedAt = DateTime.Now,
+                        ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
+                    };
+                    _context.EventUnitMembers.Add(partnerMember);
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Reload unit with all data
+        var loadedUnit = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
+            .FirstOrDefaultAsync(u => u.Id == unit.Id);
+
+        var message = $"{Utility.FormatName(user.LastName, user.FirstName)} has been registered for {division.Name}";
+        if (isWaitlisted)
+            message += " (placed on waitlist)";
+        if (request.AutoCheckIn)
+            message += " and checked in";
+
+        return Ok(new ApiResponse<EventUnitDto>
+        {
+            Success = true,
+            Data = MapToUnitDto(loadedUnit!),
+            Message = message
+        });
+    }
+
+    // ============================================
     // Unit Management
     // ============================================
 
@@ -4495,15 +4728,7 @@ public class TournamentController : ControllerBase
         if (!units.Any())
             return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = "No units to draw" });
 
-        var requiredMembers = division.TeamUnit?.TotalPlayers ?? division.TeamSize;
-        var incompleteUnits = units.Where(u =>
-            u.Members.Count(m => m.InviteStatus == "Accepted") < requiredMembers).ToList();
-
-        if (incompleteUnits.Any())
-        {
-            var unitNames = string.Join(", ", incompleteUnits.Take(3).Select(u => u.Name));
-            return BadRequest(new ApiResponse<DrawingStateDto> { Success = false, Message = $"Units not complete: {unitNames}. Each unit needs {requiredMembers} accepted member(s)." });
-        }
+        // Note: Team completion check removed - admin can draw even with incomplete teams for testing
 
         // Clear any existing unit numbers
         foreach (var unit in units)
@@ -4830,6 +5055,22 @@ public class TournamentController : ControllerBase
                 startedBy = await _context.Users.FindAsync(division.DrawingByUserId.Value);
             }
 
+            // Build units list with member info for display
+            var unitsWithMembers = units.Select(u => new DrawingUnitDto
+            {
+                UnitId = u.Id,
+                UnitName = u.Name,
+                UnitNumber = u.UnitNumber,
+                Members = u.Members
+                    .Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                    .Select(m => new DrawingMemberDto
+                    {
+                        UserId = m.UserId,
+                        Name = Utility.FormatName(m.User!.LastName, m.User.FirstName) ?? "",
+                        AvatarUrl = m.User.ProfileImageUrl
+                    }).ToList()
+            }).ToList();
+
             divisionStates.Add(new DivisionDrawingStateDto
             {
                 DivisionId = division.Id,
@@ -4842,18 +5083,24 @@ public class TournamentController : ControllerBase
                 TotalUnits = units.Count,
                 DrawnCount = drawnUnits.Count,
                 DrawnUnits = drawnUnits,
-                RemainingUnitNames = remainingUnitNames
+                RemainingUnitNames = remainingUnitNames,
+                Units = unitsWithMembers
             });
         }
 
         // Get current viewers
         var viewers = DrawingHub.GetEventViewers(eventId);
 
+        // Check if current user is organizer
+        var userId = GetUserId();
+        var isOrganizer = userId.HasValue && (evt.OrganizedByUserId == userId.Value || await IsAdminAsync());
+
         var state = new EventDrawingStateDto
         {
             EventId = evt.Id,
             EventName = evt.Name,
             TournamentStatus = evt.TournamentStatus ?? "Draft",
+            IsOrganizer = isOrganizer,
             Divisions = divisionStates,
             Viewers = viewers,
             ViewerCount = viewers.Count
@@ -5013,6 +5260,49 @@ public class TournamentController : ControllerBase
             divisionPayments.Add(divPayments);
         }
 
+        // Get all members that have payments applied (for building AppliedTo lists)
+        var allMembersWithPayments = await _context.EventUnitMembers
+            .Include(m => m.User)
+            .Include(m => m.Unit)
+            .Where(m => m.Unit!.EventId == eventId && m.PaymentId != null)
+            .ToListAsync();
+
+        // Build payment records with applied-to information
+        var paymentRecords = new List<PaymentRecordDto>();
+        foreach (var p in payments)
+        {
+            var appliedMembers = allMembersWithPayments
+                .Where(m => m.PaymentId == p.Id)
+                .Select(m => new PaymentApplicationDto
+                {
+                    UserId = m.UserId,
+                    UserName = Utility.FormatName(m.User?.LastName, m.User?.FirstName) ?? "",
+                    AmountApplied = m.AmountPaid
+                })
+                .ToList();
+
+            var totalApplied = appliedMembers.Sum(a => a.AmountApplied);
+
+            paymentRecords.Add(new PaymentRecordDto
+            {
+                Id = p.Id,
+                UserId = p.UserId,
+                UserName = Utility.FormatName(p.User?.LastName, p.User?.FirstName) ?? "",
+                UserEmail = p.User?.Email,
+                Amount = p.Amount,
+                PaymentMethod = p.PaymentMethod,
+                PaymentReference = p.PaymentReference,
+                PaymentProofUrl = p.PaymentProofUrl,
+                ReferenceId = p.ReferenceId,
+                Status = p.Status,
+                CreatedAt = p.CreatedAt,
+                VerifiedAt = p.VerifiedAt,
+                TotalApplied = totalApplied,
+                IsFullyApplied = Math.Abs(totalApplied - p.Amount) < 0.01m,
+                AppliedTo = appliedMembers
+            });
+        }
+
         // Build overall summary
         var summary = new EventPaymentSummaryDto
         {
@@ -5028,23 +5318,95 @@ public class TournamentController : ControllerBase
             UnitsUnpaid = divisionPayments.Sum(d => d.UnitsUnpaid),
             IsBalanced = Math.Abs(divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid)) < 0.01m,
             DivisionPayments = divisionPayments,
-            RecentPayments = payments.Take(20).Select(p => new PaymentRecordDto
-            {
-                Id = p.Id,
-                UserId = p.UserId,
-                UserName = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
-                UserEmail = p.User?.Email,
-                Amount = p.Amount,
-                PaymentMethod = p.PaymentMethod,
-                PaymentReference = p.PaymentReference,
-                PaymentProofUrl = p.PaymentProofUrl,
-                ReferenceId = p.ReferenceId,
-                Status = p.Status,
-                CreatedAt = p.CreatedAt,
-                VerifiedAt = p.VerifiedAt
-            }).ToList()
+            RecentPayments = paymentRecords
         };
 
         return Ok(new ApiResponse<EventPaymentSummaryDto> { Success = true, Data = summary });
+    }
+
+    /// <summary>
+    /// Verify a payment (organizer/admin only)
+    /// </summary>
+    [HttpPost("payments/{paymentId}/verify")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> VerifyPayment(int paymentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
+
+        // Check authorization - must be event organizer or admin
+        if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
+        {
+            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
+            if (evt == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+                return Forbid();
+        }
+        else if (!await IsAdminAsync())
+        {
+            return Forbid();
+        }
+
+        payment.Status = "Verified";
+        payment.VerifiedByUserId = userId.Value;
+        payment.VerifiedAt = DateTime.Now;
+        payment.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verified" });
+    }
+
+    /// <summary>
+    /// Unverify a payment (organizer/admin only)
+    /// </summary>
+    [HttpPost("payments/{paymentId}/unverify")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> UnverifyPayment(int paymentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
+
+        // Check authorization - must be event organizer or admin
+        if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
+        {
+            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
+            if (evt == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+                return Forbid();
+        }
+        else if (!await IsAdminAsync())
+        {
+            return Forbid();
+        }
+
+        payment.Status = "Pending";
+        payment.VerifiedByUserId = null;
+        payment.VerifiedAt = null;
+        payment.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verification removed" });
     }
 }

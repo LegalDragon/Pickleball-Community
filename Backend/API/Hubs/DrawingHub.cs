@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using Pickleball.Community.Database;
 
 namespace Pickleball.Community.Hubs;
 
@@ -12,6 +14,7 @@ namespace Pickleball.Community.Hubs;
 public class DrawingHub : Hub
 {
     private readonly ILogger<DrawingHub> _logger;
+    private readonly ApplicationDbContext _context;
 
     // Static storage for viewers - keyed by eventId, contains dictionary of connectionId -> viewer info
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, DrawingViewerDto>> _eventViewers = new();
@@ -19,9 +22,10 @@ public class DrawingHub : Hub
     // Track which event each connection is watching
     private static readonly ConcurrentDictionary<string, int> _connectionEvents = new();
 
-    public DrawingHub(ILogger<DrawingHub> logger)
+    public DrawingHub(ILogger<DrawingHub> logger, ApplicationDbContext context)
     {
         _logger = logger;
+        _context = context;
     }
 
     /// <summary>
@@ -61,18 +65,38 @@ public class DrawingHub : Hub
         var userId = GetUserId();
         var isAuthenticated = userId.HasValue;
 
+        string viewerDisplayName = "Anonymous";
+        string? viewerAvatarUrl = null;
+
+        // If authenticated, look up actual user info from database
+        if (isAuthenticated && userId.HasValue)
+        {
+            var user = await _context.Users.FindAsync(userId.Value);
+            if (user != null)
+            {
+                viewerDisplayName = Utility.FormatName(user.LastName, user.FirstName) ?? displayName ?? "User";
+                viewerAvatarUrl = user.ProfileImageUrl ?? avatarUrl;
+            }
+            else
+            {
+                viewerDisplayName = displayName ?? "User";
+                viewerAvatarUrl = avatarUrl;
+            }
+        }
+
         var viewer = new DrawingViewerDto
         {
             ConnectionId = connectionId,
             UserId = userId,
-            DisplayName = isAuthenticated ? displayName ?? "User" : "Anonymous",
-            AvatarUrl = isAuthenticated ? avatarUrl : null,
+            DisplayName = viewerDisplayName,
+            AvatarUrl = viewerAvatarUrl,
             IsAuthenticated = isAuthenticated,
             JoinedAt = DateTime.UtcNow
         };
 
         // Add to event viewers
         var eventViewerDict = _eventViewers.GetOrAdd(eventId, _ => new ConcurrentDictionary<string, DrawingViewerDto>());
+        var isNewViewer = !eventViewerDict.ContainsKey(connectionId);
         eventViewerDict[connectionId] = viewer;
 
         // Track which event this connection is watching
@@ -83,6 +107,12 @@ public class DrawingHub : Hub
 
         // Broadcast updated viewer list to all viewers
         await BroadcastViewerList(eventId);
+
+        // Broadcast viewer joined notification (for toast)
+        if (isNewViewer && isAuthenticated)
+        {
+            await Clients.Group(groupName).SendAsync("ViewerJoined", viewer);
+        }
     }
 
     /// <summary>
@@ -309,6 +339,7 @@ public class EventDrawingStateDto
     public int EventId { get; set; }
     public string EventName { get; set; } = string.Empty;
     public string TournamentStatus { get; set; } = string.Empty;
+    public bool IsOrganizer { get; set; }
     public List<DivisionDrawingStateDto> Divisions { get; set; } = new();
     public List<DrawingViewerDto> Viewers { get; set; } = new();
     public int ViewerCount { get; set; }
@@ -330,4 +361,26 @@ public class DivisionDrawingStateDto
     public int DrawnCount { get; set; }
     public List<DrawnUnitDto> DrawnUnits { get; set; } = new();
     public List<string> RemainingUnitNames { get; set; } = new();
+    public List<DrawingUnitDto> Units { get; set; } = new();
+}
+
+/// <summary>
+/// Unit info for drawing display
+/// </summary>
+public class DrawingUnitDto
+{
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int? UnitNumber { get; set; }
+    public List<DrawingMemberDto> Members { get; set; } = new();
+}
+
+/// <summary>
+/// Member info for drawing display
+/// </summary>
+public class DrawingMemberDto
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
 }

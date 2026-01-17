@@ -1409,6 +1409,12 @@ export const tournamentApi = {
   adminBreakUnit: (unitId) =>
     api.post(`/tournament/units/${unitId}/admin-break`),
 
+  // Admin User Search and Registration
+  searchUsersForRegistration: (eventId, query) =>
+    api.get(`/tournament/events/${eventId}/search-users?query=${encodeURIComponent(query)}`),
+  adminRegisterUser: (eventId, data) =>
+    api.post(`/tournament/events/${eventId}/admin-register`, data),
+
   // Player self-move to different division
   selfMoveToDivision: (eventId, newDivisionId, joinUnitId = null, newUnitName = null) =>
     api.post(`/tournament/events/${eventId}/self-move-division`, { newDivisionId, joinUnitId, newUnitName }),
@@ -1435,6 +1441,10 @@ export const tournamentApi = {
       targetMemberIds,
       redistributeAmount,
     }),
+  verifyPayment: (paymentId) =>
+    api.post(`/tournament/payments/${paymentId}/verify`),
+  unverifyPayment: (paymentId) =>
+    api.post(`/tournament/payments/${paymentId}/unverify`),
 
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),
