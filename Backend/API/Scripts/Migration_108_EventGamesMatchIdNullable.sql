@@ -37,14 +37,11 @@ BEGIN
         ALTER TABLE EventGames ALTER COLUMN MatchId INT NULL;
         PRINT '  Made MatchId column nullable';
 
-        -- Recreate the index (optional, but good for performance if column is still used)
-        CREATE INDEX IX_EventGames_MatchId ON EventGames(MatchId);
-        PRINT '  Recreated IX_EventGames_MatchId index';
-
-        -- Recreate foreign key constraint (but now it's nullable)
-        ALTER TABLE EventGames ADD CONSTRAINT FK_EventGames_Match
-            FOREIGN KEY (MatchId) REFERENCES EventMatches(Id) ON DELETE NO ACTION;
-        PRINT '  Recreated FK_EventGames_Match constraint (with NO ACTION to prevent cascade issues)';
+        -- Note: We don't recreate the FK_EventGames_Match constraint because:
+        -- 1. The MatchId column is deprecated in favor of EncounterMatchId
+        -- 2. The table structure has changed (EventMatches -> EventEncounters hierarchy)
+        -- The EncounterMatchId column has the proper FK to EncounterMatches table
+        PRINT '  Legacy MatchId FK not recreated (deprecated in favor of EncounterMatchId)';
     END
     ELSE
     BEGIN
