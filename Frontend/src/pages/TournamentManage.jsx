@@ -1800,7 +1800,10 @@ export default function TournamentManage() {
                                         <span className="text-green-600">Ready for check-in</span>
                                       ) : (
                                         <span className="text-yellow-600">
-                                          Missing: {!player.waiverSigned && 'Waiver'}{!player.waiverSigned && !player.hasPaid && ', '}{!player.hasPaid && 'Payment'}
+                                          Missing: {[
+                                            !player.waiverSigned && 'Waiver',
+                                            !player.hasPaid && 'Payment'
+                                          ].filter(Boolean).join(', ')}
                                         </span>
                                       )}
                                     </div>
