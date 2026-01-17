@@ -351,7 +351,7 @@ public class EncounterController : ControllerBase
                 .Select(m => new EncounterUnitRosterDto
                 {
                     UserId = m.UserId,
-                    Name = m.User?.DisplayName ?? m.User?.FirstName ?? "Unknown",
+                    Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
                     ProfileImageUrl = m.User?.ProfileImageUrl,
                     Gender = m.User?.Gender,
                     IsCheckedIn = m.IsCheckedIn
@@ -361,7 +361,7 @@ public class EncounterController : ControllerBase
                 .Select(m => new EncounterUnitRosterDto
                 {
                     UserId = m.UserId,
-                    Name = m.User?.DisplayName ?? m.User?.FirstName ?? "Unknown",
+                    Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
                     ProfileImageUrl = m.User?.ProfileImageUrl,
                     Gender = m.User?.Gender,
                     IsCheckedIn = m.IsCheckedIn
