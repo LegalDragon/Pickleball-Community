@@ -1707,10 +1707,11 @@ export default function TournamentManage() {
                               </div>
                             </div>
                           </div>
+                        </div>
 
-                          {/* Expanded details section */}
-                          {expandedPlayer === player.userId && (
-                            <div className="px-4 pb-4">
+                        {/* Expanded details section */}
+                        {expandedPlayer === player.userId && (
+                          <div className="px-4 pb-4">
                               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   {/* Waiver Details */}
