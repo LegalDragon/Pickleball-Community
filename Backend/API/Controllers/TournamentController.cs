@@ -5026,7 +5026,9 @@ public class TournamentController : ControllerBase
 
         if (!division.DrawingInProgress && !hasUnitsAssigned)
         {
-            // Nothing to reset - return success anyway (idempotent operation)
+            // Nothing to reset in database - but still broadcast to ensure UI state is synced
+            await _drawingBroadcaster.BroadcastDrawingCancelled(divisionId);
+            await _drawingBroadcaster.BroadcastEventDrawingCancelled(division.EventId, divisionId);
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Already reset" });
         }
 

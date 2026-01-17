@@ -155,17 +155,34 @@ export function useDrawingHub() {
 
     newConnection.on('EventDrawingCancelled', (data) => {
       console.log('DrawingHub: Event drawing cancelled', data);
-      setDivisionStates(prev => ({
-        ...prev,
-        [data.divisionId]: {
-          ...prev[data.divisionId],
-          drawingInProgress: false,
-          drawnCount: 0,
-          drawnUnits: [],
-          scheduleStatus: 'NotGenerated', // Reset so drawing can start again
-          remainingUnitNames: prev[data.divisionId]?.remainingUnitNames || []
-        }
-      }));
+      setDivisionStates(prev => {
+        const divState = prev[data.divisionId];
+        if (!divState) return prev;
+
+        // Reset units to clear unitNumber assignments
+        const resetUnits = (divState.units || []).map(unit => ({
+          ...unit,
+          unitNumber: null,
+          poolNumber: null,
+          poolName: null
+        }));
+
+        // Rebuild remainingUnitNames from the full units list
+        const remainingNames = resetUnits.map(u => u.unitName);
+
+        return {
+          ...prev,
+          [data.divisionId]: {
+            ...divState,
+            drawingInProgress: false,
+            drawnCount: 0,
+            drawnUnits: [],
+            scheduleStatus: 'NotGenerated', // Reset so drawing can start again
+            units: resetUnits,
+            remainingUnitNames: remainingNames
+          }
+        };
+      });
     });
 
     // Set up viewer list updates
