@@ -76,6 +76,48 @@ This app is designed to be installed as a Progressive Web App (PWA) on mobile de
 - **Blog System**: Community blog with categories, posts, comments, and ratings
 - **Community Features** (planned): Friends, clubs, events, messaging
 
+## Encounter-Match-Game Data Structure (Critical)
+The tournament/event system uses a three-tier hierarchy to support both simple tournaments and complex team league formats.
+
+### Hierarchy
+```
+EventEncounter (top level - scheduled matchup between two units/teams)
+  └── EncounterMatch[] (individual matches within the encounter)
+        └── EventGame[] (games within each match, e.g., best-of-3)
+```
+
+### Entity Details
+- **EventEncounter**: A scheduled matchup between Unit1 and Unit2. Contains round info, scheduling, and overall winner.
+- **EncounterMatch**: An individual match within an encounter. For simple divisions (`MatchesPerEncounter=1`), there's one match per encounter. For team scrimmages, multiple matches (e.g., Men's Doubles, Women's Doubles, Mixed).
+- **EncounterMatchFormat**: Division-level template defining match types (name, gender requirements, best-of settings).
+- **EventGame**: An individual game within a match. Tracks scores, court assignments, and game status.
+
+### Use Cases
+1. **Simple Tournament** (typical doubles/singles): `MatchesPerEncounter=1`, one EncounterMatch per encounter, 1-3 games per match.
+2. **Team Scrimmage/League**: `MatchesPerEncounter=3+`, multiple EncounterMatchFormats define the structure (e.g., Match 1: Men's Doubles, Match 2: Women's Doubles, Match 3: Mixed).
+
+### Navigation Patterns
+```csharp
+// Get all games from an encounter
+var allGames = encounter.Matches.SelectMany(m => m.Games);
+
+// Navigate from game to encounter
+var encounter = game.EncounterMatch?.Encounter;
+var encounterId = game.EncounterMatch!.EncounterId;
+
+// EF Core Include pattern
+.Include(g => g.EncounterMatch)
+    .ThenInclude(m => m!.Encounter)
+        .ThenInclude(e => e!.Unit1)
+```
+
+### Key Entities (in `/Backend/API/Models/Entities/`)
+- `EventEncounter.cs` - DB table: `EventMatches` (legacy name)
+- `EncounterMatch.cs` - DB table: `EncounterMatches`
+- `EncounterMatchFormat.cs` - DB table: `EncounterMatchFormats`
+- `EventGame.cs` - DB table: `EventGames`
+- `EncounterMatchPlayer.cs` - Player assignments to matches
+
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:
 - **UserId**: All Users.Id values come from the shared auth service (no local IDENTITY)
