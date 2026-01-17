@@ -138,3 +138,4 @@ Track when release notes were last generated to avoid duplicates.
 | Date | Commit | Notes |
 |------|--------|-------|
 | 2026-01-14 | e2b491f | Initial 24-hour release notes covering: Help Topics system, Social Links, Game Day execution, Admin enhancements, Event management improvements, and numerous bug fixes |
+| 2026-01-17 | e3834c5 | 144 commits: Live Drawing system with SignalR, Admin user search & registration, Payment system overhaul (UserPayment), Waiver/Document management (ObjectAssets), Game Day enhancements, Public event view |

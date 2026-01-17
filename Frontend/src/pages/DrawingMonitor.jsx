@@ -96,6 +96,7 @@ export default function DrawingMonitor() {
   const [showDrawingModal, setShowDrawingModal] = useState(false);
   const [pendingDrawResult, setPendingDrawResult] = useState(null);
   const [drawingUnit, setDrawingUnit] = useState(null);
+  const [isAutoDrawing, setIsAutoDrawing] = useState(false);
 
   // Viewer tracking
   const previousViewersRef = useRef([]);
@@ -182,6 +183,53 @@ export default function DrawingMonitor() {
     }
   }, [connection, toast]);
 
+  // Auto-draw all units with animation pauses
+  const handleAutoDrawAll = async (divisionId) => {
+    const divState = divisionStates[divisionId];
+    if (!divState) return;
+
+    setIsAutoDrawing(true);
+
+    const totalUnits = divState.totalUnits;
+    const alreadyDrawn = divState.drawnCount || 0;
+    const remaining = totalUnits - alreadyDrawn;
+
+    for (let i = 0; i < remaining; i++) {
+      try {
+        const response = await tournamentApi.drawNextUnit(divisionId);
+        if (response.success && response.data) {
+          // Show the drawn unit briefly
+          const updatedDivState = divisionStates[divisionId];
+          setDrawingUnit({
+            ...response.data,
+            divisionId,
+            remainingNames: updatedDivState?.remainingUnitNames || []
+          });
+          setShowDrawingModal(true);
+
+          // Wait for animation - pause between draws
+          await new Promise(resolve => setTimeout(resolve, 2500));
+
+          setShowDrawingModal(false);
+          setDrawingUnit(null);
+
+          // Small pause between units
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          toast.error(response.message || 'Failed to draw unit');
+          break;
+        }
+      } catch (err) {
+        toast.error(err?.response?.data?.message || 'Failed to draw unit');
+        break;
+      }
+    }
+
+    setIsAutoDrawing(false);
+    // Auto-complete the drawing when done
+    handleCompleteDrawing(divisionId);
+  };
+
   // Start drawing with countdown
   const handleStartDrawing = async (divisionId) => {
     if (!isOrganizer) return;
@@ -196,8 +244,8 @@ export default function DrawingMonitor() {
           setCountdown(prev => {
             if (prev <= 1) {
               clearInterval(interval);
-              // Start first draw after countdown
-              handleDrawNext(divisionId);
+              // Auto-draw all units after countdown
+              handleAutoDrawAll(divisionId);
               return null;
             }
             return prev - 1;
@@ -350,7 +398,10 @@ export default function DrawingMonitor() {
       {showDrawingModal && drawingUnit && (
         <DrawingModal
           isOpen={showDrawingModal}
-          onClose={() => {}}
+          onClose={() => {
+            setShowDrawingModal(false);
+            setDrawingUnit(null);
+          }}
           drawStyle={drawingStyle}
           unitNames={drawingUnit.remainingNames}
           selectedUnit={drawingUnit}
@@ -580,40 +631,37 @@ export default function DrawingMonitor() {
                     {/* During Drawing Controls */}
                     {selectedDivision.drawingInProgress && (
                       <div className="flex flex-wrap justify-center gap-4">
-                        {selectedDivision.drawnCount < selectedDivision.totalUnits && (
-                          <button
-                            onClick={() => handleDrawNext(selectedDivision.divisionId)}
-                            disabled={drawingLoading}
-                            className="px-8 py-4 bg-blue-500 text-white text-xl font-semibold rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center gap-2"
-                          >
-                            {drawingLoading ? (
-                              <Loader2 className="w-6 h-6 animate-spin" />
-                            ) : (
-                              <Shuffle className="w-6 h-6" />
+                        {isAutoDrawing ? (
+                          <div className="text-center">
+                            <Loader2 className="w-12 h-12 text-orange-500 animate-spin mx-auto mb-3" />
+                            <p className="text-xl text-white font-medium">Auto-drawing in progress...</p>
+                            <p className="text-gray-400 mt-1">
+                              {selectedDivision.drawnCount} of {selectedDivision.totalUnits} units drawn
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            {selectedDivision.drawnCount >= selectedDivision.totalUnits && (
+                              <button
+                                onClick={() => handleCompleteDrawing(selectedDivision.divisionId)}
+                                disabled={drawingLoading}
+                                className="px-8 py-4 bg-green-500 text-white text-xl font-semibold rounded-xl hover:bg-green-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                              >
+                                <Check className="w-6 h-6" />
+                                Accept & Complete
+                              </button>
                             )}
-                            Draw Next
-                          </button>
-                        )}
 
-                        {selectedDivision.drawnCount >= selectedDivision.totalUnits && (
-                          <button
-                            onClick={() => handleCompleteDrawing(selectedDivision.divisionId)}
-                            disabled={drawingLoading}
-                            className="px-8 py-4 bg-green-500 text-white text-xl font-semibold rounded-xl hover:bg-green-600 disabled:opacity-50 transition-colors flex items-center gap-2"
-                          >
-                            <Check className="w-6 h-6" />
-                            Accept & Complete
-                          </button>
+                            <button
+                              onClick={() => handleCancelDrawing(selectedDivision.divisionId)}
+                              disabled={drawingLoading || isAutoDrawing}
+                              className="px-8 py-4 bg-gray-700 text-gray-300 text-xl font-semibold rounded-xl hover:bg-gray-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+                            >
+                              <RotateCcw className="w-6 h-6" />
+                              Redraw All
+                            </button>
+                          </>
                         )}
-
-                        <button
-                          onClick={() => handleCancelDrawing(selectedDivision.divisionId)}
-                          disabled={drawingLoading}
-                          className="px-8 py-4 bg-gray-700 text-gray-300 text-xl font-semibold rounded-xl hover:bg-gray-600 disabled:opacity-50 transition-colors flex items-center gap-2"
-                        >
-                          <RotateCcw className="w-6 h-6" />
-                          Redraw All
-                        </button>
                       </div>
                     )}
                   </div>
