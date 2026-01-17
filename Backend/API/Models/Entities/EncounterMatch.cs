@@ -55,6 +55,31 @@ public class EncounterMatch
     [MaxLength(20)]
     public string Status { get; set; } = "Scheduled";
 
+    /// <summary>
+    /// Assigned tournament court for this match
+    /// </summary>
+    public int? TournamentCourtId { get; set; }
+
+    /// <summary>
+    /// Unit that submitted the score
+    /// </summary>
+    public int? ScoreSubmittedByUnitId { get; set; }
+    public DateTime? ScoreSubmittedAt { get; set; }
+
+    /// <summary>
+    /// Unit that confirmed the score (must be the other unit)
+    /// </summary>
+    public int? ScoreConfirmedByUnitId { get; set; }
+    public DateTime? ScoreConfirmedAt { get; set; }
+
+    /// <summary>
+    /// If score was disputed
+    /// </summary>
+    public DateTime? ScoreDisputedAt { get; set; }
+
+    [MaxLength(500)]
+    public string? ScoreDisputeReason { get; set; }
+
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 
@@ -70,6 +95,15 @@ public class EncounterMatch
 
     [ForeignKey("WinnerUnitId")]
     public EventUnit? Winner { get; set; }
+
+    [ForeignKey("TournamentCourtId")]
+    public TournamentCourt? TournamentCourt { get; set; }
+
+    [ForeignKey("ScoreSubmittedByUnitId")]
+    public EventUnit? ScoreSubmittedBy { get; set; }
+
+    [ForeignKey("ScoreConfirmedByUnitId")]
+    public EventUnit? ScoreConfirmedBy { get; set; }
 
     /// <summary>
     /// Players assigned to this match (for lineup management)
