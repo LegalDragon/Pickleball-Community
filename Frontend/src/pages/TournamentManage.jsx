@@ -10,7 +10,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
-import DrawingModal from '../components/DrawingModal';
 
 export default function TournamentManage() {
   const { eventId } = useParams();
@@ -34,7 +33,6 @@ export default function TournamentManage() {
 
   // Schedule generation state
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
-  const [assigningNumbers, setAssigningNumbers] = useState(false);
 
   // Schedule display state
   const [schedule, setSchedule] = useState(null);
@@ -42,8 +40,6 @@ export default function TournamentManage() {
 
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
-  const [drawingModal, setDrawingModal] = useState({ isOpen: false, division: null });
-  const [divisionUnits, setDivisionUnits] = useState([]);
 
   // Add courts modal state
   const [showAddCourtsModal, setShowAddCourtsModal] = useState(false);
@@ -336,50 +332,6 @@ export default function TournamentManage() {
       alert('Failed to generate schedule');
     } finally {
       setGeneratingSchedule(false);
-    }
-  };
-
-  const handleOpenDrawing = async (division) => {
-    // Load units for this division
-    try {
-      const response = await tournamentApi.getEventUnits(eventId, division.id);
-      if (response.success) {
-        setDivisionUnits(response.data || []);
-      }
-    } catch (err) {
-      console.error('Error loading units:', err);
-    }
-
-    // Load schedule if not already loaded
-    if (!schedule || selectedDivision?.id !== division.id) {
-      await loadSchedule(division.id);
-    }
-
-    setDrawingModal({ isOpen: true, division });
-  };
-
-  const handleDraw = async (assignments) => {
-    const division = drawingModal.division;
-    if (!division) return;
-
-    setAssigningNumbers(true);
-    try {
-      const response = await tournamentApi.assignUnitNumbersWithDrawing(division.id, assignments);
-      if (response.success) {
-        loadDashboard();
-        setDrawingModal({ isOpen: false, division: null });
-        // Reload schedule to show updated assignments
-        if (selectedDivision?.id === division.id) {
-          loadSchedule(division.id);
-        }
-      } else {
-        alert(response.message || 'Failed to save drawing results');
-      }
-    } catch (err) {
-      console.error('Error saving drawing:', err);
-      alert('Failed to save drawing results');
-    } finally {
-      setAssigningNumbers(false);
     }
   };
 
@@ -725,38 +677,15 @@ export default function TournamentManage() {
                         {div.scheduleReady ? 'Re-configure' : 'Configure Schedule'}
                       </button>
 
-                      {/* Drawing button - only show if schedule exists */}
+                      {/* View Schedule - links to printable schedule page */}
                       {div.scheduleReady && (
-                        <button
-                          onClick={() => handleOpenDrawing(div)}
-                          disabled={assigningNumbers}
-                          className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 ${
-                            div.unitsAssigned
-                              ? 'text-gray-700 border border-gray-300 hover:bg-gray-50'
-                              : 'text-white bg-green-600 hover:bg-green-700'
-                          }`}
-                        >
-                          {assigningNumbers ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Shuffle className="w-4 h-4" />
-                          )}
-                          {div.unitsAssigned ? 'Re-Draw' : 'Draw Units'}
-                        </button>
-                      )}
-
-                      {/* View Schedule */}
-                      {div.scheduleReady && (
-                        <button
-                          onClick={() => {
-                            setSelectedDivision(div);
-                            setActiveTab('schedule');
-                          }}
+                        <Link
+                          to={`/event/${eventId}/division/${div.id}/schedule`}
                           className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
                         >
                           <Eye className="w-4 h-4" />
-                          View
-                        </button>
+                          View Schedule
+                        </Link>
                       )}
                     </div>
                   )}
@@ -1559,17 +1488,6 @@ export default function TournamentManage() {
         division={scheduleConfigModal.division}
         onGenerate={handleGenerateSchedule}
         isGenerating={generatingSchedule}
-      />
-
-      {/* Drawing Modal */}
-      <DrawingModal
-        isOpen={drawingModal.isOpen}
-        onClose={() => setDrawingModal({ isOpen: false, division: null })}
-        division={drawingModal.division}
-        units={divisionUnits}
-        schedule={schedule}
-        onDraw={handleDraw}
-        isDrawing={assigningNumbers}
       />
     </div>
   );
