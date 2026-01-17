@@ -144,7 +144,6 @@ public class Event
     public ICollection<TournamentCourt> TournamentCourts { get; set; } = new List<TournamentCourt>();
     public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
     public ICollection<EventDocument> Documents { get; set; } = new List<EventDocument>();
-    public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
 }
 
 public class EventDivision
@@ -215,25 +214,6 @@ public class EventDivision
     public int? PlayoffFromPools { get; set; } // How many from each pool advance to playoffs
     public int GamesPerMatch { get; set; } = 1; // Best of X
     public int? TargetUnitCount { get; set; } // Target number of units/placeholders for schedule generation
-
-    // Encounter Configuration (for team league format)
-    /// <summary>
-    /// Number of matches per encounter (e.g., 3 for Men's/Women's/Mixed Doubles format).
-    /// If null, this division uses traditional match-based scheduling.
-    /// </summary>
-    public int? MatchesPerEncounter { get; set; }
-
-    /// <summary>
-    /// Whether a player can participate in multiple matches within the same encounter.
-    /// For example, a player could play in both Mixed Doubles and Men's Doubles.
-    /// </summary>
-    public bool AllowPlayerReuseInEncounter { get; set; } = false;
-
-    /// <summary>
-    /// Whether teams can change their lineup between encounters.
-    /// If false, the same players must be used for all encounters.
-    /// </summary>
-    public bool AllowLineupChangePerEncounter { get; set; } = false;
 
     // Live Drawing State
     /// <summary>
