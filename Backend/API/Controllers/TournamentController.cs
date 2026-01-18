@@ -6297,12 +6297,15 @@ public class TournamentController : ControllerBase
                 .ToListAsync();
             _context.EventGameScoreHistories.RemoveRange(scoreHistories);
 
-            // Reset division drawing/schedule status
+            // Reset division drawing state
             var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
             foreach (var division in divisions)
             {
-                division.DrawingComplete = false;
-                // Keep ScheduleReady = true since we want to preserve the schedule structure
+                division.DrawingInProgress = false;
+                division.DrawingSequence = 0;
+                division.DrawingStartedAt = null;
+                division.DrawingByUserId = null;
+                // Keep ScheduleStatus unchanged since we want to preserve the schedule structure
             }
 
             await _context.SaveChangesAsync();
