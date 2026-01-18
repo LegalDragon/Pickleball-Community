@@ -3841,7 +3841,7 @@ public class TournamentController : ControllerBase
                         playerId,
                         "GameUpdate",
                         "Your game is ready!",
-                        $"{unit1Name} vs {unit2Name} - Court: {court.Name}",
+                        $"{unit1Name} vs {unit2Name} - Court: {court.CourtLabel}",
                         actionUrl,
                         "Game",
                         game.Id);
@@ -3853,7 +3853,7 @@ public class TournamentController : ControllerBase
             {
                 Type = "GameUpdate",
                 Title = "Game Queued",
-                Message = $"Game assigned to {court.Name}",
+                Message = $"Game assigned to {court.CourtLabel}",
                 ReferenceType = "Game",
                 ReferenceId = game.Id,
                 CreatedAt = DateTime.Now
@@ -3921,7 +3921,7 @@ public class TournamentController : ControllerBase
             {
                 var unit1Name = encounter.Unit1?.Name ?? "Team 1";
                 var unit2Name = encounter.Unit2?.Name ?? "Team 2";
-                var courtName = game.TournamentCourt?.Name ?? "assigned court";
+                var courtName = game.TournamentCourt?.CourtLabel ?? "assigned court";
                 var actionUrl = $"/event/{encounter.EventId}/gameday";
 
                 foreach (var playerId in playerIds.Distinct())
