@@ -1501,7 +1501,10 @@ export const tournamentApi = {
   // Event-level Drawing (for Drawing Monitor page)
   getEventDrawingState: (eventId) => api.get(`/tournament/events/${eventId}/drawing`),
   startDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/start-mode`),
-  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`)
+  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`),
+
+  // Tournament Reset (for testing/dry runs)
+  resetTournament: (eventId) => api.post(`/tournament/reset-tournament/${eventId}`)
 }
 
 // Messaging API

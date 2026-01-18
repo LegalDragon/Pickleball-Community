@@ -6183,4 +6183,146 @@ public class TournamentController : ControllerBase
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verification removed" });
     }
+
+    // ============================================
+    // Tournament Reset (for Testing/Dry Run)
+    // ============================================
+
+    /// <summary>
+    /// Reset all tournament data for an event (drawings, scores, court assignments) except schedule structure.
+    /// This is useful for testing and dry runs.
+    /// </summary>
+    [Authorize]
+    [HttpPost("reset-tournament/{eventId}")]
+    public async Task<ActionResult<ApiResponse<object>>> ResetTournament(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is admin or event organizer
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
+
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        try
+        {
+            // Reset all units' drawing and stats data
+            var units = await _context.EventUnits.Where(u => u.EventId == eventId).ToListAsync();
+            foreach (var unit in units)
+            {
+                unit.UnitNumber = null;
+                unit.PoolNumber = null;
+                unit.PoolName = null;
+                unit.Seed = null;
+                unit.MatchesPlayed = 0;
+                unit.MatchesWon = 0;
+                unit.MatchesLost = 0;
+                unit.GamesWon = 0;
+                unit.GamesLost = 0;
+                unit.PointsScored = 0;
+                unit.PointsAgainst = 0;
+                unit.PoolRank = null;
+                unit.OverallRank = null;
+                unit.AdvancedToPlayoff = false;
+                unit.ManuallyAdvanced = false;
+                unit.FinalPlacement = null;
+                unit.UpdatedAt = DateTime.Now;
+            }
+
+            // Reset all encounters (keep structure, reset results and unit assignments for playoff rounds)
+            var encounters = await _context.EventMatches
+                .Where(e => e.EventId == eventId)
+                .ToListAsync();
+            foreach (var encounter in encounters)
+            {
+                encounter.WinnerUnitId = null;
+                encounter.UpdatedAt = DateTime.Now;
+
+                // For playoff rounds (bracket), reset unit assignments since they depend on pool rankings
+                if (encounter.RoundType != "Pool")
+                {
+                    // Keep Unit1Number and Unit2Number (bracket position), but reset actual unit IDs
+                    encounter.Unit1Id = null;
+                    encounter.Unit2Id = null;
+                }
+            }
+
+            // Reset all encounter matches
+            var encounterMatches = await _context.EncounterMatches
+                .Where(m => m.Encounter!.EventId == eventId)
+                .ToListAsync();
+            foreach (var match in encounterMatches)
+            {
+                match.Unit1Score = 0;
+                match.Unit2Score = 0;
+                match.WinnerUnitId = null;
+            }
+
+            // Reset all games
+            var games = await _context.EventGames
+                .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
+                .ToListAsync();
+            foreach (var game in games)
+            {
+                game.Unit1Score = 0;
+                game.Unit2Score = 0;
+                game.WinnerUnitId = null;
+                game.Status = "Scheduled";
+                game.TournamentCourtId = null;
+                game.QueuedAt = null;
+                game.StartedAt = null;
+                game.FinishedAt = null;
+                game.ScoreSubmittedByUnitId = null;
+                game.ScoreSubmittedAt = null;
+                game.ScoreConfirmedByUnitId = null;
+                game.ScoreConfirmedAt = null;
+                game.UpdatedAt = DateTime.Now;
+            }
+
+            // Reset all courts
+            var courts = await _context.TournamentCourts.Where(c => c.EventId == eventId).ToListAsync();
+            foreach (var court in courts)
+            {
+                court.CurrentGameId = null;
+                court.Status = "Available";
+            }
+
+            // Delete all score history
+            var scoreHistories = await _context.EventGameScoreHistories
+                .Where(h => h.Game!.EncounterMatch!.Encounter!.EventId == eventId)
+                .ToListAsync();
+            _context.EventGameScoreHistories.RemoveRange(scoreHistories);
+
+            // Reset division drawing/schedule status
+            var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
+            foreach (var division in divisions)
+            {
+                division.DrawingComplete = false;
+                // Keep ScheduleReady = true since we want to preserve the schedule structure
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Tournament {EventId} reset by user {UserId}", eventId, userId.Value);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Tournament data has been reset. Drawing results, game scores, and court assignments have been cleared. Schedule structure is preserved."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting tournament {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "Failed to reset tournament: " + ex.Message
+            });
+        }
+    }
 }

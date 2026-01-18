@@ -678,6 +678,28 @@ export default function TournamentManage() {
     setScheduleConfigModal({ isOpen: true, division });
   };
 
+  const handleResetTournament = async () => {
+    if (!confirm('Are you sure you want to reset all tournament data?\n\nThis will clear:\n• Drawing results (unit numbers, pools, seeds)\n• All game scores and statuses\n• Court assignments\n\nThe schedule structure will be preserved.\n\nThis action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await tournamentApi.resetTournament(eventId);
+      if (response.success) {
+        toast.success(response.message || 'Tournament reset successfully');
+        loadDashboard();
+        if (selectedDivision?.id) {
+          loadSchedule(selectedDivision.id);
+        }
+      } else {
+        toast.error(response.message || 'Failed to reset tournament');
+      }
+    } catch (err) {
+      console.error('Error resetting tournament:', err);
+      toast.error('Failed to reset tournament');
+    }
+  };
+
   const handleGenerateSchedule = async (config) => {
     const division = scheduleConfigModal.division;
     if (!division) return;
@@ -1092,6 +1114,27 @@ export default function TournamentManage() {
         {/* Divisions Tab - only show divisions with registrations */}
         {activeTab === 'divisions' && (
           <div className="space-y-6">
+            {/* Reset Tournament Button - for testing/dry runs */}
+            {isOrganizer && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-yellow-800">Testing Mode</h3>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Reset all tournament data (drawings, scores, court assignments) while keeping schedule structure.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleResetTournament}
+                    className="px-4 py-2 text-sm font-medium text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-lg hover:bg-yellow-200 flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reset Tournament
+                  </button>
+                </div>
+              </div>
+            )}
+
             {dashboard?.divisions?.filter(d => d.registeredUnits > 0).map(div => (
               <div key={div.id} className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
