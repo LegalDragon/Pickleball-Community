@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Users, LayoutGrid, Play, Settings, ChevronDown, ChevronUp, MessageSquare,
   Clock, CheckCircle, XCircle, RefreshCw, ArrowLeft, Send, AlertTriangle,
-  Calendar, MapPin, Trophy, ListOrdered, Zap, User, Bell
+  Calendar, MapPin, Trophy, ListOrdered, Zap, User, Bell, Download
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -906,22 +906,74 @@ const PlayersTab = ({ data, selectedDivision, setSelectedDivision, eventId, onMe
     return players;
   }, [data.divisions, selectedDivision]);
 
+  const handleDownloadExcel = () => {
+    // Create CSV content
+    const headers = ['Name', 'Email', 'Division', 'Team', 'Check-in Status', 'Waiver Signed'];
+    const rows = allPlayers.map(player => [
+      player.name || '',
+      player.email || '',
+      player.divisionName || '',
+      player.unitName || '',
+      player.isCheckedIn ? 'Checked In' : 'Not Checked In',
+      player.waiverSigned ? 'Yes' : 'No'
+    ]);
+
+    // Escape CSV values
+    const escapeCSV = (value) => {
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Add BOM for Excel UTF-8 compatibility
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const divisionName = selectedDivision
+      ? data.divisions.find(d => d.id === selectedDivision)?.name || 'Division'
+      : 'All_Divisions';
+    link.download = `${data.eventName || 'Event'}_CheckIns_${divisionName}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <select
-          value={selectedDivision || ''}
-          onChange={(e) => setSelectedDivision(e.target.value ? parseInt(e.target.value) : null)}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedDivision || ''}
+            onChange={(e) => setSelectedDivision(e.target.value ? parseInt(e.target.value) : null)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="">All Divisions</option>
+            {data.divisions.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+          <span className="text-gray-500">
+            {allPlayers.filter(p => p.isCheckedIn).length} / {allPlayers.length} checked in
+          </span>
+        </div>
+        <button
+          onClick={handleDownloadExcel}
+          className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+          title="Download as Excel/CSV"
         >
-          <option value="">All Divisions</option>
-          {data.divisions.map(d => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <span className="text-gray-500">
-          {allPlayers.filter(p => p.isCheckedIn).length} / {allPlayers.length} checked in
-        </span>
+          <Download className="w-4 h-4" />
+          Export
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200">
