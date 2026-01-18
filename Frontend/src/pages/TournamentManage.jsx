@@ -128,10 +128,10 @@ export default function TournamentManage() {
       if (response.success) {
         setEvent(response.data);
       }
-      // Load map asset for the event
+      // Load map asset for the event (TypeName is lowercase 'map' in database)
       const assetsResponse = await objectAssetsApi.getAssets('Event', eventId);
       if (assetsResponse.success && assetsResponse.data) {
-        const map = assetsResponse.data.find(a => a.assetTypeName === 'Map');
+        const map = assetsResponse.data.find(a => a.assetTypeName?.toLowerCase() === 'map');
         setMapAsset(map || null);
       }
     } catch (err) {
