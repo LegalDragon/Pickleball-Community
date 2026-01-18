@@ -1511,6 +1511,7 @@ export default function TournamentManage() {
                                 <button
                                   onClick={() => setSelectedGameForEdit({
                                     id: court.currentGame.gameId,
+                                    encounterId: court.currentGame.encounterId || court.currentGame.matchId,
                                     unit1Score: court.currentGame.unit1Score || 0,
                                     unit2Score: court.currentGame.unit2Score || 0,
                                     tournamentCourtId: court.id,
@@ -1870,6 +1871,7 @@ export default function TournamentManage() {
                                   <button
                                     onClick={() => setSelectedGameForEdit({
                                       id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                      encounterId: match.encounterId,
                                       ...(match.games?.[0] || {}),
                                       unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
                                       unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
@@ -1965,6 +1967,7 @@ export default function TournamentManage() {
                                     <button
                                       onClick={() => setSelectedGameForEdit({
                                         id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                        encounterId: match.encounterId,
                                         ...(match.games?.[0] || {}),
                                         unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
                                         unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
@@ -2062,6 +2065,7 @@ export default function TournamentManage() {
                                 <button
                                   onClick={() => setSelectedGameForEdit({
                                     id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                    encounterId: match.encounterId,
                                     ...(match.games?.[0] || {}),
                                     unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
                                     unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
@@ -3216,7 +3220,7 @@ export default function TournamentManage() {
             await tournamentApi.updateGameStatus(gameId, status);
           } : undefined}
           onChangeUnits={handleChangeEncounterUnits}
-          readOnly={!selectedGameForEdit.hasGames}
+          readOnly={false}
           isAdmin={user?.role === 'Admin'}
           showAllCourts={true}
         />
