@@ -112,11 +112,13 @@ var encounterId = game.EncounterMatch!.EncounterId;
 ```
 
 ### Key Entities (in `/Backend/API/Models/Entities/`)
-- `EventEncounter.cs` - DB table: `EventMatches` (legacy name)
+- `EventEncounter.cs` - DB table: `EventEncounters`
 - `EncounterMatch.cs` - DB table: `EncounterMatches`
 - `EncounterMatchFormat.cs` - DB table: `EncounterMatchFormats`
 - `EventGame.cs` - DB table: `EventGames`
 - `EncounterMatchPlayer.cs` - Player assignments to matches
+
+Note: C# code may use `_context.EventMatches` which is a backward-compatible alias for `EventEncounters`.
 
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:
