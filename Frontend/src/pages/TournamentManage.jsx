@@ -27,6 +27,7 @@ export default function TournamentManage() {
   const [poolStandings, setPoolStandings] = useState(null);
   const [calculatingRankings, setCalculatingRankings] = useState(false);
   const [finalizingPools, setFinalizingPools] = useState(false);
+  const [downloadingStandings, setDownloadingStandings] = useState(false);
   const [editingRank, setEditingRank] = useState(null);
   const [showAdvancementPreview, setShowAdvancementPreview] = useState(false);
   const [event, setEvent] = useState(null);
@@ -296,6 +297,34 @@ export default function TournamentManage() {
     } catch (err) {
       console.error('Error resetting pools:', err);
       toast.error('Failed to reset pools');
+    }
+  };
+
+  const handleDownloadSchedule = async () => {
+    if (!selectedDivision) return;
+
+    setDownloadingStandings(true);
+    try {
+      const response = await tournamentApi.downloadScoresheet(selectedDivision.id);
+
+      // Create blob and download
+      const blob = new Blob([response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedDivision?.name || 'Division'}_Scoresheet.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Scoresheet downloaded');
+    } catch (err) {
+      console.error('Error downloading scoresheet:', err);
+      toast.error('Failed to download scoresheet');
+    } finally {
+      setDownloadingStandings(false);
     }
   };
 
@@ -1844,38 +1873,49 @@ export default function TournamentManage() {
                             </span>
                           )}
                         </div>
-                        {isOrganizer && (
-                          <div className="flex items-center gap-2">
-                            {selectedDivision?.scheduleStatus !== 'PoolsFinalized' ? (
-                              <>
+                        <div className="flex items-center gap-2">
+                          {/* Download scoresheet button - always available */}
+                          <button
+                            onClick={handleDownloadSchedule}
+                            disabled={downloadingStandings}
+                            className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {downloadingStandings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            Excel
+                          </button>
+                          {isOrganizer && (
+                            <>
+                              {selectedDivision?.scheduleStatus !== 'PoolsFinalized' ? (
+                                <>
+                                  <button
+                                    onClick={handleCalculateRankings}
+                                    disabled={calculatingRankings}
+                                    className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {calculatingRankings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    Calculate Rankings
+                                  </button>
+                                  <button
+                                    onClick={handleFinalizePools}
+                                    disabled={finalizingPools}
+                                    className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {finalizingPools ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
+                                    Finalize & Advance
+                                  </button>
+                                </>
+                              ) : (
                                 <button
-                                  onClick={handleCalculateRankings}
-                                  disabled={calculatingRankings}
-                                  className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                                  onClick={handleResetPools}
+                                  className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
                                 >
-                                  {calculatingRankings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                  Calculate Rankings
+                                  <Unlock className="w-4 h-4" />
+                                  Reset Finalization
                                 </button>
-                                <button
-                                  onClick={handleFinalizePools}
-                                  disabled={finalizingPools}
-                                  className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5 disabled:opacity-50"
-                                >
-                                  {finalizingPools ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
-                                  Finalize & Advance
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={handleResetPools}
-                                className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
-                              >
-                                <Unlock className="w-4 h-4" />
-                                Reset Finalization
-                              </button>
-                            )}
-                          </div>
-                        )}
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {/* Advancement Info */}
