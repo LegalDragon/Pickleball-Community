@@ -679,7 +679,7 @@ export default function TournamentManage() {
     );
   }
 
-  const isOrganizer = event?.organizedByUserId === user?.id;
+  const isOrganizer = event?.organizedByUserId === user?.id || user?.role === 'Admin';
   const statusColors = {
     Draft: 'bg-gray-100 text-gray-700',
     RegistrationOpen: 'bg-green-100 text-green-700',
