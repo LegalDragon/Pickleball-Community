@@ -369,6 +369,95 @@ export default function PlayerCheckIn() {
   );
 }
 
+// Simple markdown renderer for waiver content
+function renderMarkdown(text) {
+  if (!text) return null;
+
+  // Convert markdown to HTML-like elements
+  const lines = text.split('\n');
+  const elements = [];
+  let inList = false;
+  let listItems = [];
+
+  const processInlineMarkdown = (line) => {
+    // Bold: **text** or __text__
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    // Italic: *text* or _text_
+    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    line = line.replace(/_(.+?)_/g, '<em>$1</em>');
+    return line;
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmedLine = line.trim();
+
+    // Empty line
+    if (!trimmedLine) {
+      if (inList) {
+        elements.push(<ul key={`list-${idx}`} className="list-disc pl-5 mb-2">{listItems}</ul>);
+        listItems = [];
+        inList = false;
+      }
+      return;
+    }
+
+    // Headers
+    if (trimmedLine.startsWith('### ')) {
+      elements.push(<h5 key={idx} className="font-semibold text-gray-800 mt-3 mb-1">{trimmedLine.slice(4)}</h5>);
+      return;
+    }
+    if (trimmedLine.startsWith('## ')) {
+      elements.push(<h4 key={idx} className="font-bold text-gray-900 mt-4 mb-2">{trimmedLine.slice(3)}</h4>);
+      return;
+    }
+    if (trimmedLine.startsWith('# ')) {
+      elements.push(<h3 key={idx} className="text-lg font-bold text-gray-900 mt-4 mb-2">{trimmedLine.slice(2)}</h3>);
+      return;
+    }
+
+    // List items
+    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+      inList = true;
+      listItems.push(
+        <li key={idx} className="mb-1" dangerouslySetInnerHTML={{ __html: processInlineMarkdown(trimmedLine.slice(2)) }} />
+      );
+      return;
+    }
+
+    // Numbered list
+    if (/^\d+\.\s/.test(trimmedLine)) {
+      const content = trimmedLine.replace(/^\d+\.\s/, '');
+      elements.push(
+        <div key={idx} className="flex gap-2 mb-1">
+          <span className="text-gray-500">{trimmedLine.match(/^\d+/)[0]}.</span>
+          <span dangerouslySetInnerHTML={{ __html: processInlineMarkdown(content) }} />
+        </div>
+      );
+      return;
+    }
+
+    // Close any open list
+    if (inList) {
+      elements.push(<ul key={`list-${idx}`} className="list-disc pl-5 mb-2">{listItems}</ul>);
+      listItems = [];
+      inList = false;
+    }
+
+    // Regular paragraph
+    elements.push(
+      <p key={idx} className="mb-2" dangerouslySetInnerHTML={{ __html: processInlineMarkdown(trimmedLine) }} />
+    );
+  });
+
+  // Close any remaining list
+  if (inList && listItems.length > 0) {
+    elements.push(<ul key="list-end" className="list-disc pl-5 mb-2">{listItems}</ul>);
+  }
+
+  return elements;
+}
+
 // Waiver Modal Component
 function WaiverModal({ waiver, playerName, onSign, onClose }) {
   const [signature, setSignature] = useState('');
@@ -377,8 +466,19 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
   const [agreed, setAgreed] = useState(false);
   const [signing, setSigning] = useState(false);
 
+  // Signer role state
+  const [signerRole, setSignerRole] = useState('Participant'); // Participant, Parent, Guardian
+  const [guardianName, setGuardianName] = useState('');
+
+  const isGuardianSigning = signerRole !== 'Participant';
+
   const handleSubmit = async () => {
     if (!signature || !signatureImage || !agreed) {
+      return;
+    }
+
+    // Validate guardian name if signing as guardian
+    if (isGuardianSigning && !guardianName.trim()) {
       return;
     }
 
@@ -388,17 +488,23 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
         signature,
         signatureImage,
         emergencyPhone,
-        signerRole: 'Participant'
+        signerRole,
+        parentGuardianName: isGuardianSigning ? guardianName.trim() : null
       });
     } finally {
       setSigning(false);
     }
   };
 
+  // Determine if content is markdown (check file extension or content patterns)
+  const isMarkdown = waiver.fileName?.toLowerCase().endsWith('.md') ||
+    waiver.fileUrl?.toLowerCase().endsWith('.md') ||
+    (waiver.content && /^#|\*\*|^-\s|^\d+\.\s/m.test(waiver.content));
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
           <h3 className="text-lg font-semibold">Sign Waiver</h3>
           <button
             onClick={onClose}
@@ -410,23 +516,108 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
 
         <div className="p-6 space-y-6">
           {/* Waiver Content */}
-          <div className="prose prose-sm max-w-none">
-            <h4 className="font-medium text-gray-900">{waiver.title}</h4>
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2">{waiver.title}</h4>
             {waiver.content ? (
-              <div
-                className="mt-4 p-4 bg-gray-50 rounded-lg max-h-60 overflow-y-auto text-sm"
-                dangerouslySetInnerHTML={{ __html: waiver.content }}
-              />
+              <div className="mt-2 p-4 bg-gray-50 rounded-lg max-h-80 overflow-y-auto text-sm border border-gray-200">
+                {isMarkdown ? (
+                  <div className="prose prose-sm max-w-none">
+                    {renderMarkdown(waiver.content)}
+                  </div>
+                ) : (
+                  <div dangerouslySetInnerHTML={{ __html: waiver.content }} />
+                )}
+              </div>
             ) : waiver.fileUrl ? (
-              <a
-                href={waiver.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-orange-600 hover:text-orange-700"
-              >
-                View Waiver Document
-              </a>
+              <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <a
+                  href={waiver.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  View Waiver Document (opens in new tab)
+                </a>
+                <p className="text-sm text-blue-600 mt-1">
+                  Please read the full document before signing below.
+                </p>
+              </div>
             ) : null}
+          </div>
+
+          {/* Signer Role Selection */}
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Who is signing this waiver?
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                signerRole === 'Participant'
+                  ? 'bg-orange-600 text-white border-orange-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+              }`}>
+                <input
+                  type="radio"
+                  name="signerRole"
+                  value="Participant"
+                  checked={signerRole === 'Participant'}
+                  onChange={(e) => setSignerRole(e.target.value)}
+                  className="sr-only"
+                />
+                <span className="font-medium">Self (Participant)</span>
+              </label>
+              <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                signerRole === 'Parent'
+                  ? 'bg-orange-600 text-white border-orange-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+              }`}>
+                <input
+                  type="radio"
+                  name="signerRole"
+                  value="Parent"
+                  checked={signerRole === 'Parent'}
+                  onChange={(e) => setSignerRole(e.target.value)}
+                  className="sr-only"
+                />
+                <span className="font-medium">Parent</span>
+              </label>
+              <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                signerRole === 'Guardian'
+                  ? 'bg-orange-600 text-white border-orange-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+              }`}>
+                <input
+                  type="radio"
+                  name="signerRole"
+                  value="Guardian"
+                  checked={signerRole === 'Guardian'}
+                  onChange={(e) => setSignerRole(e.target.value)}
+                  className="sr-only"
+                />
+                <span className="font-medium">Legal Guardian</span>
+              </label>
+            </div>
+
+            {/* Guardian Name Field */}
+            {isGuardianSigning && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {signerRole === 'Parent' ? "Parent's" : "Guardian's"} Full Legal Name *
+                </label>
+                <input
+                  type="text"
+                  value={guardianName}
+                  onChange={(e) => setGuardianName(e.target.value)}
+                  placeholder={`Enter ${signerRole.toLowerCase()}'s full name`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  By signing as {signerRole.toLowerCase()}, you confirm you have legal authority to sign on behalf of {playerName || 'the participant'}.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Emergency Phone */}
@@ -446,13 +637,13 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
           {/* Typed Signature */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Type your full legal name
+              {isGuardianSigning ? `Type ${signerRole.toLowerCase()}'s full legal name` : 'Type your full legal name'}
             </label>
             <input
               type="text"
               value={signature}
               onChange={(e) => setSignature(e.target.value)}
-              placeholder={playerName || 'Your Full Name'}
+              placeholder={isGuardianSigning ? guardianName || `${signerRole}'s Full Name` : playerName || 'Your Full Name'}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
@@ -460,7 +651,7 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
           {/* Drawn Signature */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Draw your signature
+              {isGuardianSigning ? `Draw ${signerRole.toLowerCase()}'s signature` : 'Draw your signature'}
             </label>
             <SignatureCanvas
               onSignatureChange={setSignatureImage}
@@ -477,8 +668,14 @@ function WaiverModal({ waiver, playerName, onSign, onClose }) {
               className="mt-1 w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
             />
             <span className="text-sm text-gray-700">
-              I have read and agree to the terms of this waiver. I understand that by signing this document,
-              I am waiving certain legal rights.
+              {isGuardianSigning ? (
+                <>I, as the {signerRole.toLowerCase()} of {playerName || 'the participant'}, have read and agree to the terms of this waiver.
+                I confirm I have legal authority to sign on behalf of the participant and understand that by signing this document,
+                I am waiving certain legal rights on their behalf.</>
+              ) : (
+                <>I have read and agree to the terms of this waiver. I understand that by signing this document,
+                I am waiving certain legal rights.</>
+              )}
             </span>
           </label>
 
