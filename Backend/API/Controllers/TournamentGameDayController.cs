@@ -938,6 +938,38 @@ public class TournamentGameDayController : ControllerBase
             unit.GamesLost = 0;
             unit.PointsScored = 0;
             unit.PointsAgainst = 0;
+            // Reset playoff advancement (can be re-finalized after recalculation)
+            unit.AdvancedToPlayoff = false;
+            unit.ManuallyAdvanced = false;
+            unit.OverallRank = null;
+        }
+
+        // Reset playoff bracket match assignments (only first round, and only if no games played)
+        var playoffMatches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
+            .ToListAsync();
+
+        var hasPlayedPlayoffGames = await _context.EventGames
+            .AnyAsync(g => g.EncounterMatch != null &&
+                          g.EncounterMatch.Encounter != null &&
+                          g.EncounterMatch.Encounter.DivisionId == divisionId &&
+                          g.EncounterMatch.Encounter.RoundType == "Bracket" &&
+                          (g.Status == "Playing" || g.Status == "Finished" || g.Status == "Completed"));
+
+        if (!hasPlayedPlayoffGames)
+        {
+            foreach (var match in playoffMatches)
+            {
+                match.Unit1Id = null;
+                match.Unit2Id = null;
+                match.UpdatedAt = DateTime.Now;
+            }
+
+            // Reset division status back to UnitsAssigned
+            if (division.ScheduleStatus == "PoolsFinalized")
+            {
+                division.ScheduleStatus = "UnitsAssigned";
+            }
         }
 
         // Get all completed pool encounters with their games
@@ -1292,6 +1324,149 @@ public class TournamentGameDayController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new ApiResponse<object> { Success = true, Message = "Pool finalization reset" });
+    }
+
+    /// <summary>
+    /// Manually override playoff team assignments (TD only)
+    /// Allows setting which teams advance and their bracket positions
+    /// </summary>
+    [HttpPost("override-playoff-teams/{eventId}/{divisionId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<AdvancementResultDto>>> OverridePlayoffTeams(
+        int eventId,
+        int divisionId,
+        [FromBody] OverridePlayoffTeamsRequest request)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var division = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<AdvancementResultDto> { Success = false, Message = "Division not found" });
+
+        // Check if any playoff matches have been played
+        var hasPlayedPlayoffGames = await _context.EventGames
+            .AnyAsync(g => g.EncounterMatch != null &&
+                          g.EncounterMatch.Encounter != null &&
+                          g.EncounterMatch.Encounter.DivisionId == divisionId &&
+                          g.EncounterMatch.Encounter.RoundType == "Bracket" &&
+                          (g.Status == "Playing" || g.Status == "Finished" || g.Status == "Completed"));
+
+        if (hasPlayedPlayoffGames)
+            return BadRequest(new ApiResponse<AdvancementResultDto> { Success = false, Message = "Cannot override playoff teams after playoff games have been played" });
+
+        // Get all units in this division
+        var allUnits = await _context.EventUnits
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
+            .ToListAsync();
+
+        var unitLookup = allUnits.ToDictionary(u => u.Id);
+
+        // Reset all units first
+        foreach (var unit in allUnits)
+        {
+            unit.AdvancedToPlayoff = false;
+            unit.ManuallyAdvanced = false;
+            unit.OverallRank = null;
+            unit.UpdatedAt = DateTime.Now;
+        }
+
+        // Apply manual overrides
+        var advancingUnits = new List<EventUnit>();
+        foreach (var assignment in request.Assignments.OrderBy(a => a.OverallSeed))
+        {
+            if (unitLookup.TryGetValue(assignment.UnitId, out var unit))
+            {
+                unit.AdvancedToPlayoff = true;
+                unit.ManuallyAdvanced = true;
+                unit.OverallRank = assignment.OverallSeed;
+                advancingUnits.Add(unit);
+            }
+        }
+
+        // Get playoff first round matches
+        var playoffMatches = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Bracket" && m.RoundNumber == 1)
+            .OrderBy(m => m.BracketPosition)
+            .ToListAsync();
+
+        // Clear existing assignments
+        foreach (var match in playoffMatches)
+        {
+            match.Unit1Id = null;
+            match.Unit2Id = null;
+        }
+
+        var assignedMatches = new List<PlayoffMatchAssignmentDto>();
+
+        if (playoffMatches.Any() && advancingUnits.Any())
+        {
+            // Assign units to bracket positions based on seeding
+            var bracketSize = playoffMatches.Count * 2;
+            var seedPositions = GetSeededBracketPositions(bracketSize);
+
+            for (int i = 0; i < playoffMatches.Count && i < seedPositions.Count; i++)
+            {
+                var match = playoffMatches[i];
+                var (seed1, seed2) = seedPositions[i];
+
+                var unit1 = advancingUnits.FirstOrDefault(u => u.OverallRank == seed1);
+                var unit2 = advancingUnits.FirstOrDefault(u => u.OverallRank == seed2);
+
+                if (unit1 != null)
+                {
+                    match.Unit1Id = unit1.Id;
+                    match.Unit1Number = seed1;
+                }
+                if (unit2 != null)
+                {
+                    match.Unit2Id = unit2.Id;
+                    match.Unit2Number = seed2;
+                }
+
+                match.UpdatedAt = DateTime.Now;
+
+                assignedMatches.Add(new PlayoffMatchAssignmentDto
+                {
+                    MatchId = match.Id,
+                    BracketPosition = match.BracketPosition ?? 0,
+                    Unit1Seed = seed1,
+                    Unit1Name = unit1?.Name,
+                    Unit2Seed = seed2,
+                    Unit2Name = unit2?.Name
+                });
+            }
+        }
+
+        // Update division status
+        division.ScheduleStatus = "PoolsFinalized";
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("TD {UserId} manually overrode playoff teams for division {DivisionId}, {Count} teams assigned",
+            userId, divisionId, advancingUnits.Count);
+
+        return Ok(new ApiResponse<AdvancementResultDto>
+        {
+            Success = true,
+            Data = new AdvancementResultDto
+            {
+                AdvancedCount = advancingUnits.Count,
+                AdvancedUnits = advancingUnits.Select(u => new AdvancedUnitDto
+                {
+                    UnitId = u.Id,
+                    UnitName = u.Name,
+                    PoolNumber = u.PoolNumber ?? 0,
+                    PoolRank = u.PoolRank ?? 0,
+                    OverallSeed = u.OverallRank ?? 0
+                }).OrderBy(u => u.OverallSeed).ToList(),
+                PlayoffMatches = assignedMatches
+            },
+            Message = $"Manually assigned {advancingUnits.Count} teams to playoffs"
+        });
     }
 
     private List<EventUnit> ApplyHeadToHeadTiebreaker(List<EventUnit> units, List<EventEncounter> matches)
@@ -2053,6 +2228,17 @@ public class PoolUnitRankDto
 public class FinalizePoolsRequest
 {
     public int? AdvancePerPool { get; set; }
+}
+
+public class OverridePlayoffTeamsRequest
+{
+    public List<PlayoffTeamAssignment> Assignments { get; set; } = new();
+}
+
+public class PlayoffTeamAssignment
+{
+    public int UnitId { get; set; }
+    public int OverallSeed { get; set; }
 }
 
 public class AdvancementResultDto
