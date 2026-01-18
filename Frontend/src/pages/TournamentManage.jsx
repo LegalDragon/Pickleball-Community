@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
@@ -36,6 +36,7 @@ export default function TournamentManage() {
   const [event, setEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDivision, setSelectedDivision] = useState(null);
+  const selectedDivisionRef = useRef(null); // Ref to track selectedDivision for SignalR listener
   const [error, setError] = useState(null);
 
   // Schedule generation state
@@ -99,6 +100,11 @@ export default function TournamentManage() {
     }
   }, [eventId]);
 
+  // Keep ref in sync with selectedDivision for SignalR listener
+  useEffect(() => {
+    selectedDivisionRef.current = selectedDivision;
+  }, [selectedDivision]);
+
   // SignalR connection for real-time updates
   useEffect(() => {
     if (!eventId || !isAuthenticated) return;
@@ -115,8 +121,10 @@ export default function TournamentManage() {
       if (notification.Type === 'ScoreUpdate' || notification.Type === 'GameUpdate') {
         console.log('Admin dashboard: Received game update, refreshing...', notification);
         loadDashboard();
-        if (selectedDivision?.scheduleReady) {
-          loadSchedule(selectedDivision.id);
+        // Use ref to get current selectedDivision value (avoids stale closure)
+        const currentDivision = selectedDivisionRef.current;
+        if (currentDivision?.scheduleReady) {
+          loadSchedule(currentDivision.id);
         }
       }
     });
