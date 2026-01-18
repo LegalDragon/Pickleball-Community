@@ -238,6 +238,7 @@ public class TournamentGameDayController : ControllerBase
 
         if (unitIds.Any())
         {
+            // Fetch matches without complex ordering - sort client-side to avoid EF Core SQL generation issues
             var rawMatches = await _context.EventMatches
                 .Include(m => m.Unit1)
                 .Include(m => m.Unit2)
@@ -245,13 +246,14 @@ public class TournamentGameDayController : ControllerBase
                 .Where(m => m.EventId == eventId &&
                     m.Status != "Completed" && m.Status != "Finished" &&
                     (unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0)))
+                .ToListAsync();
+
+            // Sort and project to DTO client-side to avoid EF Core translation issues
+            scheduledMatches = rawMatches
                 .OrderBy(m => m.RoundType == "Pool" ? 0 : 1)
                 .ThenBy(m => m.RoundNumber)
                 .ThenBy(m => m.EncounterNumber)
-                .ToListAsync();
-
-            // Project to DTO client-side to avoid EF Core translation issues with Contains in Select
-            scheduledMatches = rawMatches.Select(m => new ScheduledMatchDto
+                .Select(m => new ScheduledMatchDto
             {
                 EncounterId = m.Id,
                 DivisionId = m.DivisionId,
