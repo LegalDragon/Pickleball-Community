@@ -1051,12 +1051,18 @@ public class CheckInController : ControllerBase
         {
             reg.IsCheckedIn = false;
             reg.CheckedInAt = null;
+            reg.CheckInStatus = "Pending";
+            reg.CheckInRequestedAt = null;
 
-            // Void waiver
-            reg.WaiverSigned = false;
+            // Void waiver (clear all waiver-related fields)
             reg.WaiverSignedAt = null;
             reg.WaiverSignature = null;
             reg.SignedWaiverPdfUrl = null;
+            reg.SignatureAssetUrl = null;
+            reg.SignerEmail = null;
+            reg.SignerIpAddress = null;
+            reg.WaiverSignerRole = null;
+            reg.WaiverDocumentId = null;
 
             // Void payment
             reg.HasPaid = false;
@@ -1065,6 +1071,7 @@ public class CheckInController : ControllerBase
             reg.PaymentReference = null;
             reg.PaidAt = null;
             reg.PaymentProofUrl = null;
+            reg.ReferenceId = null;
         }
 
         // Remove event-level check-in record
