@@ -234,33 +234,40 @@ public class TournamentGameDayController : ControllerBase
 
         // Get scheduled matches for player's units (for Future Games section)
         var unitIds = units.Select(u => u.UnitId).ToList();
-        var scheduledMatches = await _context.EventMatches
-            .Include(m => m.Unit1)
-            .Include(m => m.Unit2)
-            .Include(m => m.Division)
-            .Where(m => m.EventId == eventId &&
-                m.Status != "Completed" && m.Status != "Finished" &&
-                (unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0)))
-            .OrderBy(m => m.RoundType == "Pool" ? 0 : 1)
-            .ThenBy(m => m.RoundNumber)
-            .ThenBy(m => m.EncounterNumber)
-            .Select(m => new ScheduledMatchDto
+        var scheduledMatches = new List<ScheduledMatchDto>();
+
+        if (unitIds.Any())
+        {
+            var rawMatches = await _context.EventMatches
+                .Include(m => m.Unit1)
+                .Include(m => m.Unit2)
+                .Include(m => m.Division)
+                .Where(m => m.EventId == eventId &&
+                    m.Status != "Completed" && m.Status != "Finished" &&
+                    (unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0)))
+                .OrderBy(m => m.RoundType == "Pool" ? 0 : 1)
+                .ThenBy(m => m.RoundNumber)
+                .ThenBy(m => m.EncounterNumber)
+                .ToListAsync();
+
+            // Project to DTO client-side to avoid EF Core translation issues with Contains in Select
+            scheduledMatches = rawMatches.Select(m => new ScheduledMatchDto
             {
                 EncounterId = m.Id,
                 DivisionId = m.DivisionId,
-                DivisionName = m.Division != null ? m.Division.Name : "",
+                DivisionName = m.Division?.Name ?? "",
                 RoundType = m.RoundType,
                 RoundName = m.RoundName,
                 MatchNumber = m.EncounterNumber,
                 MyUnitId = unitIds.Contains(m.Unit1Id ?? 0) ? m.Unit1Id : m.Unit2Id,
                 Unit1Id = m.Unit1Id,
-                Unit1Name = m.Unit1 != null ? m.Unit1.Name : null,
+                Unit1Name = m.Unit1?.Name,
                 Unit2Id = m.Unit2Id,
-                Unit2Name = m.Unit2 != null ? m.Unit2.Name : null,
+                Unit2Name = m.Unit2?.Name,
                 Status = m.Status,
                 ScheduledTime = m.ScheduledTime
-            })
-            .ToListAsync();
+            }).ToList();
+        }
 
         return Ok(new ApiResponse<PlayerGameDayDto>
         {
