@@ -1182,7 +1182,7 @@ public class CheckInController : ControllerBase
 
         // Get waiver documents for this event (ObjectAssets with AssetType "waiver")
         var eventObjectTypeId = await _context.ObjectTypes.Where(t => t.Name == "Event").Select(t => t.Id).FirstOrDefaultAsync();
-        var waiverAssetTypeId = await _context.ObjectAssetTypes.Where(t => t.Name == "waiver").Select(t => t.Id).FirstOrDefaultAsync();
+        var waiverAssetTypeId = await _context.ObjectAssetTypes.Where(t => t.TypeName == "waiver").Select(t => t.Id).FirstOrDefaultAsync();
         var waivers = await _context.ObjectAssets
             .Where(a => a.ObjectTypeId == eventObjectTypeId && a.ObjectId == eventId && a.ObjectAssetTypeId == waiverAssetTypeId)
             .ToListAsync();
