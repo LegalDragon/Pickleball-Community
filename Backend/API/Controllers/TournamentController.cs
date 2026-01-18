@@ -3575,8 +3575,7 @@ public class TournamentController : ControllerBase
             PlayoffFromPools = division.PlayoffFromPools,
             ExportedAt = DateTime.Now,
             Rounds = matches
-                // Include matches with units assigned OR with seed labels (playoff brackets before units assigned)
-                .Where(m => m.Unit1Id != null || m.Unit2Id != null || m.Unit1SeedLabel != null || m.Unit2SeedLabel != null)
+                // Include all matches - show position numbers before drawing, team names after
                 .GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
                 .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : g.Key.RoundType == "Bracket" ? 1 : 2)
                 .ThenBy(g => g.Key.RoundNumber)
