@@ -137,6 +137,22 @@ export default function TournamentManage() {
     };
   }, [eventId, isAuthenticated, connect, joinEvent, leaveEvent, addListener]);
 
+  // Auto-refresh every 30 seconds as fallback for SignalR
+  useEffect(() => {
+    if (!eventId) return;
+
+    const refreshInterval = setInterval(() => {
+      console.log('Auto-refresh: updating dashboard and schedule...');
+      loadDashboard();
+      const currentDivision = selectedDivisionRef.current;
+      if (currentDivision?.scheduleReady) {
+        loadSchedule(currentDivision.id);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [eventId]);
+
   useEffect(() => {
     if (selectedDivision?.scheduleReady) {
       loadSchedule(selectedDivision.id);
