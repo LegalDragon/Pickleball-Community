@@ -2973,6 +2973,7 @@ export default function TournamentManage() {
           onChangeUnits={handleChangeEncounterUnits}
           readOnly={!selectedGameForEdit.hasGames}
           isAdmin={user?.role === 'Admin'}
+          showAllCourts={true}
         />
       )}
 

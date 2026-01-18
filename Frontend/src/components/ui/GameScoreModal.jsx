@@ -43,6 +43,7 @@ export default function GameScoreModal({
   onChangeUnits,
   showCourtAssignment = true,
   showStatusControl = true,
+  showAllCourts = false,
   readOnly = false,
   isAdmin = false
 }) {
@@ -54,7 +55,9 @@ export default function GameScoreModal({
   const [selectedUnit1Id, setSelectedUnit1Id] = useState(game.unit1?.id || '');
   const [selectedUnit2Id, setSelectedUnit2Id] = useState(game.unit2?.id || '');
 
-  const availableCourts = courts.filter(c => c.status === 'Available' || c.id === game.tournamentCourtId);
+  const availableCourts = showAllCourts
+    ? courts
+    : courts.filter(c => c.status === 'Available' || c.id === game.tournamentCourtId);
   const isCompleted = game.status === 'Completed' || game.status === 'Finished';
   const isInProgress = game.status === 'InProgress' || game.status === 'Playing';
   const hasBestOf = game.bestOf > 1;
