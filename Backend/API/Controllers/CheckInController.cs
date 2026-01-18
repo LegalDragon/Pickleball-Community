@@ -109,6 +109,7 @@ public class CheckInController : ControllerBase
                 .Include(m => m.User)
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Division)
+                        .ThenInclude(d => d!.SkillLevel)
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Members)
                         .ThenInclude(mem => mem.User)
@@ -205,8 +206,8 @@ public class CheckInController : ControllerBase
                 UnitId = firstUnit.Id,
                 DivisionName = firstUnit.Division?.Name,
                 TeamUnitName = firstUnit.Name,
-                SkillLevelName = firstUnit.Division?.SkillLevelName,
-                AmountDue = firstUnit.RegistrationFee ?? firstUnit.Division?.RegistrationFee ?? 0,
+                SkillLevelName = firstUnit.Division?.SkillLevel?.Name,
+                AmountDue = firstUnit.Division?.DivisionFee ?? 0,
                 AmountPaid = firstUnit.Members?.Where(m => m.InviteStatus == "Accepted").Sum(m => m.AmountPaid) ?? 0,
                 PaymentStatus = firstUnit.PaymentStatus ?? "Pending",
                 PaymentReference = firstReg.PaymentReference,
@@ -1267,6 +1268,7 @@ public class CheckInController : ControllerBase
                 .Include(m => m.User)
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Division)
+                        .ThenInclude(d => d!.SkillLevel)
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Members)
                         .ThenInclude(mem => mem.User)
@@ -1350,8 +1352,8 @@ public class CheckInController : ControllerBase
                 UnitId = firstUnit.Id,
                 DivisionName = firstUnit.Division?.Name,
                 TeamUnitName = firstUnit.Name,
-                SkillLevelName = firstUnit.Division?.SkillLevelName,
-                AmountDue = firstUnit.RegistrationFee ?? firstUnit.Division?.RegistrationFee ?? 0,
+                SkillLevelName = firstUnit.Division?.SkillLevel?.Name,
+                AmountDue = firstUnit.Division?.DivisionFee ?? 0,
                 AmountPaid = firstUnit.Members?.Where(m => m.InviteStatus == "Accepted").Sum(m => m.AmountPaid) ?? 0,
                 PaymentStatus = firstUnit.PaymentStatus ?? "Pending",
                 PaymentReference = firstReg.PaymentReference,
