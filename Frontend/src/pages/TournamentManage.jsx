@@ -5,13 +5,14 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Shuffle, Settings, Target,
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
-  CheckCircle, XCircle, MoreVertical, Upload, Send
+  CheckCircle, XCircle, MoreVertical, Upload, Send, Info
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
+import GameScoreModal from '../components/ui/GameScoreModal';
 
 export default function TournamentManage() {
   const { eventId } = useParams();
@@ -39,6 +40,7 @@ export default function TournamentManage() {
   // Schedule display state
   const [schedule, setSchedule] = useState(null);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [selectedGameForEdit, setSelectedGameForEdit] = useState(null); // Game object for score editing
 
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
@@ -1338,14 +1340,32 @@ export default function TournamentManage() {
                                   </div>
                                 </div>
                               </div>
-                              <span className={`ml-4 px-2 py-1 text-xs font-medium rounded-full ${
-                                match.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
-                                match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {match.status}
-                              </span>
+                              <div className="flex items-center gap-2 ml-4">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                  match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                  match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {match.status}
+                                </span>
+                                {/* Edit button - only show if match has games/encounters */}
+                                {match.games?.length > 0 && (
+                                  <button
+                                    onClick={() => setSelectedGameForEdit({
+                                      ...match.games[0],
+                                      unit1: { id: match.unit1Id, name: match.unit1Name, members: match.unit1Members || [] },
+                                      unit2: { id: match.unit2Id, name: match.unit2Name, members: match.unit2Members || [] },
+                                      bestOf: match.bestOf || 1,
+                                      matchNumber: match.matchNumber
+                                    })}
+                                    className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                    title="Edit game score"
+                                  >
+                                    <Info className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             {match.courtLabel && (
                               <div className="mt-2 text-sm text-gray-500 flex items-center gap-2">
@@ -2270,6 +2290,24 @@ export default function TournamentManage() {
         <PublicProfileModal
           userId={profileModalUserId}
           onClose={() => setProfileModalUserId(null)}
+        />
+      )}
+
+      {/* Game Score Edit Modal */}
+      {selectedGameForEdit && (
+        <GameScoreModal
+          game={selectedGameForEdit}
+          onClose={() => setSelectedGameForEdit(null)}
+          onSuccess={() => {
+            setSelectedGameForEdit(null);
+            loadSchedule(selectedDivision?.id);
+          }}
+          onPlayerClick={(userId) => setProfileModalUserId(userId)}
+          onSaveScore={async (gameId, unit1Score, unit2Score, finish) => {
+            await tournamentApi.adminUpdateScore(gameId, unit1Score, unit2Score, finish);
+          }}
+          showCourtAssignment={false}
+          showStatusControl={false}
         />
       )}
 

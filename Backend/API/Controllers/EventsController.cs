@@ -2336,9 +2336,8 @@ public class EventsController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new ApiResponse<List<UserActiveEventDto>> { Success = false, Message = "Unauthorized" });
 
-        // Get user's registrations in active events (Drawing, Running, ScheduleReady)
-        var activeStatuses = new[] { "Drawing", "Running", "ScheduleReady", "Started" };
-
+        // Get user's registrations in active events (Drawing, Running, ScheduleReady, Started)
+        // Use explicit OR conditions instead of Contains() to avoid EF Core SQL generation issues
         var registrations = await _context.EventUnitMembers
             .Include(m => m.Unit).ThenInclude(u => u!.Event)
             .Include(m => m.Unit).ThenInclude(u => u!.Division)
@@ -2347,7 +2346,10 @@ public class EventsController : ControllerBase
                 && m.Unit != null
                 && m.Unit.Event != null
                 && m.Unit.Event.IsActive
-                && activeStatuses.Contains(m.Unit.Event.TournamentStatus))
+                && (m.Unit.Event.TournamentStatus == "Drawing"
+                    || m.Unit.Event.TournamentStatus == "Running"
+                    || m.Unit.Event.TournamentStatus == "ScheduleReady"
+                    || m.Unit.Event.TournamentStatus == "Started"))
             .ToListAsync();
 
         var result = registrations

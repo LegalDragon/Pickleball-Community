@@ -8,6 +8,8 @@ import api, { scoreMethodsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { getSharedAssetUrl } from '../services/api';
 import HelpIcon from '../components/ui/HelpIcon';
+import GameScoreModal from '../components/ui/GameScoreModal';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 // API endpoints
 const gamedayApi = {
@@ -62,6 +64,7 @@ const GameDayManage = () => {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showScoreEdit, setShowScoreEdit] = useState(null);
   const [showNewFormat, setShowNewFormat] = useState(false);
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
 
   // Filter states
   const [selectedDivision, setSelectedDivision] = useState(null);
@@ -275,11 +278,34 @@ const GameDayManage = () => {
 
       {/* Score Edit Modal */}
       {showScoreEdit && (
-        <ScoreEditModal
+        <GameScoreModal
           game={showScoreEdit}
-          data={data}
+          courts={data?.courts || []}
           onClose={() => setShowScoreEdit(null)}
           onSuccess={() => { setShowScoreEdit(null); loadData(); }}
+          onPlayerClick={(userId) => setProfileModalUserId(userId)}
+          onSaveScore={async (gameId, unit1Score, unit2Score, finish) => {
+            await gamedayApi.updateScore(gameId, {
+              gameNumber: showScoreEdit.currentGameNumber || 1,
+              unit1Score,
+              unit2Score,
+              isFinished: finish
+            });
+          }}
+          onAssignCourt={async (gameId, courtId) => {
+            await gamedayApi.assignCourt(gameId, { courtId });
+          }}
+          onStatusChange={async (gameId, status) => {
+            await gamedayApi.updateGameStatus(gameId, { status });
+          }}
+        />
+      )}
+
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
         />
       )}
 
