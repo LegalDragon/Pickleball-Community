@@ -474,6 +474,14 @@ public class UpdateGameStatusRequest
     public string Status { get; set; } = string.Empty; // New, Ready, Queued, Started, Playing, Finished
 }
 
+public class AdminUpdateScoreRequest
+{
+    public int GameId { get; set; }
+    public int Unit1Score { get; set; }
+    public int Unit2Score { get; set; }
+    public bool MarkAsFinished { get; set; } = false;
+}
+
 // ============================================
 // Check-in DTOs
 // ============================================
@@ -562,6 +570,9 @@ public class ScheduleExportDto
     public string EventName { get; set; } = string.Empty;
     public string? ScheduleType { get; set; } // RoundRobin, RoundRobinPlayoff, SingleElimination, etc.
     public int? PlayoffFromPools { get; set; } // Number of teams advancing per pool to playoffs
+    public int MatchesPerEncounter { get; set; } = 1; // Number of matches per encounter (1 for simple, 3+ for team scrimmages)
+    public int GamesPerMatch { get; set; } = 1; // Best of X games per match
+    public string? DefaultScoreFormat { get; set; } // e.g., "Rally to 11, win by 2"
     public DateTime ExportedAt { get; set; }
     public List<ScheduleRoundDto> Rounds { get; set; } = new();
     public List<PoolStandingsDto> PoolStandings { get; set; } = new();
@@ -577,6 +588,7 @@ public class ScheduleRoundDto
 
 public class ScheduleMatchDto
 {
+    public int EncounterId { get; set; } // For linking to encounter details/editing
     public int MatchNumber { get; set; }
     public int? Unit1Number { get; set; }
     public int? Unit2Number { get; set; }
@@ -587,9 +599,24 @@ public class ScheduleMatchDto
     public bool IsBye { get; set; } // True if one team has a bye
     public string? CourtLabel { get; set; }
     public DateTime? ScheduledTime { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Score { get; set; } // "11-7, 9-11, 11-5"
     public string? WinnerName { get; set; }
+    public List<ScheduleGameDto> Games { get; set; } = new(); // Individual games within the match
+}
+
+public class ScheduleGameDto
+{
+    public int GameId { get; set; }
+    public int GameNumber { get; set; }
+    public int? Unit1Score { get; set; }
+    public int? Unit2Score { get; set; }
+    public string? CourtLabel { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 public class PoolStandingsDto

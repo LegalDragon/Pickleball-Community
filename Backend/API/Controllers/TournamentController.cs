@@ -3502,7 +3502,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<ScheduleExportDto>>> GetSchedule(int divisionId)
     {
         var division = await _context.EventDivisions
-            .Include(d => d.Event)
+            .Include(d => d.Event).ThenInclude(e => e!.DefaultScoreFormat)
             .FirstOrDefaultAsync(d => d.Id == divisionId);
 
         if (division == null)
@@ -3512,7 +3512,7 @@ public class TournamentController : ControllerBase
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.Winner)
-            .Include(m => m.Matches).ThenInclude(match => match.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games).ThenInclude(game => game.TournamentCourt)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundType)
             .ThenBy(m => m.RoundNumber)
@@ -3573,6 +3573,9 @@ public class TournamentController : ControllerBase
             EventName = division.Event?.Name ?? "",
             ScheduleType = division.ScheduleType,
             PlayoffFromPools = division.PlayoffFromPools,
+            MatchesPerEncounter = division.MatchesPerEncounter,
+            GamesPerMatch = division.GamesPerMatch,
+            DefaultScoreFormat = division.Event?.DefaultScoreFormat?.Name,
             ExportedAt = DateTime.Now,
             Rounds = matches
                 // Include all matches - show position numbers before drawing, team names after
@@ -3586,6 +3589,7 @@ public class TournamentController : ControllerBase
                     RoundName = g.Key.RoundName,
                     Matches = g.Select(m => new ScheduleMatchDto
                     {
+                        EncounterId = m.Id,
                         MatchNumber = m.MatchNumber,
                         Unit1Number = m.Unit1Number,
                         Unit2Number = m.Unit2Number,
@@ -3600,9 +3604,24 @@ public class TournamentController : ControllerBase
                             ? (m.Unit2Id == null ? m.Unit2SeedLabel : GetSeedInfo(m.Unit2Id))
                             : null,
                         IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
+                        CourtLabel = m.Matches.FirstOrDefault()?.Games.FirstOrDefault(g => g.TournamentCourt != null)?.TournamentCourt?.CourtLabel,
+                        ScheduledTime = m.ScheduledTime,
+                        StartedAt = m.StartedAt,
+                        CompletedAt = m.CompletedAt,
                         Status = m.Status,
                         Score = GetMatchScore(m),
-                        WinnerName = GetUnitDisplayName(m.WinnerId) ?? m.Winner?.Name
+                        WinnerName = GetUnitDisplayName(m.WinnerId) ?? m.Winner?.Name,
+                        Games = m.Matches.SelectMany(match => match.Games).OrderBy(game => game.GameNumber).Select(game => new ScheduleGameDto
+                        {
+                            GameId = game.Id,
+                            GameNumber = game.GameNumber,
+                            Unit1Score = game.Unit1Score,
+                            Unit2Score = game.Unit2Score,
+                            CourtLabel = game.TournamentCourt?.CourtLabel,
+                            Status = game.Status,
+                            StartedAt = game.StartedAt,
+                            CompletedAt = game.FinishedAt
+                        }).ToList()
                     }).ToList()
                 }).ToList(),
             PoolStandings = units.GroupBy(u => u.PoolNumber ?? 0)
@@ -3871,6 +3890,56 @@ public class TournamentController : ControllerBase
         game.ScoreSubmittedByUnitId = userUnit.Id;
         game.ScoreSubmittedAt = DateTime.Now;
         game.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<EventGameDto>
+        {
+            Success = true,
+            Data = MapToGameDto(game)
+        });
+    }
+
+    /// <summary>
+    /// Admin endpoint to update game scores without being a participant
+    /// </summary>
+    [Authorize]
+    [HttpPost("games/admin-update-score")]
+    public async Task<ActionResult<ApiResponse<EventGameDto>>> AdminUpdateScore([FromBody] AdminUpdateScoreRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is admin
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user?.Role != "Admin")
+            return Forbid();
+
+        var game = await _context.EventGames
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Include(g => g.ScoreFormat)
+            .FirstOrDefaultAsync(g => g.Id == request.GameId);
+
+        if (game == null)
+            return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
+
+        game.Unit1Score = request.Unit1Score;
+        game.Unit2Score = request.Unit2Score;
+        game.UpdatedAt = DateTime.Now;
+
+        // If marking as finished, set winner
+        if (request.MarkAsFinished && game.Status != "Finished")
+        {
+            game.Status = "Finished";
+            game.FinishedAt = DateTime.Now;
+
+            var encounter = game.EncounterMatch?.Encounter;
+            if (encounter != null)
+            {
+                game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
+            }
+        }
 
         await _context.SaveChangesAsync();
 

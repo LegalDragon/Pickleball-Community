@@ -1469,6 +1469,8 @@ export const tournamentApi = {
     api.post('/tournament/games/submit-score', { gameId, unit1Score, unit2Score }),
   confirmScore: (gameId, confirm, disputeReason = null) =>
     api.post('/tournament/games/confirm-score', { gameId, confirm, disputeReason }),
+  adminUpdateScore: (gameId, unit1Score, unit2Score, markAsFinished = false) =>
+    api.post('/tournament/games/admin-update-score', { gameId, unit1Score, unit2Score, markAsFinished }),
 
   // Check-in
   checkIn: (eventId, divisionId = null) =>

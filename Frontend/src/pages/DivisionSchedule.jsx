@@ -2,19 +2,28 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Calendar, Users, Trophy, ChevronLeft, Loader2,
-  AlertCircle, Printer, Download, Clock, MapPin, User, RotateCcw
+  AlertCircle, Printer, Download, Clock, MapPin, User, RotateCcw, Info, X, Edit2, Save
 } from 'lucide-react';
 import { tournamentApi, getSharedAssetUrl } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function DivisionSchedule() {
   const { eventId, divisionId } = useParams();
+  const { user } = useAuth();
+  const toast = useToast();
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [profileModalUserId, setProfileModalUserId] = useState(null);
   const [resettingDrawing, setResettingDrawing] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null); // For match details modal
+  const [editingGame, setEditingGame] = useState(null); // { gameId, unit1Score, unit2Score }
+  const [savingScore, setSavingScore] = useState(false);
+
+  const isAdmin = user?.role === 'Admin';
 
   useEffect(() => {
     loadSchedule();
@@ -87,6 +96,72 @@ export default function DivisionSchedule() {
     } finally {
       setDownloadingExcel(false);
     }
+  };
+
+  const handleOpenMatchDetails = (match) => {
+    setSelectedMatch(match);
+    setEditingGame(null);
+  };
+
+  const handleStartEditScore = (game) => {
+    setEditingGame({
+      gameId: game.gameId,
+      unit1Score: game.unit1Score ?? 0,
+      unit2Score: game.unit2Score ?? 0
+    });
+  };
+
+  const handleCancelEditScore = () => {
+    setEditingGame(null);
+  };
+
+  const handleSaveScore = async () => {
+    if (!editingGame) return;
+
+    try {
+      setSavingScore(true);
+      const response = await tournamentApi.adminUpdateScore(
+        editingGame.gameId,
+        editingGame.unit1Score,
+        editingGame.unit2Score,
+        true // markAsFinished
+      );
+
+      if (response.success) {
+        toast.success('Score saved successfully');
+        // Update the local state
+        if (selectedMatch?.games) {
+          const updatedGames = selectedMatch.games.map(g =>
+            g.gameId === editingGame.gameId
+              ? { ...g, unit1Score: editingGame.unit1Score, unit2Score: editingGame.unit2Score, status: 'Finished' }
+              : g
+          );
+          setSelectedMatch({ ...selectedMatch, games: updatedGames });
+        }
+        setEditingGame(null);
+        // Reload the schedule to get updated data
+        await loadSchedule();
+      } else {
+        toast.error(response.message || 'Failed to save score');
+      }
+    } catch (err) {
+      console.error('Error saving score:', err);
+      toast.error(err?.response?.data?.message || 'Failed to save score');
+    } finally {
+      setSavingScore(false);
+    }
+  };
+
+  const formatStatus = (status) => {
+    const statusColors = {
+      'New': 'bg-gray-100 text-gray-600',
+      'Ready': 'bg-blue-100 text-blue-700',
+      'Queued': 'bg-yellow-100 text-yellow-700',
+      'Started': 'bg-green-100 text-green-700',
+      'Playing': 'bg-green-100 text-green-700',
+      'Finished': 'bg-purple-100 text-purple-700'
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-600';
   };
 
   if (loading) {
@@ -284,6 +359,7 @@ export default function DivisionSchedule() {
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Team 2</th>
                               <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1">Score</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Winner</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:hidden w-10"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -320,6 +396,15 @@ export default function DivisionSchedule() {
                                   </td>
                                   <td className="border border-gray-300 px-3 py-2 text-gray-900 font-medium print:px-1 print:py-1">
                                     {match.winnerName || '—'}
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                    <button
+                                      onClick={() => handleOpenMatchDetails(match)}
+                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                      title="Match details"
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
@@ -360,6 +445,7 @@ export default function DivisionSchedule() {
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Team 2</th>
                               <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1">Score</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Winner</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:hidden w-10"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -426,6 +512,17 @@ export default function DivisionSchedule() {
                                 <td className="border border-gray-300 px-3 py-2 text-gray-900 font-medium print:px-1 print:py-1">
                                   {match.isBye ? (match.unit1Name || match.unit2Name || '—') : (match.winnerName || '—')}
                                 </td>
+                                <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                  {!match.isBye && (
+                                    <button
+                                      onClick={() => handleOpenMatchDetails(match)}
+                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                      title="Match details"
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -460,6 +557,7 @@ export default function DivisionSchedule() {
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Team 2</th>
                               <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1">Score</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Winner</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:hidden w-10"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -497,6 +595,15 @@ export default function DivisionSchedule() {
                                   <td className="border border-gray-300 px-3 py-2 text-gray-900 font-medium print:px-1 print:py-1">
                                     {match.winnerName || '—'}
                                   </td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                    <button
+                                      onClick={() => handleOpenMatchDetails(match)}
+                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                      title="Match details"
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </button>
+                                  </td>
                                 </tr>
                               ))}
                           </tbody>
@@ -521,6 +628,213 @@ export default function DivisionSchedule() {
           userId={profileModalUserId}
           onClose={() => setProfileModalUserId(null)}
         />
+      )}
+
+      {/* Match Details Modal */}
+      {selectedMatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Match #{selectedMatch.matchNumber} Details
+              </h3>
+              <button
+                onClick={() => setSelectedMatch(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Teams */}
+              <div className="grid grid-cols-3 gap-4 items-center">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    {selectedMatch.unit1Number && (
+                      <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                        {selectedMatch.unit1Number}
+                      </span>
+                    )}
+                    <span className="font-medium text-gray-900">
+                      {selectedMatch.unit1Name || `Position ${selectedMatch.unit1Number}`}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-center text-gray-400 font-medium">vs</div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    {selectedMatch.unit2Number && (
+                      <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                        {selectedMatch.unit2Number}
+                      </span>
+                    )}
+                    <span className="font-medium text-gray-900">
+                      {selectedMatch.unit2Name || `Position ${selectedMatch.unit2Number}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Match Info */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Encounter ID:</span>
+                  <span className="text-gray-900">{selectedMatch.encounterId || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Overall Score:</span>
+                  <span className="text-gray-900 font-medium">{selectedMatch.score || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Winner:</span>
+                  <span className="text-gray-900 font-medium">{selectedMatch.winnerName || '—'}</span>
+                </div>
+                {selectedMatch.startedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Started:</span>
+                    <span className="text-gray-900">{new Date(selectedMatch.startedAt).toLocaleString()}</span>
+                  </div>
+                )}
+                {selectedMatch.completedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Completed:</span>
+                    <span className="text-gray-900">{new Date(selectedMatch.completedAt).toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Games */}
+              {selectedMatch.games && selectedMatch.games.length > 0 ? (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-3">Games</h4>
+                  <div className="space-y-3">
+                    {selectedMatch.games.map((game, idx) => (
+                      <div key={game.gameId || idx} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-gray-700">Game {game.gameNumber || idx + 1}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${formatStatus(game.status)}`}>
+                            {game.status || 'New'}
+                          </span>
+                        </div>
+
+                        {editingGame?.gameId === game.gameId ? (
+                          /* Score Editing UI */
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-4 justify-center">
+                              <div className="text-center">
+                                <label className="text-xs text-gray-500 block mb-1">
+                                  {selectedMatch.unit1Name || 'Team 1'}
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="99"
+                                  value={editingGame.unit1Score}
+                                  onChange={(e) => setEditingGame({
+                                    ...editingGame,
+                                    unit1Score: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-16 text-center px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                />
+                              </div>
+                              <span className="text-gray-400">-</span>
+                              <div className="text-center">
+                                <label className="text-xs text-gray-500 block mb-1">
+                                  {selectedMatch.unit2Name || 'Team 2'}
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="99"
+                                  value={editingGame.unit2Score}
+                                  onChange={(e) => setEditingGame({
+                                    ...editingGame,
+                                    unit2Score: parseInt(e.target.value) || 0
+                                  })}
+                                  className="w-16 text-center px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={handleCancelEditScore}
+                                disabled={savingScore}
+                                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-lg transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={handleSaveScore}
+                                disabled={savingScore}
+                                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                              >
+                                {savingScore ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Score Display */
+                          <div className="flex items-center justify-between">
+                            <div className="text-2xl font-bold text-center flex-1">
+                              <span className={game.unit1Score > game.unit2Score ? 'text-green-600' : 'text-gray-700'}>
+                                {game.unit1Score ?? '—'}
+                              </span>
+                              <span className="text-gray-400 mx-2">-</span>
+                              <span className={game.unit2Score > game.unit1Score ? 'text-green-600' : 'text-gray-700'}>
+                                {game.unit2Score ?? '—'}
+                              </span>
+                            </div>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleStartEditScore(game)}
+                                className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                title="Edit score"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Game Details */}
+                        <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                          {game.courtLabel && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {game.courtLabel}
+                            </div>
+                          )}
+                          {game.startedAt && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(game.startedAt).toLocaleTimeString()}
+                            </div>
+                          )}
+                          {game.completedAt && (
+                            <div className="col-span-2 text-gray-400">
+                              Completed: {new Date(game.completedAt).toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  <p>No games recorded yet</p>
+                  <p className="text-xs mt-1">Games will appear here once the match starts</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
