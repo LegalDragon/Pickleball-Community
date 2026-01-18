@@ -111,7 +111,7 @@ public class EncounterController : ControllerBase
             return Forbid();
 
         // Update division configuration
-        division.MatchesPerEncounter = dto.MatchesPerEncounter;
+        division.MatchesPerEncounter = dto.MatchesPerEncounter ?? 1;
         division.AllowPlayerReuseInEncounter = dto.AllowPlayerReuseInEncounter;
         division.AllowLineupChangePerEncounter = dto.AllowLineupChangePerEncounter;
         division.UpdatedAt = DateTime.UtcNow;
@@ -309,7 +309,7 @@ public class EncounterController : ControllerBase
                         {
                             Id = p.Id,
                             UserId = p.UserId,
-                            Name = p.User?.DisplayName ?? p.User?.FirstName ?? "Unknown",
+                            Name = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
                             ProfileImageUrl = p.User?.ProfileImageUrl,
                             UnitId = p.UnitId,
                             UnitSide = p.UnitSide,
@@ -322,7 +322,7 @@ public class EncounterController : ControllerBase
                         {
                             Id = p.Id,
                             UserId = p.UserId,
-                            Name = p.User?.DisplayName ?? p.User?.FirstName ?? "Unknown",
+                            Name = $"{p.User?.FirstName} {p.User?.LastName}".Trim(),
                             ProfileImageUrl = p.User?.ProfileImageUrl,
                             UnitId = p.UnitId,
                             UnitSide = p.UnitSide,
@@ -334,7 +334,7 @@ public class EncounterController : ControllerBase
                         .Select(g => new EncounterMatchGameDto
                         {
                             Id = g.Id,
-                            MatchId = g.MatchId,
+                            MatchId = g.EncounterMatchId,
                             GameNumber = g.GameNumber,
                             Unit1Score = g.Unit1Score,
                             Unit2Score = g.Unit2Score,
@@ -351,7 +351,7 @@ public class EncounterController : ControllerBase
                 .Select(m => new EncounterUnitRosterDto
                 {
                     UserId = m.UserId,
-                    Name = m.User?.DisplayName ?? m.User?.FirstName ?? "Unknown",
+                    Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
                     ProfileImageUrl = m.User?.ProfileImageUrl,
                     Gender = m.User?.Gender,
                     IsCheckedIn = m.IsCheckedIn
@@ -361,7 +361,7 @@ public class EncounterController : ControllerBase
                 .Select(m => new EncounterUnitRosterDto
                 {
                     UserId = m.UserId,
-                    Name = m.User?.DisplayName ?? m.User?.FirstName ?? "Unknown",
+                    Name = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
                     ProfileImageUrl = m.User?.ProfileImageUrl,
                     Gender = m.User?.Gender,
                     IsCheckedIn = m.IsCheckedIn
@@ -424,9 +424,9 @@ public class EncounterController : ControllerBase
             // If best-of > 1, create game records
             for (int i = 1; i <= format.BestOf; i++)
             {
-                _context.EncounterMatchGames.Add(new EncounterMatchGame
+                _context.EventGames.Add(new EventGame
                 {
-                    MatchId = match.Id,
+                    EncounterMatchId = match.Id,
                     GameNumber = i,
                     ScoreFormatId = format.ScoreFormatId
                 });
@@ -748,8 +748,8 @@ public class EncounterController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        var game = await _context.EncounterMatchGames
-            .Include(g => g.Match)
+        var game = await _context.EventGames
+            .Include(g => g.EncounterMatch)
                 .ThenInclude(m => m!.Encounter)
             .FirstOrDefaultAsync(g => g.Id == gameId);
 
@@ -762,9 +762,9 @@ public class EncounterController : ControllerBase
         if (dto.WinnerUnitId.HasValue)
             game.WinnerUnitId = dto.WinnerUnitId;
         else if (dto.Unit1Score > dto.Unit2Score)
-            game.WinnerUnitId = game.Match?.Encounter?.Unit1Id;
+            game.WinnerUnitId = game.EncounterMatch?.Encounter?.Unit1Id;
         else if (dto.Unit2Score > dto.Unit1Score)
-            game.WinnerUnitId = game.Match?.Encounter?.Unit2Id;
+            game.WinnerUnitId = game.EncounterMatch?.Encounter?.Unit2Id;
 
         if (!string.IsNullOrEmpty(dto.Status))
             game.Status = dto.Status;
@@ -779,11 +779,11 @@ public class EncounterController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Update match score based on game wins
-        var match = game.Match;
+        var match = game.EncounterMatch;
         if (match != null)
         {
-            var allGames = await _context.EncounterMatchGames
-                .Where(g => g.MatchId == match.Id)
+            var allGames = await _context.EventGames
+                .Where(g => g.EncounterMatchId == match.Id)
                 .ToListAsync();
 
             match.Unit1Score = allGames.Count(g => g.WinnerUnitId == match.Encounter?.Unit1Id);

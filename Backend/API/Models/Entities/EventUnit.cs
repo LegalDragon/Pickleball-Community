@@ -181,6 +181,12 @@ public class EventUnitMember
     public string? ReferenceId { get; set; }
 
     /// <summary>
+    /// Payment method: Zelle, Cash, Venmo, etc.
+    /// </summary>
+    [MaxLength(50)]
+    public string? PaymentMethod { get; set; }
+
+    /// <summary>
     /// Reference to the UserPayment record that covered this registration
     /// </summary>
     public int? PaymentId { get; set; }

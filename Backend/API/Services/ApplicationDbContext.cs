@@ -82,6 +82,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventUnitJoinRequest> EventUnitJoinRequests { get; set; }
     public DbSet<UserPayment> UserPayments { get; set; }
     public DbSet<EventEncounter> EventEncounters { get; set; }
+    // Backward-compatible alias for EventEncounters (was EventMatches)
+    public DbSet<EventEncounter> EventMatches => EventEncounters;
     public DbSet<EncounterMatchFormat> EncounterMatchFormats { get; set; }
     public DbSet<EncounterMatch> EncounterMatches { get; set; }
     public DbSet<EncounterMatchPlayer> EncounterMatchPlayers { get; set; }
@@ -90,13 +92,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventGameScoreHistory> EventGameScoreHistories { get; set; }
     public DbSet<TournamentCourt> TournamentCourts { get; set; }
     public DbSet<EventDocument> EventDocuments { get; set; }
-
-    // Encounter System (Team League Format)
-    public DbSet<EncounterMatchFormat> EncounterMatchFormats { get; set; }
-    public DbSet<EventEncounter> EventEncounters { get; set; }
-    public DbSet<EncounterMatch> EncounterMatches { get; set; }
-    public DbSet<EncounterMatchPlayer> EncounterMatchPlayers { get; set; }
-    public DbSet<EncounterMatchGame> EncounterMatchGames { get; set; }
 
     // Clubs
     public DbSet<Club> Clubs { get; set; }
@@ -907,7 +902,7 @@ public class ApplicationDbContext : DbContext
         {
             entity.Property(f => f.Name).IsRequired().HasMaxLength(100);
             entity.HasIndex(f => f.DivisionId);
-            entity.HasIndex(f => new { f.DivisionId, f.MatchOrder });
+            entity.HasIndex(f => new { f.DivisionId, f.MatchNumber });
 
             entity.HasOne(f => f.Division)
                   .WithMany(d => d.EncounterMatchFormats)
@@ -967,22 +962,15 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<EventGame>(entity =>
         {
             entity.Property(g => g.Status).HasMaxLength(20);
-            entity.HasIndex(g => g.MatchId);
             entity.HasIndex(g => g.EncounterMatchId);
             entity.HasIndex(g => g.Status);
             entity.HasIndex(g => g.TournamentCourtId);
 
-            // Legacy: Reference to EventEncounter (for backward compatibility)
-            entity.HasOne(g => g.Encounter)
-                  .WithMany(m => m.Games)
-                  .HasForeignKey(g => g.MatchId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            // New: Reference to EncounterMatch (for multi-match encounters)
+            // Reference to EncounterMatch
             entity.HasOne(g => g.EncounterMatch)
                   .WithMany(m => m.Games)
                   .HasForeignKey(g => g.EncounterMatchId)
-                  .OnDelete(DeleteBehavior.NoAction);
+                  .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(g => g.ScoreFormat)
                   .WithMany()
@@ -1186,35 +1174,6 @@ public class ApplicationDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(p => p.UnitId)
                   .OnDelete(DeleteBehavior.NoAction);
-        });
-
-        // Encounter Match Game configuration
-        modelBuilder.Entity<EncounterMatchGame>(entity =>
-        {
-            entity.Property(g => g.Status).HasMaxLength(20);
-            entity.HasIndex(g => g.MatchId);
-            entity.HasIndex(g => g.Status);
-            entity.HasIndex(g => new { g.MatchId, g.GameNumber }).IsUnique();
-
-            entity.HasOne(g => g.Match)
-                  .WithMany(m => m.Games)
-                  .HasForeignKey(g => g.MatchId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(g => g.Winner)
-                  .WithMany()
-                  .HasForeignKey(g => g.WinnerUnitId)
-                  .OnDelete(DeleteBehavior.NoAction);
-
-            entity.HasOne(g => g.ScoreFormat)
-                  .WithMany()
-                  .HasForeignKey(g => g.ScoreFormatId)
-                  .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(g => g.TournamentCourt)
-                  .WithMany()
-                  .HasForeignKey(g => g.TournamentCourtId)
-                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Blog Category configuration

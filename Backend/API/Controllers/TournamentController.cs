@@ -1692,6 +1692,7 @@ public class TournamentController : ControllerBase
             member.AmountPaid = perMemberAmount;
             member.PaymentProofUrl = request.PaymentProofUrl;
             member.PaymentReference = request.PaymentReference;
+            member.PaymentMethod = request.PaymentMethod;
             member.ReferenceId = referenceId;
             member.PaymentId = userPayment.Id; // Link to the UserPayment record
         }
@@ -2315,6 +2316,8 @@ public class TournamentController : ControllerBase
             member.PaymentReference = request.PaymentReference;
         if (request.PaymentProofUrl != null)
             member.PaymentProofUrl = request.PaymentProofUrl;
+        if (request.PaymentMethod != null)
+            member.PaymentMethod = request.PaymentMethod;
         if (request.AmountPaid.HasValue)
             member.AmountPaid = request.AmountPaid.Value;
         if (request.ReferenceId != null)
@@ -2436,18 +2439,59 @@ public class TournamentController : ControllerBase
             }
 
             // No payment - safe to delete the unit entirely
-            // Also remove any pending join requests for this unit
-            var joinRequests = await _context.EventUnitJoinRequests
-                .Where(jr => jr.UnitId == unitId)
-                .ToListAsync();
-            _context.EventUnitJoinRequests.RemoveRange(joinRequests);
+            try
+            {
+                // Remove any game player assignments for this unit
+                var gamePlayers = await _context.EventGamePlayers
+                    .Where(p => p.UnitId == unitId)
+                    .ToListAsync();
+                if (gamePlayers.Any())
+                    _context.EventGamePlayers.RemoveRange(gamePlayers);
 
-            // Remove all members (including pending ones)
-            _context.EventUnitMembers.RemoveRange(unit.Members);
-            _context.EventUnits.Remove(unit);
+                // Remove any match player assignments for this unit
+                var matchPlayers = await _context.EncounterMatchPlayers
+                    .Where(p => p.UnitId == unitId)
+                    .ToListAsync();
+                if (matchPlayers.Any())
+                    _context.EncounterMatchPlayers.RemoveRange(matchPlayers);
 
-            await _context.SaveChangesAsync();
-            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration cancelled" });
+                // Check if unit is referenced in any encounters
+                var encountersWithUnit = await _context.EventEncounters
+                    .Where(e => e.Unit1Id == unitId || e.Unit2Id == unitId)
+                    .ToListAsync();
+                if (encountersWithUnit.Any())
+                {
+                    // Can't delete if unit is part of scheduled matches
+                    return BadRequest(new ApiResponse<bool>
+                    {
+                        Success = false,
+                        Message = "Cannot remove registration - unit has scheduled matches. Remove matches first or contact administrator."
+                    });
+                }
+
+                // Remove any pending join requests for this unit
+                var joinRequests = await _context.EventUnitJoinRequests
+                    .Where(jr => jr.UnitId == unitId)
+                    .ToListAsync();
+                if (joinRequests.Any())
+                    _context.EventUnitJoinRequests.RemoveRange(joinRequests);
+
+                // Remove all members (including pending ones)
+                _context.EventUnitMembers.RemoveRange(unit.Members);
+                _context.EventUnits.Remove(unit);
+
+                await _context.SaveChangesAsync();
+                return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration cancelled" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing registration for unit {UnitId} in event {EventId}", unitId, eventId);
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Failed to remove registration due to database constraints. The unit may have related records (games, matches) that need to be removed first."
+                });
+            }
         }
         else
         {
@@ -2973,7 +3017,8 @@ public class TournamentController : ControllerBase
         var courts = await _context.TournamentCourts
             .Include(c => c.Venue)
             .Include(c => c.CurrentGame)
-                .ThenInclude(g => g!.Match)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
             .Where(c => c.EventId == eventId && c.IsActive)
             .OrderBy(c => c.SortOrder)
             .Select(c => new TournamentCourtDto
@@ -3161,7 +3206,7 @@ public class TournamentController : ControllerBase
 
         // Clear existing matches and games for this division
         var existingMatches = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .ToListAsync();
 
@@ -3172,7 +3217,8 @@ public class TournamentController : ControllerBase
             var courtsWithGames = await _context.TournamentCourts
                 .Where(c => c.CurrentGameId != null &&
                     _context.EventGames.Any(g => g.Id == c.CurrentGameId &&
-                        _context.EventMatches.Any(m => m.Id == g.MatchId && m.DivisionId == divisionId)))
+                        _context.EncounterMatches.Any(em => em.Id == g.EncounterMatchId &&
+                            _context.EventMatches.Any(m => m.Id == em.EncounterId && m.DivisionId == divisionId))))
                 .ToListAsync();
 
             foreach (var court in courtsWithGames)
@@ -3182,9 +3228,11 @@ public class TournamentController : ControllerBase
             }
 
             // Delete games first, then matches
-            foreach (var match in existingMatches)
+            foreach (var encounter in existingMatches)
             {
-                _context.EventGames.RemoveRange(match.Games);
+                var allGames = encounter.Matches.SelectMany(m => m.Games).ToList();
+                _context.EventGames.RemoveRange(allGames);
+                _context.EncounterMatches.RemoveRange(encounter.Matches);
             }
             _context.EventMatches.RemoveRange(existingMatches);
             await _context.SaveChangesAsync();
@@ -3198,7 +3246,7 @@ public class TournamentController : ControllerBase
             unit.PoolName = null;
         }
 
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         if (request.ScheduleType == "RoundRobin" || request.ScheduleType == "Hybrid")
         {
@@ -3241,40 +3289,67 @@ public class TournamentController : ControllerBase
         division.TargetUnitCount = targetUnitCount;
         await _context.SaveChangesAsync();
 
-        // Create games for each match based on phase
-        foreach (var match in matches)
+        // Create EncounterMatch and games for each encounter based on phase
+        foreach (var encounter in matches)
         {
             // Determine if this is a pool match or playoff match
-            var isPoolMatch = match.RoundType == "Pool";
+            var isPoolMatch = encounter.RoundType == "Pool";
             var gamesPerMatch = isPoolMatch ? poolGamesPerMatch : playoffGamesPerMatch;
             var scoreFormatId = isPoolMatch ? poolScoreFormatId : playoffScoreFormatId;
 
-            // Update match with correct games per match
-            match.BestOf = gamesPerMatch;
-            match.ScoreFormatId = scoreFormatId;
+            // Update encounter with correct games per match
+            encounter.BestOf = gamesPerMatch;
+            encounter.ScoreFormatId = scoreFormatId;
 
-            for (int g = 1; g <= gamesPerMatch; g++)
+            // Create default EncounterMatch for simple divisions (MatchesPerEncounter=1)
+            var encounterMatch = new EncounterMatch
             {
-                var game = new EventGame
+                EncounterId = encounter.Id,
+                MatchOrder = 1,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
+            _context.EncounterMatches.Add(encounterMatch);
+        }
+        await _context.SaveChangesAsync();
+
+        // Now create games for each EncounterMatch
+        foreach (var encounter in matches)
+        {
+            var isPoolMatch = encounter.RoundType == "Pool";
+            var gamesPerMatch = isPoolMatch ? poolGamesPerMatch : playoffGamesPerMatch;
+            var scoreFormatId = isPoolMatch ? poolScoreFormatId : playoffScoreFormatId;
+
+            // Get the EncounterMatch we just created
+            var encounterMatch = await _context.EncounterMatches
+                .FirstOrDefaultAsync(m => m.EncounterId == encounter.Id);
+
+            if (encounterMatch != null)
+            {
+                for (int g = 1; g <= gamesPerMatch; g++)
                 {
-                    MatchId = match.Id,
-                    GameNumber = g,
-                    ScoreFormatId = scoreFormatId,
-                    Status = "New",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-                _context.EventGames.Add(game);
+                    var game = new EventGame
+                    {
+                        EncounterMatchId = encounterMatch.Id,
+                        GameNumber = g,
+                        ScoreFormatId = scoreFormatId,
+                        Status = "New",
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
+                    };
+                    _context.EventGames.Add(game);
+                }
             }
         }
         await _context.SaveChangesAsync();
 
         // Reload with games
         var result = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
         return Ok(new ApiResponse<List<EventMatchDto>>
@@ -3437,27 +3512,58 @@ public class TournamentController : ControllerBase
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.Winner)
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundType)
             .ThenBy(m => m.RoundNumber)
-            .ThenBy(m => m.MatchNumber)
+            .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
+        // Include members to show team composition
         var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
             .OrderBy(u => u.PoolNumber)
             .ThenByDescending(u => u.MatchesWon)
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
             .ToListAsync();
 
+        // Build lookup for unit pool/rank info (for playoff seed descriptions)
+        var unitPoolInfo = new Dictionary<int, (string PoolName, int Rank)>();
+        var poolGroups = units.GroupBy(u => u.PoolNumber ?? 0).OrderBy(g => g.Key);
+        foreach (var poolGroup in poolGroups)
+        {
+            var poolName = poolGroup.First().PoolName ?? $"Pool {poolGroup.Key}";
+            int rank = 1;
+            foreach (var unit in poolGroup)
+            {
+                if (unit.Id > 0)
+                    unitPoolInfo[unit.Id] = (poolName, rank);
+                rank++;
+            }
+        }
+
+        // Helper to get seed info for a unit in playoff matches
+        string? GetSeedInfo(int? unitId)
+        {
+            if (!unitId.HasValue || !unitPoolInfo.ContainsKey(unitId.Value))
+                return null;
+            var info = unitPoolInfo[unitId.Value];
+            return $"{info.PoolName} #{info.Rank}";
+        }
+
         var schedule = new ScheduleExportDto
         {
             DivisionId = divisionId,
             DivisionName = division.Name,
             EventName = division.Event?.Name ?? "",
+            ScheduleType = division.ScheduleType,
+            PlayoffFromPools = division.PlayoffFromPools,
             ExportedAt = DateTime.Now,
-            Rounds = matches.GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
+            Rounds = matches
+                // Include matches with units assigned OR with seed labels (playoff brackets before units assigned)
+                .Where(m => m.Unit1Id != null || m.Unit2Id != null || m.Unit1SeedLabel != null || m.Unit2SeedLabel != null)
+                .GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
                 .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : g.Key.RoundType == "Bracket" ? 1 : 2)
                 .ThenBy(g => g.Key.RoundNumber)
                 .Select(g => new ScheduleRoundDto
@@ -3472,6 +3578,15 @@ public class TournamentController : ControllerBase
                         Unit2Number = m.Unit2Number,
                         Unit1Name = m.Unit1?.Name,
                         Unit2Name = m.Unit2?.Name,
+                        // Add seed info for playoff (Bracket) matches
+                        // Use stored seed label if unit not assigned yet, otherwise calculate from pool position
+                        Unit1SeedInfo = g.Key.RoundType == "Bracket"
+                            ? (m.Unit1Id == null ? m.Unit1SeedLabel : GetSeedInfo(m.Unit1Id))
+                            : null,
+                        Unit2SeedInfo = g.Key.RoundType == "Bracket"
+                            ? (m.Unit2Id == null ? m.Unit2SeedLabel : GetSeedInfo(m.Unit2Id))
+                            : null,
+                        IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
                         Status = m.Status,
                         Score = GetMatchScore(m),
                         WinnerName = m.Winner?.Name
@@ -3488,6 +3603,16 @@ public class TournamentController : ControllerBase
                         Rank = idx + 1,
                         UnitNumber = u.UnitNumber,
                         UnitName = u.Name,
+                        Members = u.Members
+                            .Where(m => m.User != null)
+                            .Select(m => new TeamMemberInfoDto
+                            {
+                                UserId = m.UserId,
+                                FirstName = m.User!.FirstName,
+                                LastName = m.User.LastName,
+                                ProfileImageUrl = m.User.ProfileImageUrl
+                            })
+                            .ToList(),
                         MatchesPlayed = u.MatchesPlayed,
                         MatchesWon = u.MatchesWon,
                         MatchesLost = u.MatchesLost,
@@ -3501,6 +3626,118 @@ public class TournamentController : ControllerBase
         return Ok(new ApiResponse<ScheduleExportDto> { Success = true, Data = schedule });
     }
 
+    [HttpGet("divisions/{divisionId}/scoresheet")]
+    public async Task<IActionResult> DownloadScoresheet(int divisionId)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Division not found" });
+
+        var encounters = await _context.EventMatches
+            .Include(m => m.Unit1).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(m => m.Unit2).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
+            .Where(m => m.DivisionId == divisionId)
+            .OrderBy(m => m.RoundType)
+            .ThenBy(m => m.RoundNumber)
+            .ThenBy(m => m.EncounterNumber)
+            .ToListAsync();
+
+        var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
+            .OrderBy(u => u.UnitNumber)
+            .ToListAsync();
+
+        // Generate Excel file using ClosedXML
+        using var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // Sheet 1: Drawing Results
+        var drawingSheet = workbook.Worksheets.Add("Drawing Results");
+        drawingSheet.Cell(1, 1).Value = division.Event?.Name ?? "Event";
+        drawingSheet.Cell(1, 1).Style.Font.Bold = true;
+        drawingSheet.Cell(1, 1).Style.Font.FontSize = 16;
+        drawingSheet.Cell(2, 1).Value = division.Name;
+        drawingSheet.Cell(2, 1).Style.Font.Bold = true;
+        drawingSheet.Cell(2, 1).Style.Font.FontSize = 14;
+        drawingSheet.Cell(3, 1).Value = $"Generated: {DateTime.Now:g}";
+
+        // Drawing results table
+        drawingSheet.Cell(5, 1).Value = "#";
+        drawingSheet.Cell(5, 2).Value = "Team Name";
+        drawingSheet.Cell(5, 3).Value = "Players";
+        drawingSheet.Range(5, 1, 5, 3).Style.Font.Bold = true;
+        drawingSheet.Range(5, 1, 5, 3).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+
+        int row = 6;
+        foreach (var unit in units)
+        {
+            drawingSheet.Cell(row, 1).Value = unit.UnitNumber ?? 0;
+            drawingSheet.Cell(row, 2).Value = unit.Name;
+            drawingSheet.Cell(row, 3).Value = string.Join(", ", unit.Members.Select(m =>
+                $"{m.User?.FirstName} {m.User?.LastName}".Trim()));
+            row++;
+        }
+        drawingSheet.Columns().AdjustToContents();
+
+        // Sheet 2: Match Schedule with scoresheet
+        var scheduleSheet = workbook.Worksheets.Add("Scoresheet");
+        scheduleSheet.Cell(1, 1).Value = division.Event?.Name ?? "Event";
+        scheduleSheet.Cell(1, 1).Style.Font.Bold = true;
+        scheduleSheet.Cell(2, 1).Value = $"{division.Name} - Scoresheet";
+        scheduleSheet.Cell(2, 1).Style.Font.Bold = true;
+
+        // Scoresheet headers
+        scheduleSheet.Cell(4, 1).Value = "Match #";
+        scheduleSheet.Cell(4, 2).Value = "Round";
+        scheduleSheet.Cell(4, 3).Value = "Team 1";
+        scheduleSheet.Cell(4, 4).Value = "Team 2";
+        scheduleSheet.Cell(4, 5).Value = "Game 1";
+        scheduleSheet.Cell(4, 6).Value = "Game 2";
+        scheduleSheet.Cell(4, 7).Value = "Game 3";
+        scheduleSheet.Cell(4, 8).Value = "Winner";
+        scheduleSheet.Range(4, 1, 4, 8).Style.Font.Bold = true;
+        scheduleSheet.Range(4, 1, 4, 8).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+
+        row = 5;
+        foreach (var encounter in encounters)
+        {
+            var unit1Name = encounter.Unit1?.Name ?? $"Position {encounter.Unit1Number}";
+            var unit2Name = encounter.Unit2?.Name ?? $"Position {encounter.Unit2Number}";
+            var roundLabel = encounter.RoundName ?? $"{encounter.RoundType} R{encounter.RoundNumber}";
+
+            scheduleSheet.Cell(row, 1).Value = encounter.MatchNumber;
+            scheduleSheet.Cell(row, 2).Value = roundLabel;
+            scheduleSheet.Cell(row, 3).Value = $"[{encounter.Unit1Number}] {unit1Name}";
+            scheduleSheet.Cell(row, 4).Value = $"[{encounter.Unit2Number}] {unit2Name}";
+
+            // Add borders for score entry cells
+            for (int col = 5; col <= 7; col++)
+            {
+                scheduleSheet.Cell(row, col).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+                scheduleSheet.Cell(row, col).Value = "__ - __";
+                scheduleSheet.Cell(row, col).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+            }
+            scheduleSheet.Cell(row, 8).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+            row++;
+        }
+        scheduleSheet.Columns().AdjustToContents();
+
+        // Return as file download
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var fileName = $"{division.Name.Replace(" ", "_")}_Scoresheet.xlsx";
+        return File(stream.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
+
     // ============================================
     // Game Management
     // ============================================
@@ -3510,7 +3747,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<EventGameDto>>> AssignGameToCourt([FromBody] AssignGameToCourtRequest request)
     {
         var game = await _context.EventGames
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
         if (game == null)
@@ -3549,7 +3786,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<EventGameDto>>> UpdateGameStatus([FromBody] UpdateGameStatusRequest request)
     {
         var game = await _context.EventGames
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
             .Include(g => g.TournamentCourt)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
@@ -3597,10 +3834,10 @@ public class TournamentController : ControllerBase
             return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
 
         var game = await _context.EventGames
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit1)
                     .ThenInclude(u => u!.Members)
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit2)
                     .ThenInclude(u => u!.Members)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
@@ -3609,8 +3846,9 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
 
         // Check if user is in one of the units
-        var userUnit = game.Match?.Unit1?.Members.Any(m => m.UserId == userId) == true ? game.Match.Unit1 :
-                       game.Match?.Unit2?.Members.Any(m => m.UserId == userId) == true ? game.Match.Unit2 : null;
+        var encounter = game.EncounterMatch?.Encounter;
+        var userUnit = encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit1 :
+                       encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit2 : null;
 
         if (userUnit == null)
             return Forbid();
@@ -3639,10 +3877,10 @@ public class TournamentController : ControllerBase
             return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
 
         var game = await _context.EventGames
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit1)
                     .ThenInclude(u => u!.Members)
-            .Include(g => g.Match)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
                 .ThenInclude(m => m!.Unit2)
                     .ThenInclude(u => u!.Members)
             .Include(g => g.ScoreFormat)
@@ -3652,8 +3890,9 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
 
         // Check if user is in the OTHER unit (not the one that submitted)
-        var userUnit = game.Match?.Unit1?.Members.Any(m => m.UserId == userId) == true ? game.Match.Unit1 :
-                       game.Match?.Unit2?.Members.Any(m => m.UserId == userId) == true ? game.Match.Unit2 : null;
+        var encounter = game.EncounterMatch?.Encounter;
+        var userUnit = encounter?.Unit1?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit1 :
+                       encounter?.Unit2?.Members.Any(m => m.UserId == userId) == true ? encounter.Unit2 : null;
 
         if (userUnit == null || userUnit.Id == game.ScoreSubmittedByUnitId)
             return Forbid();
@@ -3666,8 +3905,8 @@ public class TournamentController : ControllerBase
             game.FinishedAt = DateTime.Now;
 
             // Determine winner
-            var unit1Id = game.Match!.Unit1Id;
-            var unit2Id = game.Match!.Unit2Id;
+            var unit1Id = encounter!.Unit1Id;
+            var unit2Id = encounter!.Unit2Id;
             game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? unit1Id : unit2Id;
 
             // Update unit stats
@@ -3685,7 +3924,7 @@ public class TournamentController : ControllerBase
             }
 
             // Check if match is complete
-            await CheckMatchComplete(game.MatchId);
+            await CheckMatchComplete(game.EncounterMatch!.EncounterId);
         }
         else
         {
@@ -3804,8 +4043,8 @@ public class TournamentController : ControllerBase
             .ToListAsync();
 
         var games = await _context.EventGames
-            .Include(g => g.Match)
-            .Where(g => g.Match!.EventId == eventId)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
             .ToListAsync();
 
         var courts = await _context.TournamentCourts
@@ -3991,6 +4230,7 @@ public class TournamentController : ControllerBase
                     AmountPaid = m.AmountPaid,
                     PaymentProofUrl = m.PaymentProofUrl,
                     PaymentReference = m.PaymentReference,
+                    PaymentMethod = m.PaymentMethod,
                     ReferenceId = m.ReferenceId
                 }).Concat(
                     pendingJoinRequests.Select(jr => new EventUnitMemberDto
@@ -4024,7 +4264,7 @@ public class TournamentController : ControllerBase
         return "Unknown";
     }
 
-    private EventMatchDto MapToMatchDto(EventMatch m)
+    private EventMatchDto MapToMatchDto(EventEncounter m)
     {
         return new EventMatchDto
         {
@@ -4048,9 +4288,9 @@ public class TournamentController : ControllerBase
             CompletedAt = m.CompletedAt,
             TournamentCourtId = m.TournamentCourtId,
             ScoreFormatId = m.ScoreFormatId,
-            Games = m.Games.OrderBy(g => g.GameNumber).Select(MapToGameDto).ToList(),
-            Unit1GamesWon = m.Games.Count(g => g.WinnerUnitId == m.Unit1Id),
-            Unit2GamesWon = m.Games.Count(g => g.WinnerUnitId == m.Unit2Id)
+            Games = m.Matches.SelectMany(match => match.Games).OrderBy(g => g.GameNumber).Select(MapToGameDto).ToList(),
+            Unit1GamesWon = m.Matches.SelectMany(match => match.Games).Count(g => g.WinnerUnitId == m.Unit1Id),
+            Unit2GamesWon = m.Matches.SelectMany(match => match.Games).Count(g => g.WinnerUnitId == m.Unit2Id)
         };
     }
 
@@ -4059,7 +4299,7 @@ public class TournamentController : ControllerBase
         return new EventGameDto
         {
             Id = g.Id,
-            MatchId = g.MatchId,
+            EncounterMatchId = g.EncounterMatchId,
             GameNumber = g.GameNumber,
             ScoreFormatId = g.ScoreFormatId,
             Unit1Score = g.Unit1Score,
@@ -4077,9 +4317,9 @@ public class TournamentController : ControllerBase
         };
     }
 
-    private List<EventMatch> GenerateRoundRobinMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateRoundRobinMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var poolCount = request.PoolCount ?? 1;
 
         // Distribute units to pools
@@ -4099,7 +4339,7 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnits.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
@@ -4122,9 +4362,9 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private List<EventMatch> GenerateSingleEliminationMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateSingleEliminationMatches(EventDivision division, List<EventUnit> units, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var unitCount = units.Count;
 
         // Find next power of 2
@@ -4144,7 +4384,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4181,9 +4421,9 @@ public class TournamentController : ControllerBase
     }
 
     // New methods for generating schedules based on target unit count (with placeholders)
-    private List<EventMatch> GenerateRoundRobinMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateRoundRobinMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
         var poolCount = request.PoolCount ?? 1;
 
         // Generate round robin within each pool using placeholder numbers
@@ -4205,7 +4445,7 @@ public class TournamentController : ControllerBase
             {
                 for (int j = i + 1; j < poolUnitNumbers.Count; j++)
                 {
-                    matches.Add(new EventMatch
+                    matches.Add(new EventEncounter
                     {
                         EventId = division.EventId,
                         DivisionId = division.Id,
@@ -4228,9 +4468,9 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private List<EventMatch> GeneratePlayoffMatchesForTarget(EventDivision division, int playoffUnits, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GeneratePlayoffMatchesForTarget(EventDivision division, int playoffUnits, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2 for bracket size
         var bracketSize = 1;
@@ -4239,6 +4479,17 @@ public class TournamentController : ControllerBase
         var rounds = (int)Math.Log2(bracketSize);
         var matchNum = 1;
 
+        // Get pool configuration
+        var poolCount = request.PoolCount ?? 1;
+        var playoffFromPools = request.PlayoffFromPools ?? 2;
+
+        // Generate seed labels for playoff positions
+        // Standard cross-pool seeding: Pool A #1 vs Pool B #2, Pool B #1 vs Pool A #2, etc.
+        var seedLabels = GeneratePlayoffSeedLabels(poolCount, playoffFromPools, bracketSize);
+
+        // Get seeded bracket positions for first round
+        var seedPositions = GetSeededBracketPositions(bracketSize);
+
         for (int round = 1; round <= rounds; round++)
         {
             var matchesInRound = bracketSize / (int)Math.Pow(2, round);
@@ -4246,10 +4497,54 @@ public class TournamentController : ControllerBase
                            round == rounds - 1 ? "Playoff Semifinal" :
                            round == rounds - 2 ? "Playoff Quarterfinal" :
                            $"Playoff Round {round}";
+            var roundAbbr = round == rounds ? "F" :
+                           round == rounds - 1 ? "SF" :
+                           round == rounds - 2 ? "QF" :
+                           $"R{round}";
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                var matchIdx = matchNum;
+                string? unit1Label = null;
+                string? unit2Label = null;
+
+                if (round == 1)
+                {
+                    // First round: use pool-based seed labels
+                    var matchup = seedPositions[m - 1];
+                    var seed1 = matchup.Item1;
+                    var seed2 = matchup.Item2;
+
+                    unit1Label = seed1 <= playoffUnits && seedLabels.ContainsKey(seed1) ? seedLabels[seed1] : null;
+                    unit2Label = seed2 <= playoffUnits && seedLabels.ContainsKey(seed2) ? seedLabels[seed2] : null;
+
+                    // Handle byes
+                    if (seed1 > playoffUnits) unit1Label = "BYE";
+                    if (seed2 > playoffUnits) unit2Label = "BYE";
+                }
+                else
+                {
+                    // Later rounds: reference winners from previous round
+                    // Calculate which matches from previous round feed into this one
+                    var prevRoundMatchBase = 0;
+                    for (int r = 1; r < round; r++)
+                    {
+                        prevRoundMatchBase += bracketSize / (int)Math.Pow(2, r);
+                    }
+                    var prevRoundMatchCount = bracketSize / (int)Math.Pow(2, round - 1);
+                    var prevRoundAbbr = round - 1 == rounds - 1 ? "SF" :
+                                        round - 1 == rounds - 2 ? "QF" :
+                                        $"R{round - 1}";
+
+                    // Match m in this round comes from matches (m*2-1) and (m*2) in previous round
+                    var prevMatch1 = prevRoundMatchBase - prevRoundMatchCount + (m * 2 - 1);
+                    var prevMatch2 = prevRoundMatchBase - prevRoundMatchCount + (m * 2);
+
+                    unit1Label = $"W {prevRoundAbbr}{m * 2 - 1}";
+                    unit2Label = $"W {prevRoundAbbr}{m * 2}";
+                }
+
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4260,6 +4555,8 @@ public class TournamentController : ControllerBase
                     BracketPosition = m,
                     BestOf = request.PlayoffGamesPerMatch ?? request.BestOf,
                     ScoreFormatId = request.PlayoffScoreFormatId ?? request.ScoreFormatId,
+                    Unit1SeedLabel = unit1Label,
+                    Unit2SeedLabel = unit2Label,
                     Status = "Scheduled",
                     CreatedAt = DateTime.Now,
                     UpdatedAt = DateTime.Now
@@ -4267,15 +4564,39 @@ public class TournamentController : ControllerBase
             }
         }
 
-        // Note: Playoff bracket positions are determined after pool play completes
-        // The unit assignments will be filled in based on pool standings
-
         return matches;
     }
 
-    private List<EventMatch> GenerateSingleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    /// <summary>
+    /// Generate seed labels for playoff positions based on pool configuration.
+    /// Cross-pool seeding ensures pool winners face lower seeds from other pools.
+    /// </summary>
+    private Dictionary<int, string> GeneratePlayoffSeedLabels(int poolCount, int playoffFromPools, int bracketSize)
     {
-        var matches = new List<EventMatch>();
+        var labels = new Dictionary<int, string>();
+
+        // Pool names: A, B, C, D, etc.
+        var poolNames = Enumerable.Range(0, poolCount).Select(i => (char)('A' + i)).ToArray();
+
+        // Generate seeds by alternating pools for each rank position
+        // Seed 1: Pool A #1, Seed 2: Pool B #1, Seed 3: Pool C #1, ...
+        // Seed N+1: Pool A #2, Seed N+2: Pool B #2, ...
+        var seed = 1;
+        for (int rank = 1; rank <= playoffFromPools && seed <= bracketSize; rank++)
+        {
+            for (int pool = 0; pool < poolCount && seed <= bracketSize; pool++)
+            {
+                labels[seed] = $"Pool {poolNames[pool]} #{rank}";
+                seed++;
+            }
+        }
+
+        return labels;
+    }
+
+    private List<EventEncounter> GenerateSingleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    {
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2
         var bracketSize = 1;
@@ -4294,7 +4615,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4371,9 +4692,9 @@ public class TournamentController : ControllerBase
         return matchups;
     }
 
-    private List<EventMatch> GenerateDoubleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
+    private List<EventEncounter> GenerateDoubleEliminationMatchesForTarget(EventDivision division, int targetUnitCount, CreateMatchScheduleRequest request)
     {
-        var matches = new List<EventMatch>();
+        var matches = new List<EventEncounter>();
 
         // Find next power of 2
         var bracketSize = 1;
@@ -4392,7 +4713,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4421,7 +4742,7 @@ public class TournamentController : ControllerBase
 
             for (int m = 1; m <= matchesInRound; m++)
             {
-                matches.Add(new EventMatch
+                matches.Add(new EventEncounter
                 {
                     EventId = division.EventId,
                     DivisionId = division.Id,
@@ -4440,7 +4761,7 @@ public class TournamentController : ControllerBase
         }
 
         // Grand Final
-        matches.Add(new EventMatch
+        matches.Add(new EventEncounter
         {
             EventId = division.EventId,
             DivisionId = division.Id,
@@ -4476,11 +4797,12 @@ public class TournamentController : ControllerBase
         return matches;
     }
 
-    private string? GetMatchScore(EventMatch match)
+    private string? GetMatchScore(EventEncounter match)
     {
-        if (!match.Games.Any(g => g.Status == "Finished")) return null;
+        var allGames = match.Matches.SelectMany(m => m.Games);
+        if (!allGames.Any(g => g.Status == "Finished")) return null;
 
-        return string.Join(", ", match.Games
+        return string.Join(", ", allGames
             .Where(g => g.Status == "Finished")
             .OrderBy(g => g.GameNumber)
             .Select(g => $"{g.Unit1Score}-{g.Unit2Score}"));
@@ -4488,11 +4810,11 @@ public class TournamentController : ControllerBase
 
     private async Task UpdateUnitStats(EventGame game)
     {
-        var match = game.Match;
-        if (match == null) return;
+        var encounter = game.EncounterMatch?.Encounter;
+        if (encounter == null) return;
 
-        var unit1 = await _context.EventUnits.FindAsync(match.Unit1Id);
-        var unit2 = await _context.EventUnits.FindAsync(match.Unit2Id);
+        var unit1 = await _context.EventUnits.FindAsync(encounter.Unit1Id);
+        var unit2 = await _context.EventUnits.FindAsync(encounter.Unit2Id);
 
         if (unit1 != null)
         {
@@ -4522,14 +4844,15 @@ public class TournamentController : ControllerBase
     private async Task CheckMatchComplete(int matchId)
     {
         var match = await _context.EventMatches
-            .Include(m => m.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return;
 
+        var allGames = match.Matches.SelectMany(m => m.Games);
         var gamesNeeded = (match.BestOf / 2) + 1;
-        var unit1Wins = match.Games.Count(g => g.WinnerUnitId == match.Unit1Id);
-        var unit2Wins = match.Games.Count(g => g.WinnerUnitId == match.Unit2Id);
+        var unit1Wins = allGames.Count(g => g.WinnerUnitId == match.Unit1Id);
+        var unit2Wins = allGames.Count(g => g.WinnerUnitId == match.Unit2Id);
 
         if (unit1Wins >= gamesNeeded || unit2Wins >= gamesNeeded)
         {
@@ -4991,7 +5314,9 @@ public class TournamentController : ControllerBase
 
         if (!division.DrawingInProgress && !hasUnitsAssigned)
         {
-            // Nothing to reset - return success anyway (idempotent operation)
+            // Nothing to reset in database - but still broadcast to ensure UI state is synced
+            await _drawingBroadcaster.BroadcastDrawingCancelled(divisionId);
+            await _drawingBroadcaster.BroadcastEventDrawingCancelled(division.EventId, divisionId);
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Already reset" });
         }
 

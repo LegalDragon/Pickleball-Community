@@ -32,6 +32,7 @@ import TDGameDayDashboard from './pages/TDGameDayDashboard'
 import PlayerGameDay from './pages/PlayerGameDay'
 import EventScoreboard from './pages/EventScoreboard'
 import DrawingMonitor from './pages/DrawingMonitor'
+import DivisionSchedule from './pages/DivisionSchedule'
 import Venues from './pages/Venues'
 import Clubs from './pages/Clubs'
 import Leagues from './pages/Leagues'
@@ -110,6 +111,7 @@ function App() {
       } />
       <Route path="/event/:eventId/scoreboard" element={<EventScoreboard />} />
       <Route path="/event/:eventId/drawing" element={<DrawingMonitor />} />
+      <Route path="/event/:eventId/division/:divisionId/schedule" element={<DivisionSchedule />} />
       <Route path="/venues" element={<Venues />} />
       <Route path="/courts" element={<Navigate to="/venues" replace />} />
       <Route path="/clubs" element={<Clubs />} />

@@ -3,6 +3,17 @@ import { X, DollarSign, Upload, CheckCircle, AlertCircle, Loader2, Image, Extern
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 
+const PAYMENT_METHODS = [
+  { value: '', label: 'Select payment method...' },
+  { value: 'Zelle', label: 'Zelle' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Venmo', label: 'Venmo' },
+  { value: 'PayPal', label: 'PayPal' },
+  { value: 'CreditCard', label: 'Credit Card' },
+  { value: 'Check', label: 'Check' },
+  { value: 'Other', label: 'Other' },
+];
+
 export default function PaymentModal({ isOpen, onClose, registration, event, onPaymentUpdated, userId }) {
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -11,6 +22,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
   const [previewImage, setPreviewImage] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [copied, setCopied] = useState(false);
   const [proofUrlCopied, setProofUrlCopied] = useState(false);
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
@@ -150,6 +162,11 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!paymentMethod) {
+      toast.error('Please select a payment method');
+      return;
+    }
+
     if (!paymentProofUrl && !paymentReference) {
       toast.error('Please upload payment proof or enter a payment reference');
       return;
@@ -170,6 +187,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       const response = await tournamentApi.uploadPaymentProof(event.id, registration.unitId, {
         paymentProofUrl,
         paymentReference,
+        paymentMethod,
         amountPaid: paymentAmount ? parseFloat(paymentAmount) : null,
         memberIds: memberRecordIds,
       });
@@ -566,6 +584,23 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                 </div>
               </div>
 
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Method <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                >
+                  {PAYMENT_METHODS.map(method => (
+                    <option key={method.value} value={method.value}>{method.label}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Payment Reference */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -583,7 +618,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isSubmitting || (!paymentProofUrl && !paymentReference)}
+                disabled={isSubmitting || !paymentMethod || (!paymentProofUrl && !paymentReference)}
                 className="w-full py-2.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (

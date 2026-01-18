@@ -4,13 +4,14 @@ import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
   ChevronDown, ChevronUp, RefreshCw, Shuffle, Settings, Target,
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
-  Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink
+  Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
+  CheckCircle, XCircle, MoreVertical
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, getSharedAssetUrl } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
-import DrawingModal from '../components/DrawingModal';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function TournamentManage() {
   const { eventId } = useParams();
@@ -34,7 +35,6 @@ export default function TournamentManage() {
 
   // Schedule generation state
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
-  const [assigningNumbers, setAssigningNumbers] = useState(false);
 
   // Schedule display state
   const [schedule, setSchedule] = useState(null);
@@ -42,8 +42,6 @@ export default function TournamentManage() {
 
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
-  const [drawingModal, setDrawingModal] = useState({ isOpen: false, division: null });
-  const [divisionUnits, setDivisionUnits] = useState([]);
 
   // Add courts modal state
   const [showAddCourtsModal, setShowAddCourtsModal] = useState(false);
@@ -58,6 +56,30 @@ export default function TournamentManage() {
 
   // Status update state
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Check-in management state
+  const [checkInData, setCheckInData] = useState(null);
+  const [loadingCheckIns, setLoadingCheckIns] = useState(false);
+  const [checkInFilter, setCheckInFilter] = useState('all'); // all, pending, checked-in
+  const [checkInDivisionFilter, setCheckInDivisionFilter] = useState('all');
+  const [processingAction, setProcessingAction] = useState(null); // { userId, action }
+  const [actionMenuOpen, setActionMenuOpen] = useState(null); // userId
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
+  const [expandedPlayer, setExpandedPlayer] = useState(null); // userId for expanded details view
+  const [editingPayment, setEditingPayment] = useState(null); // { player, form }
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  // Payment methods for dropdown
+  const PAYMENT_METHODS = [
+    { value: '', label: 'Select method...' },
+    { value: 'Zelle', label: 'Zelle' },
+    { value: 'Cash', label: 'Cash' },
+    { value: 'Venmo', label: 'Venmo' },
+    { value: 'PayPal', label: 'PayPal' },
+    { value: 'CreditCard', label: 'Credit Card' },
+    { value: 'Check', label: 'Check' },
+    { value: 'Other', label: 'Other' },
+  ];
 
   useEffect(() => {
     if (eventId) {
@@ -269,6 +291,211 @@ export default function TournamentManage() {
     }
   };
 
+  // Check-in management functions
+  const loadCheckIns = async () => {
+    setLoadingCheckIns(true);
+    try {
+      const response = await checkInApi.getEventCheckIns(eventId);
+      if (response.success) {
+        setCheckInData(response.data);
+      } else {
+        toast.error(response.message || 'Failed to load check-in data');
+      }
+    } catch (err) {
+      console.error('Error loading check-ins:', err);
+      toast.error('Failed to load check-in data');
+    } finally {
+      setLoadingCheckIns(false);
+    }
+  };
+
+  const handleManualCheckIn = async (userId) => {
+    setProcessingAction({ userId, action: 'checkin' });
+    try {
+      const response = await checkInApi.manualCheckIn(eventId, userId, { signWaiver: false });
+      if (response.success) {
+        toast.success('Player checked in');
+        loadCheckIns();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to check in player');
+      }
+    } catch (err) {
+      console.error('Error checking in player:', err);
+      toast.error('Failed to check in player');
+    } finally {
+      setProcessingAction(null);
+      setActionMenuOpen(null);
+    }
+  };
+
+  const handleVoidCheckIn = async (userId) => {
+    if (!confirm('Are you sure you want to void this check-in?')) return;
+    setProcessingAction({ userId, action: 'void-checkin' });
+    try {
+      const response = await checkInApi.voidCheckIn(eventId, userId);
+      if (response.success) {
+        toast.success('Check-in voided');
+        loadCheckIns();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to void check-in');
+      }
+    } catch (err) {
+      console.error('Error voiding check-in:', err);
+      toast.error('Failed to void check-in');
+    } finally {
+      setProcessingAction(null);
+      setActionMenuOpen(null);
+    }
+  };
+
+  const handleOverrideWaiver = async (userId) => {
+    setProcessingAction({ userId, action: 'override-waiver' });
+    try {
+      const response = await checkInApi.overrideWaiver(eventId, userId);
+      if (response.success) {
+        toast.success('Waiver requirement overridden');
+        loadCheckIns();
+      } else {
+        toast.error(response.message || 'Failed to override waiver');
+      }
+    } catch (err) {
+      console.error('Error overriding waiver:', err);
+      toast.error('Failed to override waiver');
+    } finally {
+      setProcessingAction(null);
+      setActionMenuOpen(null);
+    }
+  };
+
+  const handleVoidWaiver = async (userId) => {
+    if (!confirm('Are you sure you want to void this waiver signature?')) return;
+    setProcessingAction({ userId, action: 'void-waiver' });
+    try {
+      const response = await checkInApi.voidWaiver(eventId, userId);
+      if (response.success) {
+        toast.success('Waiver signature voided');
+        loadCheckIns();
+      } else {
+        toast.error(response.message || 'Failed to void waiver');
+      }
+    } catch (err) {
+      console.error('Error voiding waiver:', err);
+      toast.error('Failed to void waiver');
+    } finally {
+      setProcessingAction(null);
+      setActionMenuOpen(null);
+    }
+  };
+
+  const handleOverridePayment = async (userId, hasPaid) => {
+    if (!hasPaid && !confirm('Are you sure you want to void this payment?')) return;
+    setProcessingAction({ userId, action: hasPaid ? 'mark-paid' : 'void-payment' });
+    try {
+      const response = await checkInApi.overridePayment(eventId, userId, hasPaid);
+      if (response.success) {
+        toast.success(hasPaid ? 'Payment marked as paid' : 'Payment voided');
+        loadCheckIns();
+      } else {
+        toast.error(response.message || 'Failed to update payment');
+      }
+    } catch (err) {
+      console.error('Error updating payment:', err);
+      toast.error('Failed to update payment');
+    } finally {
+      setProcessingAction(null);
+      setActionMenuOpen(null);
+    }
+  };
+
+  // Start editing payment for a player
+  const startEditPayment = (player) => {
+    setEditingPayment({
+      player,
+      form: {
+        hasPaid: player.hasPaid,
+        amountPaid: player.amountPaid?.toString() || '',
+        paymentMethod: player.paymentMethod || '',
+        paymentReference: player.paymentReference || '',
+        paymentProofUrl: player.paymentProofUrl || '',
+      }
+    });
+  };
+
+  // Save edited payment
+  const saveEditedPayment = async () => {
+    if (!editingPayment) return;
+    setSavingPayment(true);
+    try {
+      const { player, form } = editingPayment;
+      const response = await tournamentApi.updateMemberPayment(eventId, player.unitId, player.userId, {
+        hasPaid: form.hasPaid,
+        amountPaid: form.amountPaid ? parseFloat(form.amountPaid) : 0,
+        paymentMethod: form.paymentMethod || null,
+        paymentReference: form.paymentReference || null,
+        paymentProofUrl: form.paymentProofUrl || null,
+      });
+      if (response.success) {
+        toast.success('Payment updated successfully');
+        setEditingPayment(null);
+        loadCheckIns();
+      } else {
+        toast.error(response.message || 'Failed to update payment');
+      }
+    } catch (err) {
+      console.error('Error updating payment:', err);
+      toast.error('Failed to update payment');
+    } finally {
+      setSavingPayment(false);
+    }
+  };
+
+  // Update edit form field
+  const updateEditForm = (field, value) => {
+    setEditingPayment(prev => ({
+      ...prev,
+      form: { ...prev.form, [field]: value }
+    }));
+  };
+
+  // Filter players for check-in tab
+  const getFilteredPlayers = () => {
+    if (!checkInData?.players) return [];
+    let filtered = checkInData.players;
+
+    // Apply division filter
+    if (checkInDivisionFilter !== 'all') {
+      filtered = filtered.filter(p => p.divisionId === parseInt(checkInDivisionFilter));
+    }
+
+    // Apply status filter
+    if (checkInFilter === 'pending') {
+      filtered = filtered.filter(p => !p.isCheckedIn);
+    } else if (checkInFilter === 'checked-in') {
+      filtered = filtered.filter(p => p.isCheckedIn);
+    }
+
+    return filtered;
+  };
+
+  // Group players by division
+  const getPlayersByDivision = () => {
+    const filtered = getFilteredPlayers();
+    const grouped = {};
+    filtered.forEach(player => {
+      if (!grouped[player.divisionId]) {
+        grouped[player.divisionId] = {
+          divisionId: player.divisionId,
+          divisionName: player.divisionName,
+          players: []
+        };
+      }
+      grouped[player.divisionId].players.push(player);
+    });
+    return Object.values(grouped);
+  };
+
   const handleOverrideRank = async (unitId, poolRank) => {
     try {
       const response = await gameDayApi.overrideRank(unitId, { poolRank });
@@ -336,50 +563,6 @@ export default function TournamentManage() {
       alert('Failed to generate schedule');
     } finally {
       setGeneratingSchedule(false);
-    }
-  };
-
-  const handleOpenDrawing = async (division) => {
-    // Load units for this division
-    try {
-      const response = await tournamentApi.getEventUnits(eventId, division.id);
-      if (response.success) {
-        setDivisionUnits(response.data || []);
-      }
-    } catch (err) {
-      console.error('Error loading units:', err);
-    }
-
-    // Load schedule if not already loaded
-    if (!schedule || selectedDivision?.id !== division.id) {
-      await loadSchedule(division.id);
-    }
-
-    setDrawingModal({ isOpen: true, division });
-  };
-
-  const handleDraw = async (assignments) => {
-    const division = drawingModal.division;
-    if (!division) return;
-
-    setAssigningNumbers(true);
-    try {
-      const response = await tournamentApi.assignUnitNumbersWithDrawing(division.id, assignments);
-      if (response.success) {
-        loadDashboard();
-        setDrawingModal({ isOpen: false, division: null });
-        // Reload schedule to show updated assignments
-        if (selectedDivision?.id === division.id) {
-          loadSchedule(division.id);
-        }
-      } else {
-        alert(response.message || 'Failed to save drawing results');
-      }
-    } catch (err) {
-      console.error('Error saving drawing:', err);
-      alert('Failed to save drawing results');
-    } finally {
-      setAssigningNumbers(false);
     }
   };
 
@@ -455,8 +638,20 @@ export default function TournamentManage() {
               <Link to="/events" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
                 <ArrowLeft className="w-5 h-5" />
               </Link>
+              {/* Event logo/image - links to event detail */}
+              {event?.posterImageUrl && (
+                <Link to={`/event/${eventId}`} className="shrink-0">
+                  <img
+                    src={getSharedAssetUrl(event.posterImageUrl)}
+                    alt={event.name || 'Event'}
+                    className="w-12 h-12 rounded-lg object-cover hover:opacity-80 transition-opacity"
+                  />
+                </Link>
+              )}
               <div>
-                <h1 className="text-xl font-bold text-gray-900">{dashboard?.eventName || 'Tournament'}</h1>
+                <Link to={`/event/${eventId}`} className="hover:text-orange-600 transition-colors">
+                  <h1 className="text-xl font-bold text-gray-900">{dashboard?.eventName || 'Tournament'}</h1>
+                </Link>
                 <div className="flex items-center gap-3 mt-1">
                   <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[dashboard?.tournamentStatus] || 'bg-gray-100 text-gray-700'}`}>
                     {dashboard?.tournamentStatus?.replace(/([A-Z])/g, ' $1').trim() || 'Unknown'}
@@ -725,38 +920,15 @@ export default function TournamentManage() {
                         {div.scheduleReady ? 'Re-configure' : 'Configure Schedule'}
                       </button>
 
-                      {/* Drawing button - only show if schedule exists */}
+                      {/* View Schedule - links to printable schedule page */}
                       {div.scheduleReady && (
-                        <button
-                          onClick={() => handleOpenDrawing(div)}
-                          disabled={assigningNumbers}
-                          className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 ${
-                            div.unitsAssigned
-                              ? 'text-gray-700 border border-gray-300 hover:bg-gray-50'
-                              : 'text-white bg-green-600 hover:bg-green-700'
-                          }`}
-                        >
-                          {assigningNumbers ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Shuffle className="w-4 h-4" />
-                          )}
-                          {div.unitsAssigned ? 'Re-Draw' : 'Draw Units'}
-                        </button>
-                      )}
-
-                      {/* View Schedule */}
-                      {div.scheduleReady && (
-                        <button
-                          onClick={() => {
-                            setSelectedDivision(div);
-                            setActiveTab('schedule');
-                          }}
+                        <Link
+                          to={`/event/${eventId}/division/${div.id}/schedule`}
                           className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
                         >
                           <Eye className="w-4 h-4" />
-                          View
-                        </button>
+                          View Schedule
+                        </Link>
                       )}
                     </div>
                   )}
@@ -1327,70 +1499,484 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Player Check-in</h2>
               <button
-                onClick={loadDashboard}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                onClick={() => { loadCheckIns(); loadDashboard(); }}
+                disabled={loadingCheckIns}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className={`w-5 h-5 ${loadingCheckIns ? 'animate-spin' : ''}`} />
               </button>
             </div>
 
             {/* Check-in stats */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="text-2xl font-bold text-gray-900">
-                  {dashboard?.stats?.checkedInPlayers || 0}
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {checkInData?.checkedInCount || dashboard?.stats?.checkedInPlayers || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Checked In</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">Checked In</div>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="text-2xl font-bold text-gray-900">
-                  {(dashboard?.stats?.totalRegistrations || 0) - (dashboard?.stats?.checkedInPlayers || 0)}
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <Clock className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {(checkInData?.totalPlayers || dashboard?.stats?.totalRegistrations || 0) - (checkInData?.checkedInCount || dashboard?.stats?.checkedInPlayers || 0)}
+                    </div>
+                    <div className="text-sm text-gray-500">Pending</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">Pending</div>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="text-2xl font-bold text-gray-900">
-                  {dashboard?.stats?.totalRegistrations || 0}
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {checkInData?.waiverSignedCount || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Waivers Signed</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">Total Registered</div>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <DollarSign className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {checkInData?.paidCount || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Paid</div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Division check-in status */}
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h3 className="font-medium text-gray-900 mb-4">Check-in by Division</h3>
-              <div className="space-y-4">
-                {dashboard?.divisions?.map(div => (
-                  <div key={div.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-medium text-gray-900">{div.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {div.checkedInUnits} / {div.registeredUnits} teams checked in
-                      </div>
+            {/* Filters */}
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={checkInFilter}
+                    onChange={(e) => setCheckInFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="all">All Players</option>
+                    <option value="pending">Pending Check-in</option>
+                    <option value="checked-in">Checked In</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
+                  <select
+                    value={checkInDivisionFilter}
+                    onChange={(e) => setCheckInDivisionFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="all">All Divisions</option>
+                    {dashboard?.divisions?.map(div => (
+                      <option key={div.id} value={div.id}>{div.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {!checkInData && (
+                  <div className="flex items-end">
+                    <button
+                      onClick={loadCheckIns}
+                      disabled={loadingCheckIns}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {loadingCheckIns ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                      Load Players
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Player list by division */}
+            {checkInData?.players ? (
+              <div className="space-y-6">
+                {getPlayersByDivision().map(divGroup => (
+                  <div key={divGroup.divisionId} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b">
+                      <h3 className="font-semibold text-gray-900">{divGroup.divisionName}</h3>
+                      <p className="text-sm text-gray-500">
+                        {divGroup.players.filter(p => p.isCheckedIn).length} / {divGroup.players.length} checked in
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-green-500 transition-all"
-                          style={{ width: `${div.registeredUnits > 0 ? (div.checkedInUnits / div.registeredUnits) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600 w-12 text-right">
-                        {div.registeredUnits > 0 ? Math.round((div.checkedInUnits / div.registeredUnits) * 100) : 0}%
-                      </span>
+                    <div className="divide-y divide-gray-100">
+                      {divGroup.players.map(player => (
+                        <div key={`${player.divisionId}-${player.userId}`} className="hover:bg-gray-50">
+                          <div className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {/* Avatar - clickable for profile */}
+                                <button
+                                  onClick={() => setProfileModalUserId(player.userId)}
+                                  className="focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-full"
+                                  title="View profile"
+                                >
+                                  {player.avatarUrl ? (
+                                    <img
+                                      src={getSharedAssetUrl(player.avatarUrl)}
+                                      alt=""
+                                      className="w-10 h-10 rounded-full object-cover hover:ring-2 hover:ring-orange-400 transition-all"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center hover:ring-2 hover:ring-orange-400 transition-all">
+                                      <User className="w-5 h-5 text-gray-400" />
+                                    </div>
+                                  )}
+                                </button>
+
+                                {/* Player info - clickable for profile */}
+                                <div>
+                                  <button
+                                    onClick={() => setProfileModalUserId(player.userId)}
+                                    className="font-medium text-gray-900 hover:text-orange-600 text-left"
+                                  >
+                                    {player.firstName} {player.lastName}
+                                  </button>
+                                  <div className="text-sm text-gray-500">
+                                    {player.unitName} • {player.email}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Status indicators and actions */}
+                              <div className="flex items-center gap-4">
+                                {/* Status badges - clickable to expand details */}
+                                <button
+                                  onClick={() => setExpandedPlayer(expandedPlayer === player.userId ? null : player.userId)}
+                                  className="flex items-center gap-2 hover:opacity-80"
+                                >
+                                  {/* Check-in status */}
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                    player.isCheckedIn
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {player.isCheckedIn ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                    {player.isCheckedIn ? 'Checked In' : 'Pending'}
+                                  </span>
+
+                                  {/* Waiver status */}
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                    player.waiverSigned
+                                      ? 'bg-blue-100 text-blue-700'
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    <FileText className="w-3 h-3" />
+                                    {player.waiverSigned ? 'Waiver' : 'No Waiver'}
+                                  </span>
+
+                                  {/* Payment status */}
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                    player.hasPaid
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-red-100 text-red-600'
+                                  }`}>
+                                    <DollarSign className="w-3 h-3" />
+                                    {player.hasPaid ? 'Paid' : 'Unpaid'}
+                                  </span>
+
+                                  {/* Expand indicator */}
+                                  {expandedPlayer === player.userId ? (
+                                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  )}
+                                </button>
+
+                                {/* Action menu */}
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setActionMenuOpen(actionMenuOpen === player.userId ? null : player.userId)}
+                                    disabled={processingAction?.userId === player.userId}
+                                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                                  >
+                                    {processingAction?.userId === player.userId ? (
+                                      <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                      <MoreVertical className="w-5 h-5" />
+                                    )}
+                                  </button>
+
+                                  {/* Dropdown menu */}
+                                  {actionMenuOpen === player.userId && (
+                                    <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                                      {/* Check-in actions */}
+                                      {!player.isCheckedIn ? (
+                                        <button
+                                          onClick={() => handleManualCheckIn(player.userId)}
+                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                        >
+                                          <CheckCircle className="w-4 h-4 text-green-600" />
+                                          Check In
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleVoidCheckIn(player.userId)}
+                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                        >
+                                          <XCircle className="w-4 h-4 text-red-600" />
+                                        Void Check-in
+                                      </button>
+                                    )}
+
+                                    <div className="border-t border-gray-100 my-1" />
+
+                                    {/* Waiver actions */}
+                                    {!player.waiverSigned ? (
+                                      <button
+                                        onClick={() => handleOverrideWaiver(player.userId)}
+                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                      >
+                                        <FileText className="w-4 h-4 text-blue-600" />
+                                        Override Waiver
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleVoidWaiver(player.userId)}
+                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                      >
+                                        <FileText className="w-4 h-4 text-red-600" />
+                                        Void Waiver
+                                      </button>
+                                    )}
+
+                                    <div className="border-t border-gray-100 my-1" />
+
+                                    {/* Payment actions */}
+                                    {!player.hasPaid ? (
+                                      <button
+                                        onClick={() => handleOverridePayment(player.userId, true)}
+                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                      >
+                                        <DollarSign className="w-4 h-4 text-green-600" />
+                                        Mark as Paid
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleOverridePayment(player.userId, false)}
+                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                      >
+                                        <DollarSign className="w-4 h-4 text-red-600" />
+                                        Void Payment
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded details section */}
+                        {expandedPlayer === player.userId && (
+                          <div className="px-4 pb-4">
+                              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Waiver Details */}
+                                  <div className="space-y-2">
+                                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                                      <FileText className="w-4 h-4 text-blue-600" />
+                                      Waiver Status
+                                    </h4>
+                                    {player.waiverSigned ? (
+                                      <div className="text-sm space-y-1">
+                                        <div className="flex items-center gap-2 text-green-600">
+                                          <CheckCircle className="w-4 h-4" />
+                                          <span>Waiver signed</span>
+                                        </div>
+                                        {player.waiverSignedAt && (
+                                          <p className="text-gray-500">
+                                            Signed: {new Date(player.waiverSignedAt).toLocaleString()}
+                                          </p>
+                                        )}
+                                        {player.waiverSignature && (
+                                          <p className="text-gray-500 truncate">
+                                            Signature: {player.waiverSignature}
+                                          </p>
+                                        )}
+                                        {player.signedWaiverPdfUrl && (
+                                          <a
+                                            href={getSharedAssetUrl(player.signedWaiverPdfUrl)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-2"
+                                          >
+                                            <Eye className="w-4 h-4" />
+                                            View Signed Waiver
+                                          </a>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm">
+                                        <div className="flex items-center gap-2 text-yellow-600">
+                                          <AlertCircle className="w-4 h-4" />
+                                          <span>Waiver not signed</span>
+                                        </div>
+                                        <p className="text-gray-500 mt-1">
+                                          Player needs to sign the waiver before check-in
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Payment Details */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                                        <DollarSign className="w-4 h-4 text-emerald-600" />
+                                        Payment Status
+                                      </h4>
+                                      <button
+                                        onClick={() => startEditPayment(player)}
+                                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                        Edit
+                                      </button>
+                                    </div>
+                                    {player.hasPaid ? (
+                                      <div className="text-sm space-y-1">
+                                        <div className="flex items-center gap-2 text-green-600">
+                                          <CheckCircle className="w-4 h-4" />
+                                          <span>Payment received</span>
+                                        </div>
+                                        {player.amountPaid > 0 && (
+                                          <p className="text-gray-500">
+                                            Amount: ${player.amountPaid?.toFixed(2) || '0.00'}
+                                          </p>
+                                        )}
+                                        {player.paymentMethod && (
+                                          <p className="text-gray-500">
+                                            Method: {player.paymentMethod}
+                                          </p>
+                                        )}
+                                        {player.paidAt && (
+                                          <p className="text-gray-500">
+                                            Paid: {new Date(player.paidAt).toLocaleString()}
+                                          </p>
+                                        )}
+                                        {player.paymentReference && (
+                                          <p className="text-gray-500 truncate">
+                                            Reference: {player.paymentReference}
+                                          </p>
+                                        )}
+                                        {player.paymentProofUrl && (
+                                          <a
+                                            href={getSharedAssetUrl(player.paymentProofUrl)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-1"
+                                          >
+                                            <Eye className="w-4 h-4" />
+                                            View Payment Proof
+                                          </a>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm">
+                                        <div className="flex items-center gap-2 text-red-600">
+                                          <XCircle className="w-4 h-4" />
+                                          <span>Payment pending</span>
+                                        </div>
+                                        <p className="text-gray-500 mt-1">
+                                          Player has not submitted payment
+                                        </p>
+                                        {player.paymentProofUrl && (
+                                          <a
+                                            href={getSharedAssetUrl(player.paymentProofUrl)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-1"
+                                          >
+                                            <Eye className="w-4 h-4" />
+                                            View Payment Proof (Pending Verification)
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Check-in Requirements Summary */}
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm">
+                                      <span className="font-medium text-gray-700">Check-in Eligibility: </span>
+                                      {player.waiverSigned && player.hasPaid ? (
+                                        <span className="text-green-600">Ready for check-in</span>
+                                      ) : (
+                                        <span className="text-yellow-600">
+                                          Missing: {[
+                                            !player.waiverSigned && 'Waiver',
+                                            !player.hasPaid && 'Payment'
+                                          ].filter(Boolean).join(', ')}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {!player.isCheckedIn && (
+                                      <button
+                                        onClick={() => handleManualCheckIn(player.userId)}
+                                        disabled={processingAction?.userId === player.userId}
+                                        className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                                      >
+                                        {processingAction?.userId === player.userId ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <CheckCircle className="w-4 h-4" />
+                                        )}
+                                        Check In Player
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
+
+                {getPlayersByDivision().length === 0 && (
+                  <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                    <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No players match the current filters</p>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 mb-4">Click "Load Players" to view individual check-in status</p>
+              </div>
+            )}
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-700">
               <div className="flex items-center gap-2 mb-2">
                 <AlertCircle className="w-5 h-5" />
-                <span className="font-medium">Player Check-in</span>
+                <span className="font-medium">Player Self Check-in</span>
               </div>
               <p className="text-sm">
-                Players can check in from their Events page by viewing the event and clicking "Check In".
+                Players can check in from their Member Dashboard after signing the waiver and completing payment.
                 Check-in is typically enabled when the tournament status is set to "Running".
               </p>
             </div>
@@ -1561,16 +2147,118 @@ export default function TournamentManage() {
         isGenerating={generatingSchedule}
       />
 
-      {/* Drawing Modal */}
-      <DrawingModal
-        isOpen={drawingModal.isOpen}
-        onClose={() => setDrawingModal({ isOpen: false, division: null })}
-        division={drawingModal.division}
-        units={divisionUnits}
-        schedule={schedule}
-        onDraw={handleDraw}
-        isDrawing={assigningNumbers}
-      />
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
+        />
+      )}
+
+      {/* Edit Payment Modal */}
+      {editingPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-orange-600" />
+                <h2 className="text-lg font-semibold">Edit Payment</h2>
+              </div>
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                <p className="font-medium text-gray-900">
+                  {editingPayment.player.firstName} {editingPayment.player.lastName}
+                </p>
+                <p className="text-gray-500">{editingPayment.player.divisionName}</p>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingPayment.form.hasPaid}
+                    onChange={(e) => updateEditForm('hasPaid', e.target.checked)}
+                    className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Payment Received</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingPayment.form.amountPaid}
+                    onChange={(e) => updateEditForm('amountPaid', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg p-2.5 pl-7 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={editingPayment.form.paymentMethod}
+                  onChange={(e) => updateEditForm('paymentMethod', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  {PAYMENT_METHODS.map(method => (
+                    <option key={method.value} value={method.value}>{method.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Reference</label>
+                <input
+                  type="text"
+                  value={editingPayment.form.paymentReference}
+                  onChange={(e) => updateEditForm('paymentReference', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="e.g., Zelle confirmation, transaction ID"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditingPayment(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEditedPayment}
+                  disabled={savingPayment}
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {savingPayment ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

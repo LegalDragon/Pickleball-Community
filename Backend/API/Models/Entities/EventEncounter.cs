@@ -37,6 +37,16 @@ public class EventEncounter
     public int EncounterNumber { get; set; } = 1;
 
     /// <summary>
+    /// Backward-compatible alias for EncounterNumber
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public int MatchNumber
+    {
+        get => EncounterNumber;
+        set => EncounterNumber = value;
+    }
+
+    /// <summary>
     /// Position in bracket (for elimination brackets)
     /// </summary>
     public int? BracketPosition { get; set; }
@@ -46,6 +56,15 @@ public class EventEncounter
     /// </summary>
     public int? Unit1Number { get; set; }
     public int? Unit2Number { get; set; }
+
+    /// <summary>
+    /// Seed label for playoff brackets (e.g., "Pool A #1", "Winner SF1")
+    /// Shown before actual units are assigned
+    /// </summary>
+    [MaxLength(50)]
+    public string? Unit1SeedLabel { get; set; }
+    [MaxLength(50)]
+    public string? Unit2SeedLabel { get; set; }
 
     /// <summary>
     /// Actual unit IDs (after drawing assignment)
@@ -133,12 +152,7 @@ public class EventEncounter
 
     /// <summary>
     /// Matches within this encounter (1 for simple, multiple for team scrimmages)
+    /// Always has at least 1 match - simple divisions auto-create 1 match.
     /// </summary>
     public ICollection<EncounterMatch> Matches { get; set; } = new List<EncounterMatch>();
-
-    /// <summary>
-    /// Legacy: Games directly on encounter (for backward compatibility during migration)
-    /// New code should use Matches[].Games
-    /// </summary>
-    public ICollection<EventGame> Games { get; set; } = new List<EventGame>();
 }

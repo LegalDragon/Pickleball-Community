@@ -185,12 +185,14 @@ public class PlayerHistoryController : ControllerBase
         // Base query: get all games where this player participated
         var query = _context.Set<EventGamePlayer>()
             .Include(gp => gp.Game)
-                .ThenInclude(g => g!.Match)
-                    .ThenInclude(m => m!.Event)
-                        .ThenInclude(e => e!.EventType)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
+                        .ThenInclude(e => e!.Event)
+                            .ThenInclude(ev => ev!.EventType)
             .Include(gp => gp.Game)
-                .ThenInclude(g => g!.Match)
-                    .ThenInclude(m => m!.Division)
+                .ThenInclude(g => g!.EncounterMatch)
+                    .ThenInclude(m => m!.Encounter)
+                        .ThenInclude(e => e!.Division)
             .Include(gp => gp.Game)
                 .ThenInclude(g => g!.Players)
                     .ThenInclude(p => p.User)
@@ -210,12 +212,12 @@ public class PlayerHistoryController : ControllerBase
 
         if (!string.IsNullOrEmpty(request.EventType))
         {
-            query = query.Where(gp => gp.Game!.Match!.Event!.EventType!.Name == request.EventType);
+            query = query.Where(gp => gp.Game!.EncounterMatch!.Encounter!.Event!.EventType!.Name == request.EventType);
         }
 
         if (request.EventId.HasValue)
         {
-            query = query.Where(gp => gp.Game!.Match!.EventId == request.EventId.Value);
+            query = query.Where(gp => gp.Game!.EncounterMatch!.Encounter!.EventId == request.EventId.Value);
         }
 
         if (request.WinsOnly == true)
@@ -234,16 +236,16 @@ public class PlayerHistoryController : ControllerBase
         foreach (var gp in allGames)
         {
             var game = gp.Game!;
-            var match = game.Match!;
-            var evt = match.Event!;
-            var division = match.Division!;
+            var encounter = game.EncounterMatch!.Encounter!;
+            var evt = encounter.Event!;
+            var division = encounter.Division!;
 
             var playerUnitId = gp.UnitId;
             var isWin = game.WinnerUnitId == playerUnitId;
 
             // Determine player's score and opponent's score
-            var playerScore = match.Unit1Id == playerUnitId ? game.Unit1Score : game.Unit2Score;
-            var opponentScore = match.Unit1Id == playerUnitId ? game.Unit2Score : game.Unit1Score;
+            var playerScore = encounter.Unit1Id == playerUnitId ? game.Unit1Score : game.Unit2Score;
+            var opponentScore = encounter.Unit1Id == playerUnitId ? game.Unit2Score : game.Unit1Score;
 
             // Get partner (same unit, different user)
             var partner = game.Players
@@ -290,7 +292,7 @@ public class PlayerHistoryController : ControllerBase
             gameHistoryList.Add(new PlayerGameHistoryDto
             {
                 GameId = game.Id,
-                MatchId = match.Id,
+                MatchId = encounter.Id,
                 EventId = evt.Id,
                 EventName = evt.Name,
                 EventType = evt.EventType?.Name,
@@ -307,9 +309,9 @@ public class PlayerHistoryController : ControllerBase
                 PartnerName = partner != null ? Utility.FormatName(partner.LastName, partner.FirstName) : null,
                 PartnerProfileImageUrl = partner?.ProfileImageUrl,
                 Opponents = opponents,
-                RoundType = match.RoundType,
-                RoundName = match.RoundName,
-                MatchNumber = match.MatchNumber
+                RoundType = encounter.RoundType,
+                RoundName = encounter.RoundName,
+                MatchNumber = encounter.EncounterNumber
             });
         }
 

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   CheckCircle, XCircle, Play, Clock, MapPin,
   RefreshCw, AlertCircle, FileText, Trophy, Calendar,
-  ChevronRight, User
+  ChevronRight, User, DollarSign
 } from 'lucide-react'
 import { gameDayApi, checkInApi } from '../services/api'
 import SignatureCanvas from '../components/SignatureCanvas'
@@ -199,6 +199,18 @@ export default function PlayerGameDay() {
               </a>
             </div>
           )}
+
+          {/* Payment status */}
+          <div className={`mt-3 pt-3 border-t ${
+            gameDay.isCheckedIn ? 'border-green-200' : 'border-yellow-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              <DollarSign className={`w-4 h-4 ${gameDay.hasPaid ? 'text-green-600' : 'text-red-500'}`} />
+              <span className={`text-sm ${gameDay.hasPaid ? 'text-green-700' : 'text-red-600'}`}>
+                {gameDay.hasPaid ? 'Payment received' : 'Payment pending'}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* My Divisions */}

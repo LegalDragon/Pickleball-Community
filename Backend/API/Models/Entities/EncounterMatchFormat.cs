@@ -15,9 +15,9 @@ public class EncounterMatchFormat
     public int DivisionId { get; set; }
 
     /// <summary>
-    /// Order of this match type within the encounter (1, 2, 3...)
+    /// Which match number this format is for within an encounter (1, 2, 3...)
     /// </summary>
-    public int MatchOrder { get; set; } = 1;
+    public int MatchNumber { get; set; } = 1;
 
     /// <summary>
     /// Display name for this match type (e.g., "Men's Doubles", "Mixed Doubles")
@@ -43,14 +43,17 @@ public class EncounterMatchFormat
     public int UnisexCount { get; set; } = 2;
 
     /// <summary>
-    /// Number of games per match: 1, 3, or 5 (best-of format)
+    /// Best of X games for this match format (1, 3, or 5)
     /// </summary>
-    public int GamesPerMatch { get; set; } = 1;
+    public int BestOf { get; set; } = 1;
 
     /// <summary>
     /// Score format for games in this match type (can override division default)
     /// </summary>
     public int? ScoreFormatId { get; set; }
+
+    public int SortOrder { get; set; } = 0;
+    public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
@@ -64,5 +67,5 @@ public class EncounterMatchFormat
 
     // Computed properties
     [NotMapped]
-    public int PlayersPerSide => MaleCount + FemaleCount + UnisexCount;
+    public int TotalPlayers => MaleCount + FemaleCount + UnisexCount;
 }

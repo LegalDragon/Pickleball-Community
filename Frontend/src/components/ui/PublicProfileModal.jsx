@@ -6,7 +6,7 @@ import {
   User, MapPin, Calendar, UserPlus, UserCheck, Clock,
   Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle,
   Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink,
-  KeyRound
+  KeyRound, Mail
 } from 'lucide-react'
 import AdminEditCredentialsModal from './AdminEditCredentialsModal'
 
@@ -251,6 +251,13 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
                       <Calendar className="w-4 h-4" />
                       <span>Member since {formatDate(profile.createdAt)} ({profile.id})</span>
+                    </div>
+                  )}
+
+                  {profile.email && (
+                    <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
+                      <Mail className="w-4 h-4" />
+                      <span>{profile.email}</span>
                     </div>
                   )}
 

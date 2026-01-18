@@ -199,6 +199,7 @@ public class EventUnitMemberDto
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
     public string? ReferenceId { get; set; }
+    public string? PaymentMethod { get; set; }
 }
 
 public class CreateUnitRequest
@@ -410,7 +411,7 @@ public class UnitAssignment
 public class EventGameDto
 {
     public int Id { get; set; }
-    public int MatchId { get; set; }
+    public int EncounterMatchId { get; set; }
     public int GameNumber { get; set; }
     public int? ScoreFormatId { get; set; }
     public ScoreFormatDto? ScoreFormat { get; set; }
@@ -559,6 +560,8 @@ public class ScheduleExportDto
     public int DivisionId { get; set; }
     public string DivisionName { get; set; } = string.Empty;
     public string EventName { get; set; } = string.Empty;
+    public string? ScheduleType { get; set; } // RoundRobin, RoundRobinPlayoff, SingleElimination, etc.
+    public int? PlayoffFromPools { get; set; } // Number of teams advancing per pool to playoffs
     public DateTime ExportedAt { get; set; }
     public List<ScheduleRoundDto> Rounds { get; set; } = new();
     public List<PoolStandingsDto> PoolStandings { get; set; } = new();
@@ -579,6 +582,9 @@ public class ScheduleMatchDto
     public int? Unit2Number { get; set; }
     public string? Unit1Name { get; set; }
     public string? Unit2Name { get; set; }
+    public string? Unit1SeedInfo { get; set; } // e.g., "Pool A #1" for playoff matches
+    public string? Unit2SeedInfo { get; set; }
+    public bool IsBye { get; set; } // True if one team has a bye
     public string? CourtLabel { get; set; }
     public DateTime? ScheduledTime { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -598,12 +604,26 @@ public class PoolStandingEntryDto
     public int Rank { get; set; }
     public int? UnitNumber { get; set; }
     public string? UnitName { get; set; }
+    public List<TeamMemberInfoDto> Members { get; set; } = new(); // Team member details
     public int MatchesPlayed { get; set; }
     public int MatchesWon { get; set; }
     public int MatchesLost { get; set; }
     public int GamesWon { get; set; }
     public int GamesLost { get; set; }
     public int PointDifferential { get; set; }
+}
+
+/// <summary>
+/// Lightweight member info for display in schedule/drawing results
+/// </summary>
+public class TeamMemberInfoDto
+{
+    public int UserId { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? ProfileImageUrl { get; set; }
+
+    public string FullName => $"{FirstName} {LastName}".Trim();
 }
 
 // ============================================
@@ -712,6 +732,7 @@ public class UpdateMemberPaymentRequest
     public decimal? AmountPaid { get; set; }
     public string? PaymentProofUrl { get; set; }
     public string? PaymentReference { get; set; }
+    public string? PaymentMethod { get; set; }
     public string? ReferenceId { get; set; }
 }
 

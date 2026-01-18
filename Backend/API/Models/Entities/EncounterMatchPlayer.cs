@@ -13,11 +13,17 @@ public class EncounterMatchPlayer
 
     public int MatchId { get; set; }
     public int UserId { get; set; }
+    public int UnitId { get; set; }
 
     /// <summary>
     /// Which side/unit this player is on (1 or 2)
     /// </summary>
     public int UnitSide { get; set; }
+
+    /// <summary>
+    /// Position within the team for this match (1, 2, etc.)
+    /// </summary>
+    public int? Position { get; set; }
 
     /// <summary>
     /// Player's gender for validation: M, F, or NULL (unknown/other)
@@ -38,4 +44,7 @@ public class EncounterMatchPlayer
 
     [ForeignKey("UserId")]
     public User? User { get; set; }
+
+    [ForeignKey("UnitId")]
+    public EventUnit? Unit { get; set; }
 }
