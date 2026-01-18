@@ -4034,7 +4034,7 @@ public class TournamentController : ControllerBase
         game.Unit2Score = request.Unit2Score;
         game.UpdatedAt = DateTime.Now;
 
-        // If marking as finished, set winner
+        // If marking as finished, set winner and update stats
         if (request.MarkAsFinished && game.Status != "Finished")
         {
             game.Status = "Finished";
@@ -4044,6 +4044,23 @@ public class TournamentController : ControllerBase
             if (encounter != null)
             {
                 game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
+
+                // Update unit stats (games won/lost, points scored/against)
+                await UpdateUnitStats(game);
+
+                // Free up court
+                if (game.TournamentCourtId.HasValue)
+                {
+                    var court = await _context.TournamentCourts.FindAsync(game.TournamentCourtId);
+                    if (court != null)
+                    {
+                        court.Status = "Available";
+                        court.CurrentGameId = null;
+                    }
+                }
+
+                // Check if match is complete (for best-of series)
+                await CheckMatchComplete(encounter.Id);
             }
         }
 
