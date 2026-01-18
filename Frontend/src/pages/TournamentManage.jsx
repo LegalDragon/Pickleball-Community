@@ -2757,14 +2757,22 @@ export default function TournamentManage() {
       {selectedGameForEdit && (
         <GameScoreModal
           game={selectedGameForEdit}
+          courts={dashboard?.courts || []}
           onClose={() => setSelectedGameForEdit(null)}
           onSuccess={() => {
             setSelectedGameForEdit(null);
             loadSchedule(selectedDivision?.id);
+            loadDashboard();
           }}
           onPlayerClick={(userId) => setProfileModalUserId(userId)}
           onSaveScore={selectedGameForEdit.hasGames ? async (gameId, unit1Score, unit2Score, finish) => {
             await tournamentApi.adminUpdateScore(gameId, unit1Score, unit2Score, finish);
+          } : undefined}
+          onAssignCourt={selectedGameForEdit.hasGames ? async (gameId, courtId) => {
+            await tournamentApi.assignGameToCourt(gameId, courtId);
+          } : undefined}
+          onStatusChange={selectedGameForEdit.hasGames ? async (gameId, status) => {
+            await tournamentApi.updateGameStatus(gameId, status);
           } : undefined}
           readOnly={!selectedGameForEdit.hasGames}
         />
