@@ -126,7 +126,7 @@ export default function TournamentManage() {
         // Use ref to get current selectedDivision value (avoids stale closure)
         const currentDivision = selectedDivisionRef.current;
         if (currentDivision?.scheduleReady) {
-          loadSchedule(currentDivision.id);
+          loadSchedule(currentDivision.id, true); // silent refresh
         }
       }
     });
@@ -137,7 +137,7 @@ export default function TournamentManage() {
     };
   }, [eventId, isAuthenticated, connect, joinEvent, leaveEvent, addListener]);
 
-  // Auto-refresh every 30 seconds as fallback for SignalR
+  // Auto-refresh every 30 seconds as fallback for SignalR (silent - no loading spinners)
   useEffect(() => {
     if (!eventId) return;
 
@@ -146,7 +146,7 @@ export default function TournamentManage() {
       loadDashboard();
       const currentDivision = selectedDivisionRef.current;
       if (currentDivision?.scheduleReady) {
-        loadSchedule(currentDivision.id);
+        loadSchedule(currentDivision.id, true); // silent refresh
       }
     }, 30000); // 30 seconds
 
@@ -273,8 +273,8 @@ export default function TournamentManage() {
     }
   };
 
-  const loadSchedule = async (divisionId) => {
-    setLoadingSchedule(true);
+  const loadSchedule = async (divisionId, silent = false) => {
+    if (!silent) setLoadingSchedule(true);
     try {
       const response = await tournamentApi.getSchedule(divisionId);
       if (response.success) {
@@ -288,7 +288,7 @@ export default function TournamentManage() {
     } catch (err) {
       console.error('Error loading schedule:', err);
     } finally {
-      setLoadingSchedule(false);
+      if (!silent) setLoadingSchedule(false);
     }
   };
 
