@@ -292,8 +292,8 @@ public class CheckInController : ControllerBase
         // Get first registration for reference ID
         var firstReg = registrations.First();
 
-        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}
-        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}";
+        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}-U{userId}
+        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}-U{userId}";
 
         // Get player name
         var playerName = $"{user.FirstName} {user.LastName}".Trim();
@@ -1399,8 +1399,8 @@ public class CheckInController : ControllerBase
         // Get first registration for reference ID
         var firstReg = registrations.First();
 
-        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}
-        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}";
+        // Generate reference ID in format E{eventId}-W{waiverId}-M{memberId}-U{userId}
+        var referenceId = $"E{eventId}-W{objectAsset.Id}-M{firstReg.Id}-U{targetUserId}";
 
         // Get player name from TARGET user
         var playerName = $"{targetUser.FirstName} {targetUser.LastName}".Trim();
