@@ -3619,6 +3619,30 @@ public class TournamentController : ControllerBase
             return $"{info.PoolName} #{info.Rank}";
         }
 
+        // Build court lookup for games
+        var courtIds = matches
+            .SelectMany(m => m.Matches)
+            .SelectMany(em => em.Games)
+            .Where(g => g.TournamentCourtId.HasValue)
+            .Select(g => g.TournamentCourtId!.Value)
+            .Distinct()
+            .ToList();
+
+        var courts = await _context.TournamentCourts
+            .Where(c => courtIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.CourtLabel);
+
+        // Helper to get court label for an encounter
+        string? GetCourtLabel(EventEncounter encounter)
+        {
+            var game = encounter.Matches
+                .SelectMany(em => em.Games)
+                .FirstOrDefault(g => g.TournamentCourtId.HasValue);
+            if (game?.TournamentCourtId != null && courts.TryGetValue(game.TournamentCourtId.Value, out var label))
+                return label;
+            return null;
+        }
+
         var schedule = new ScheduleExportDto
         {
             DivisionId = divisionId,
@@ -3657,7 +3681,7 @@ public class TournamentController : ControllerBase
                             ? (m.Unit2Id == null ? m.Unit2SeedLabel : GetSeedInfo(m.Unit2Id))
                             : null,
                         IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
-                        CourtLabel = m.Matches.FirstOrDefault()?.Games.FirstOrDefault(g => g.TournamentCourt != null)?.TournamentCourt?.CourtLabel,
+                        CourtLabel = GetCourtLabel(m),
                         ScheduledTime = m.ScheduledTime,
                         StartedAt = m.StartedAt,
                         CompletedAt = m.CompletedAt,
@@ -3671,7 +3695,7 @@ public class TournamentController : ControllerBase
                             Unit1Score = game.Unit1Score,
                             Unit2Score = game.Unit2Score,
                             TournamentCourtId = game.TournamentCourtId,
-                            CourtLabel = game.TournamentCourt?.CourtLabel,
+                            CourtLabel = game.TournamentCourtId.HasValue && courts.TryGetValue(game.TournamentCourtId.Value, out var courtLabel) ? courtLabel : null,
                             Status = game.Status,
                             StartedAt = game.StartedAt,
                             CompletedAt = game.FinishedAt
