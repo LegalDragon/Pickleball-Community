@@ -528,14 +528,15 @@ function MyGamesTab({
                   <div className="text-4xl font-bold">
                     {currentGame.unit1Score} - {currentGame.unit2Score}
                   </div>
-                  {currentGame.canSubmitScore && (
-                    <button
-                      onClick={() => onSubmitScore(currentGame)}
-                      className="mt-3 px-6 py-2 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50"
-                    >
-                      <CheckCircle className="w-4 h-4 inline mr-2" />
-                      Finished - Submit Score
-                    </button>
+                  <button
+                    onClick={() => onSubmitScore(currentGame)}
+                    className="mt-3 px-6 py-2 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50"
+                  >
+                    <CheckCircle className="w-4 h-4 inline mr-2" />
+                    {currentGame.needsConfirmation ? 'Confirm Score' : 'Submit Score'}
+                  </button>
+                  {currentGame.needsConfirmation && (
+                    <p className="text-xs text-blue-200 mt-2">Opponent submitted a score - confirm to finish</p>
                   )}
                 </div>
               )}
