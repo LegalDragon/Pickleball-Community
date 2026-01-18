@@ -425,8 +425,8 @@ export default function DivisionSchedule() {
               </div>
             )}
 
-            {/* Playoff/Bracket Section */}
-            {schedule.rounds.filter(r => r.roundType === 'Bracket').length > 0 && (
+            {/* Playoff/Bracket Section (includes Bronze Medal/3rd Place matches) */}
+            {schedule.rounds.filter(r => r.roundType === 'Bracket' || r.roundType === 'ThirdPlace').length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2 print:text-lg">
                   <Trophy className="w-5 h-5 text-yellow-500" />
@@ -438,10 +438,15 @@ export default function DivisionSchedule() {
                   )}
                 </h3>
                 {schedule.rounds
-                  .filter(r => r.roundType === 'Bracket')
+                  .filter(r => r.roundType === 'Bracket' || r.roundType === 'ThirdPlace')
                   .map((round, roundIdx) => (
                     <div key={roundIdx} className="mb-6 print:mb-3">
-                      <h4 className="text-lg font-semibold text-gray-800 mb-3 bg-yellow-50 border border-yellow-200 px-4 py-2 rounded print:text-sm print:px-2 print:py-1">
+                      <h4 className={`text-lg font-semibold text-gray-800 mb-3 px-4 py-2 rounded print:text-sm print:px-2 print:py-1 ${
+                        round.roundType === 'ThirdPlace'
+                          ? 'bg-amber-50 border border-amber-300'
+                          : 'bg-yellow-50 border border-yellow-200'
+                      }`}>
+                        {round.roundType === 'ThirdPlace' ? '🥉 ' : ''}
                         {round.roundName || `Playoff Round ${round.roundNumber}`}
                       </h4>
                       <div className="overflow-x-auto">
@@ -542,15 +547,15 @@ export default function DivisionSchedule() {
               </div>
             )}
 
-            {/* Other round types (not Pool or Bracket) */}
-            {schedule.rounds.filter(r => r.roundType !== 'Pool' && r.roundType !== 'Bracket').length > 0 && (
+            {/* Other round types (not Pool, Bracket, or ThirdPlace) */}
+            {schedule.rounds.filter(r => r.roundType !== 'Pool' && r.roundType !== 'Bracket' && r.roundType !== 'ThirdPlace').length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2 print:text-lg">
                   <Calendar className="w-5 h-5 text-orange-500" />
                   Match Schedule
                 </h3>
                 {schedule.rounds
-                  .filter(r => r.roundType !== 'Pool' && r.roundType !== 'Bracket')
+                  .filter(r => r.roundType !== 'Pool' && r.roundType !== 'Bracket' && r.roundType !== 'ThirdPlace')
                   .map((round, roundIdx) => (
                     <div key={roundIdx} className="mb-6 print:mb-3">
                       <h4 className="text-lg font-semibold text-gray-800 mb-3 bg-gray-100 px-4 py-2 rounded print:text-sm print:px-2 print:py-1">

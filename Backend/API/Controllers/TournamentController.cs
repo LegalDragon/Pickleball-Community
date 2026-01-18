@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Pickleball.Community.Database;
+using Pickleball.Community.Models.Constants;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Hubs;
@@ -3582,7 +3583,7 @@ public class TournamentController : ControllerBase
             Rounds = matches
                 // Include all matches - show position numbers before drawing, team names after
                 .GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
-                .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : g.Key.RoundType == "Bracket" ? 1 : 2)
+                .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace) ? 1 : 2)
                 .ThenBy(g => g.Key.RoundNumber)
                 .Select(g => new ScheduleRoundDto
                 {
@@ -3597,12 +3598,12 @@ public class TournamentController : ControllerBase
                         Unit2Number = m.Unit2Number,
                         Unit1Name = GetUnitDisplayName(m.Unit1Id) ?? m.Unit1?.Name,
                         Unit2Name = GetUnitDisplayName(m.Unit2Id) ?? m.Unit2?.Name,
-                        // Add seed info for playoff (Bracket) matches
+                        // Add seed info for playoff (Bracket) and bronze medal (ThirdPlace) matches
                         // Use stored seed label if unit not assigned yet, otherwise calculate from pool position
-                        Unit1SeedInfo = g.Key.RoundType == "Bracket"
+                        Unit1SeedInfo = (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace)
                             ? (m.Unit1Id == null ? m.Unit1SeedLabel : GetSeedInfo(m.Unit1Id))
                             : null,
-                        Unit2SeedInfo = g.Key.RoundType == "Bracket"
+                        Unit2SeedInfo = (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace)
                             ? (m.Unit2Id == null ? m.Unit2SeedLabel : GetSeedInfo(m.Unit2Id))
                             : null,
                         IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
@@ -4705,6 +4706,29 @@ public class TournamentController : ControllerBase
             }
         }
 
+        // Add bronze medal match (3rd place) - between losers of semi-finals
+        // Only add if there are at least 2 rounds (meaning there are semi-finals)
+        if (rounds >= 2)
+        {
+            matches.Add(new EventEncounter
+            {
+                EventId = division.EventId,
+                DivisionId = division.Id,
+                RoundType = RoundType.ThirdPlace,
+                RoundNumber = rounds, // Same round as finals
+                RoundName = "Bronze Medal",
+                MatchNumber = matchNum++,
+                BracketPosition = 1,
+                Unit1SeedLabel = "L SF1", // Loser of Playoff Semi-final 1
+                Unit2SeedLabel = "L SF2", // Loser of Playoff Semi-final 2
+                BestOf = request.PlayoffGamesPerMatch ?? request.BestOf,
+                ScoreFormatId = request.PlayoffScoreFormatId ?? request.ScoreFormatId,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            });
+        }
+
         return matches;
     }
 
@@ -4789,6 +4813,29 @@ public class TournamentController : ControllerBase
                 firstRoundMatches[i].Unit1Number = seed1;
             if (seed2 <= targetUnitCount)
                 firstRoundMatches[i].Unit2Number = seed2;
+        }
+
+        // Add bronze medal match (3rd place) - between losers of semi-finals
+        // Only add if there are at least 4 units (meaning there are semi-finals)
+        if (rounds >= 2)
+        {
+            matches.Add(new EventEncounter
+            {
+                EventId = division.EventId,
+                DivisionId = division.Id,
+                RoundType = RoundType.ThirdPlace,
+                RoundNumber = rounds, // Same round as finals
+                RoundName = "Bronze Medal",
+                MatchNumber = matchNum++,
+                BracketPosition = 1,
+                Unit1SeedLabel = "L SF1", // Loser of Semi-final 1
+                Unit2SeedLabel = "L SF2", // Loser of Semi-final 2
+                BestOf = request.BestOf,
+                ScoreFormatId = request.ScoreFormatId,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            });
         }
 
         return matches;
