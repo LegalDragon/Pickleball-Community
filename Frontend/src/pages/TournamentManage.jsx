@@ -1147,15 +1147,25 @@ export default function TournamentManage() {
                   );
                 })()}
               </div>
-              {isOrganizer && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowAddCourtsModal(true)}
-                  className="px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 flex items-center gap-2"
+                  onClick={() => loadDashboard()}
+                  className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  title="Refresh courts"
                 >
-                  <Plus className="w-4 h-4" />
-                  Add Courts
+                  <RefreshCw className="w-4 h-4" />
+                  Refresh
                 </button>
-              )}
+                {isOrganizer && (
+                  <button
+                    onClick={() => setShowAddCourtsModal(true)}
+                    className="px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Courts
+                  </button>
+                )}
+              </div>
             </div>
 
             {dashboard?.courts?.length === 0 ? (
@@ -1175,34 +1185,106 @@ export default function TournamentManage() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dashboard?.courts?.map(court => (
-                  <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
-                          court.status === 'Available' ? 'bg-green-100 text-green-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {court.status}
-                        </span>
-                        {isOrganizer && (
-                          <button
-                            onClick={() => handleEditCourt(court)}
-                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                            title="Edit court"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
+                {dashboard?.courts?.map(court => {
+                  // Helper to format time elapsed
+                  const formatTimeElapsed = (startTime) => {
+                    if (!startTime) return '';
+                    const start = new Date(startTime);
+                    const now = new Date();
+                    const diffMs = now - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    if (diffMins < 1) return 'Just started';
+                    if (diffMins < 60) return `${diffMins}m`;
+                    const hours = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    return `${hours}h ${mins}m`;
+                  };
+
+                  return (
+                    <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
+                            court.status === 'Available' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {court.status}
+                          </span>
+                          {isOrganizer && (
+                            <button
+                              onClick={() => handleEditCourt(court)}
+                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                              title="Edit court"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Current Game */}
+                      {court.currentGame ? (
+                        <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-orange-700 uppercase">Current Game</span>
+                            {court.currentGame.startedAt && (
+                              <span className="text-xs text-orange-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatTimeElapsed(court.currentGame.startedAt)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {court.currentGame.unit1Players || 'TBD'} vs {court.currentGame.unit2Players || 'TBD'}
+                          </div>
+                          {court.currentGame.unit1Score !== null && court.currentGame.unit2Score !== null && (
+                            <div className="text-sm text-gray-600 mt-1">
+                              Score: {court.currentGame.unit1Score} - {court.currentGame.unit2Score}
+                            </div>
+                          )}
+                          {court.currentGame.divisionName && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {court.currentGame.divisionName} • {court.currentGame.roundName || `Game ${court.currentGame.gameNumber}`}
+                            </div>
+                          )}
+                        </div>
+                      ) : court.status === 'Available' ? (
+                        <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <span className="text-sm text-gray-500">No game in progress</span>
+                        </div>
+                      ) : null}
+
+                      {/* Next Game */}
+                      {court.nextGame && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-blue-700 uppercase">Next Game</span>
+                            {court.nextGame.queuedAt && (
+                              <span className="text-xs text-blue-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Queued {formatTimeElapsed(court.nextGame.queuedAt)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {court.nextGame.unit1Players || 'TBD'} vs {court.nextGame.unit2Players || 'TBD'}
+                          </div>
+                          {court.nextGame.divisionName && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {court.nextGame.divisionName} • {court.nextGame.roundName || `Game ${court.nextGame.gameNumber}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {court.locationDescription && (
+                        <p className="text-xs text-gray-500 mt-2">{court.locationDescription}</p>
+                      )}
                     </div>
-                    {court.locationDescription && (
-                      <p className="text-sm text-gray-500">{court.locationDescription}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

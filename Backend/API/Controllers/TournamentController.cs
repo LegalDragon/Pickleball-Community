@@ -4128,13 +4128,47 @@ public class TournamentController : ControllerBase
             .ToListAsync();
 
         var games = await _context.EventGames
-            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit1).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit2).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Division)
+            .Include(g => g.TournamentCourt)
             .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
             .ToListAsync();
 
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive)
             .ToListAsync();
+
+        // Helper to get player names from unit members
+        string GetPlayerNames(EventUnit? unit)
+        {
+            if (unit?.Members == null || !unit.Members.Any()) return unit?.Name ?? "TBD";
+            return string.Join(" / ", unit.Members.Where(m => m.User != null).Select(m => m.User!.FirstName));
+        }
+
+        // Helper to build game info DTO
+        CourtGameInfoDto? BuildGameInfo(EventGame? game)
+        {
+            if (game == null) return null;
+            var encounter = game.EncounterMatch?.Encounter;
+            return new CourtGameInfoDto
+            {
+                GameId = game.Id,
+                EncounterId = encounter?.Id,
+                Unit1Name = encounter?.Unit1?.Name,
+                Unit2Name = encounter?.Unit2?.Name,
+                Unit1Players = GetPlayerNames(encounter?.Unit1),
+                Unit2Players = GetPlayerNames(encounter?.Unit2),
+                Unit1Score = game.Unit1Score,
+                Unit2Score = game.Unit2Score,
+                Status = game.Status,
+                StartedAt = game.StartedAt,
+                QueuedAt = game.QueuedAt,
+                DivisionName = encounter?.Division?.Name,
+                RoundName = encounter?.RoundName,
+                GameNumber = game.GameNumber
+            };
+        }
 
         // Calculate payment stats
         var activeUnits = units.Where(u => u.Status != "Cancelled").ToList();
@@ -4178,14 +4212,29 @@ public class TournamentController : ControllerBase
                 ScheduleReady = matches.Any(m => m.DivisionId == d.Id),
                 UnitsAssigned = units.Where(u => u.DivisionId == d.Id).All(u => u.UnitNumber.HasValue)
             }).ToList(),
-            Courts = courts.Select(c => new TournamentCourtDto
-            {
-                Id = c.Id,
-                EventId = c.EventId,
-                CourtLabel = c.CourtLabel,
-                Status = c.Status,
-                CurrentGameId = c.CurrentGameId,
-                SortOrder = c.SortOrder
+            Courts = courts.Select(c => {
+                // Find current game (playing/started on this court)
+                var currentGame = games.FirstOrDefault(g =>
+                    g.TournamentCourtId == c.Id &&
+                    (g.Status == "Playing" || g.Status == "Started" || g.Status == "InProgress"));
+
+                // Find next game (queued for this court, ordered by queued time)
+                var nextGame = games
+                    .Where(g => g.TournamentCourtId == c.Id && g.Status == "Queued")
+                    .OrderBy(g => g.QueuedAt ?? DateTime.MaxValue)
+                    .FirstOrDefault();
+
+                return new TournamentCourtDto
+                {
+                    Id = c.Id,
+                    EventId = c.EventId,
+                    CourtLabel = c.CourtLabel,
+                    Status = c.Status,
+                    CurrentGameId = c.CurrentGameId,
+                    CurrentGame = BuildGameInfo(currentGame),
+                    NextGame = BuildGameInfo(nextGame),
+                    SortOrder = c.SortOrder
+                };
             }).ToList()
         };
 

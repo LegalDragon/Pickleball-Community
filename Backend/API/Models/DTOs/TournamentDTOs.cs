@@ -301,9 +301,31 @@ public class TournamentCourtDto
     public string CourtLabel { get; set; } = string.Empty;
     public string Status { get; set; } = "Available";
     public int? CurrentGameId { get; set; }
-    public EventGameDto? CurrentGame { get; set; }
+    public CourtGameInfoDto? CurrentGame { get; set; }
+    public CourtGameInfoDto? NextGame { get; set; }
     public string? LocationDescription { get; set; }
     public int SortOrder { get; set; }
+}
+
+/// <summary>
+/// Game info for court display (current/next game)
+/// </summary>
+public class CourtGameInfoDto
+{
+    public int GameId { get; set; }
+    public int? EncounterId { get; set; }
+    public string? Unit1Name { get; set; }
+    public string? Unit2Name { get; set; }
+    public string? Unit1Players { get; set; }
+    public string? Unit2Players { get; set; }
+    public int? Unit1Score { get; set; }
+    public int? Unit2Score { get; set; }
+    public string? Status { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? QueuedAt { get; set; }
+    public string? DivisionName { get; set; }
+    public string? RoundName { get; set; }
+    public int? GameNumber { get; set; }
 }
 
 public class CreateTournamentCourtRequest
