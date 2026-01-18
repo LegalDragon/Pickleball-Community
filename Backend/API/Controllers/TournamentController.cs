@@ -3543,6 +3543,20 @@ public class TournamentController : ControllerBase
             }
         }
 
+        // Build lookup for unit display names (FirstName1 + FirstName2 for pairs)
+        var unitDisplayNames = units.ToDictionary(
+            u => u.Id,
+            u => Utility.FormatUnitDisplayName(u.Members, u.Name)
+        );
+
+        // Helper to get display name for a unit
+        string? GetUnitDisplayName(int? unitId)
+        {
+            if (!unitId.HasValue || !unitDisplayNames.ContainsKey(unitId.Value))
+                return null;
+            return unitDisplayNames[unitId.Value];
+        }
+
         // Helper to get seed info for a unit in playoff matches
         string? GetSeedInfo(int? unitId)
         {
@@ -3576,8 +3590,8 @@ public class TournamentController : ControllerBase
                         MatchNumber = m.MatchNumber,
                         Unit1Number = m.Unit1Number,
                         Unit2Number = m.Unit2Number,
-                        Unit1Name = m.Unit1?.Name,
-                        Unit2Name = m.Unit2?.Name,
+                        Unit1Name = GetUnitDisplayName(m.Unit1Id) ?? m.Unit1?.Name,
+                        Unit2Name = GetUnitDisplayName(m.Unit2Id) ?? m.Unit2?.Name,
                         // Add seed info for playoff (Bracket) matches
                         // Use stored seed label if unit not assigned yet, otherwise calculate from pool position
                         Unit1SeedInfo = g.Key.RoundType == "Bracket"
@@ -3589,7 +3603,7 @@ public class TournamentController : ControllerBase
                         IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
                         Status = m.Status,
                         Score = GetMatchScore(m),
-                        WinnerName = m.Winner?.Name
+                        WinnerName = GetUnitDisplayName(m.WinnerId) ?? m.Winner?.Name
                     }).ToList()
                 }).ToList(),
             PoolStandings = units.GroupBy(u => u.PoolNumber ?? 0)
@@ -3602,7 +3616,7 @@ public class TournamentController : ControllerBase
                     {
                         Rank = idx + 1,
                         UnitNumber = u.UnitNumber,
-                        UnitName = u.Name,
+                        UnitName = Utility.FormatUnitDisplayName(u.Members, u.Name),
                         Members = u.Members
                             .Where(m => m.User != null)
                             .Select(m => new TeamMemberInfoDto
