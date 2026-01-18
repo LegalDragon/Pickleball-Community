@@ -355,59 +355,68 @@ export default function DivisionSchedule() {
                             <tr className="bg-gray-50 print:text-xs">
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">#</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Team 1</th>
-                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1">vs</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1 w-16">Score</th>
+                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1 w-16">Score</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Team 2</th>
-                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:px-1 print:py-1">Score</th>
                               <th className="border border-gray-300 px-3 py-2 text-left text-gray-700 print:px-1 print:py-1">Winner</th>
-                              <th className="border border-gray-300 px-3 py-2 text-center text-gray-700 print:hidden w-10"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {round.matches
                               .filter(m => !m.isBye)
-                              .map((match, matchIdx) => (
-                                <tr key={matchIdx} className="hover:bg-gray-50 print:text-xs">
-                                  <td className="border border-gray-300 px-3 py-2 text-gray-600 print:px-1 print:py-1">
-                                    {match.matchNumber}
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 print:px-1 print:py-1">
-                                    <div className="flex items-center gap-2">
-                                      {match.unit1Number && (
-                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs print:w-4 print:h-4">
-                                          {match.unit1Number}
+                              .map((match, matchIdx) => {
+                                const unit1Wins = match.winnerUnitId === match.unit1Id;
+                                const unit2Wins = match.winnerUnitId === match.unit2Id;
+                                return (
+                                  <tr key={matchIdx} className="hover:bg-gray-50 print:text-xs">
+                                    <td className="border border-gray-300 px-3 py-2 text-gray-600 print:px-1 print:py-1">
+                                      <div className="flex items-center gap-2">
+                                        <span>{match.matchNumber}</span>
+                                        <button
+                                          onClick={() => handleOpenMatchDetails(match)}
+                                          className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors print:hidden"
+                                          title="Match details"
+                                        >
+                                          <Info className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className={`border border-gray-300 px-3 py-2 print:px-1 print:py-1 ${unit1Wins ? 'bg-green-50' : ''}`}>
+                                      <div className="flex items-center gap-2">
+                                        {match.unit1Number && (
+                                          <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs print:w-4 print:h-4">
+                                            {match.unit1Number}
+                                          </span>
+                                        )}
+                                        <span className={`${unit1Wins ? 'text-green-700 font-semibold' : 'text-gray-900'}`}>
+                                          {match.unit1Name || `Position ${match.unit1Number}`}
                                         </span>
-                                      )}
-                                      <span className="text-gray-900">{match.unit1Name || `Position ${match.unit1Number}`}</span>
-                                    </div>
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-gray-400 print:px-1 print:py-1">vs</td>
-                                  <td className="border border-gray-300 px-3 py-2 print:px-1 print:py-1">
-                                    <div className="flex items-center gap-2">
-                                      {match.unit2Number && (
-                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs print:w-4 print:h-4">
-                                          {match.unit2Number}
+                                      </div>
+                                    </td>
+                                    <td className={`border border-gray-300 px-3 py-2 text-center print:px-1 print:py-1 ${unit1Wins ? 'bg-green-50 text-green-700 font-semibold' : 'text-gray-600'}`}>
+                                      {match.unit1Score ?? '—'}
+                                    </td>
+                                    <td className={`border border-gray-300 px-3 py-2 text-center print:px-1 print:py-1 ${unit2Wins ? 'bg-green-50 text-green-700 font-semibold' : 'text-gray-600'}`}>
+                                      {match.unit2Score ?? '—'}
+                                    </td>
+                                    <td className={`border border-gray-300 px-3 py-2 print:px-1 print:py-1 ${unit2Wins ? 'bg-green-50' : ''}`}>
+                                      <div className="flex items-center gap-2">
+                                        {match.unit2Number && (
+                                          <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs print:w-4 print:h-4">
+                                            {match.unit2Number}
+                                          </span>
+                                        )}
+                                        <span className={`${unit2Wins ? 'text-green-700 font-semibold' : 'text-gray-900'}`}>
+                                          {match.unit2Name || `Position ${match.unit2Number}`}
                                         </span>
-                                      )}
-                                      <span className="text-gray-900">{match.unit2Name || `Position ${match.unit2Number}`}</span>
-                                    </div>
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center text-gray-600 print:px-1 print:py-1">
-                                    {match.score || '—'}
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-gray-900 font-medium print:px-1 print:py-1">
-                                    {match.winnerName || '—'}
-                                  </td>
-                                  <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
-                                    <button
-                                      onClick={() => handleOpenMatchDetails(match)}
-                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                                      title="Match details"
-                                    >
-                                      <Info className="w-4 h-4" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                                      </div>
+                                    </td>
+                                    <td className="border border-gray-300 px-3 py-2 text-gray-900 font-medium print:px-1 print:py-1">
+                                      {match.winnerName || '—'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>

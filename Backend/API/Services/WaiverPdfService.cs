@@ -193,9 +193,11 @@ public class WaiverPdfService : IWaiverPdfService
     {
         container.Column(column =>
         {
-            // Waiver content - strip HTML tags for PDF
-            var plainContent = StripHtml(waiver.Content);
-            column.Item().PaddingBottom(20).Text(plainContent);
+            // Waiver content - render HTML with proper formatting (WYSIWYG)
+            column.Item().PaddingBottom(20).Column(contentColumn =>
+            {
+                HtmlToPdfConverter.RenderHtml(contentColumn, waiver.Content);
+            });
 
             // Signature section
             column.Item().PaddingTop(20).LineHorizontal(1);
@@ -267,30 +269,4 @@ public class WaiverPdfService : IWaiverPdfService
         });
     }
 
-    private string StripHtml(string html)
-    {
-        if (string.IsNullOrEmpty(html))
-            return string.Empty;
-
-        // Simple HTML stripping - replace common tags with appropriate text
-        var text = html
-            .Replace("<br>", "\n")
-            .Replace("<br/>", "\n")
-            .Replace("<br />", "\n")
-            .Replace("</p>", "\n\n")
-            .Replace("</div>", "\n")
-            .Replace("</li>", "\n")
-            .Replace("<li>", "• ");
-
-        // Remove remaining HTML tags
-        text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]+>", "");
-
-        // Decode HTML entities
-        text = System.Net.WebUtility.HtmlDecode(text);
-
-        // Clean up extra whitespace
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
-
-        return text.Trim();
-    }
 }
