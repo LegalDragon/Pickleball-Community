@@ -48,6 +48,7 @@ export default function TournamentManage() {
   const [numberOfCourts, setNumberOfCourts] = useState('');
   const [addingCourts, setAddingCourts] = useState(false);
   const [mapAsset, setMapAsset] = useState(null);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // Edit court modal state
   const [editingCourt, setEditingCourt] = useState(null);
@@ -1060,18 +1061,30 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-semibold text-gray-900">Tournament Courts</h2>
-                {mapAsset && (
-                  <a
-                    href={getSharedAssetUrl(mapAsset.fileUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    <Map className="w-4 h-4" />
-                    View Court Map
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
+                {mapAsset && (() => {
+                  const url = mapAsset.fileUrl?.toLowerCase() || '';
+                  const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif') || url.endsWith('.webp') || (mapAsset.fileType && mapAsset.fileType.startsWith('image/'));
+                  return isImage ? (
+                    <button
+                      onClick={() => setShowMapModal(true)}
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Map className="w-4 h-4" />
+                      View Court Map
+                    </button>
+                  ) : (
+                    <a
+                      href={getSharedAssetUrl(mapAsset.fileUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Map className="w-4 h-4" />
+                      View Court Map
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  );
+                })()}
               </div>
               {isOrganizer && (
                 <button
@@ -2379,6 +2392,43 @@ export default function TournamentManage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map Modal */}
+      {showMapModal && mapAsset && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowMapModal(false)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowMapModal(false)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 flex items-center gap-2"
+            >
+              <X className="w-6 h-6" />
+              Close
+            </button>
+            <img
+              src={getSharedAssetUrl(mapAsset.fileUrl)}
+              alt="Court Map"
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+            />
+            <div className="flex justify-center mt-4">
+              <a
+                href={getSharedAssetUrl(mapAsset.fileUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open in New Tab
+              </a>
             </div>
           </div>
         </div>

@@ -4166,7 +4166,7 @@ public class TournamentController : ControllerBase
                 Name = d.Name,
                 TeamUnitId = d.TeamUnitId,
                 MaxUnits = d.MaxUnits ?? 0,
-                RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled" && u.Status != "Waitlisted"),
+                RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled"),
                 WaitlistedUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "Waitlisted"),
                 CheckedInUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "CheckedIn"),
                 TotalMatches = matches.Count(m => m.DivisionId == d.Id),
