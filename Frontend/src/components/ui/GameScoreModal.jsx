@@ -48,13 +48,13 @@ export default function GameScoreModal({
 }) {
   const [unit1Score, setUnit1Score] = useState(game.unit1Score || 0);
   const [unit2Score, setUnit2Score] = useState(game.unit2Score || 0);
-  const [courtId, setCourtId] = useState(game.courtId || '');
+  const [courtId, setCourtId] = useState(game.tournamentCourtId || '');
   const [submitting, setSubmitting] = useState(false);
   const [editingUnits, setEditingUnits] = useState(false);
   const [selectedUnit1Id, setSelectedUnit1Id] = useState(game.unit1?.id || '');
   const [selectedUnit2Id, setSelectedUnit2Id] = useState(game.unit2?.id || '');
 
-  const availableCourts = courts.filter(c => c.status === 'Available' || c.id === game.courtId);
+  const availableCourts = courts.filter(c => c.status === 'Available' || c.id === game.tournamentCourtId);
   const isCompleted = game.status === 'Completed' || game.status === 'Finished';
   const isInProgress = game.status === 'InProgress' || game.status === 'Playing';
   const hasBestOf = game.bestOf > 1;

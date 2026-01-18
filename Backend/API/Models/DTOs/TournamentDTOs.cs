@@ -642,6 +642,7 @@ public class ScheduleGameDto
     public int GameNumber { get; set; }
     public int? Unit1Score { get; set; }
     public int? Unit2Score { get; set; }
+    public int? TournamentCourtId { get; set; }
     public string? CourtLabel { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime? StartedAt { get; set; }

@@ -3627,6 +3627,7 @@ public class TournamentController : ControllerBase
                             GameNumber = game.GameNumber,
                             Unit1Score = game.Unit1Score,
                             Unit2Score = game.Unit2Score,
+                            TournamentCourtId = game.TournamentCourtId,
                             CourtLabel = game.TournamentCourt?.CourtLabel,
                             Status = game.Status,
                             StartedAt = game.StartedAt,
@@ -6296,6 +6297,15 @@ public class TournamentController : ControllerBase
                 .Where(h => h.Game!.EncounterMatch!.Encounter!.EventId == eventId)
                 .ToListAsync();
             _context.EventGameScoreHistories.RemoveRange(scoreHistories);
+
+            // Delete game-related notifications for this event
+            var gameIds = games.Select(g => g.Id).ToList();
+            var notifications = await _context.Notifications
+                .Where(n =>
+                    (n.ReferenceType == "Event" && n.ReferenceId == eventId) ||
+                    (n.ReferenceType == "Game" && n.ReferenceId.HasValue && gameIds.Contains(n.ReferenceId.Value)))
+                .ToListAsync();
+            _context.Notifications.RemoveRange(notifications);
 
             // Reset division drawing state
             var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
