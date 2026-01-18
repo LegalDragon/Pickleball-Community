@@ -112,13 +112,26 @@ var encounterId = game.EncounterMatch!.EncounterId;
 ```
 
 ### Key Entities (in `/Backend/API/Models/Entities/`)
-- `EventEncounter.cs` - DB table: `EventEncounters`
-- `EncounterMatch.cs` - DB table: `EncounterMatches`
-- `EncounterMatchFormat.cs` - DB table: `EncounterMatchFormats`
-- `EventGame.cs` - DB table: `EventGames`
-- `EncounterMatchPlayer.cs` - Player assignments to matches
+| Entity | DB Table | Purpose |
+|--------|----------|---------|
+| `EventEncounter.cs` | `EventEncounters` | Scheduled matchup between two units |
+| `EncounterMatch.cs` | `EncounterMatches` | Individual match within an encounter |
+| `EncounterMatchFormat.cs` | `EncounterMatchFormats` | Division-level template for match types |
+| `EventGame.cs` | `EventGames` | Individual game within a match |
+| `EncounterMatchPlayer.cs` | `EncounterMatchPlayers` | Player assignments to matches |
 
 Note: C# code may use `_context.EventMatches` which is a backward-compatible alias for `EventEncounters`.
+
+### Migration History (Important)
+- **Migration 041**: Created original `EventMatches` table
+- **Migration 105**: Created parallel NEW structure (`EventEncounters`, `EncounterMatches`, `EncounterMatchGames`)
+- **Migration 106**: RENAMED `EventMatches` → `EventEncounters`, reused `EventGames` with new `EncounterMatchId` FK
+
+**ORPHANED TABLE**: `EncounterMatchGames` was created by Migration 105 but is NOT USED. The application uses `EventGames` instead (via `EncounterMatchId` FK). This table can be safely dropped.
+
+### SQL Migration Notes
+- Migrations 041-105 reference `EventMatches` (old table name)
+- Migrations 106+ must reference `EventEncounters` (renamed table)
 
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:
