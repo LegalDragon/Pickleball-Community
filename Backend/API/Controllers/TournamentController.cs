@@ -5246,14 +5246,13 @@ public class TournamentController : ControllerBase
         // Show scores for any game that has been scored (has non-zero scores or is finished/completed)
         var scoredGames = allGames
             .Where(g => g.Status == "Finished" || g.Status == "Completed" ||
-                        (g.Unit1Score.HasValue && g.Unit1Score > 0) ||
-                        (g.Unit2Score.HasValue && g.Unit2Score > 0))
+                        g.Unit1Score > 0 || g.Unit2Score > 0)
             .OrderBy(g => g.GameNumber)
             .ToList();
 
         if (!scoredGames.Any()) return null;
 
-        return string.Join(", ", scoredGames.Select(g => $"{g.Unit1Score ?? 0}-{g.Unit2Score ?? 0}"));
+        return string.Join(", ", scoredGames.Select(g => $"{g.Unit1Score}-{g.Unit2Score}"));
     }
 
     private async Task UpdateUnitStats(EventGame game)
@@ -5271,8 +5270,8 @@ public class TournamentController : ControllerBase
             else
                 unit1.GamesLost++;
 
-            unit1.PointsScored += game.Unit1Score ?? 0;
-            unit1.PointsAgainst += game.Unit2Score ?? 0;
+            unit1.PointsScored += game.Unit1Score;
+            unit1.PointsAgainst += game.Unit2Score;
             unit1.UpdatedAt = DateTime.Now;
         }
 
@@ -5283,8 +5282,8 @@ public class TournamentController : ControllerBase
             else
                 unit2.GamesLost++;
 
-            unit2.PointsScored += game.Unit2Score ?? 0;
-            unit2.PointsAgainst += game.Unit1Score ?? 0;
+            unit2.PointsScored += game.Unit2Score;
+            unit2.PointsAgainst += game.Unit1Score;
             unit2.UpdatedAt = DateTime.Now;
         }
     }
