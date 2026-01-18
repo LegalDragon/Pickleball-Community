@@ -173,53 +173,123 @@ public class TournamentGameDayController : ControllerBase
                 .ThenInclude(u => u!.Division)
             .ToListAsync();
 
-        // Get player's games
-        var myGames = await _context.EventGamePlayers
-            .Where(p => p.UserId == userId && p.Game!.EncounterMatch!.Encounter!.EventId == eventId)
-            .Include(p => p.Game)
-                .ThenInclude(g => g!.EncounterMatch)
+        // Get player's unit IDs for game lookup
+        var unitIds = units.Select(u => u.UnitId).ToList();
+        var myGames = new List<PlayerGameInfoDto>();
+
+        if (unitIds.Any())
+        {
+            // Get games from encounters where player's unit is participating
+            // This is essential for simple tournaments where EventGamePlayers isn't populated
+            var allGames = await _context.EventGames
+                .Include(g => g.EncounterMatch)
                     .ThenInclude(m => m!.Encounter)
                         .ThenInclude(e => e!.Unit1)
-            .Include(p => p.Game)
-                .ThenInclude(g => g!.EncounterMatch)
+                .Include(g => g.EncounterMatch)
                     .ThenInclude(m => m!.Encounter)
                         .ThenInclude(e => e!.Unit2)
-            .Include(p => p.Game)
-                .ThenInclude(g => g!.EncounterMatch)
+                .Include(g => g.EncounterMatch)
                     .ThenInclude(m => m!.Encounter)
                         .ThenInclude(e => e!.Division)
-            .Include(p => p.Game)
-                .ThenInclude(g => g!.TournamentCourt)
-            .OrderBy(p => p.Game!.EncounterMatch!.Encounter!.RoundNumber)
-            .ThenBy(p => p.Game!.EncounterMatch!.Encounter!.EncounterNumber)
-            .Select(p => new PlayerGameInfoDto
+                .Include(g => g.TournamentCourt)
+                .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
+                .ToListAsync();
+
+            // Filter for player's units and project to DTO client-side
+            myGames = allGames
+                .Where(g => unitIds.Contains(g.EncounterMatch!.Encounter!.Unit1Id ?? 0) ||
+                            unitIds.Contains(g.EncounterMatch!.Encounter!.Unit2Id ?? 0))
+                .OrderBy(g => g.EncounterMatch!.Encounter!.RoundNumber)
+                .ThenBy(g => g.EncounterMatch!.Encounter!.EncounterNumber)
+                .ThenBy(g => g.GameNumber)
+                .Select(g => {
+                    var encounter = g.EncounterMatch!.Encounter!;
+                    var myUnitId = unitIds.Contains(encounter.Unit1Id ?? 0) ? encounter.Unit1Id : encounter.Unit2Id;
+                    return new PlayerGameInfoDto
+                    {
+                        GameId = g.Id,
+                        GameNumber = g.GameNumber,
+                        Status = g.Status,
+                        Unit1Score = g.Unit1Score,
+                        Unit2Score = g.Unit2Score,
+                        MatchId = g.EncounterMatch.EncounterId,
+                        RoundType = encounter.RoundType,
+                        RoundName = encounter.RoundName,
+                        DivisionName = encounter.Division?.Name ?? "",
+                        MyUnitId = myUnitId ?? 0,
+                        Unit1Id = encounter.Unit1Id,
+                        Unit1Name = encounter.Unit1?.Name,
+                        Unit2Id = encounter.Unit2Id,
+                        Unit2Name = encounter.Unit2?.Name,
+                        CourtName = g.TournamentCourt?.CourtLabel,
+                        CourtNumber = g.TournamentCourt?.SortOrder,
+                        ScheduledTime = encounter.ScheduledTime,
+                        QueuedAt = g.QueuedAt,
+                        StartedAt = g.StartedAt,
+                        FinishedAt = g.FinishedAt,
+                        CanSubmitScore = g.Status == "Playing" && g.ScoreSubmittedByUnitId != myUnitId,
+                        NeedsConfirmation = g.ScoreSubmittedByUnitId != null && g.ScoreSubmittedByUnitId != myUnitId && g.ScoreConfirmedByUnitId == null
+                    };
+                })
+                .ToList();
+        }
+
+        var firstUnit = units.FirstOrDefault();
+
+        // Get all event divisions for "Others" tab
+        var allDivisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId)
+            .OrderBy(d => d.SortOrder)
+            .Select(d => new EventDivisionBriefDto
             {
-                GameId = p.GameId,
-                GameNumber = p.Game!.GameNumber,
-                Status = p.Game.Status,
-                Unit1Score = p.Game.Unit1Score,
-                Unit2Score = p.Game.Unit2Score,
-                MatchId = p.Game.EncounterMatch!.EncounterId,
-                RoundType = p.Game.EncounterMatch!.Encounter!.RoundType,
-                RoundName = p.Game.EncounterMatch.Encounter.RoundName,
-                DivisionName = p.Game.EncounterMatch.Encounter.Division != null ? p.Game.EncounterMatch.Encounter.Division.Name : "",
-                MyUnitId = p.UnitId,
-                Unit1Id = p.Game.EncounterMatch.Encounter.Unit1Id,
-                Unit1Name = p.Game.EncounterMatch.Encounter.Unit1 != null ? p.Game.EncounterMatch.Encounter.Unit1.Name : null,
-                Unit2Id = p.Game.EncounterMatch.Encounter.Unit2Id,
-                Unit2Name = p.Game.EncounterMatch.Encounter.Unit2 != null ? p.Game.EncounterMatch.Encounter.Unit2.Name : null,
-                CourtName = p.Game.TournamentCourt != null ? p.Game.TournamentCourt.CourtLabel : null,
-                CourtNumber = p.Game.TournamentCourt != null ? p.Game.TournamentCourt.SortOrder : null,
-                ScheduledTime = p.Game.EncounterMatch.Encounter.ScheduledTime,
-                QueuedAt = p.Game.QueuedAt,
-                StartedAt = p.Game.StartedAt,
-                FinishedAt = p.Game.FinishedAt,
-                CanSubmitScore = p.Game.Status == "Playing" && p.Game.ScoreSubmittedByUnitId != p.UnitId,
-                NeedsConfirmation = p.Game.ScoreSubmittedByUnitId != null && p.Game.ScoreSubmittedByUnitId != p.UnitId && p.Game.ScoreConfirmedByUnitId == null
+                Id = d.Id,
+                Name = d.Name
             })
             .ToListAsync();
 
-        var firstUnit = units.FirstOrDefault();
+        // Get scheduled matches for player's units (for Future Games section)
+        // unitIds already defined above
+        var scheduledMatches = new List<ScheduledMatchDto>();
+
+        if (unitIds.Any())
+        {
+            // Fetch all non-completed matches for event, then filter client-side
+            // This avoids EF Core SQL generation issues with Contains() + OR in WHERE clause
+            var allEventMatches = await _context.EventMatches
+                .Include(m => m.Unit1)
+                .Include(m => m.Unit2)
+                .Include(m => m.Division)
+                .Where(m => m.EventId == eventId &&
+                    m.Status != "Completed" && m.Status != "Finished")
+                .ToListAsync();
+
+            // Filter for player's units client-side
+            var rawMatches = allEventMatches
+                .Where(m => unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0))
+                .ToList();
+
+            // Sort and project to DTO client-side to avoid EF Core translation issues
+            scheduledMatches = rawMatches
+                .OrderBy(m => m.RoundType == "Pool" ? 0 : 1)
+                .ThenBy(m => m.RoundNumber)
+                .ThenBy(m => m.EncounterNumber)
+                .Select(m => new ScheduledMatchDto
+            {
+                EncounterId = m.Id,
+                DivisionId = m.DivisionId,
+                DivisionName = m.Division?.Name ?? "",
+                RoundType = m.RoundType,
+                RoundName = m.RoundName,
+                MatchNumber = m.EncounterNumber,
+                MyUnitId = unitIds.Contains(m.Unit1Id ?? 0) ? m.Unit1Id : m.Unit2Id,
+                Unit1Id = m.Unit1Id,
+                Unit1Name = m.Unit1?.Name,
+                Unit2Id = m.Unit2Id,
+                Unit2Name = m.Unit2?.Name,
+                Status = m.Status,
+                ScheduledTime = m.ScheduledTime
+            }).ToList();
+        }
 
         return Ok(new ApiResponse<PlayerGameDayDto>
         {
@@ -240,7 +310,9 @@ public class TournamentGameDayController : ControllerBase
                     UnitName = u.Unit.Name,
                     HasPaid = u.HasPaid
                 }).ToList(),
+                AllDivisions = allDivisions,
                 MyGames = myGames,
+                ScheduledMatches = scheduledMatches,
                 UpcomingGame = myGames.FirstOrDefault(g => g.Status == "Queued" || g.Status == "Playing"),
                 NextGame = myGames.FirstOrDefault(g => g.Status == "Ready" || g.Status == "New")
             }
@@ -481,8 +553,8 @@ public class TournamentGameDayController : ControllerBase
             return NotFound(new ApiResponse<object> { Success = false, Message = "Game encounter not found" });
 
         var isOrganizer = await IsEventOrganizer(encounter.EventId, userId);
-        var isUnit1Player = encounter.Unit1!.Members.Any(m => m.UserId == userId && m.InviteStatus == "Accepted");
-        var isUnit2Player = encounter.Unit2!.Members.Any(m => m.UserId == userId && m.InviteStatus == "Accepted");
+        var isUnit1Player = encounter.Unit1?.Members?.Any(m => m.UserId == userId && m.InviteStatus == "Accepted") ?? false;
+        var isUnit2Player = encounter.Unit2?.Members?.Any(m => m.UserId == userId && m.InviteStatus == "Accepted") ?? false;
         var playerUnitId = isUnit1Player ? encounter.Unit1Id : (isUnit2Player ? encounter.Unit2Id : null);
 
         if (!isOrganizer && !isUnit1Player && !isUnit2Player)
@@ -1105,9 +1177,10 @@ public class TournamentGameDayController : ControllerBase
             .FirstOrDefaultAsync(m => m.Id == encounterId);
 
         if (encounter == null) return;
+        if (encounter.Unit1?.Members == null || encounter.Unit2?.Members == null) return;
 
-        var playerIds = encounter.Unit1!.Members
-            .Concat(encounter.Unit2!.Members)
+        var playerIds = encounter.Unit1.Members
+            .Concat(encounter.Unit2.Members)
             .Where(m => m.InviteStatus == "Accepted")
             .Select(m => m.UserId)
             .Distinct();
@@ -1137,9 +1210,10 @@ public class TournamentGameDayController : ControllerBase
             .FirstOrDefaultAsync(m => m.Id == encounterId);
 
         if (encounter == null) return;
+        if (encounter.Unit1?.Members == null || encounter.Unit2?.Members == null) return;
 
-        var playerIds = encounter.Unit1!.Members
-            .Concat(encounter.Unit2!.Members)
+        var playerIds = encounter.Unit1.Members
+            .Concat(encounter.Unit2.Members)
             .Where(m => m.InviteStatus == "Accepted")
             .Select(m => m.UserId)
             .Distinct();
@@ -1253,8 +1327,10 @@ public class TournamentGameDayController : ControllerBase
             match.WinnerUnitId = unit1Wins > unit2Wins ? match.Unit1Id : match.Unit2Id;
 
             // Update match stats
-            var unit1 = match.Unit1!;
-            var unit2 = match.Unit2!;
+            var unit1 = match.Unit1;
+            var unit2 = match.Unit2;
+            if (unit1 == null || unit2 == null) return;
+
             unit1.MatchesPlayed++;
             unit2.MatchesPlayed++;
 
@@ -1395,9 +1471,34 @@ public class PlayerGameDayDto
     public bool WaiverSigned { get; set; }
     public bool HasPaid { get; set; }
     public List<PlayerDivisionDto> MyDivisions { get; set; } = new();
+    public List<EventDivisionBriefDto> AllDivisions { get; set; } = new();
     public List<PlayerGameInfoDto> MyGames { get; set; } = new();
+    public List<ScheduledMatchDto> ScheduledMatches { get; set; } = new();
     public PlayerGameInfoDto? UpcomingGame { get; set; }
     public PlayerGameInfoDto? NextGame { get; set; }
+}
+
+public class EventDivisionBriefDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class ScheduledMatchDto
+{
+    public int EncounterId { get; set; }
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string RoundType { get; set; } = string.Empty;
+    public string? RoundName { get; set; }
+    public int MatchNumber { get; set; }
+    public int? MyUnitId { get; set; }
+    public int? Unit1Id { get; set; }
+    public string? Unit1Name { get; set; }
+    public int? Unit2Id { get; set; }
+    public string? Unit2Name { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? ScheduledTime { get; set; }
 }
 
 public class PlayerDivisionDto

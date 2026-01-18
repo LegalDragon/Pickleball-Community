@@ -5,7 +5,8 @@ import {
   Send, RefreshCw, AlertCircle, ChevronDown, ChevronRight,
   FileText, Bell, Trophy, Grid, List, Eye, UserCheck, Tv
 } from 'lucide-react'
-import { gameDayApi, checkInApi } from '../services/api'
+import { gameDayApi, checkInApi, tournamentApi } from '../services/api'
+import GameScoreModal from '../components/ui/GameScoreModal'
 
 export default function TDGameDayDashboard() {
   const { eventId } = useParams()
@@ -19,6 +20,7 @@ export default function TDGameDayDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState('courts') // courts, games, checkins
   const [dashboardView, setDashboardView] = useState('td') // td, player, spectator
+  const [showScoreEdit, setShowScoreEdit] = useState(null) // Game to edit score
 
   const loadData = useCallback(async () => {
     try {
@@ -253,6 +255,7 @@ export default function TDGameDayDashboard() {
             readyGames={gamesReadyWithCheckIn}
             onStartGame={handleStartGame}
             onQueueGame={handleQueueGame}
+            onEditScore={(game) => setShowScoreEdit(game)}
           />
         )}
 
@@ -411,6 +414,31 @@ export default function TDGameDayDashboard() {
           onSend={loadData}
         />
       )}
+
+      {/* Game Score Edit Modal */}
+      {showScoreEdit && (
+        <GameScoreModal
+          game={{
+            id: showScoreEdit.gameId,
+            unit1Score: showScoreEdit.unit1Score || 0,
+            unit2Score: showScoreEdit.unit2Score || 0,
+            status: showScoreEdit.status,
+            courtLabel: showScoreEdit.courtName,
+            unit1: { name: showScoreEdit.unit1Name },
+            unit2: { name: showScoreEdit.unit2Name }
+          }}
+          onClose={() => setShowScoreEdit(null)}
+          onSuccess={() => {
+            setShowScoreEdit(null)
+            loadData()
+          }}
+          onSaveScore={async (gameId, unit1Score, unit2Score, finish) => {
+            await gameDayApi.submitScore(gameId, unit1Score, unit2Score, finish)
+          }}
+          showCourtAssignment={false}
+          showStatusControl={false}
+        />
+      )}
     </div>
   )
 }
@@ -427,7 +455,7 @@ function StatCard({ icon, label, value, color }) {
   )
 }
 
-function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueGame }) {
+function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueGame, onEditScore }) {
   const [selectedCourt, setSelectedCourt] = useState(null)
   const [showQueueModal, setShowQueueModal] = useState(null)
 
@@ -515,6 +543,14 @@ function CourtsView({ courts, inProgressGames, readyGames, onStartGame, onQueueG
                         className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
                       >
                         <Play className="w-4 h-4" /> Start Game
+                      </button>
+                    )}
+                    {(currentGame.status === 'Playing' || currentGame.status === 'InProgress') && (
+                      <button
+                        onClick={() => onEditScore(currentGame)}
+                        className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-4 h-4" /> Edit Score
                       </button>
                     )}
                   </div>

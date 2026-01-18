@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Users, LayoutGrid, Play, Settings, ChevronDown, ChevronUp, MessageSquare,
   Clock, CheckCircle, XCircle, RefreshCw, ArrowLeft, Send, AlertTriangle,
-  Calendar, MapPin, Trophy, ListOrdered, Zap, User, Bell
+  Calendar, MapPin, Trophy, ListOrdered, Zap, User, Bell, Download
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,14 +23,23 @@ const eventRunningApi = {
   broadcast: (eventId, data) => api.post(`/event-running/${eventId}/broadcast`, data),
 };
 
-const TABS = [
-  { id: 'overview', label: 'Overview', icon: LayoutGrid },
-  { id: 'schedule', label: 'Schedule', icon: Calendar },
+// Left group: main operational tabs
+const LEFT_TABS = [
+  { id: 'checkin', label: 'Check-in', icon: Users },
   { id: 'courts', label: 'Courts', icon: LayoutGrid },
-  { id: 'queue', label: 'Queue', icon: ListOrdered },
-  { id: 'players', label: 'Players', icon: Users },
-  { id: 'messages', label: 'Messages', icon: MessageSquare },
+  { id: 'divisions', label: 'Divisions', icon: Trophy },
+  { id: 'schedule', label: 'Schedule', icon: Calendar },
 ];
+
+// Right group: secondary/overview tabs
+const RIGHT_TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutGrid },
+  { id: 'scoring', label: 'Scoring', icon: ListOrdered },
+  { id: 'gameday', label: 'Game Day', icon: Play },
+];
+
+// Combined for backward compatibility
+const TABS = [...LEFT_TABS, ...RIGHT_TABS];
 
 const STATUS_COLORS = {
   Scheduled: 'bg-gray-100 text-gray-700',
@@ -57,7 +66,7 @@ const EventRunningAdmin = () => {
   const { isAuthenticated } = useAuth();
   const { joinEvent, leaveEvent } = useNotifications();
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('checkin');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -253,44 +262,81 @@ const EventRunningAdmin = () => {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Left and Right groups */}
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-1 overflow-x-auto pb-2">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-blue-100 text-blue-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-                {tab.id === 'queue' && data.matchQueue?.length > 0 && (
-                  <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {data.matchQueue.length}
-                  </span>
-                )}
-                {tab.id === 'overview' && data.stats?.disputedGames > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                    {data.stats.disputedGames}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="flex justify-between overflow-x-auto pb-2">
+            {/* Left tabs: operational */}
+            <div className="flex gap-1">
+              {LEFT_TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => tab.id === 'gameday' ? navigate(`/events/${eventId}/gameday`) : setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Right tabs: secondary/overview */}
+            <div className="flex gap-1">
+              {RIGHT_TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => tab.id === 'gameday' ? navigate(`/events/${eventId}/gameday`) : setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                  {tab.id === 'scoring' && data.matchQueue?.length > 0 && (
+                    <span className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {data.matchQueue.length}
+                    </span>
+                  )}
+                  {tab.id === 'overview' && data.stats?.disputedGames > 0 && (
+                    <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {data.stats.disputedGames}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === 'overview' && (
-          <OverviewTab
+        {activeTab === 'checkin' && (
+          <PlayersTab
+            data={data}
+            selectedDivision={selectedDivision}
+            setSelectedDivision={setSelectedDivision}
+            eventId={eventId}
+            onMessage={(player) => setShowPlayerMessage(player)}
+            onRefresh={loadData}
+          />
+        )}
+        {activeTab === 'courts' && (
+          <CourtsTab
             data={data}
             onStartMatch={handleStartMatch}
             onEditScore={(match) => setShowScoreEdit(match)}
+          />
+        )}
+        {activeTab === 'divisions' && (
+          <DivisionsTab
+            data={data}
+            selectedDivision={selectedDivision}
+            setSelectedDivision={setSelectedDivision}
           />
         )}
         {activeTab === 'schedule' && (
@@ -309,38 +355,20 @@ const EventRunningAdmin = () => {
             onEditScore={(match) => setShowScoreEdit(match)}
           />
         )}
-        {activeTab === 'courts' && (
-          <CourtsTab
+        {activeTab === 'overview' && (
+          <OverviewTab
             data={data}
             onStartMatch={handleStartMatch}
             onEditScore={(match) => setShowScoreEdit(match)}
           />
         )}
-        {activeTab === 'queue' && (
+        {activeTab === 'scoring' && (
           <QueueTab
             data={data}
             onQueueMatch={handleQueueMatch}
             onStartMatch={handleStartMatch}
             onAssignCourt={(match) => setShowAssignCourt(match)}
             onRefresh={loadData}
-          />
-        )}
-        {activeTab === 'players' && (
-          <PlayersTab
-            data={data}
-            selectedDivision={selectedDivision}
-            setSelectedDivision={setSelectedDivision}
-            eventId={eventId}
-            onMessage={(player) => setShowPlayerMessage(player)}
-            onRefresh={loadData}
-          />
-        )}
-        {activeTab === 'messages' && (
-          <MessagesTab
-            data={data}
-            eventId={eventId}
-            onBroadcast={() => setShowBroadcast(true)}
-            onMessage={(player) => setShowPlayerMessage(player)}
           />
         )}
       </div>
@@ -781,6 +809,66 @@ const QueueTab = ({ data, onQueueMatch, onStartMatch, onAssignCourt, onRefresh }
   );
 };
 
+const DivisionsTab = ({ data, selectedDivision, setSelectedDivision }) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <select
+          value={selectedDivision || ''}
+          onChange={(e) => setSelectedDivision(e.target.value ? parseInt(e.target.value) : null)}
+          className="px-3 py-2 border border-gray-300 rounded-lg"
+        >
+          <option value="">All Divisions</option>
+          {data.divisions?.map(d => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {data.divisions
+          ?.filter(d => !selectedDivision || d.id === selectedDivision)
+          .map(division => (
+            <div key={division.id} className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-lg">{division.name}</h3>
+                <span className="text-sm text-gray-500">{division.units?.length || 0} teams</span>
+              </div>
+              <div className="space-y-2">
+                {division.units?.map(unit => (
+                  <div key={unit.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                    <div>
+                      <span className="font-medium text-sm">{unit.name}</span>
+                      <div className="text-xs text-gray-500">
+                        {unit.members?.length || 0} players
+                      </div>
+                    </div>
+                    <div className="flex -space-x-2">
+                      {unit.members?.slice(0, 4).map((member, idx) => (
+                        <div key={member.userId || idx} className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center overflow-hidden">
+                          {member.profileImageUrl ? (
+                            <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-3 h-3 text-gray-400" />
+                          )}
+                        </div>
+                      ))}
+                      {(unit.members?.length || 0) > 4 && (
+                        <div className="w-6 h-6 rounded-full bg-gray-300 border-2 border-white flex items-center justify-center text-xs text-gray-600">
+                          +{unit.members.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+};
+
 const PlayersTab = ({ data, selectedDivision, setSelectedDivision, eventId, onMessage, onRefresh }) => {
   const [updating, setUpdating] = useState(null);
 
@@ -818,22 +906,74 @@ const PlayersTab = ({ data, selectedDivision, setSelectedDivision, eventId, onMe
     return players;
   }, [data.divisions, selectedDivision]);
 
+  const handleDownloadExcel = () => {
+    // Create CSV content
+    const headers = ['Name', 'Email', 'Division', 'Team', 'Check-in Status', 'Waiver Signed'];
+    const rows = allPlayers.map(player => [
+      player.name || '',
+      player.email || '',
+      player.divisionName || '',
+      player.unitName || '',
+      player.isCheckedIn ? 'Checked In' : 'Not Checked In',
+      player.waiverSigned ? 'Yes' : 'No'
+    ]);
+
+    // Escape CSV values
+    const escapeCSV = (value) => {
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Add BOM for Excel UTF-8 compatibility
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const divisionName = selectedDivision
+      ? data.divisions.find(d => d.id === selectedDivision)?.name || 'Division'
+      : 'All_Divisions';
+    link.download = `${data.eventName || 'Event'}_CheckIns_${divisionName}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <select
-          value={selectedDivision || ''}
-          onChange={(e) => setSelectedDivision(e.target.value ? parseInt(e.target.value) : null)}
-          className="px-3 py-2 border border-gray-300 rounded-lg"
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedDivision || ''}
+            onChange={(e) => setSelectedDivision(e.target.value ? parseInt(e.target.value) : null)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="">All Divisions</option>
+            {data.divisions.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+          <span className="text-gray-500">
+            {allPlayers.filter(p => p.isCheckedIn).length} / {allPlayers.length} checked in
+          </span>
+        </div>
+        <button
+          onClick={handleDownloadExcel}
+          className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+          title="Download as Excel/CSV"
         >
-          <option value="">All Divisions</option>
-          {data.divisions.map(d => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <span className="text-gray-500">
-          {allPlayers.filter(p => p.isCheckedIn).length} / {allPlayers.length} checked in
-        </span>
+          <Download className="w-4 h-4" />
+          Export
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200">

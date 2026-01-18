@@ -3890,13 +3890,17 @@ public class TournamentController : ControllerBase
         game.Status = request.Status;
         game.UpdatedAt = DateTime.Now;
 
+        var finishedCourtId = (int?)null;
         if (request.Status == "Started" || request.Status == "Playing")
         {
             game.StartedAt ??= DateTime.Now;
         }
-        else if (request.Status == "Finished")
+        else if (request.Status == "Finished" || request.Status == "Completed")
         {
             game.FinishedAt = DateTime.Now;
+
+            // Save court ID before freeing it (for auto-starting next game)
+            finishedCourtId = game.TournamentCourtId;
 
             // Free up the court
             if (game.TournamentCourt != null)
@@ -3913,7 +3917,8 @@ public class TournamentController : ControllerBase
 
         // Send real-time notifications to players if status changed significantly
         var encounter = game.EncounterMatch?.Encounter;
-        if (encounter != null && (request.Status == "Started" || request.Status == "Playing"))
+        var notifyStatuses = new[] { "Queued", "Ready", "InProgress", "Started", "Playing" };
+        if (encounter != null && notifyStatuses.Contains(request.Status) && oldStatus != request.Status)
         {
             var playerIds = new List<int>();
             if (encounter.Unit1?.Members != null)
@@ -3928,12 +3933,21 @@ public class TournamentController : ControllerBase
                 var courtName = game.TournamentCourt?.CourtLabel ?? "assigned court";
                 var actionUrl = $"/event/{encounter.EventId}/gameday";
 
+                // Customize message based on status
+                var title = request.Status switch
+                {
+                    "Queued" => "Game Queued!",
+                    "Ready" => "Get Ready!",
+                    "InProgress" or "Playing" or "Started" => "Game Starting!",
+                    _ => "Game Update"
+                };
+
                 foreach (var playerId in playerIds.Distinct())
                 {
                     await _notificationService.CreateAndSendAsync(
                         playerId,
                         "GameUpdate",
-                        "Game Starting!",
+                        title,
                         $"{unit1Name} vs {unit2Name} - {courtName}",
                         actionUrl,
                         "Game",
@@ -3954,6 +3968,12 @@ public class TournamentController : ControllerBase
                 ReferenceId = game.Id,
                 CreatedAt = DateTime.Now
             });
+
+            // Auto-start next queued game on the same court if game finished
+            if (finishedCourtId.HasValue && (request.Status == "Finished" || request.Status == "Completed"))
+            {
+                await StartNextQueuedGameOnCourt(finishedCourtId.Value, encounter.EventId);
+            }
         }
 
         return Ok(new ApiResponse<EventGameDto>
@@ -4046,6 +4066,8 @@ public class TournamentController : ControllerBase
             game.Status = "Finished";
             game.FinishedAt = DateTime.Now;
 
+            var finishedCourtId = game.TournamentCourtId;
+
             if (encounter != null)
             {
                 game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
@@ -4066,6 +4088,21 @@ public class TournamentController : ControllerBase
 
                 // Check if match is complete (for best-of series)
                 await CheckMatchComplete(encounter.Id);
+
+                // Save changes before starting next game
+                await _context.SaveChangesAsync();
+
+                // Auto-start next queued game on the same court
+                if (finishedCourtId.HasValue)
+                {
+                    await StartNextQueuedGameOnCourt(finishedCourtId.Value, encounter.EventId);
+                }
+
+                return Ok(new ApiResponse<EventGameDto>
+                {
+                    Success = true,
+                    Data = MapToGameDto(game)
+                });
             }
         }
         // If already finished and score changed, update stats with delta
@@ -4125,6 +4162,8 @@ public class TournamentController : ControllerBase
             game.Status = "Finished";
             game.FinishedAt = DateTime.Now;
 
+            var finishedCourtId = game.TournamentCourtId;
+
             // Determine winner
             var unit1Id = encounter!.Unit1Id;
             var unit2Id = encounter!.Unit2Id;
@@ -4146,6 +4185,21 @@ public class TournamentController : ControllerBase
 
             // Check if match is complete
             await CheckMatchComplete(game.EncounterMatch!.EncounterId);
+
+            game.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            // Auto-start next queued game on the same court
+            if (finishedCourtId.HasValue)
+            {
+                await StartNextQueuedGameOnCourt(finishedCourtId.Value, encounter.EventId);
+            }
+
+            return Ok(new ApiResponse<EventGameDto>
+            {
+                Success = true,
+                Data = MapToGameDto(game)
+            });
         }
         else
         {
@@ -5359,6 +5413,85 @@ public class TournamentController : ControllerBase
             unit2.PointsScored = unit2.PointsScored - oldUnit2Score + newUnit2Score;
             unit2.PointsAgainst = unit2.PointsAgainst - oldUnit1Score + newUnit1Score;
             unit2.UpdatedAt = DateTime.Now;
+        }
+    }
+
+    /// <summary>
+    /// When a game finishes and frees up a court, check if there's another game queued
+    /// on that court and automatically start it.
+    /// </summary>
+    private async Task StartNextQueuedGameOnCourt(int courtId, int eventId)
+    {
+        // Find the next queued game on this court
+        var nextGame = await _context.EventGames
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit1).ThenInclude(u => u!.Members)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit2).ThenInclude(u => u!.Members)
+            .Include(g => g.TournamentCourt)
+            .Where(g => g.TournamentCourtId == courtId
+                && g.Status == "Queued"
+                && g.EncounterMatch!.Encounter!.EventId == eventId)
+            .OrderBy(g => g.QueuedAt)
+            .FirstOrDefaultAsync();
+
+        if (nextGame == null) return;
+
+        // Start the next game
+        nextGame.Status = "InProgress";
+        nextGame.StartedAt = DateTime.Now;
+        nextGame.UpdatedAt = DateTime.Now;
+
+        // Update the court status
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court != null)
+        {
+            court.Status = "InUse";
+            court.CurrentGameId = nextGame.Id;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Send notifications to players
+        var encounter = nextGame.EncounterMatch?.Encounter;
+        if (encounter != null)
+        {
+            var playerIds = new List<int>();
+            if (encounter.Unit1?.Members != null)
+                playerIds.AddRange(encounter.Unit1.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+            if (encounter.Unit2?.Members != null)
+                playerIds.AddRange(encounter.Unit2.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+
+            if (playerIds.Count > 0)
+            {
+                var unit1Name = encounter.Unit1?.Name ?? "Team 1";
+                var unit2Name = encounter.Unit2?.Name ?? "Team 2";
+                var courtName = nextGame.TournamentCourt?.CourtLabel ?? "assigned court";
+                var actionUrl = $"/event/{encounter.EventId}/gameday";
+
+                foreach (var playerId in playerIds.Distinct())
+                {
+                    await _notificationService.CreateAndSendAsync(
+                        playerId,
+                        "GameUpdate",
+                        "Game Starting!",
+                        $"{unit1Name} vs {unit2Name} - {courtName}",
+                        actionUrl,
+                        "Game",
+                        nextGame.Id);
+                }
+            }
+
+            // Broadcast to event group for admin dashboard refresh
+            await _notificationService.SendToEventAsync(encounter.EventId, new NotificationPayload
+            {
+                Type = "GameUpdate",
+                Title = "Game Started",
+                Message = $"Next game auto-started on {court?.CourtLabel}",
+                ReferenceType = "Game",
+                ReferenceId = nextGame.Id,
+                CreatedAt = DateTime.Now
+            });
         }
     }
 

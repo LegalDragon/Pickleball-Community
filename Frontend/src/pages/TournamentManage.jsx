@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
@@ -36,6 +36,7 @@ export default function TournamentManage() {
   const [event, setEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDivision, setSelectedDivision] = useState(null);
+  const selectedDivisionRef = useRef(null); // Ref to track selectedDivision for SignalR listener
   const [error, setError] = useState(null);
 
   // Schedule generation state
@@ -99,6 +100,11 @@ export default function TournamentManage() {
     }
   }, [eventId]);
 
+  // Keep ref in sync with selectedDivision for SignalR listener
+  useEffect(() => {
+    selectedDivisionRef.current = selectedDivision;
+  }, [selectedDivision]);
+
   // SignalR connection for real-time updates
   useEffect(() => {
     if (!eventId || !isAuthenticated) return;
@@ -115,8 +121,10 @@ export default function TournamentManage() {
       if (notification.Type === 'ScoreUpdate' || notification.Type === 'GameUpdate') {
         console.log('Admin dashboard: Received game update, refreshing...', notification);
         loadDashboard();
-        if (selectedDivision?.scheduleReady) {
-          loadSchedule(selectedDivision.id);
+        // Use ref to get current selectedDivision value (avoids stale closure)
+        const currentDivision = selectedDivisionRef.current;
+        if (currentDivision?.scheduleReady) {
+          loadSchedule(currentDivision.id);
         }
       }
     });
@@ -912,23 +920,42 @@ export default function TournamentManage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - Left (operational) and Right (secondary) groups */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex overflow-x-auto">
-            {['overview', 'divisions', 'courts', 'schedule', 'checkin', 'scoring', 'gameday'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab
-                    ? 'border-orange-600 text-orange-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab === 'checkin' ? 'Check-in' : tab === 'gameday' ? 'Game Day' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
+          <div className="flex justify-between overflow-x-auto">
+            {/* Left group: operational tabs */}
+            <div className="flex">
+              {['checkin', 'courts', 'divisions', 'schedule'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab
+                      ? 'border-orange-600 text-orange-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'checkin' ? 'Check-in' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+            {/* Right group: secondary/overview tabs */}
+            <div className="flex">
+              {['overview', 'scoring', 'gameday'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab
+                      ? 'border-orange-600 text-orange-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab === 'gameday' ? 'Game Day' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1356,12 +1383,34 @@ export default function TournamentManage() {
                         <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-semibold text-orange-700 uppercase">Current Game</span>
-                            {court.currentGame.startedAt && (
-                              <span className="text-xs text-orange-600 flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {formatTimeElapsed(court.currentGame.startedAt)}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {court.currentGame.startedAt && (
+                                <span className="text-xs text-orange-600 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {formatTimeElapsed(court.currentGame.startedAt)}
+                                </span>
+                              )}
+                              {isOrganizer && (
+                                <button
+                                  onClick={() => setSelectedGameForEdit({
+                                    id: court.currentGame.gameId,
+                                    unit1Score: court.currentGame.unit1Score || 0,
+                                    unit2Score: court.currentGame.unit2Score || 0,
+                                    tournamentCourtId: court.id,
+                                    status: court.currentGame.status || 'Playing',
+                                    unit1: { id: court.currentGame.unit1Id, name: court.currentGame.unit1Name || court.currentGame.unit1Players },
+                                    unit2: { id: court.currentGame.unit2Id, name: court.currentGame.unit2Name || court.currentGame.unit2Players },
+                                    bestOf: 1,
+                                    hasGames: true
+                                  })}
+                                  className="text-xs text-orange-700 hover:text-orange-800 flex items-center gap-1"
+                                  title="Edit score"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  Edit
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="text-sm font-medium text-gray-900">
                             {court.currentGame.unit1Players || 'TBD'} vs {court.currentGame.unit2Players || 'TBD'}

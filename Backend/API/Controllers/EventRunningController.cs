@@ -137,7 +137,7 @@ public class EventRunningController : ControllerBase
             .Include(m => m.Unit2).ThenInclude(u => u!.Members).ThenInclude(mem => mem.User)
             .Include(m => m.Division)
             .Include(m => m.TournamentCourt)
-            .Include(m => m.Matches).ThenInclude(match => match.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games).ThenInclude(g => g.TournamentCourt)
             .Where(m => m.EventId == eventId &&
                 (unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0)))
             .OrderBy(m => m.ScheduledTime ?? m.CreatedAt)
@@ -1280,9 +1280,9 @@ public class EventRunningController : ControllerBase
             Unit1Id = m.Unit1Id,
             Unit2Id = m.Unit2Id,
             MyUnitId = myUnitId,
-            CourtLabel = m.TournamentCourt?.CourtLabel,
+            CourtLabel = currentGame?.TournamentCourt?.CourtLabel ?? m.TournamentCourt?.CourtLabel,
             ScheduledTime = m.ScheduledTime,
-            Status = m.Status,
+            Status = currentGame?.Status ?? m.Status,
             BestOf = m.BestOf,
             CurrentGameNumber = currentGame?.GameNumber ?? 1,
             Unit1Score = currentGame?.Unit1Score ?? 0,
