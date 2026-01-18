@@ -65,7 +65,9 @@ public class GameDayController : ControllerBase
         if (evt == null)
             return NotFound(new { success = false, message = "Event not found" });
 
-        var isOrganizer = evt.OrganizedByUserId == userId.Value;
+        // Check if user is organizer or site admin
+        var currentUser = await _context.Users.FindAsync(userId.Value);
+        var isOrganizer = evt.OrganizedByUserId == userId.Value || currentUser?.Role == "Admin";
 
         // Get all units with their members
         var units = await _context.EventUnits

@@ -150,9 +150,10 @@ export default function DrawingMonitor() {
         setIsOrganizer(data.isOrganizer);
         initializeDivisionStates(data.divisions);
 
-        // Auto-select first division if none selected
-        if (!selectedDivisionId && data.divisions.length > 0) {
-          setSelectedDivisionId(data.divisions[0].divisionId);
+        // Auto-select first division with units if none selected
+        const divisionsWithUnits = data.divisions.filter(d => d.totalUnits > 0);
+        if (!selectedDivisionId && divisionsWithUnits.length > 0) {
+          setSelectedDivisionId(divisionsWithUnits[0].divisionId);
         }
       } else {
         setError('Failed to load event data');
@@ -481,7 +482,7 @@ export default function DrawingMonitor() {
     );
   }
 
-  const divisions = Object.values(divisionStates);
+  const divisions = Object.values(divisionStates).filter(d => d.totalUnits > 0);
   const selectedDivision = selectedDivisionId ? divisionStates[selectedDivisionId] : null;
   const authenticatedViewers = viewers.filter(v => v.isAuthenticated);
   const anonymousCount = viewers.filter(v => !v.isAuthenticated).length;

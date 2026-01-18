@@ -171,6 +171,18 @@ public class EventUnitMember
     public DateTime? CheckedInAt { get; set; }
 
     /// <summary>
+    /// Check-in status: None, Requested, Approved, Rejected
+    /// None = not requested, Requested = player submitted self-check-in, Approved = admin approved, Rejected = admin rejected
+    /// </summary>
+    [MaxLength(20)]
+    public string CheckInStatus { get; set; } = "None";
+
+    /// <summary>
+    /// When the player requested check-in
+    /// </summary>
+    public DateTime? CheckInRequestedAt { get; set; }
+
+    /// <summary>
     /// Whether this member has paid their portion
     /// </summary>
     public bool HasPaid { get; set; } = false;

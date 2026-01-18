@@ -30,6 +30,7 @@ import EventDashboard from './pages/EventDashboard'
 import EventRunningAdmin from './pages/EventRunningAdmin'
 import TDGameDayDashboard from './pages/TDGameDayDashboard'
 import PlayerGameDay from './pages/PlayerGameDay'
+import PlayerCheckIn from './pages/PlayerCheckIn'
 import EventScoreboard from './pages/EventScoreboard'
 import DrawingMonitor from './pages/DrawingMonitor'
 import DivisionSchedule from './pages/DivisionSchedule'
@@ -48,6 +49,7 @@ import Messages from './pages/Messages'
 import PublicProfile from './pages/PublicProfile'
 import PlayerHistory from './pages/PlayerHistory'
 import ProtectedRoute from './components/ProtectedRoute'
+import ActiveEventNotices from './components/ActiveEventNotices'
 
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
@@ -59,7 +61,9 @@ import InstaGameMain from './pages/InstaGame/InstaGameMain'
 
 function App() {
   return (
-    <Routes>
+    <>
+      <ActiveEventNotices />
+      <Routes>
       {/* Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
@@ -107,6 +111,16 @@ function App() {
       <Route path="/event/:eventId/gameday" element={
         <ProtectedRoute>
           <PlayerGameDay />
+        </ProtectedRoute>
+      } />
+      <Route path="/event/:eventId/game-day" element={
+        <ProtectedRoute>
+          <PlayerGameDay />
+        </ProtectedRoute>
+      } />
+      <Route path="/event/:eventId/check-in" element={
+        <ProtectedRoute>
+          <PlayerCheckIn />
         </ProtectedRoute>
       } />
       <Route path="/event/:eventId/scoreboard" element={<EventScoreboard />} />
@@ -300,6 +314,7 @@ function App() {
       {/* Fallback 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
 

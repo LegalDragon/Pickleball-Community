@@ -301,9 +301,31 @@ public class TournamentCourtDto
     public string CourtLabel { get; set; } = string.Empty;
     public string Status { get; set; } = "Available";
     public int? CurrentGameId { get; set; }
-    public EventGameDto? CurrentGame { get; set; }
+    public CourtGameInfoDto? CurrentGame { get; set; }
+    public CourtGameInfoDto? NextGame { get; set; }
     public string? LocationDescription { get; set; }
     public int SortOrder { get; set; }
+}
+
+/// <summary>
+/// Game info for court display (current/next game)
+/// </summary>
+public class CourtGameInfoDto
+{
+    public int GameId { get; set; }
+    public int? EncounterId { get; set; }
+    public string? Unit1Name { get; set; }
+    public string? Unit2Name { get; set; }
+    public string? Unit1Players { get; set; }
+    public string? Unit2Players { get; set; }
+    public int? Unit1Score { get; set; }
+    public int? Unit2Score { get; set; }
+    public string? Status { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? QueuedAt { get; set; }
+    public string? DivisionName { get; set; }
+    public string? RoundName { get; set; }
+    public int? GameNumber { get; set; }
 }
 
 public class CreateTournamentCourtRequest
@@ -474,6 +496,21 @@ public class UpdateGameStatusRequest
     public string Status { get; set; } = string.Empty; // New, Ready, Queued, Started, Playing, Finished
 }
 
+public class AdminUpdateScoreRequest
+{
+    public int GameId { get; set; }
+    public int Unit1Score { get; set; }
+    public int Unit2Score { get; set; }
+    public bool MarkAsFinished { get; set; } = false;
+}
+
+public class UpdateEncounterUnitsRequest
+{
+    public int EncounterId { get; set; }
+    public int? Unit1Id { get; set; }
+    public int? Unit2Id { get; set; }
+}
+
 // ============================================
 // Check-in DTOs
 // ============================================
@@ -562,6 +599,9 @@ public class ScheduleExportDto
     public string EventName { get; set; } = string.Empty;
     public string? ScheduleType { get; set; } // RoundRobin, RoundRobinPlayoff, SingleElimination, etc.
     public int? PlayoffFromPools { get; set; } // Number of teams advancing per pool to playoffs
+    public int MatchesPerEncounter { get; set; } = 1; // Number of matches per encounter (1 for simple, 3+ for team scrimmages)
+    public int GamesPerMatch { get; set; } = 1; // Best of X games per match
+    public string? DefaultScoreFormat { get; set; } // e.g., "Rally to 11, win by 2"
     public DateTime ExportedAt { get; set; }
     public List<ScheduleRoundDto> Rounds { get; set; } = new();
     public List<PoolStandingsDto> PoolStandings { get; set; } = new();
@@ -577,6 +617,7 @@ public class ScheduleRoundDto
 
 public class ScheduleMatchDto
 {
+    public int EncounterId { get; set; } // For linking to encounter details/editing
     public int MatchNumber { get; set; }
     public int? Unit1Number { get; set; }
     public int? Unit2Number { get; set; }
@@ -587,9 +628,25 @@ public class ScheduleMatchDto
     public bool IsBye { get; set; } // True if one team has a bye
     public string? CourtLabel { get; set; }
     public DateTime? ScheduledTime { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Score { get; set; } // "11-7, 9-11, 11-5"
     public string? WinnerName { get; set; }
+    public List<ScheduleGameDto> Games { get; set; } = new(); // Individual games within the match
+}
+
+public class ScheduleGameDto
+{
+    public int GameId { get; set; }
+    public int GameNumber { get; set; }
+    public int? Unit1Score { get; set; }
+    public int? Unit2Score { get; set; }
+    public int? TournamentCourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 public class PoolStandingsDto
@@ -603,6 +660,7 @@ public class PoolStandingEntryDto
 {
     public int Rank { get; set; }
     public int? UnitNumber { get; set; }
+    public int? UnitId { get; set; }
     public string? UnitName { get; set; }
     public List<TeamMemberInfoDto> Members { get; set; } = new(); // Team member details
     public int MatchesPlayed { get; set; }
@@ -610,6 +668,8 @@ public class PoolStandingEntryDto
     public int MatchesLost { get; set; }
     public int GamesWon { get; set; }
     public int GamesLost { get; set; }
+    public int PointsFor { get; set; }
+    public int PointsAgainst { get; set; }
     public int PointDifferential { get; set; }
 }
 

@@ -929,7 +929,10 @@ export const eventsApi = {
     api.put(`/events/${eventId}/documents/${docId}`, data),
 
   deleteDocument: (eventId, docId) =>
-    api.delete(`/events/${eventId}/documents/${docId}`)
+    api.delete(`/events/${eventId}/documents/${docId}`),
+
+  // Get user's active event registrations (for dashboard notices)
+  getMyActiveEvents: () => api.get('/events/my-active-events')
 }
 
 // Clubs API
@@ -1469,6 +1472,14 @@ export const tournamentApi = {
     api.post('/tournament/games/submit-score', { gameId, unit1Score, unit2Score }),
   confirmScore: (gameId, confirm, disputeReason = null) =>
     api.post('/tournament/games/confirm-score', { gameId, confirm, disputeReason }),
+  adminUpdateScore: (gameId, unit1Score, unit2Score, markAsFinished = false) =>
+    api.post('/tournament/games/admin-update-score', { gameId, unit1Score, unit2Score, markAsFinished }),
+
+  // Encounter management
+  updateEncounterUnits: (encounterId, unit1Id, unit2Id) =>
+    api.post('/tournament/encounters/update-units', { encounterId, unit1Id, unit2Id }),
+  getDivisionUnits: (divisionId) =>
+    api.get(`/tournament/divisions/${divisionId}/units`),
 
   // Check-in
   checkIn: (eventId, divisionId = null) =>
@@ -1490,7 +1501,10 @@ export const tournamentApi = {
   // Event-level Drawing (for Drawing Monitor page)
   getEventDrawingState: (eventId) => api.get(`/tournament/events/${eventId}/drawing`),
   startDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/start-mode`),
-  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`)
+  endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`),
+
+  // Tournament Reset (for testing/dry runs)
+  resetTournament: (eventId) => api.post(`/tournament/reset-tournament/${eventId}`)
 }
 
 // Messaging API
@@ -1977,11 +1991,15 @@ export const notificationTemplatesApi = {
 
 // Check-In API (Game Day)
 export const checkInApi = {
-  // Get check-in status for current user
-  getStatus: (eventId) => api.get(`/checkin/status/${eventId}`),
+  // Get check-in status for current user (redo param allows re-signing waiver)
+  getStatus: (eventId, redo = null) => api.get(`/checkin/status/${eventId}${redo ? `?redo=${redo}` : ''}`),
 
   // Self check-in
   checkIn: (eventId) => api.post(`/checkin/${eventId}`),
+
+  // Request check-in (player self-service, sets status to Requested)
+  requestCheckIn: (eventId, confirmPaymentSubmitted = false) =>
+    api.post(`/checkin/request/${eventId}`, { confirmPaymentSubmitted }),
 
   // Manual check-in by TD
   manualCheckIn: (eventId, userId, data = {}) => api.post(`/checkin/manual/${eventId}/${userId}`, data),
@@ -1996,6 +2014,22 @@ export const checkInApi = {
     emergencyPhone: signatureData.emergencyPhone,
     chineseName: signatureData.chineseName
   }),
+
+  // Admin: Get check-in status for a specific user (for admin-initiated waiver signing)
+  getAdminStatus: (eventId, userId, redo = null) =>
+    api.get(`/checkin/admin/status/${eventId}/${userId}${redo ? `?redo=${redo}` : ''}`),
+
+  // Admin: Sign waiver on behalf of a user (for in-person signing on admin's device)
+  adminSignWaiver: (eventId, userId, waiverId, signatureData = {}) =>
+    api.post(`/checkin/admin/waiver/${eventId}/${userId}`, {
+      waiverId,
+      signature: signatureData.signature,
+      signatureImage: signatureData.signatureImage,
+      signerRole: signatureData.signerRole || 'Participant',
+      parentGuardianName: signatureData.parentGuardianName,
+      emergencyPhone: signatureData.emergencyPhone,
+      chineseName: signatureData.chineseName
+    }),
 
   // Get event check-in summary (TD view)
   getEventCheckIns: (eventId) => api.get(`/checkin/event/${eventId}`),
@@ -2023,7 +2057,10 @@ export const checkInApi = {
   overrideWaiver: (eventId, userId, notes = null) => api.post(`/checkin/waiver-override/${eventId}/${userId}`, { notes }),
   voidWaiver: (eventId, userId, notes = null) => api.post(`/checkin/waiver-void/${eventId}/${userId}`, { notes }),
   overridePayment: (eventId, userId, hasPaid, amountPaid = null, notes = null) =>
-    api.post(`/checkin/payment-override/${eventId}/${userId}`, { hasPaid, amountPaid, notes })
+    api.post(`/checkin/payment-override/${eventId}/${userId}`, { hasPaid, amountPaid, notes }),
+
+  // Send waiver signing request to player
+  sendWaiverRequest: (eventId, userId) => api.post(`/checkin/send-waiver-request/${eventId}/${userId}`)
 }
 
 // Tournament Game Day API

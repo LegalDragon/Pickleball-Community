@@ -3868,15 +3868,17 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                     )}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {/* TD Dashboard - Admin and Organizers only */}
+                    {/* Admin Dashboard - Admin and Organizers only */}
                     {(isAdmin || isOrganizer) && (
                       <Link
-                        to={`/event/${event.id}/manage`}
+                        to={event.eventTypeName?.toLowerCase() === 'tournament'
+                          ? `/tournament/${event.id}/manage`
+                          : `/event/${event.id}/manage`}
                         className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 hover:bg-orange-100 transition-colors"
                       >
                         <ClipboardList className="w-5 h-5" />
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm">TD Dashboard</div>
+                          <div className="font-medium text-sm">Admin Dashboard</div>
                           <div className="text-xs text-orange-600 truncate">Manage games & courts</div>
                         </div>
                       </Link>

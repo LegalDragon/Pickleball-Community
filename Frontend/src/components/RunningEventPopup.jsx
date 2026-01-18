@@ -51,9 +51,13 @@ const RunningEventPopup = () => {
     setDismissed(true);
   };
 
-  const handleGoToEvent = (eventId) => {
+  const handleGoToEvent = (event) => {
     setDismissed(true);
-    navigate(`/event-dashboard/${eventId}`);
+    if (event.isOrganizer) {
+      navigate(`/tournament/${event.eventId}/manage`);
+    } else {
+      navigate(`/event/${event.eventId}/gameday`);
+    }
   };
 
   // Don't show if dismissed, loading, or no events
@@ -91,7 +95,7 @@ const RunningEventPopup = () => {
             {runningEvents.map((event) => (
               <button
                 key={`${event.eventId}-${event.divisionId}`}
-                onClick={() => handleGoToEvent(event.eventId)}
+                onClick={() => handleGoToEvent(event)}
                 className="w-full text-left p-4 bg-gray-50 hover:bg-blue-50 rounded-xl border border-gray-200 hover:border-blue-200 transition-all group"
               >
                 <div className="flex items-center justify-between">

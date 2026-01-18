@@ -260,6 +260,34 @@ public static class Utility
         return "Unknown";
     }
 
+    /// <summary>
+    /// Format unit display name showing player first names for pairs (e.g., "John + Jane")
+    /// Falls back to provided name if no members available
+    /// </summary>
+    public static string FormatUnitDisplayName(IEnumerable<Pickleball.Community.Models.Entities.EventUnitMember>? members, string? fallbackName)
+    {
+        if (members == null)
+            return fallbackName ?? "Unknown";
+
+        var acceptedMembers = members
+            .Where(m => m.InviteStatus == "Accepted" && m.User != null)
+            .OrderBy(m => m.Id)
+            .ToList();
+
+        if (acceptedMembers.Count == 0)
+            return fallbackName ?? "Unknown";
+
+        if (acceptedMembers.Count == 1)
+            return acceptedMembers[0].User!.FirstName ?? fallbackName ?? "Unknown";
+
+        // For pairs: "FirstName1 + FirstName2"
+        if (acceptedMembers.Count == 2)
+            return $"{acceptedMembers[0].User!.FirstName} + {acceptedMembers[1].User!.FirstName}";
+
+        // For teams with more than 2 members, show first 2 names + count
+        return $"{acceptedMembers[0].User!.FirstName} + {acceptedMembers[1].User!.FirstName} +{acceptedMembers.Count - 2}";
+    }
+
     public static string GetContentType(string fileName)
     {
         // Extract the file extension (e.g., ".pdf", ".jpg", ".txt")

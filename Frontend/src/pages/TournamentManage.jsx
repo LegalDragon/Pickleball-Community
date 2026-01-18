@@ -1,23 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Trophy, Calendar, Clock, MapPin, Play, Check, X,
   ChevronDown, ChevronUp, RefreshCw, Shuffle, Settings, Target,
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
-  CheckCircle, XCircle, MoreVertical
+  CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, getSharedAssetUrl } from '../services/api';
+import { useNotifications } from '../hooks/useNotifications';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
+import GameScoreModal from '../components/ui/GameScoreModal';
 
 export default function TournamentManage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const toast = useToast();
+  const { connect, disconnect, joinEvent, leaveEvent, addListener, isConnected } = useNotifications();
 
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
@@ -26,6 +30,7 @@ export default function TournamentManage() {
   const [poolStandings, setPoolStandings] = useState(null);
   const [calculatingRankings, setCalculatingRankings] = useState(false);
   const [finalizingPools, setFinalizingPools] = useState(false);
+  const [downloadingStandings, setDownloadingStandings] = useState(false);
   const [editingRank, setEditingRank] = useState(null);
   const [showAdvancementPreview, setShowAdvancementPreview] = useState(false);
   const [event, setEvent] = useState(null);
@@ -39,6 +44,9 @@ export default function TournamentManage() {
   // Schedule display state
   const [schedule, setSchedule] = useState(null);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
+  const [selectedGameForEdit, setSelectedGameForEdit] = useState(null); // Game object for score editing
+  const [drawingResultsCollapsed, setDrawingResultsCollapsed] = useState(false); // Collapsible drawing results
+  const [divisionUnits, setDivisionUnits] = useState([]); // Units for admin unit change
 
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
@@ -48,6 +56,7 @@ export default function TournamentManage() {
   const [numberOfCourts, setNumberOfCourts] = useState('');
   const [addingCourts, setAddingCourts] = useState(false);
   const [mapAsset, setMapAsset] = useState(null);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // Edit court modal state
   const [editingCourt, setEditingCourt] = useState(null);
@@ -68,6 +77,8 @@ export default function TournamentManage() {
   const [expandedPlayer, setExpandedPlayer] = useState(null); // userId for expanded details view
   const [editingPayment, setEditingPayment] = useState(null); // { player, form }
   const [savingPayment, setSavingPayment] = useState(false);
+  const [uploadingPaymentProof, setUploadingPaymentProof] = useState(false);
+  const [sendingWaiverRequest, setSendingWaiverRequest] = useState(null); // userId
 
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
@@ -88,6 +99,34 @@ export default function TournamentManage() {
     }
   }, [eventId]);
 
+  // SignalR connection for real-time updates
+  useEffect(() => {
+    if (!eventId || !isAuthenticated) return;
+
+    const setupSignalR = async () => {
+      await connect();
+      await joinEvent(parseInt(eventId));
+    };
+
+    setupSignalR();
+
+    // Listen for game/score updates and refresh dashboard
+    const removeListener = addListener((notification) => {
+      if (notification.Type === 'ScoreUpdate' || notification.Type === 'GameUpdate') {
+        console.log('Admin dashboard: Received game update, refreshing...', notification);
+        loadDashboard();
+        if (selectedDivision?.scheduleReady) {
+          loadSchedule(selectedDivision.id);
+        }
+      }
+    });
+
+    return () => {
+      removeListener();
+      leaveEvent(parseInt(eventId));
+    };
+  }, [eventId, isAuthenticated, connect, joinEvent, leaveEvent, addListener]);
+
   useEffect(() => {
     if (selectedDivision?.scheduleReady) {
       loadSchedule(selectedDivision.id);
@@ -102,7 +141,9 @@ export default function TournamentManage() {
       if (response.success) {
         setDashboard(response.data);
         if (!selectedDivision && response.data.divisions?.length > 0) {
-          setSelectedDivision(response.data.divisions[0]);
+          // Select first division with registrations, or first division if none have registrations
+          const divisionsWithRegs = response.data.divisions.filter(d => d.registeredUnits > 0);
+          setSelectedDivision(divisionsWithRegs.length > 0 ? divisionsWithRegs[0] : response.data.divisions[0]);
         }
       } else {
         setError(response.message || 'Failed to load tournament dashboard');
@@ -121,10 +162,10 @@ export default function TournamentManage() {
       if (response.success) {
         setEvent(response.data);
       }
-      // Load map asset for the event
+      // Load map asset for the event (TypeName is lowercase 'map' in database)
       const assetsResponse = await objectAssetsApi.getAssets('Event', eventId);
       if (assetsResponse.success && assetsResponse.data) {
-        const map = assetsResponse.data.find(a => a.assetTypeName === 'Map');
+        const map = assetsResponse.data.find(a => a.assetTypeName?.toLowerCase() === 'map');
         setMapAsset(map || null);
       }
     } catch (err) {
@@ -213,10 +254,30 @@ export default function TournamentManage() {
       if (response.success) {
         setSchedule(response.data);
       }
+      // Also load division units for admin unit change feature
+      const unitsResponse = await tournamentApi.getDivisionUnits(divisionId);
+      if (unitsResponse.success) {
+        setDivisionUnits(unitsResponse.data || []);
+      }
     } catch (err) {
       console.error('Error loading schedule:', err);
     } finally {
       setLoadingSchedule(false);
+    }
+  };
+
+  const handleChangeEncounterUnits = async (encounterId, unit1Id, unit2Id) => {
+    try {
+      const response = await tournamentApi.updateEncounterUnits(encounterId, unit1Id, unit2Id);
+      if (response.success) {
+        toast.success('Teams updated successfully');
+      } else {
+        toast.error(response.message || 'Failed to update teams');
+      }
+    } catch (err) {
+      console.error('Error updating encounter units:', err);
+      toast.error('Failed to update teams');
+      throw err;
     }
   };
 
@@ -291,6 +352,34 @@ export default function TournamentManage() {
     }
   };
 
+  const handleDownloadSchedule = async () => {
+    if (!selectedDivision) return;
+
+    setDownloadingStandings(true);
+    try {
+      const response = await tournamentApi.downloadScoresheet(selectedDivision.id);
+
+      // Create blob and download
+      const blob = new Blob([response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedDivision?.name || 'Division'}_Scoresheet.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Scoresheet downloaded');
+    } catch (err) {
+      console.error('Error downloading scoresheet:', err);
+      toast.error('Failed to download scoresheet');
+    } finally {
+      setDownloadingStandings(false);
+    }
+  };
+
   // Check-in management functions
   const loadCheckIns = async () => {
     setLoadingCheckIns(true);
@@ -330,12 +419,12 @@ export default function TournamentManage() {
   };
 
   const handleVoidCheckIn = async (userId) => {
-    if (!confirm('Are you sure you want to void this check-in?')) return;
+    if (!confirm('Are you sure you want to void this check-in? This will also void the waiver and payment, allowing the player to re-sign and re-pay.')) return;
     setProcessingAction({ userId, action: 'void-checkin' });
     try {
       const response = await checkInApi.voidCheckIn(eventId, userId);
       if (response.success) {
-        toast.success('Check-in voided');
+        toast.success(response.message || 'Check-in voided - player can now re-sign waiver and re-submit payment');
         loadCheckIns();
         loadDashboard();
       } else {
@@ -459,6 +548,62 @@ export default function TournamentManage() {
     }));
   };
 
+  // Handle payment proof upload
+  const handlePaymentProofUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload an image (JPG, PNG, GIF, WebP) or PDF file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB');
+      return;
+    }
+
+    setUploadingPaymentProof(true);
+    try {
+      const assetType = file.type === 'application/pdf' ? 'document' : 'image';
+      const response = await sharedAssetApi.upload(file, assetType, 'payment-proof', true);
+      if (response.success && response.url) {
+        const fullUrl = getSharedAssetUrl(response.url);
+        updateEditForm('paymentProofUrl', fullUrl);
+        toast.success('File uploaded successfully');
+      } else {
+        toast.error(response.message || 'Failed to upload file');
+      }
+    } catch (err) {
+      console.error('Error uploading file:', err);
+      toast.error('Failed to upload file');
+    } finally {
+      setUploadingPaymentProof(false);
+    }
+  };
+
+  // Send waiver request to player
+  const handleSendWaiverRequest = async (player) => {
+    setSendingWaiverRequest(player.userId);
+    setActionMenuOpen(null);
+    try {
+      const response = await checkInApi.sendWaiverRequest(eventId, player.userId);
+      if (response.success) {
+        toast.success(`Waiver request sent to ${player.firstName}`);
+      } else {
+        toast.error(response.message || 'Failed to send waiver request');
+      }
+    } catch (err) {
+      console.error('Error sending waiver request:', err);
+      toast.error('Failed to send waiver request');
+    } finally {
+      setSendingWaiverRequest(null);
+    }
+  };
+
   // Filter players for check-in tab
   const getFilteredPlayers = () => {
     if (!checkInData?.players) return [];
@@ -531,6 +676,28 @@ export default function TournamentManage() {
 
   const handleOpenScheduleConfig = (division) => {
     setScheduleConfigModal({ isOpen: true, division });
+  };
+
+  const handleResetTournament = async () => {
+    if (!confirm('Are you sure you want to reset all tournament data?\n\nThis will clear:\n• Drawing results (unit numbers, pools, seeds)\n• All game scores and statuses\n• Court assignments\n\nThe schedule structure will be preserved.\n\nThis action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await tournamentApi.resetTournament(eventId);
+      if (response.success) {
+        toast.success(response.message || 'Tournament reset successfully');
+        loadDashboard();
+        if (selectedDivision?.id) {
+          loadSchedule(selectedDivision.id);
+        }
+      } else {
+        toast.error(response.message || 'Failed to reset tournament');
+      }
+    } catch (err) {
+      console.error('Error resetting tournament:', err);
+      toast.error('Failed to reset tournament');
+    }
   };
 
   const handleGenerateSchedule = async (config) => {
@@ -616,7 +783,7 @@ export default function TournamentManage() {
     );
   }
 
-  const isOrganizer = event?.organizedByUserId === user?.id;
+  const isOrganizer = event?.organizedByUserId === user?.id || user?.role === 'Admin';
   const statusColors = {
     Draft: 'bg-gray-100 text-gray-700',
     RegistrationOpen: 'bg-green-100 text-green-700',
@@ -640,7 +807,7 @@ export default function TournamentManage() {
               </Link>
               {/* Event logo/image - links to event detail */}
               {event?.posterImageUrl && (
-                <Link to={`/event/${eventId}`} className="shrink-0">
+                <Link to={`/events/${eventId}`} className="shrink-0">
                   <img
                     src={getSharedAssetUrl(event.posterImageUrl)}
                     alt={event.name || 'Event'}
@@ -649,7 +816,7 @@ export default function TournamentManage() {
                 </Link>
               )}
               <div>
-                <Link to={`/event/${eventId}`} className="hover:text-orange-600 transition-colors">
+                <Link to={`/events/${eventId}`} className="hover:text-orange-600 transition-colors">
                   <h1 className="text-xl font-bold text-gray-900">{dashboard?.eventName || 'Tournament'}</h1>
                 </Link>
                 <div className="flex items-center gap-3 mt-1">
@@ -664,8 +831,67 @@ export default function TournamentManage() {
                 </div>
               </div>
             </div>
-            {isOrganizer && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              {/* Status-based action buttons */}
+              {(dashboard?.tournamentStatus === 'Draft' || dashboard?.tournamentStatus === 'RegistrationOpen') && (
+                <Link
+                  to={`/events/${eventId}`}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm flex items-center gap-2"
+                >
+                  <Users className="w-4 h-4" />
+                  Register for Event
+                </Link>
+              )}
+              {dashboard?.tournamentStatus === 'Drawing' && (
+                <Link
+                  to={`/event/${eventId}/drawing`}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors ${
+                    isOrganizer
+                      ? 'bg-purple-600 text-white hover:bg-purple-700'
+                      : 'bg-orange-600 text-white hover:bg-orange-700'
+                  }`}
+                >
+                  {isOrganizer ? (
+                    <>
+                      <Settings className="w-4 h-4" />
+                      Manage Drawing
+                    </>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Radio className="w-4 h-4" />
+                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
+                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+                      </div>
+                      Live Drawing
+                    </>
+                  )}
+                </Link>
+              )}
+              {(dashboard?.tournamentStatus === 'Running' || dashboard?.tournamentStatus === 'Started') && (
+                <Link
+                  to={isOrganizer
+                    ? `/tournament/${eventId}/manage`
+                    : `/event/${eventId}/gameday`
+                  }
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center gap-2"
+                >
+                  {isOrganizer ? (
+                    <>
+                      <ClipboardList className="w-4 h-4" />
+                      Admin Dashboard
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Dashboard
+                    </>
+                  )}
+                </Link>
+              )}
+
+              {/* Status dropdown - organizers only */}
+              {isOrganizer && (
                 <select
                   value={dashboard?.tournamentStatus || ''}
                   onChange={(e) => handleUpdateStatus(e.target.value)}
@@ -680,8 +906,8 @@ export default function TournamentManage() {
                   <option value="Running">Running</option>
                   <option value="Completed">Completed</option>
                 </select>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -805,11 +1031,11 @@ export default function TournamentManage() {
               </div>
             )}
 
-            {/* Division Summary */}
+            {/* Division Summary - only show divisions with registrations */}
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Division Status</h2>
               <div className="space-y-4">
-                {dashboard?.divisions?.map(div => (
+                {dashboard?.divisions?.filter(d => d.registeredUnits > 0).map(div => (
                   <div key={div.id} className="border rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -885,10 +1111,31 @@ export default function TournamentManage() {
           </div>
         )}
 
-        {/* Divisions Tab */}
+        {/* Divisions Tab - only show divisions with registrations */}
         {activeTab === 'divisions' && (
           <div className="space-y-6">
-            {dashboard?.divisions?.map(div => (
+            {/* Reset Tournament Button - for testing/dry runs */}
+            {isOrganizer && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-yellow-800">Testing Mode</h3>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Reset all tournament data (drawings, scores, court assignments) while keeping schedule structure.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleResetTournament}
+                    className="px-4 py-2 text-sm font-medium text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-lg hover:bg-yellow-200 flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reset Tournament
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {dashboard?.divisions?.filter(d => d.registeredUnits > 0).map(div => (
               <div key={div.id} className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -902,23 +1149,25 @@ export default function TournamentManage() {
                   </div>
                   {isOrganizer && (
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {/* Generate/Re-generate Schedule */}
-                      <button
-                        onClick={() => handleOpenScheduleConfig(div)}
-                        disabled={generatingSchedule}
-                        className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 ${
-                          div.scheduleReady
-                            ? 'text-gray-700 border border-gray-300 hover:bg-gray-50'
-                            : 'text-white bg-orange-600 hover:bg-orange-700'
-                        }`}
-                      >
-                        {generatingSchedule ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Calendar className="w-4 h-4" />
-                        )}
-                        {div.scheduleReady ? 'Re-configure' : 'Configure Schedule'}
-                      </button>
+                      {/* Generate/Re-generate Schedule - disabled after event starts */}
+                      {!['Running', 'Started'].includes(dashboard?.tournamentStatus) && (
+                        <button
+                          onClick={() => handleOpenScheduleConfig(div)}
+                          disabled={generatingSchedule}
+                          className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 ${
+                            div.scheduleReady
+                              ? 'text-gray-700 border border-gray-300 hover:bg-gray-50'
+                              : 'text-white bg-orange-600 hover:bg-orange-700'
+                          }`}
+                        >
+                          {generatingSchedule ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Calendar className="w-4 h-4" />
+                          )}
+                          {div.scheduleReady ? 'Re-configure' : 'Configure Schedule'}
+                        </button>
+                      )}
 
                       {/* View Schedule - links to printable schedule page */}
                       {div.scheduleReady && (
@@ -1000,28 +1249,50 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-semibold text-gray-900">Tournament Courts</h2>
-                {mapAsset && (
-                  <a
-                    href={getSharedAssetUrl(mapAsset.fileUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                {mapAsset && (() => {
+                  const url = mapAsset.fileUrl?.toLowerCase() || '';
+                  const isImage = url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.gif') || url.endsWith('.webp') || (mapAsset.fileType && mapAsset.fileType.startsWith('image/'));
+                  return isImage ? (
+                    <button
+                      onClick={() => setShowMapModal(true)}
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Map className="w-4 h-4" />
+                      View Court Map
+                    </button>
+                  ) : (
+                    <a
+                      href={getSharedAssetUrl(mapAsset.fileUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <Map className="w-4 h-4" />
+                      View Court Map
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  );
+                })()}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => loadDashboard()}
+                  className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  title="Refresh courts"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Refresh
+                </button>
+                {isOrganizer && (
+                  <button
+                    onClick={() => setShowAddCourtsModal(true)}
+                    className="px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 flex items-center gap-2"
                   >
-                    <Map className="w-4 h-4" />
-                    View Court Map
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                    <Plus className="w-4 h-4" />
+                    Add Courts
+                  </button>
                 )}
               </div>
-              {isOrganizer && (
-                <button
-                  onClick={() => setShowAddCourtsModal(true)}
-                  className="px-3 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Courts
-                </button>
-              )}
             </div>
 
             {dashboard?.courts?.length === 0 ? (
@@ -1041,34 +1312,106 @@ export default function TournamentManage() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dashboard?.courts?.map(court => (
-                  <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
-                          court.status === 'Available' ? 'bg-green-100 text-green-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {court.status}
-                        </span>
-                        {isOrganizer && (
-                          <button
-                            onClick={() => handleEditCourt(court)}
-                            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                            title="Edit court"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
+                {dashboard?.courts?.map(court => {
+                  // Helper to format time elapsed
+                  const formatTimeElapsed = (startTime) => {
+                    if (!startTime) return '';
+                    const start = new Date(startTime);
+                    const now = new Date();
+                    const diffMs = now - start;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    if (diffMins < 1) return 'Just started';
+                    if (diffMins < 60) return `${diffMins}m`;
+                    const hours = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    return `${hours}h ${mins}m`;
+                  };
+
+                  return (
+                    <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
+                            court.status === 'Available' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {court.status}
+                          </span>
+                          {isOrganizer && (
+                            <button
+                              onClick={() => handleEditCourt(court)}
+                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                              title="Edit court"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Current Game */}
+                      {court.currentGame ? (
+                        <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-orange-700 uppercase">Current Game</span>
+                            {court.currentGame.startedAt && (
+                              <span className="text-xs text-orange-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatTimeElapsed(court.currentGame.startedAt)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {court.currentGame.unit1Players || 'TBD'} vs {court.currentGame.unit2Players || 'TBD'}
+                          </div>
+                          {court.currentGame.unit1Score !== null && court.currentGame.unit2Score !== null && (
+                            <div className="text-sm text-gray-600 mt-1">
+                              Score: {court.currentGame.unit1Score} - {court.currentGame.unit2Score}
+                            </div>
+                          )}
+                          {court.currentGame.divisionName && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {court.currentGame.divisionName} • {court.currentGame.roundName || `Game ${court.currentGame.gameNumber}`}
+                            </div>
+                          )}
+                        </div>
+                      ) : court.status === 'Available' ? (
+                        <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <span className="text-sm text-gray-500">No game in progress</span>
+                        </div>
+                      ) : null}
+
+                      {/* Next Game */}
+                      {court.nextGame && (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-blue-700 uppercase">Next Game</span>
+                            {court.nextGame.queuedAt && (
+                              <span className="text-xs text-blue-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Queued {formatTimeElapsed(court.nextGame.queuedAt)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {court.nextGame.unit1Players || 'TBD'} vs {court.nextGame.unit2Players || 'TBD'}
+                          </div>
+                          {court.nextGame.divisionName && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {court.nextGame.divisionName} • {court.nextGame.roundName || `Game ${court.nextGame.gameNumber}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {court.locationDescription && (
+                        <p className="text-xs text-gray-500 mt-2">{court.locationDescription}</p>
+                      )}
                     </div>
-                    {court.locationDescription && (
-                      <p className="text-sm text-gray-500">{court.locationDescription}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1206,24 +1549,27 @@ export default function TournamentManage() {
               </button>
             </div>
 
-            {/* Division selector */}
-            {dashboard?.divisions?.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {dashboard.divisions.map(div => (
-                  <button
-                    key={div.id}
-                    onClick={() => setSelectedDivision(div)}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${
-                      selectedDivision?.id === div.id
-                        ? 'bg-orange-600 text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {div.name}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Division selector - only show divisions with registrations */}
+            {(() => {
+              const divisionsWithRegs = dashboard?.divisions?.filter(d => d.registeredUnits > 0) || [];
+              return divisionsWithRegs.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {divisionsWithRegs.map(div => (
+                    <button
+                      key={div.id}
+                      onClick={() => setSelectedDivision(div)}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap ${
+                        selectedDivision?.id === div.id
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {div.name}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
 
             {selectedDivision?.scheduleReady ? (
               loadingSchedule ? (
@@ -1232,8 +1578,284 @@ export default function TournamentManage() {
                 </div>
               ) : schedule ? (
                 <div className="space-y-6">
-                  {/* Rounds and Matches */}
-                  {schedule.rounds?.map((round, roundIdx) => (
+                  {/* Drawing Results - Collapsible */}
+                  {schedule.poolStandings?.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <button
+                        onClick={() => setDrawingResultsCollapsed(!drawingResultsCollapsed)}
+                        className="w-full px-4 py-3 bg-gray-50 border-b flex items-center justify-between hover:bg-gray-100 transition-colors"
+                      >
+                        <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-orange-500" />
+                          Drawing Results
+                          <span className="text-sm font-normal text-gray-500">
+                            ({schedule.poolStandings.reduce((total, pool) => total + (pool.standings?.length || 0), 0)} teams in {schedule.poolStandings.length} pool{schedule.poolStandings.length > 1 ? 's' : ''})
+                          </span>
+                        </h3>
+                        {drawingResultsCollapsed ? (
+                          <ChevronDown className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <ChevronUp className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                      {!drawingResultsCollapsed && (
+                        <div className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {schedule.poolStandings.map((pool, poolIdx) => (
+                              <div key={pool.poolNumber ?? `pool-${poolIdx}`} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                {pool.poolName && (
+                                  <h4 className="font-semibold text-gray-800 mb-3">{pool.poolName}</h4>
+                                )}
+                                <div className="space-y-2">
+                                  {pool.standings?.map((entry, entryIdx) => (
+                                    <div key={entry.unitNumber ?? `entry-${entryIdx}`} className="flex items-start gap-2 text-sm">
+                                      <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-orange-500 text-white font-bold rounded">
+                                        {entry.unitNumber}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="font-medium text-gray-900">{entry.unitName}</div>
+                                        {entry.members && entry.members.length > 0 && (
+                                          <div className="flex flex-wrap gap-2 mt-1">
+                                            {entry.members.map((member, memberIdx) => (
+                                              <button
+                                                key={member.userId ?? `member-${memberIdx}`}
+                                                onClick={() => setProfileModalUserId(member.userId)}
+                                                className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-600 transition-colors"
+                                                title={`View ${member.firstName} ${member.lastName}'s profile`}
+                                              >
+                                                {member.profileImageUrl ? (
+                                                  <img
+                                                    src={getSharedAssetUrl(member.profileImageUrl)}
+                                                    alt=""
+                                                    className="w-5 h-5 rounded-full object-cover border border-gray-200"
+                                                  />
+                                                ) : (
+                                                  <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center">
+                                                    <User className="w-3 h-3 text-gray-400" />
+                                                  </div>
+                                                )}
+                                                <span className="hover:underline">
+                                                  {member.firstName} {member.lastName}
+                                                </span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {/* Fallback: Show players string if members array not available */}
+                                        {(!entry.members || entry.members.length === 0) && entry.players && (
+                                          <div className="text-xs text-gray-500 mt-0.5">{entry.players}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Pool Play Rounds */}
+                  {schedule.rounds?.filter(r => r.roundType === 'Pool').length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b">
+                        <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-blue-500" />
+                          Pool Play Schedule
+                        </h3>
+                      </div>
+                      <div className="divide-y">
+                        {schedule.rounds.filter(r => r.roundType === 'Pool').map((round, roundIdx) => (
+                          <div key={roundIdx}>
+                            <div className="px-4 py-2 bg-gray-100 text-sm font-medium text-gray-700">
+                              {round.roundName || `Pool Round ${round.roundNumber}`}
+                            </div>
+                            {round.matches?.filter(m => !m.isBye).map((match, matchIdx) => (
+                              <div key={matchIdx} className="p-4 border-t border-gray-100">
+                                <div className="flex items-center gap-3">
+                                  {/* Edit button on far left */}
+                                  <button
+                                    onClick={() => setSelectedGameForEdit({
+                                      id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                      ...(match.games?.[0] || {}),
+                                      unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
+                                      unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
+                                      unit1Score: match.games?.[0]?.unit1Score ?? match.unit1Score ?? 0,
+                                      unit2Score: match.games?.[0]?.unit2Score ?? match.unit2Score ?? 0,
+                                      bestOf: match.bestOf || 1,
+                                      matchNumber: match.matchNumber,
+                                      status: match.games?.[0]?.status || match.status || 'New',
+                                      games: match.games || [],
+                                      courtLabel: match.courtLabel,
+                                      winnerUnitId: match.winnerUnitId,
+                                      hasGames: match.games?.length > 0
+                                    })}
+                                    className="p-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
+                                    title="Edit match"
+                                  >
+                                    <Edit2 className="w-5 h-5" />
+                                  </button>
+                                  <div className="text-sm text-gray-400 w-8">#{match.matchNumber}</div>
+                                  <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                                    <div className={`text-right flex items-center justify-end gap-2 ${match.winnerName === match.unit1Name ? 'font-semibold text-green-600' : ''}`}>
+                                      {match.unit1Number && (
+                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                          {match.unit1Number}
+                                        </span>
+                                      )}
+                                      <span className={match.unit1Name ? 'text-gray-900' : 'text-gray-600'}>
+                                        {match.unit1Name || match.unit1SeedInfo || (match.unit1Number ? `Unit #${match.unit1Number}` : '')}
+                                      </span>
+                                    </div>
+                                    <div className="text-center">
+                                      {match.score ? (
+                                        <span className="font-medium text-gray-700">{match.score}</span>
+                                      ) : (
+                                        <span className="text-gray-400">vs</span>
+                                      )}
+                                    </div>
+                                    <div className={`flex items-center gap-2 ${match.winnerName === match.unit2Name ? 'font-semibold text-green-600' : ''}`}>
+                                      {match.unit2Number && (
+                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                          {match.unit2Number}
+                                        </span>
+                                      )}
+                                      <span className={match.unit2Name ? 'text-gray-900' : 'text-gray-600'}>
+                                        {match.unit2Name || match.unit2SeedInfo || (match.unit2Number ? `Unit #${match.unit2Number}` : '')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                    match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {match.status || 'Scheduled'}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Playoff/Bracket Rounds */}
+                  {schedule.rounds?.filter(r => r.roundType === 'Bracket' || r.roundType === 'ThirdPlace').length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 bg-yellow-50 border-b">
+                        <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-yellow-500" />
+                          Playoff Bracket
+                          {schedule.playoffFromPools && (
+                            <span className="text-sm font-normal text-gray-500">
+                              (Top {schedule.playoffFromPools} from each pool advance)
+                            </span>
+                          )}
+                        </h3>
+                      </div>
+                      <div className="divide-y">
+                        {schedule.rounds.filter(r => r.roundType === 'Bracket' || r.roundType === 'ThirdPlace').map((round, roundIdx) => (
+                          <div key={roundIdx}>
+                            <div className={`px-4 py-2 text-sm font-medium text-gray-700 ${
+                              round.roundType === 'ThirdPlace' ? 'bg-amber-50' : 'bg-yellow-100'
+                            }`}>
+                              {round.roundType === 'ThirdPlace' ? '🥉 ' : ''}
+                              {round.roundName || `Playoff Round ${round.roundNumber}`}
+                            </div>
+                            {round.matches?.map((match, matchIdx) => (
+                              <div key={matchIdx} className="p-4 border-t border-gray-100">
+                                <div className="flex items-center gap-3">
+                                  {/* Edit button on far left */}
+                                  {!match.isBye && (
+                                    <button
+                                      onClick={() => setSelectedGameForEdit({
+                                        id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                        ...(match.games?.[0] || {}),
+                                        unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
+                                        unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
+                                        unit1Score: match.games?.[0]?.unit1Score ?? match.unit1Score ?? 0,
+                                        unit2Score: match.games?.[0]?.unit2Score ?? match.unit2Score ?? 0,
+                                        bestOf: match.bestOf || 1,
+                                        matchNumber: match.matchNumber,
+                                        status: match.games?.[0]?.status || match.status || 'New',
+                                        games: match.games || [],
+                                        courtLabel: match.courtLabel,
+                                        winnerUnitId: match.winnerUnitId,
+                                        hasGames: match.games?.length > 0
+                                      })}
+                                      className="p-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
+                                      title="Edit match"
+                                    >
+                                      <Edit2 className="w-5 h-5" />
+                                    </button>
+                                  )}
+                                  {match.isBye && <div className="w-9" />}
+                                  <div className="text-sm text-gray-400 w-8">#{match.matchNumber}</div>
+                                  <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                                    <div className={`text-right flex items-center justify-end gap-2 ${match.winnerName === match.unit1Name ? 'font-semibold text-green-600' : ''}`}>
+                                      {match.isBye && !match.unit1Name ? (
+                                        <span className="italic text-gray-400">BYE</span>
+                                      ) : (
+                                        <>
+                                          {match.unit1Number && (
+                                            <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                              {match.unit1Number}
+                                            </span>
+                                          )}
+                                          <span className={match.unit1Name ? 'text-gray-900' : 'text-blue-600 font-medium'}>
+                                            {match.unit1Name || match.unit1SeedInfo || (match.unit1Number ? `Unit #${match.unit1Number}` : '')}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="text-center">
+                                      {match.isBye ? (
+                                        <span className="text-gray-300">—</span>
+                                      ) : match.score ? (
+                                        <span className="font-medium text-gray-700">{match.score}</span>
+                                      ) : (
+                                        <span className="text-gray-400">vs</span>
+                                      )}
+                                    </div>
+                                    <div className={`flex items-center gap-2 ${match.winnerName === match.unit2Name ? 'font-semibold text-green-600' : ''}`}>
+                                      {match.isBye && !match.unit2Name ? (
+                                        <span className="italic text-gray-400">BYE</span>
+                                      ) : (
+                                        <>
+                                          {match.unit2Number && (
+                                            <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                              {match.unit2Number}
+                                            </span>
+                                          )}
+                                          <span className={match.unit2Name ? 'text-gray-900' : 'text-blue-600 font-medium'}>
+                                            {match.unit2Name || match.unit2SeedInfo || (match.unit2Number ? `Unit #${match.unit2Number}` : '')}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                    match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {match.status || 'Scheduled'}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Other Round Types (not Pool, Bracket, or ThirdPlace) */}
+                  {schedule.rounds?.filter(r => r.roundType !== 'Pool' && r.roundType !== 'Bracket' && r.roundType !== 'ThirdPlace').map((round, roundIdx) => (
                     <div key={roundIdx} className="bg-white rounded-xl shadow-sm overflow-hidden">
                       <div className="px-4 py-3 bg-gray-50 border-b">
                         <h3 className="font-medium text-gray-900">
@@ -1243,36 +1865,86 @@ export default function TournamentManage() {
                       <div className="divide-y">
                         {round.matches?.map((match, matchIdx) => (
                           <div key={matchIdx} className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4 flex-1">
-                                <div className="text-sm text-gray-400 w-8">#{match.matchNumber}</div>
-                                <div className="flex-1 grid grid-cols-3 gap-4 items-center">
-                                  <div className={`text-right ${match.winnerName === match.unit1Name ? 'font-semibold text-green-600' : 'text-gray-900'}`}>
-                                    {match.unit1Name || `Unit #${match.unit1Number || '?'}`}
-                                  </div>
-                                  <div className="text-center">
-                                    {match.score ? (
-                                      <span className="font-medium text-gray-700">{match.score}</span>
-                                    ) : (
-                                      <span className="text-gray-400">vs</span>
-                                    )}
-                                  </div>
-                                  <div className={`${match.winnerName === match.unit2Name ? 'font-semibold text-green-600' : 'text-gray-900'}`}>
-                                    {match.unit2Name || `Unit #${match.unit2Number || '?'}`}
-                                  </div>
+                            <div className="flex items-center gap-3">
+                              {/* Edit button on far left */}
+                              {!match.isBye && (
+                                <button
+                                  onClick={() => setSelectedGameForEdit({
+                                    id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                    ...(match.games?.[0] || {}),
+                                    unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
+                                    unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
+                                    unit1Score: match.games?.[0]?.unit1Score ?? match.unit1Score ?? 0,
+                                    unit2Score: match.games?.[0]?.unit2Score ?? match.unit2Score ?? 0,
+                                    bestOf: match.bestOf || 1,
+                                    matchNumber: match.matchNumber,
+                                    status: match.games?.[0]?.status || match.status || 'New',
+                                    games: match.games || [],
+                                    courtLabel: match.courtLabel,
+                                    winnerUnitId: match.winnerUnitId,
+                                    hasGames: match.games?.length > 0
+                                  })}
+                                  className="p-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors"
+                                  title="Edit match"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </button>
+                              )}
+                              {match.isBye && <div className="w-9" />}
+                              <div className="text-sm text-gray-400 w-8">#{match.matchNumber}</div>
+                              <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                                <div className={`text-right flex items-center justify-end gap-2 ${match.winnerName === match.unit1Name ? 'font-semibold text-green-600' : ''}`}>
+                                  {match.isBye && !match.unit1Name ? (
+                                    <span className="italic text-gray-400">BYE</span>
+                                  ) : (
+                                    <>
+                                      {match.unit1Number && (
+                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                          {match.unit1Number}
+                                        </span>
+                                      )}
+                                      <span className={match.unit1Name ? 'text-gray-900' : 'text-blue-600 font-medium'}>
+                                        {match.unit1Name || match.unit1SeedInfo || (match.unit1Number ? `Unit #${match.unit1Number}` : '')}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                <div className="text-center">
+                                  {match.isBye ? (
+                                    <span className="text-gray-300">—</span>
+                                  ) : match.score ? (
+                                    <span className="font-medium text-gray-700">{match.score}</span>
+                                  ) : (
+                                    <span className="text-gray-400">vs</span>
+                                  )}
+                                </div>
+                                <div className={`flex items-center gap-2 ${match.winnerName === match.unit2Name ? 'font-semibold text-green-600' : ''}`}>
+                                  {match.isBye && !match.unit2Name ? (
+                                    <span className="italic text-gray-400">BYE</span>
+                                  ) : (
+                                    <>
+                                      {match.unit2Number && (
+                                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-semibold rounded text-xs">
+                                          {match.unit2Number}
+                                        </span>
+                                      )}
+                                      <span className={match.unit2Name ? 'text-gray-900' : 'text-blue-600 font-medium'}>
+                                        {match.unit2Name || match.unit2SeedInfo || (match.unit2Number ? `Unit #${match.unit2Number}` : '')}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
-                              <span className={`ml-4 px-2 py-1 text-xs font-medium rounded-full ${
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                 match.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                 match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
-                                match.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
                                 'bg-gray-100 text-gray-700'
                               }`}>
-                                {match.status}
+                                {match.status || 'Scheduled'}
                               </span>
                             </div>
                             {match.courtLabel && (
-                              <div className="mt-2 text-sm text-gray-500 flex items-center gap-2">
+                              <div className="mt-2 ml-12 text-sm text-gray-500 flex items-center gap-2">
                                 <MapPin className="w-3 h-3" />
                                 {match.courtLabel}
                               </div>
@@ -1296,38 +1968,49 @@ export default function TournamentManage() {
                             </span>
                           )}
                         </div>
-                        {isOrganizer && (
-                          <div className="flex items-center gap-2">
-                            {selectedDivision?.scheduleStatus !== 'PoolsFinalized' ? (
-                              <>
+                        <div className="flex items-center gap-2">
+                          {/* Download scoresheet button - always available */}
+                          <button
+                            onClick={handleDownloadSchedule}
+                            disabled={downloadingStandings}
+                            className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {downloadingStandings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            Excel
+                          </button>
+                          {isOrganizer && (
+                            <>
+                              {selectedDivision?.scheduleStatus !== 'PoolsFinalized' ? (
+                                <>
+                                  <button
+                                    onClick={handleCalculateRankings}
+                                    disabled={calculatingRankings}
+                                    className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {calculatingRankings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    Calculate Rankings
+                                  </button>
+                                  <button
+                                    onClick={handleFinalizePools}
+                                    disabled={finalizingPools}
+                                    className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {finalizingPools ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
+                                    Finalize & Advance
+                                  </button>
+                                </>
+                              ) : (
                                 <button
-                                  onClick={handleCalculateRankings}
-                                  disabled={calculatingRankings}
-                                  className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50"
+                                  onClick={handleResetPools}
+                                  className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
                                 >
-                                  {calculatingRankings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                  Calculate Rankings
+                                  <Unlock className="w-4 h-4" />
+                                  Reset Finalization
                                 </button>
-                                <button
-                                  onClick={handleFinalizePools}
-                                  disabled={finalizingPools}
-                                  className="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5 disabled:opacity-50"
-                                >
-                                  {finalizingPools ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
-                                  Finalize & Advance
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={handleResetPools}
-                                className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1.5"
-                              >
-                                <Unlock className="w-4 h-4" />
-                                Reset Finalization
-                              </button>
-                            )}
-                          </div>
-                        )}
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {/* Advancement Info */}
@@ -1586,7 +2269,7 @@ export default function TournamentManage() {
                     className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="all">All Divisions</option>
-                    {dashboard?.divisions?.map(div => (
+                    {dashboard?.divisions?.filter(d => d.registeredUnits > 0).map(div => (
                       <option key={div.id} value={div.id}>{div.name}</option>
                     ))}
                   </select>
@@ -1620,12 +2303,19 @@ export default function TournamentManage() {
                     <div className="divide-y divide-gray-100">
                       {divGroup.players.map(player => (
                         <div key={`${player.divisionId}-${player.userId}`} className="hover:bg-gray-50">
-                          <div className="p-4">
+                          {/* Clickable row - whole bar expands details */}
+                          <div
+                            className="p-4 cursor-pointer"
+                            onClick={() => setExpandedPlayer(expandedPlayer === player.userId ? null : player.userId)}
+                          >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 {/* Avatar - clickable for profile */}
                                 <button
-                                  onClick={() => setProfileModalUserId(player.userId)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProfileModalUserId(player.userId);
+                                  }}
                                   className="focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-full"
                                   title="View profile"
                                 >
@@ -1645,7 +2335,10 @@ export default function TournamentManage() {
                                 {/* Player info - clickable for profile */}
                                 <div>
                                   <button
-                                    onClick={() => setProfileModalUserId(player.userId)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProfileModalUserId(player.userId);
+                                    }}
                                     className="font-medium text-gray-900 hover:text-orange-600 text-left"
                                   >
                                     {player.firstName} {player.lastName}
@@ -1657,20 +2350,25 @@ export default function TournamentManage() {
                               </div>
 
                               {/* Status indicators and actions */}
-                              <div className="flex items-center gap-4">
-                                {/* Status badges - clickable to expand details */}
-                                <button
-                                  onClick={() => setExpandedPlayer(expandedPlayer === player.userId ? null : player.userId)}
-                                  className="flex items-center gap-2 hover:opacity-80"
-                                >
+                              <div className="flex items-center gap-2">
+                                {/* Status badges */}
+                                <div className="flex items-center gap-2">
                                   {/* Check-in status */}
                                   <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                                     player.isCheckedIn
                                       ? 'bg-green-100 text-green-700'
+                                      : player.checkInStatus === 'Requested'
+                                      ? 'bg-orange-100 text-orange-700'
                                       : 'bg-yellow-100 text-yellow-700'
                                   }`}>
-                                    {player.isCheckedIn ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                    {player.isCheckedIn ? 'Checked In' : 'Pending'}
+                                    {player.isCheckedIn ? (
+                                      <CheckCircle className="w-3 h-3" />
+                                    ) : player.checkInStatus === 'Requested' ? (
+                                      <AlertCircle className="w-3 h-3" />
+                                    ) : (
+                                      <Clock className="w-3 h-3" />
+                                    )}
+                                    {player.isCheckedIn ? 'Checked In' : player.checkInStatus === 'Requested' ? 'Requested' : 'Pending'}
                                   </span>
 
                                   {/* Waiver status */}
@@ -1699,99 +2397,18 @@ export default function TournamentManage() {
                                   ) : (
                                     <ChevronDown className="w-4 h-4 text-gray-400" />
                                   )}
-                                </button>
-
-                                {/* Action menu */}
-                                <div className="relative">
-                                  <button
-                                    onClick={() => setActionMenuOpen(actionMenuOpen === player.userId ? null : player.userId)}
-                                    disabled={processingAction?.userId === player.userId}
-                                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-                                  >
-                                    {processingAction?.userId === player.userId ? (
-                                      <Loader2 className="w-5 h-5 animate-spin" />
-                                    ) : (
-                                      <MoreVertical className="w-5 h-5" />
-                                    )}
-                                  </button>
-
-                                  {/* Dropdown menu */}
-                                  {actionMenuOpen === player.userId && (
-                                    <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                                      {/* Check-in actions */}
-                                      {!player.isCheckedIn ? (
-                                        <button
-                                          onClick={() => handleManualCheckIn(player.userId)}
-                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                        >
-                                          <CheckCircle className="w-4 h-4 text-green-600" />
-                                          Check In
-                                        </button>
-                                      ) : (
-                                        <button
-                                          onClick={() => handleVoidCheckIn(player.userId)}
-                                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                        >
-                                          <XCircle className="w-4 h-4 text-red-600" />
-                                        Void Check-in
-                                      </button>
-                                    )}
-
-                                    <div className="border-t border-gray-100 my-1" />
-
-                                    {/* Waiver actions */}
-                                    {!player.waiverSigned ? (
-                                      <button
-                                        onClick={() => handleOverrideWaiver(player.userId)}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                      >
-                                        <FileText className="w-4 h-4 text-blue-600" />
-                                        Override Waiver
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleVoidWaiver(player.userId)}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                      >
-                                        <FileText className="w-4 h-4 text-red-600" />
-                                        Void Waiver
-                                      </button>
-                                    )}
-
-                                    <div className="border-t border-gray-100 my-1" />
-
-                                    {/* Payment actions */}
-                                    {!player.hasPaid ? (
-                                      <button
-                                        onClick={() => handleOverridePayment(player.userId, true)}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                      >
-                                        <DollarSign className="w-4 h-4 text-green-600" />
-                                        Mark as Paid
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleOverridePayment(player.userId, false)}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                                      >
-                                        <DollarSign className="w-4 h-4 text-red-600" />
-                                        Void Payment
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Expanded details section */}
-                        {expandedPlayer === player.userId && (
+                          {/* Expanded details section */}
+                          {expandedPlayer === player.userId && (
                           <div className="px-4 pb-4">
                               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {/* Waiver Details */}
-                                  <div className="space-y-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {/* Waiver Section with Actions */}
+                                  <div className="space-y-3">
                                     <h4 className="font-medium text-gray-900 flex items-center gap-2">
                                       <FileText className="w-4 h-4 text-blue-600" />
                                       Waiver Status
@@ -1817,7 +2434,7 @@ export default function TournamentManage() {
                                             href={getSharedAssetUrl(player.signedWaiverPdfUrl)}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-2"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
                                           >
                                             <Eye className="w-4 h-4" />
                                             View Signed Waiver
@@ -1835,23 +2452,60 @@ export default function TournamentManage() {
                                         </p>
                                       </div>
                                     )}
+                                    {/* Waiver Action Buttons */}
+                                    <div className="flex flex-wrap gap-2 pt-2">
+                                      {!player.waiverSigned ? (
+                                        <>
+                                          <button
+                                            onClick={() => {
+                                              const checkInUrl = `${window.location.origin}/event/${eventId}/check-in?redo=waiver&userId=${player.userId}`;
+                                              window.open(checkInUrl, '_blank');
+                                            }}
+                                            className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
+                                          >
+                                            <ExternalLink className="w-4 h-4" />
+                                            Open Waiver Page
+                                          </button>
+                                          <button
+                                            onClick={() => handleSendWaiverRequest(player)}
+                                            disabled={sendingWaiverRequest === player.userId}
+                                            className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                          >
+                                            {sendingWaiverRequest === player.userId ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Send className="w-4 h-4" />
+                                            )}
+                                            Send Request
+                                          </button>
+                                          <button
+                                            onClick={() => handleOverrideWaiver(player.userId)}
+                                            disabled={processingAction?.userId === player.userId}
+                                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                          >
+                                            <CheckCircle className="w-4 h-4" />
+                                            Override Waiver
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleVoidWaiver(player.userId)}
+                                          disabled={processingAction?.userId === player.userId}
+                                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                          <XCircle className="w-4 h-4" />
+                                          Void Waiver
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
 
-                                  {/* Payment Details */}
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
-                                        <DollarSign className="w-4 h-4 text-emerald-600" />
-                                        Payment Status
-                                      </h4>
-                                      <button
-                                        onClick={() => startEditPayment(player)}
-                                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                                      >
-                                        <Edit2 className="w-3 h-3" />
-                                        Edit
-                                      </button>
-                                    </div>
+                                  {/* Payment Section with Actions */}
+                                  <div className="space-y-3">
+                                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                                      Payment Status
+                                    </h4>
                                     {player.hasPaid ? (
                                       <div className="text-sm space-y-1">
                                         <div className="flex items-center gap-2 text-green-600">
@@ -1883,7 +2537,7 @@ export default function TournamentManage() {
                                             href={getSharedAssetUrl(player.paymentProofUrl)}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-1"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
                                           >
                                             <Eye className="w-4 h-4" />
                                             View Payment Proof
@@ -1904,23 +2558,65 @@ export default function TournamentManage() {
                                             href={getSharedAssetUrl(player.paymentProofUrl)}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 mt-1"
+                                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
                                           >
                                             <Eye className="w-4 h-4" />
-                                            View Payment Proof (Pending Verification)
+                                            View Payment Proof (Pending)
                                           </a>
                                         )}
                                       </div>
                                     )}
+                                    {/* Payment Action Buttons */}
+                                    <div className="flex flex-wrap gap-2 pt-2">
+                                      {!player.hasPaid ? (
+                                        <>
+                                          <button
+                                            onClick={() => handleOverridePayment(player.userId, true)}
+                                            disabled={processingAction?.userId === player.userId}
+                                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                          >
+                                            <DollarSign className="w-4 h-4" />
+                                            Mark as Paid
+                                          </button>
+                                          <button
+                                            onClick={() => startEditPayment(player)}
+                                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
+                                          >
+                                            <Edit2 className="w-4 h-4" />
+                                            Edit Payment
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button
+                                            onClick={() => handleOverridePayment(player.userId, false)}
+                                            disabled={processingAction?.userId === player.userId}
+                                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                                          >
+                                            <XCircle className="w-4 h-4" />
+                                            Void Payment
+                                          </button>
+                                          <button
+                                            onClick={() => startEditPayment(player)}
+                                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
+                                          >
+                                            <Edit2 className="w-4 h-4" />
+                                            Edit Payment
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
-                                {/* Check-in Requirements Summary */}
-                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                {/* Check-in Actions */}
+                                <div className="mt-6 pt-4 border-t border-gray-200">
                                   <div className="flex items-center justify-between">
                                     <div className="text-sm">
-                                      <span className="font-medium text-gray-700">Check-in Eligibility: </span>
-                                      {player.waiverSigned && player.hasPaid ? (
+                                      <span className="font-medium text-gray-700">Check-in Status: </span>
+                                      {player.isCheckedIn ? (
+                                        <span className="text-green-600 font-medium">Checked In</span>
+                                      ) : player.waiverSigned && player.hasPaid ? (
                                         <span className="text-green-600">Ready for check-in</span>
                                       ) : (
                                         <span className="text-yellow-600">
@@ -1931,21 +2627,41 @@ export default function TournamentManage() {
                                         </span>
                                       )}
                                     </div>
-                                    {!player.isCheckedIn && (
-                                      <button
-                                        onClick={() => handleManualCheckIn(player.userId)}
-                                        disabled={processingAction?.userId === player.userId}
-                                        className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
-                                      >
-                                        {processingAction?.userId === player.userId ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                          <CheckCircle className="w-4 h-4" />
-                                        )}
-                                        Check In Player
-                                      </button>
-                                    )}
+                                    <div className="flex gap-2">
+                                      {!player.isCheckedIn ? (
+                                        <button
+                                          onClick={() => handleManualCheckIn(player.userId)}
+                                          disabled={processingAction?.userId === player.userId}
+                                          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                        >
+                                          {processingAction?.userId === player.userId && processingAction?.action === 'checkin' ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <CheckCircle className="w-4 h-4" />
+                                          )}
+                                          Check In Player
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleVoidCheckIn(player.userId)}
+                                          disabled={processingAction?.userId === player.userId}
+                                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                        >
+                                          {processingAction?.userId === player.userId && processingAction?.action === 'void-checkin' ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <XCircle className="w-4 h-4" />
+                                          )}
+                                          Void Check-in
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
+                                  {player.isCheckedIn && (
+                                    <p className="text-xs text-gray-500 mt-2">
+                                      <strong>Note:</strong> Voiding check-in will also void the waiver signature and payment record, allowing the player to start the check-in process over.
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2155,6 +2871,34 @@ export default function TournamentManage() {
         />
       )}
 
+      {/* Game Score Edit Modal */}
+      {selectedGameForEdit && (
+        <GameScoreModal
+          game={selectedGameForEdit}
+          courts={dashboard?.courts || []}
+          divisionUnits={divisionUnits}
+          onClose={() => setSelectedGameForEdit(null)}
+          onSuccess={() => {
+            setSelectedGameForEdit(null);
+            loadSchedule(selectedDivision?.id);
+            loadDashboard();
+          }}
+          onPlayerClick={(userId) => setProfileModalUserId(userId)}
+          onSaveScore={selectedGameForEdit.hasGames ? async (gameId, unit1Score, unit2Score, finish) => {
+            await tournamentApi.adminUpdateScore(gameId, unit1Score, unit2Score, finish);
+          } : undefined}
+          onAssignCourt={selectedGameForEdit.hasGames ? async (gameId, courtId) => {
+            await tournamentApi.assignGameToCourt(gameId, courtId);
+          } : undefined}
+          onStatusChange={selectedGameForEdit.hasGames ? async (gameId, status) => {
+            await tournamentApi.updateGameStatus(gameId, status);
+          } : undefined}
+          onChangeUnits={handleChangeEncounterUnits}
+          readOnly={!selectedGameForEdit.hasGames}
+          isAdmin={user?.role === 'Admin'}
+        />
+      )}
+
       {/* Edit Payment Modal */}
       {editingPayment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2230,6 +2974,53 @@ export default function TournamentManage() {
                 />
               </div>
 
+              {/* Payment Proof Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Proof</label>
+                {editingPayment.form.paymentProofUrl ? (
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <a
+                        href={editingPayment.form.paymentProofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                        View Proof
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => updateEditForm('paymentProofUrl', '')}
+                        className="text-sm text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex flex-col items-center justify-center">
+                      {uploadingPaymentProof ? (
+                        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="w-5 h-5 text-gray-400 mb-1" />
+                          <span className="text-xs text-gray-500">Upload screenshot or receipt</span>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*,.pdf"
+                      onChange={handlePaymentProofUpload}
+                      disabled={uploadingPaymentProof}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditingPayment(null)}
@@ -2255,6 +3046,43 @@ export default function TournamentManage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map Modal */}
+      {showMapModal && mapAsset && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowMapModal(false)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowMapModal(false)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 flex items-center gap-2"
+            >
+              <X className="w-6 h-6" />
+              Close
+            </button>
+            <img
+              src={getSharedAssetUrl(mapAsset.fileUrl)}
+              alt="Court Map"
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+            />
+            <div className="flex justify-center mt-4">
+              <a
+                href={getSharedAssetUrl(mapAsset.fileUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open in New Tab
+              </a>
             </div>
           </div>
         </div>

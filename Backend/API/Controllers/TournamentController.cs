@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Pickleball.Community.Database;
+using Pickleball.Community.Models.Constants;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Hubs;
+using Pickleball.Community.Services;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -16,12 +18,18 @@ public class TournamentController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<TournamentController> _logger;
     private readonly IDrawingBroadcaster _drawingBroadcaster;
+    private readonly INotificationService _notificationService;
 
-    public TournamentController(ApplicationDbContext context, ILogger<TournamentController> logger, IDrawingBroadcaster drawingBroadcaster)
+    public TournamentController(
+        ApplicationDbContext context,
+        ILogger<TournamentController> logger,
+        IDrawingBroadcaster drawingBroadcaster,
+        INotificationService notificationService)
     {
         _context = context;
         _logger = logger;
         _drawingBroadcaster = drawingBroadcaster;
+        _notificationService = notificationService;
     }
 
     private int? GetUserId()
@@ -3502,7 +3510,7 @@ public class TournamentController : ControllerBase
     public async Task<ActionResult<ApiResponse<ScheduleExportDto>>> GetSchedule(int divisionId)
     {
         var division = await _context.EventDivisions
-            .Include(d => d.Event)
+            .Include(d => d.Event).ThenInclude(e => e!.DefaultScoreFormat)
             .FirstOrDefaultAsync(d => d.Id == divisionId);
 
         if (division == null)
@@ -3512,7 +3520,7 @@ public class TournamentController : ControllerBase
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.Winner)
-            .Include(m => m.Matches).ThenInclude(match => match.Games)
+            .Include(m => m.Matches).ThenInclude(match => match.Games).ThenInclude(game => game.TournamentCourt)
             .Where(m => m.DivisionId == divisionId)
             .OrderBy(m => m.RoundType)
             .ThenBy(m => m.RoundNumber)
@@ -3520,12 +3528,14 @@ public class TournamentController : ControllerBase
             .ToListAsync();
 
         // Include members to show team composition
+        // Order: pool number, then by matches won (for standings after games), then by point differential, then by unit number (for drawing results)
         var units = await _context.EventUnits
             .Include(u => u.Members).ThenInclude(m => m.User)
             .Where(u => u.DivisionId == divisionId && u.Status != "Cancelled")
             .OrderBy(u => u.PoolNumber)
             .ThenByDescending(u => u.MatchesWon)
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
+            .ThenBy(u => u.UnitNumber)
             .ToListAsync();
 
         // Build lookup for unit pool/rank info (for playoff seed descriptions)
@@ -3541,6 +3551,20 @@ public class TournamentController : ControllerBase
                     unitPoolInfo[unit.Id] = (poolName, rank);
                 rank++;
             }
+        }
+
+        // Build lookup for unit display names (FirstName1 + FirstName2 for pairs)
+        var unitDisplayNames = units.ToDictionary(
+            u => u.Id,
+            u => Utility.FormatUnitDisplayName(u.Members, u.Name)
+        );
+
+        // Helper to get display name for a unit
+        string? GetUnitDisplayName(int? unitId)
+        {
+            if (!unitId.HasValue || !unitDisplayNames.ContainsKey(unitId.Value))
+                return null;
+            return unitDisplayNames[unitId.Value];
         }
 
         // Helper to get seed info for a unit in playoff matches
@@ -3559,12 +3583,14 @@ public class TournamentController : ControllerBase
             EventName = division.Event?.Name ?? "",
             ScheduleType = division.ScheduleType,
             PlayoffFromPools = division.PlayoffFromPools,
+            MatchesPerEncounter = division.MatchesPerEncounter,
+            GamesPerMatch = division.GamesPerMatch,
+            DefaultScoreFormat = division.Event?.DefaultScoreFormat?.Name,
             ExportedAt = DateTime.Now,
             Rounds = matches
-                // Include matches with units assigned OR with seed labels (playoff brackets before units assigned)
-                .Where(m => m.Unit1Id != null || m.Unit2Id != null || m.Unit1SeedLabel != null || m.Unit2SeedLabel != null)
+                // Include all matches - show position numbers before drawing, team names after
                 .GroupBy(m => new { m.RoundType, m.RoundNumber, m.RoundName })
-                .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : g.Key.RoundType == "Bracket" ? 1 : 2)
+                .OrderBy(g => g.Key.RoundType == "Pool" ? 0 : (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace) ? 1 : 2)
                 .ThenBy(g => g.Key.RoundNumber)
                 .Select(g => new ScheduleRoundDto
                 {
@@ -3573,23 +3599,40 @@ public class TournamentController : ControllerBase
                     RoundName = g.Key.RoundName,
                     Matches = g.Select(m => new ScheduleMatchDto
                     {
+                        EncounterId = m.Id,
                         MatchNumber = m.MatchNumber,
                         Unit1Number = m.Unit1Number,
                         Unit2Number = m.Unit2Number,
-                        Unit1Name = m.Unit1?.Name,
-                        Unit2Name = m.Unit2?.Name,
-                        // Add seed info for playoff (Bracket) matches
+                        Unit1Name = GetUnitDisplayName(m.Unit1Id) ?? m.Unit1?.Name,
+                        Unit2Name = GetUnitDisplayName(m.Unit2Id) ?? m.Unit2?.Name,
+                        // Add seed info for playoff (Bracket) and bronze medal (ThirdPlace) matches
                         // Use stored seed label if unit not assigned yet, otherwise calculate from pool position
-                        Unit1SeedInfo = g.Key.RoundType == "Bracket"
+                        Unit1SeedInfo = (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace)
                             ? (m.Unit1Id == null ? m.Unit1SeedLabel : GetSeedInfo(m.Unit1Id))
                             : null,
-                        Unit2SeedInfo = g.Key.RoundType == "Bracket"
+                        Unit2SeedInfo = (g.Key.RoundType == "Bracket" || g.Key.RoundType == RoundType.ThirdPlace)
                             ? (m.Unit2Id == null ? m.Unit2SeedLabel : GetSeedInfo(m.Unit2Id))
                             : null,
                         IsBye = (m.Unit1Id == null) != (m.Unit2Id == null), // One but not both is null
+                        CourtLabel = m.Matches.FirstOrDefault()?.Games.FirstOrDefault(g => g.TournamentCourt != null)?.TournamentCourt?.CourtLabel,
+                        ScheduledTime = m.ScheduledTime,
+                        StartedAt = m.StartedAt,
+                        CompletedAt = m.CompletedAt,
                         Status = m.Status,
                         Score = GetMatchScore(m),
-                        WinnerName = m.Winner?.Name
+                        WinnerName = GetUnitDisplayName(m.WinnerUnitId) ?? m.Winner?.Name,
+                        Games = m.Matches.SelectMany(match => match.Games).OrderBy(game => game.GameNumber).Select(game => new ScheduleGameDto
+                        {
+                            GameId = game.Id,
+                            GameNumber = game.GameNumber,
+                            Unit1Score = game.Unit1Score,
+                            Unit2Score = game.Unit2Score,
+                            TournamentCourtId = game.TournamentCourtId,
+                            CourtLabel = game.TournamentCourt?.CourtLabel,
+                            Status = game.Status,
+                            StartedAt = game.StartedAt,
+                            CompletedAt = game.FinishedAt
+                        }).ToList()
                     }).ToList()
                 }).ToList(),
             PoolStandings = units.GroupBy(u => u.PoolNumber ?? 0)
@@ -3601,8 +3644,9 @@ public class TournamentController : ControllerBase
                     Standings = g.Select((u, idx) => new PoolStandingEntryDto
                     {
                         Rank = idx + 1,
+                        UnitId = u.Id,
                         UnitNumber = u.UnitNumber,
-                        UnitName = u.Name,
+                        UnitName = Utility.FormatUnitDisplayName(u.Members, u.Name),
                         Members = u.Members
                             .Where(m => m.User != null)
                             .Select(m => new TeamMemberInfoDto
@@ -3618,6 +3662,8 @@ public class TournamentController : ControllerBase
                         MatchesLost = u.MatchesLost,
                         GamesWon = u.GamesWon,
                         GamesLost = u.GamesLost,
+                        PointsFor = u.PointsScored,
+                        PointsAgainst = u.PointsAgainst,
                         PointDifferential = u.PointsScored - u.PointsAgainst
                     }).ToList()
                 }).ToList()
@@ -3748,6 +3794,9 @@ public class TournamentController : ControllerBase
     {
         var game = await _context.EventGames
             .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit1).ThenInclude(u => u!.Members)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit2).ThenInclude(u => u!.Members)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
         if (game == null)
@@ -3774,6 +3823,47 @@ public class TournamentController : ControllerBase
         // Call stored procedure for notifications
         await CallGameStatusChangeSP(game.Id, oldStatus, "Queued");
 
+        // Send real-time notifications to players in this game
+        var encounter = game.EncounterMatch?.Encounter;
+        if (encounter != null)
+        {
+            var playerIds = new List<int>();
+            if (encounter.Unit1?.Members != null)
+                playerIds.AddRange(encounter.Unit1.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+            if (encounter.Unit2?.Members != null)
+                playerIds.AddRange(encounter.Unit2.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+
+            if (playerIds.Count > 0)
+            {
+                var unit1Name = encounter.Unit1?.Name ?? "Team 1";
+                var unit2Name = encounter.Unit2?.Name ?? "Team 2";
+                var actionUrl = $"/event/{encounter.EventId}/gameday";
+
+                foreach (var playerId in playerIds.Distinct())
+                {
+                    await _notificationService.CreateAndSendAsync(
+                        playerId,
+                        "GameUpdate",
+                        "Your game is ready!",
+                        $"{unit1Name} vs {unit2Name} - Court: {court.CourtLabel}",
+                        actionUrl,
+                        "Game",
+                        game.Id);
+                }
+            }
+
+            // Also broadcast to event group for admin dashboard refresh
+            await _notificationService.SendToEventAsync(encounter.EventId, new NotificationPayload
+            {
+                Type = "GameUpdate",
+                Title = "Game Queued",
+                Message = $"Game assigned to {court.CourtLabel}",
+                ReferenceType = "Game",
+                ReferenceId = game.Id,
+                CreatedAt = DateTime.Now
+            });
+        }
+
         return Ok(new ApiResponse<EventGameDto>
         {
             Success = true,
@@ -3787,6 +3877,9 @@ public class TournamentController : ControllerBase
     {
         var game = await _context.EventGames
             .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit1).ThenInclude(u => u!.Members)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+                .ThenInclude(e => e!.Unit2).ThenInclude(u => u!.Members)
             .Include(g => g.TournamentCourt)
             .FirstOrDefaultAsync(g => g.Id == request.GameId);
 
@@ -3817,6 +3910,51 @@ public class TournamentController : ControllerBase
 
         // Call stored procedure for notifications
         await CallGameStatusChangeSP(game.Id, oldStatus, request.Status);
+
+        // Send real-time notifications to players if status changed significantly
+        var encounter = game.EncounterMatch?.Encounter;
+        if (encounter != null && (request.Status == "Started" || request.Status == "Playing"))
+        {
+            var playerIds = new List<int>();
+            if (encounter.Unit1?.Members != null)
+                playerIds.AddRange(encounter.Unit1.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+            if (encounter.Unit2?.Members != null)
+                playerIds.AddRange(encounter.Unit2.Members.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId));
+
+            if (playerIds.Count > 0)
+            {
+                var unit1Name = encounter.Unit1?.Name ?? "Team 1";
+                var unit2Name = encounter.Unit2?.Name ?? "Team 2";
+                var courtName = game.TournamentCourt?.CourtLabel ?? "assigned court";
+                var actionUrl = $"/event/{encounter.EventId}/gameday";
+
+                foreach (var playerId in playerIds.Distinct())
+                {
+                    await _notificationService.CreateAndSendAsync(
+                        playerId,
+                        "GameUpdate",
+                        "Game Starting!",
+                        $"{unit1Name} vs {unit2Name} - {courtName}",
+                        actionUrl,
+                        "Game",
+                        game.Id);
+                }
+            }
+        }
+
+        // Broadcast to event group for admin dashboard refresh
+        if (encounter != null)
+        {
+            await _notificationService.SendToEventAsync(encounter.EventId, new NotificationPayload
+            {
+                Type = "GameUpdate",
+                Title = $"Game {request.Status}",
+                Message = $"Game status updated to {request.Status}",
+                ReferenceType = "Game",
+                ReferenceId = game.Id,
+                CreatedAt = DateTime.Now
+            });
+        }
 
         return Ok(new ApiResponse<EventGameDto>
         {
@@ -3858,6 +3996,89 @@ public class TournamentController : ControllerBase
         game.ScoreSubmittedByUnitId = userUnit.Id;
         game.ScoreSubmittedAt = DateTime.Now;
         game.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<EventGameDto>
+        {
+            Success = true,
+            Data = MapToGameDto(game)
+        });
+    }
+
+    /// <summary>
+    /// Admin endpoint to update game scores without being a participant
+    /// </summary>
+    [Authorize]
+    [HttpPost("games/admin-update-score")]
+    public async Task<ActionResult<ApiResponse<EventGameDto>>> AdminUpdateScore([FromBody] AdminUpdateScoreRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventGameDto> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is admin
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user?.Role != "Admin")
+            return Forbid();
+
+        var game = await _context.EventGames
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Include(g => g.ScoreFormat)
+            .FirstOrDefaultAsync(g => g.Id == request.GameId);
+
+        if (game == null)
+            return NotFound(new ApiResponse<EventGameDto> { Success = false, Message = "Game not found" });
+
+        var encounter = game.EncounterMatch?.Encounter;
+        var wasAlreadyFinished = game.Status == "Finished";
+        var oldUnit1Score = game.Unit1Score;
+        var oldUnit2Score = game.Unit2Score;
+        var oldWinnerId = game.WinnerUnitId;
+
+        game.Unit1Score = request.Unit1Score;
+        game.Unit2Score = request.Unit2Score;
+        game.UpdatedAt = DateTime.Now;
+
+        // If marking as finished (first time)
+        if (request.MarkAsFinished && !wasAlreadyFinished)
+        {
+            game.Status = "Finished";
+            game.FinishedAt = DateTime.Now;
+
+            if (encounter != null)
+            {
+                game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
+
+                // Update unit stats (games won/lost, points scored/against)
+                await UpdateUnitStats(game);
+
+                // Free up court
+                if (game.TournamentCourtId.HasValue)
+                {
+                    var court = await _context.TournamentCourts.FindAsync(game.TournamentCourtId);
+                    if (court != null)
+                    {
+                        court.Status = "Available";
+                        court.CurrentGameId = null;
+                    }
+                }
+
+                // Check if match is complete (for best-of series)
+                await CheckMatchComplete(encounter.Id);
+            }
+        }
+        // If already finished and score changed, update stats with delta
+        else if (wasAlreadyFinished && encounter != null &&
+                 (oldUnit1Score != request.Unit1Score || oldUnit2Score != request.Unit2Score))
+        {
+            // Update winner based on new scores
+            game.WinnerUnitId = game.Unit1Score > game.Unit2Score ? encounter.Unit1Id : encounter.Unit2Id;
+
+            // Adjust unit stats (subtract old, add new)
+            await AdjustUnitStats(encounter, oldUnit1Score, oldUnit2Score, oldWinnerId,
+                                  game.Unit1Score, game.Unit2Score, game.WinnerUnitId);
+        }
 
         await _context.SaveChangesAsync();
 
@@ -3939,6 +4160,92 @@ public class TournamentController : ControllerBase
         {
             Success = true,
             Data = MapToGameDto(game)
+        });
+    }
+
+    /// <summary>
+    /// Admin endpoint to update encounter units (teams)
+    /// </summary>
+    [Authorize]
+    [HttpPost("encounters/update-units")]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateEncounterUnits([FromBody] UpdateEncounterUnitsRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is admin
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
+        if (user?.Role != "Admin")
+            return Forbid();
+
+        var encounter = await _context.EventEncounters
+            .Include(e => e.Division)
+            .FirstOrDefaultAsync(e => e.Id == request.EncounterId);
+
+        if (encounter == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Encounter not found" });
+
+        // Validate units belong to same division
+        if (request.Unit1Id.HasValue)
+        {
+            var unit1 = await _context.EventUnits.FirstOrDefaultAsync(u => u.Id == request.Unit1Id.Value);
+            if (unit1 == null || unit1.DivisionId != encounter.DivisionId)
+                return BadRequest(new ApiResponse<object> { Success = false, Message = "Unit 1 not found or not in same division" });
+        }
+
+        if (request.Unit2Id.HasValue)
+        {
+            var unit2 = await _context.EventUnits.FirstOrDefaultAsync(u => u.Id == request.Unit2Id.Value);
+            if (unit2 == null || unit2.DivisionId != encounter.DivisionId)
+                return BadRequest(new ApiResponse<object> { Success = false, Message = "Unit 2 not found or not in same division" });
+        }
+
+        // Update encounter units
+        encounter.Unit1Id = request.Unit1Id;
+        encounter.Unit2Id = request.Unit2Id;
+        encounter.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = "Encounter units updated successfully"
+        });
+    }
+
+    /// <summary>
+    /// Get all units in a division
+    /// </summary>
+    [Authorize]
+    [HttpGet("divisions/{divisionId}/units")]
+    public async Task<ActionResult<ApiResponse<List<EventUnitDto>>>> GetDivisionUnits(int divisionId)
+    {
+        var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Where(u => u.DivisionId == divisionId)
+            .OrderBy(u => u.UnitNumber)
+            .Select(u => new EventUnitDto
+            {
+                Id = u.Id,
+                Name = u.Name,
+                UnitNumber = u.UnitNumber,
+                Status = u.Status,
+                Members = u.Members!.Where(m => m.InviteStatus == "Accepted").Select(m => new EventUnitMemberDto
+                {
+                    UserId = m.UserId,
+                    FirstName = m.User!.FirstName,
+                    LastName = m.User.LastName,
+                    ProfileImageUrl = m.User.ProfileImageUrl
+                }).ToList()
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<EventUnitDto>>
+        {
+            Success = true,
+            Data = units
         });
     }
 
@@ -4043,13 +4350,47 @@ public class TournamentController : ControllerBase
             .ToListAsync();
 
         var games = await _context.EventGames
-            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit1).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit2).ThenInclude(u => u!.Members).ThenInclude(m => m.User)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Division)
+            .Include(g => g.TournamentCourt)
             .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
             .ToListAsync();
 
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive)
             .ToListAsync();
+
+        // Helper to get player names from unit members
+        string GetPlayerNames(EventUnit? unit)
+        {
+            if (unit?.Members == null || !unit.Members.Any()) return unit?.Name ?? "TBD";
+            return string.Join(" / ", unit.Members.Where(m => m.User != null).Select(m => m.User!.FirstName));
+        }
+
+        // Helper to build game info DTO
+        CourtGameInfoDto? BuildGameInfo(EventGame? game)
+        {
+            if (game == null) return null;
+            var encounter = game.EncounterMatch?.Encounter;
+            return new CourtGameInfoDto
+            {
+                GameId = game.Id,
+                EncounterId = encounter?.Id,
+                Unit1Name = encounter?.Unit1?.Name,
+                Unit2Name = encounter?.Unit2?.Name,
+                Unit1Players = GetPlayerNames(encounter?.Unit1),
+                Unit2Players = GetPlayerNames(encounter?.Unit2),
+                Unit1Score = game.Unit1Score,
+                Unit2Score = game.Unit2Score,
+                Status = game.Status,
+                StartedAt = game.StartedAt,
+                QueuedAt = game.QueuedAt,
+                DivisionName = encounter?.Division?.Name,
+                RoundName = encounter?.RoundName,
+                GameNumber = game.GameNumber
+            };
+        }
 
         // Calculate payment stats
         var activeUnits = units.Where(u => u.Status != "Cancelled").ToList();
@@ -4084,7 +4425,7 @@ public class TournamentController : ControllerBase
                 Name = d.Name,
                 TeamUnitId = d.TeamUnitId,
                 MaxUnits = d.MaxUnits ?? 0,
-                RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled" && u.Status != "Waitlisted"),
+                RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled"),
                 WaitlistedUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "Waitlisted"),
                 CheckedInUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "CheckedIn"),
                 TotalMatches = matches.Count(m => m.DivisionId == d.Id),
@@ -4093,14 +4434,29 @@ public class TournamentController : ControllerBase
                 ScheduleReady = matches.Any(m => m.DivisionId == d.Id),
                 UnitsAssigned = units.Where(u => u.DivisionId == d.Id).All(u => u.UnitNumber.HasValue)
             }).ToList(),
-            Courts = courts.Select(c => new TournamentCourtDto
-            {
-                Id = c.Id,
-                EventId = c.EventId,
-                CourtLabel = c.CourtLabel,
-                Status = c.Status,
-                CurrentGameId = c.CurrentGameId,
-                SortOrder = c.SortOrder
+            Courts = courts.Select(c => {
+                // Find current game (playing/started on this court)
+                var currentGame = games.FirstOrDefault(g =>
+                    g.TournamentCourtId == c.Id &&
+                    (g.Status == "Playing" || g.Status == "Started" || g.Status == "InProgress"));
+
+                // Find next game (queued for this court, ordered by queued time)
+                var nextGame = games
+                    .Where(g => g.TournamentCourtId == c.Id && g.Status == "Queued")
+                    .OrderBy(g => g.QueuedAt ?? DateTime.MaxValue)
+                    .FirstOrDefault();
+
+                return new TournamentCourtDto
+                {
+                    Id = c.Id,
+                    EventId = c.EventId,
+                    CourtLabel = c.CourtLabel,
+                    Status = c.Status,
+                    CurrentGameId = c.CurrentGameId,
+                    CurrentGame = BuildGameInfo(currentGame),
+                    NextGame = BuildGameInfo(nextGame),
+                    SortOrder = c.SortOrder
+                };
             }).ToList()
         };
 
@@ -4430,6 +4786,7 @@ public class TournamentController : ControllerBase
         for (int pool = 1; pool <= poolCount; pool++)
         {
             // Determine which unit numbers belong to this pool
+            // Seed evenly: unit 1 to pool 1, unit 2 to pool 2, unit 3 to pool 3, then unit 4 to pool 1, etc.
             var poolUnitNumbers = new List<int>();
             for (int i = 0; i < targetUnitCount; i++)
             {
@@ -4439,29 +4796,85 @@ public class TournamentController : ControllerBase
                 }
             }
 
-            var matchNum = 1;
+            // Use circle method for balanced round-robin scheduling
+            // This ensures each unit gets roughly equal wait time between matches
+            var roundRobinMatches = GenerateCircleMethodSchedule(poolUnitNumbers);
 
-            for (int i = 0; i < poolUnitNumbers.Count; i++)
+            var matchNum = 1;
+            foreach (var (unit1, unit2, roundNum) in roundRobinMatches)
             {
-                for (int j = i + 1; j < poolUnitNumbers.Count; j++)
+                matches.Add(new EventEncounter
                 {
-                    matches.Add(new EventEncounter
-                    {
-                        EventId = division.EventId,
-                        DivisionId = division.Id,
-                        RoundType = "Pool",
-                        RoundNumber = pool,
-                        RoundName = $"Pool {(char)('A' + pool - 1)}",
-                        MatchNumber = matchNum++,
-                        Unit1Number = poolUnitNumbers[i],
-                        Unit2Number = poolUnitNumbers[j],
-                        BestOf = request.BestOf,
-                        ScoreFormatId = request.ScoreFormatId,
-                        Status = "Scheduled",
-                        CreatedAt = DateTime.Now,
-                        UpdatedAt = DateTime.Now
-                    });
+                    EventId = division.EventId,
+                    DivisionId = division.Id,
+                    RoundType = "Pool",
+                    RoundNumber = pool,
+                    RoundName = $"Pool {(char)('A' + pool - 1)}",
+                    MatchNumber = matchNum++,
+                    EncounterNumber = roundNum, // Use encounter number to track round within pool
+                    Unit1Number = unit1,
+                    Unit2Number = unit2,
+                    BestOf = request.BestOf,
+                    ScoreFormatId = request.ScoreFormatId,
+                    Status = "Scheduled",
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                });
+            }
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Generate round-robin matches using the circle method (polygon method)
+    /// This ensures balanced wait times - each unit plays once per round
+    /// </summary>
+    private List<(int unit1, int unit2, int round)> GenerateCircleMethodSchedule(List<int> unitNumbers)
+    {
+        var matches = new List<(int unit1, int unit2, int round)>();
+        var n = unitNumbers.Count;
+
+        if (n < 2) return matches;
+
+        // For odd number of units, add a dummy (BYE) position
+        var units = new List<int>(unitNumbers);
+        bool hasBye = (n % 2 == 1);
+        if (hasBye)
+        {
+            units.Add(-1); // -1 represents BYE (will be filtered out)
+            n++;
+        }
+
+        // Number of rounds = n-1 for even, n for odd (but we added dummy, so still n-1)
+        var rounds = n - 1;
+
+        // Circle method: fix position 0, rotate others
+        for (int round = 0; round < rounds; round++)
+        {
+            // In each round, pair units[i] with units[n-1-i]
+            for (int i = 0; i < n / 2; i++)
+            {
+                int pos1 = i;
+                int pos2 = n - 1 - i;
+
+                // Get actual indices after rotation
+                int idx1 = (pos1 == 0) ? 0 : ((pos1 + round - 1) % (n - 1)) + 1;
+                int idx2 = (pos2 == 0) ? 0 : ((pos2 + round - 1) % (n - 1)) + 1;
+
+                var unit1 = units[idx1];
+                var unit2 = units[idx2];
+
+                // Skip matches involving the BYE
+                if (unit1 == -1 || unit2 == -1) continue;
+
+                // Ensure lower unit number is always unit1 for consistency
+                if (unit1 > unit2)
+                {
+                    (unit1, unit2) = (unit2, unit1);
                 }
+
+                matches.Add((unit1, unit2, round + 1));
             }
         }
 
@@ -4564,6 +4977,29 @@ public class TournamentController : ControllerBase
             }
         }
 
+        // Add bronze medal match (3rd place) - between losers of semi-finals
+        // Only add if there are at least 2 rounds (meaning there are semi-finals)
+        if (rounds >= 2)
+        {
+            matches.Add(new EventEncounter
+            {
+                EventId = division.EventId,
+                DivisionId = division.Id,
+                RoundType = RoundType.ThirdPlace,
+                RoundNumber = rounds, // Same round as finals
+                RoundName = "Bronze Medal",
+                MatchNumber = matchNum++,
+                BracketPosition = 1,
+                Unit1SeedLabel = "L SF1", // Loser of Playoff Semi-final 1
+                Unit2SeedLabel = "L SF2", // Loser of Playoff Semi-final 2
+                BestOf = request.PlayoffGamesPerMatch ?? request.BestOf,
+                ScoreFormatId = request.PlayoffScoreFormatId ?? request.ScoreFormatId,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            });
+        }
+
         return matches;
     }
 
@@ -4648,6 +5084,29 @@ public class TournamentController : ControllerBase
                 firstRoundMatches[i].Unit1Number = seed1;
             if (seed2 <= targetUnitCount)
                 firstRoundMatches[i].Unit2Number = seed2;
+        }
+
+        // Add bronze medal match (3rd place) - between losers of semi-finals
+        // Only add if there are at least 4 units (meaning there are semi-finals)
+        if (rounds >= 2)
+        {
+            matches.Add(new EventEncounter
+            {
+                EventId = division.EventId,
+                DivisionId = division.Id,
+                RoundType = RoundType.ThirdPlace,
+                RoundNumber = rounds, // Same round as finals
+                RoundName = "Bronze Medal",
+                MatchNumber = matchNum++,
+                BracketPosition = 1,
+                Unit1SeedLabel = "L SF1", // Loser of Semi-final 1
+                Unit2SeedLabel = "L SF2", // Loser of Semi-final 2
+                BestOf = request.BestOf,
+                ScoreFormatId = request.ScoreFormatId,
+                Status = "Scheduled",
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            });
         }
 
         return matches;
@@ -4800,12 +5259,16 @@ public class TournamentController : ControllerBase
     private string? GetMatchScore(EventEncounter match)
     {
         var allGames = match.Matches.SelectMany(m => m.Games);
-        if (!allGames.Any(g => g.Status == "Finished")) return null;
-
-        return string.Join(", ", allGames
-            .Where(g => g.Status == "Finished")
+        // Show scores for any game that has been scored (has non-zero scores or is finished/completed)
+        var scoredGames = allGames
+            .Where(g => g.Status == "Finished" || g.Status == "Completed" ||
+                        g.Unit1Score > 0 || g.Unit2Score > 0)
             .OrderBy(g => g.GameNumber)
-            .Select(g => $"{g.Unit1Score}-{g.Unit2Score}"));
+            .ToList();
+
+        if (!scoredGames.Any()) return null;
+
+        return string.Join(", ", scoredGames.Select(g => $"{g.Unit1Score}-{g.Unit2Score}"));
     }
 
     private async Task UpdateUnitStats(EventGame game)
@@ -4837,6 +5300,64 @@ public class TournamentController : ControllerBase
 
             unit2.PointsScored += game.Unit2Score;
             unit2.PointsAgainst += game.Unit1Score;
+            unit2.UpdatedAt = DateTime.Now;
+        }
+    }
+
+    /// <summary>
+    /// Adjusts unit stats when an already-finished game's score is changed.
+    /// Subtracts old values and adds new values.
+    /// </summary>
+    private async Task AdjustUnitStats(EventEncounter encounter,
+        int oldUnit1Score, int oldUnit2Score, int? oldWinnerId,
+        int newUnit1Score, int newUnit2Score, int? newWinnerId)
+    {
+        var unit1 = await _context.EventUnits.FindAsync(encounter.Unit1Id);
+        var unit2 = await _context.EventUnits.FindAsync(encounter.Unit2Id);
+
+        if (unit1 != null)
+        {
+            // Adjust games won/lost if winner changed
+            if (oldWinnerId != newWinnerId)
+            {
+                if (oldWinnerId == unit1.Id)
+                {
+                    unit1.GamesWon--;
+                    unit1.GamesLost++;
+                }
+                else if (newWinnerId == unit1.Id)
+                {
+                    unit1.GamesWon++;
+                    unit1.GamesLost--;
+                }
+            }
+
+            // Adjust points (subtract old, add new)
+            unit1.PointsScored = unit1.PointsScored - oldUnit1Score + newUnit1Score;
+            unit1.PointsAgainst = unit1.PointsAgainst - oldUnit2Score + newUnit2Score;
+            unit1.UpdatedAt = DateTime.Now;
+        }
+
+        if (unit2 != null)
+        {
+            // Adjust games won/lost if winner changed
+            if (oldWinnerId != newWinnerId)
+            {
+                if (oldWinnerId == unit2.Id)
+                {
+                    unit2.GamesWon--;
+                    unit2.GamesLost++;
+                }
+                else if (newWinnerId == unit2.Id)
+                {
+                    unit2.GamesWon++;
+                    unit2.GamesLost--;
+                }
+            }
+
+            // Adjust points (subtract old, add new)
+            unit2.PointsScored = unit2.PointsScored - oldUnit2Score + newUnit2Score;
+            unit2.PointsAgainst = unit2.PointsAgainst - oldUnit1Score + newUnit1Score;
             unit2.UpdatedAt = DateTime.Now;
         }
     }
@@ -5760,5 +6281,159 @@ public class TournamentController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verification removed" });
+    }
+
+    // ============================================
+    // Tournament Reset (for Testing/Dry Run)
+    // ============================================
+
+    /// <summary>
+    /// Reset all tournament data for an event (drawings, scores, court assignments) except schedule structure.
+    /// This is useful for testing and dry runs.
+    /// </summary>
+    [Authorize]
+    [HttpPost("reset-tournament/{eventId}")]
+    public async Task<ActionResult<ApiResponse<object>>> ResetTournament(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        // Check if user is admin or event organizer
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
+
+        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            return Forbid();
+
+        try
+        {
+            // Reset all units' drawing and stats data
+            var units = await _context.EventUnits.Where(u => u.EventId == eventId).ToListAsync();
+            foreach (var unit in units)
+            {
+                unit.UnitNumber = null;
+                unit.PoolNumber = null;
+                unit.PoolName = null;
+                unit.Seed = null;
+                unit.MatchesPlayed = 0;
+                unit.MatchesWon = 0;
+                unit.MatchesLost = 0;
+                unit.GamesWon = 0;
+                unit.GamesLost = 0;
+                unit.PointsScored = 0;
+                unit.PointsAgainst = 0;
+                unit.PoolRank = null;
+                unit.OverallRank = null;
+                unit.AdvancedToPlayoff = false;
+                unit.ManuallyAdvanced = false;
+                unit.FinalPlacement = null;
+                unit.UpdatedAt = DateTime.Now;
+            }
+
+            // Reset all encounters (keep structure, reset results and unit assignments for playoff rounds)
+            var encounters = await _context.EventMatches
+                .Where(e => e.EventId == eventId)
+                .ToListAsync();
+            foreach (var encounter in encounters)
+            {
+                encounter.WinnerUnitId = null;
+                encounter.UpdatedAt = DateTime.Now;
+
+                // For playoff rounds (bracket), reset unit assignments since they depend on pool rankings
+                if (encounter.RoundType != "Pool")
+                {
+                    // Keep Unit1Number and Unit2Number (bracket position), but reset actual unit IDs
+                    encounter.Unit1Id = null;
+                    encounter.Unit2Id = null;
+                }
+            }
+
+            // Reset all encounter matches
+            var encounterMatches = await _context.EncounterMatches
+                .Where(m => m.Encounter!.EventId == eventId)
+                .ToListAsync();
+            foreach (var match in encounterMatches)
+            {
+                match.Unit1Score = 0;
+                match.Unit2Score = 0;
+                match.WinnerUnitId = null;
+            }
+
+            // Reset all games
+            var games = await _context.EventGames
+                .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
+                .ToListAsync();
+            foreach (var game in games)
+            {
+                game.Unit1Score = 0;
+                game.Unit2Score = 0;
+                game.WinnerUnitId = null;
+                game.Status = "Scheduled";
+                game.TournamentCourtId = null;
+                game.QueuedAt = null;
+                game.StartedAt = null;
+                game.FinishedAt = null;
+                game.ScoreSubmittedByUnitId = null;
+                game.ScoreSubmittedAt = null;
+                game.ScoreConfirmedByUnitId = null;
+                game.ScoreConfirmedAt = null;
+                game.UpdatedAt = DateTime.Now;
+            }
+
+            // Reset all courts
+            var courts = await _context.TournamentCourts.Where(c => c.EventId == eventId).ToListAsync();
+            foreach (var court in courts)
+            {
+                court.CurrentGameId = null;
+                court.Status = "Available";
+            }
+
+            // Delete all score history
+            var scoreHistories = await _context.EventGameScoreHistories
+                .Where(h => h.Game!.EncounterMatch!.Encounter!.EventId == eventId)
+                .ToListAsync();
+            _context.EventGameScoreHistories.RemoveRange(scoreHistories);
+
+            // Delete game-related notifications for this event
+            var gameIds = games.Select(g => g.Id).ToList();
+            var notifications = await _context.Notifications
+                .Where(n =>
+                    (n.ReferenceType == "Event" && n.ReferenceId == eventId) ||
+                    (n.ReferenceType == "Game" && n.ReferenceId.HasValue && gameIds.Contains(n.ReferenceId.Value)))
+                .ToListAsync();
+            _context.Notifications.RemoveRange(notifications);
+
+            // Reset division drawing state
+            var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
+            foreach (var division in divisions)
+            {
+                division.DrawingInProgress = false;
+                division.DrawingSequence = 0;
+                division.DrawingStartedAt = null;
+                division.DrawingByUserId = null;
+                // Keep ScheduleStatus unchanged since we want to preserve the schedule structure
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Tournament {EventId} reset by user {UserId}", eventId, userId.Value);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Tournament data has been reset. Drawing results, game scores, and court assignments have been cleared. Schedule structure is preserved."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting tournament {EventId}", eventId);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "Failed to reset tournament: " + ex.Message
+            });
+        }
     }
 }

@@ -624,3 +624,28 @@ public class UpdateEventDocumentDto
     public bool? IsPublic { get; set; }
     public int? SortOrder { get; set; }
 }
+
+/// <summary>
+/// User's active event registration summary for dashboard notices
+/// </summary>
+public class UserActiveEventDto
+{
+    public int EventId { get; set; }
+    public string EventName { get; set; } = "";
+    public string TournamentStatus { get; set; } = "";
+    public DateTime StartDate { get; set; }
+    public string? VenueName { get; set; }
+    public bool IsCheckedIn { get; set; }
+    public bool WaiverSigned { get; set; }
+    public bool HasPaid { get; set; }
+    public string CheckInStatus { get; set; } = "None";
+    public List<UserEventDivisionDto> Divisions { get; set; } = new();
+}
+
+public class UserEventDivisionDto
+{
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = "";
+    public int UnitId { get; set; }
+    public string? UnitName { get; set; }
+}

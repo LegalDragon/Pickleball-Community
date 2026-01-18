@@ -1163,6 +1163,17 @@ public class TournamentGameDayController : ControllerBase
         var encounter = game.EncounterMatch?.Encounter;
         if (encounter == null) return;
 
+        // Broadcast to event group for admin dashboard refresh
+        await _notificationService.SendToEventAsync(encounter.EventId, new NotificationPayload
+        {
+            Type = "ScoreUpdate",
+            Title = "Score Updated",
+            Message = $"Score: {game.Unit1Score} - {game.Unit2Score}",
+            ReferenceType = "Game",
+            ReferenceId = game.Id,
+            CreatedAt = DateTime.Now
+        });
+
         // Notify spectators subscribed to this game/players
         var subscriptions = await _context.SpectatorSubscriptions
             .Where(s => s.EventId == encounter.EventId && s.IsActive && s.NotifyOnScoreUpdate)

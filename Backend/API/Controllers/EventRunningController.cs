@@ -88,7 +88,8 @@ public class EventRunningController : ControllerBase
                 DivisionName = m.Unit.Division!.Name,
                 UnitId = m.Unit.Id,
                 UnitName = m.Unit.Name,
-                IsCheckedIn = m.IsCheckedIn
+                IsCheckedIn = m.IsCheckedIn,
+                IsOrganizer = m.Unit.Event.OrganizedByUserId == userId.Value
             })
             .ToListAsync();
 
@@ -1395,6 +1396,7 @@ public class RunningEventDto
     public int UnitId { get; set; }
     public string UnitName { get; set; } = string.Empty;
     public bool IsCheckedIn { get; set; }
+    public bool IsOrganizer { get; set; }
 }
 
 public class PlayerEventDashboardDto

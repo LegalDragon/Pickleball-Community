@@ -3,6 +3,17 @@ import { X, DollarSign, CheckCircle, AlertCircle, ExternalLink, FileText, Loader
 import { useToast } from '../contexts/ToastContext';
 import { tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
 
+const PAYMENT_METHODS = [
+  { value: '', label: 'Select method...' },
+  { value: 'Zelle', label: 'Zelle' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Venmo', label: 'Venmo' },
+  { value: 'PayPal', label: 'PayPal' },
+  { value: 'CreditCard', label: 'Credit Card' },
+  { value: 'Check', label: 'Check' },
+  { value: 'Other', label: 'Other' },
+];
+
 export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaymentUpdated }) {
   const toast = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -17,7 +28,8 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
     paymentReference: '',
     paymentProofUrl: '',
     amountPaid: '',
-    referenceId: ''
+    referenceId: '',
+    paymentMethod: ''
   });
 
   // Get the specific member to verify (passed via unit.selectedMember)
@@ -42,7 +54,8 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
         paymentReference: member.paymentReference || '',
         paymentProofUrl: member.paymentProofUrl || '',
         amountPaid: defaultAmount,
-        referenceId: member.referenceId || ''
+        referenceId: member.referenceId || '',
+        paymentMethod: member.paymentMethod || ''
       });
     }
   }, [member, unit?.members, event, unit?.divisionFee]);
@@ -271,7 +284,8 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
         paymentReference: editForm.paymentReference || null,
         paymentProofUrl: editForm.paymentProofUrl || null,
         amountPaid: editForm.amountPaid ? parseFloat(editForm.amountPaid) : null,
-        referenceId: editForm.referenceId || null
+        referenceId: editForm.referenceId || null,
+        paymentMethod: editForm.paymentMethod || null
       };
 
       const response = await tournamentApi.updateMemberPayment(event.id, unit.unitId, member.userId, updateData);
@@ -366,6 +380,22 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
                 </div>
               </div>
 
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={editForm.paymentMethod}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  {PAYMENT_METHODS.map(method => (
+                    <option key={method.value} value={method.value}>{method.label}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Payment Reference */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -452,6 +482,7 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
                             paymentProofUrl: editForm.paymentProofUrl || null,
                             amountPaid: editForm.amountPaid ? parseFloat(editForm.amountPaid) : null,
                             referenceId: editForm.referenceId || null,
+                            paymentMethod: editForm.paymentMethod || null,
                             hasPaid: true // Mark as paid
                           };
                           const response = await tournamentApi.updateMemberPayment(event.id, unit.unitId, member.userId, updateData);
@@ -538,6 +569,14 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">Amount Paid:</span>
                     <span className="font-medium text-green-600">${member.amountPaid.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Payment Method */}
+                {member.paymentMethod && (
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-gray-600">Payment Method:</span>
+                    <span className="font-medium">{member.paymentMethod}</span>
                   </div>
                 )}
 
