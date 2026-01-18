@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   CheckCircle, XCircle, Play, Clock, MapPin,
@@ -25,6 +25,7 @@ export default function PlayerGameDay() {
   const [schedule, setSchedule] = useState(null)
   const [loadingSchedule, setLoadingSchedule] = useState(false)
   const [selectedDivisionId, setSelectedDivisionId] = useState(null)
+  const selectedDivisionIdRef = useRef(null) // Ref to track selectedDivisionId for SignalR listener
   const [profileModalUserId, setProfileModalUserId] = useState(null)
   const [expandedRounds, setExpandedRounds] = useState({})
   const [mapAsset, setMapAsset] = useState(null)
@@ -59,9 +60,9 @@ export default function PlayerGameDay() {
     }
   }, [eventId, selectedDivisionId])
 
-  const loadSchedule = useCallback(async (divisionId) => {
+  const loadSchedule = useCallback(async (divisionId, silent = false) => {
     if (!divisionId) return
-    setLoadingSchedule(true)
+    if (!silent) setLoadingSchedule(true)
     try {
       const response = await tournamentApi.getSchedule(divisionId)
       if (response.success) {
@@ -70,9 +71,14 @@ export default function PlayerGameDay() {
     } catch (err) {
       console.error('Error loading schedule:', err)
     } finally {
-      setLoadingSchedule(false)
+      if (!silent) setLoadingSchedule(false)
     }
   }, [])
+
+  // Keep ref in sync with selectedDivisionId for SignalR listener
+  useEffect(() => {
+    selectedDivisionIdRef.current = selectedDivisionId
+  }, [selectedDivisionId])
 
   useEffect(() => {
     loadData()
@@ -91,13 +97,15 @@ export default function PlayerGameDay() {
 
     setupSignalR()
 
-    // Listen for game updates and refresh data
+    // Listen for game updates and refresh data (including standings)
     const removeListener = addListener((notification) => {
       if (notification.Type === 'GameUpdate' || notification.Type === 'ScoreUpdate') {
         console.log('Player dashboard: Received game update, refreshing...', notification)
         loadData()
-        if (activeTab === 'others' && selectedDivisionId) {
-          loadSchedule(selectedDivisionId)
+        // Always refresh schedule for standings update (use ref to avoid stale closure)
+        const currentDivisionId = selectedDivisionIdRef.current
+        if (currentDivisionId) {
+          loadSchedule(currentDivisionId, true) // silent refresh
         }
       }
     })
@@ -106,7 +114,7 @@ export default function PlayerGameDay() {
       removeListener()
       leaveEvent(parseInt(eventId))
     }
-  }, [eventId, connect, joinEvent, leaveEvent, addListener, activeTab, selectedDivisionId, loadData, loadSchedule])
+  }, [eventId, connect, joinEvent, leaveEvent, addListener, loadData, loadSchedule])
 
   useEffect(() => {
     if (activeTab === 'others' && selectedDivisionId) {
