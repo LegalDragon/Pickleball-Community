@@ -1024,6 +1024,7 @@ public class ApplicationDbContext : DbContext
         // Event Game Score History configuration (audit trail)
         modelBuilder.Entity<EventGameScoreHistory>(entity =>
         {
+            entity.ToTable("EventGameScoreHistory");
             entity.Property(h => h.ChangeType).IsRequired().HasMaxLength(50);
             entity.Property(h => h.Reason).HasMaxLength(500);
             entity.Property(h => h.IpAddress).HasMaxLength(45);
