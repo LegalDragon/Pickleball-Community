@@ -221,6 +221,47 @@ public class TournamentGameDayController : ControllerBase
 
         var firstUnit = units.FirstOrDefault();
 
+        // Get all event divisions for "Others" tab
+        var allDivisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId)
+            .OrderBy(d => d.SortOrder)
+            .Select(d => new EventDivisionBriefDto
+            {
+                Id = d.Id,
+                Name = d.Name
+            })
+            .ToListAsync();
+
+        // Get scheduled matches for player's units (for Future Games section)
+        var unitIds = units.Select(u => u.UnitId).ToList();
+        var scheduledMatches = await _context.EventMatches
+            .Include(m => m.Unit1)
+            .Include(m => m.Unit2)
+            .Include(m => m.Division)
+            .Where(m => m.EventId == eventId &&
+                m.Status != "Completed" && m.Status != "Finished" &&
+                (unitIds.Contains(m.Unit1Id ?? 0) || unitIds.Contains(m.Unit2Id ?? 0)))
+            .OrderBy(m => m.RoundType == "Pool" ? 0 : 1)
+            .ThenBy(m => m.RoundNumber)
+            .ThenBy(m => m.EncounterNumber)
+            .Select(m => new ScheduledMatchDto
+            {
+                EncounterId = m.Id,
+                DivisionId = m.DivisionId,
+                DivisionName = m.Division != null ? m.Division.Name : "",
+                RoundType = m.RoundType,
+                RoundName = m.RoundName,
+                MatchNumber = m.EncounterNumber,
+                MyUnitId = unitIds.Contains(m.Unit1Id ?? 0) ? m.Unit1Id : m.Unit2Id,
+                Unit1Id = m.Unit1Id,
+                Unit1Name = m.Unit1 != null ? m.Unit1.Name : null,
+                Unit2Id = m.Unit2Id,
+                Unit2Name = m.Unit2 != null ? m.Unit2.Name : null,
+                Status = m.Status,
+                ScheduledTime = m.ScheduledTime
+            })
+            .ToListAsync();
+
         return Ok(new ApiResponse<PlayerGameDayDto>
         {
             Success = true,
@@ -240,7 +281,9 @@ public class TournamentGameDayController : ControllerBase
                     UnitName = u.Unit.Name,
                     HasPaid = u.HasPaid
                 }).ToList(),
+                AllDivisions = allDivisions,
                 MyGames = myGames,
+                ScheduledMatches = scheduledMatches,
                 UpcomingGame = myGames.FirstOrDefault(g => g.Status == "Queued" || g.Status == "Playing"),
                 NextGame = myGames.FirstOrDefault(g => g.Status == "Ready" || g.Status == "New")
             }
@@ -1395,9 +1438,34 @@ public class PlayerGameDayDto
     public bool WaiverSigned { get; set; }
     public bool HasPaid { get; set; }
     public List<PlayerDivisionDto> MyDivisions { get; set; } = new();
+    public List<EventDivisionBriefDto> AllDivisions { get; set; } = new();
     public List<PlayerGameInfoDto> MyGames { get; set; } = new();
+    public List<ScheduledMatchDto> ScheduledMatches { get; set; } = new();
     public PlayerGameInfoDto? UpcomingGame { get; set; }
     public PlayerGameInfoDto? NextGame { get; set; }
+}
+
+public class EventDivisionBriefDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class ScheduledMatchDto
+{
+    public int EncounterId { get; set; }
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string RoundType { get; set; } = string.Empty;
+    public string? RoundName { get; set; }
+    public int MatchNumber { get; set; }
+    public int? MyUnitId { get; set; }
+    public int? Unit1Id { get; set; }
+    public string? Unit1Name { get; set; }
+    public int? Unit2Id { get; set; }
+    public string? Unit2Name { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? ScheduledTime { get; set; }
 }
 
 public class PlayerDivisionDto

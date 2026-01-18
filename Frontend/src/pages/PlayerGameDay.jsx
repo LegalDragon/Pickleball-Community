@@ -246,6 +246,7 @@ export default function PlayerGameDay() {
           currentGame={currentGame}
           pastGames={pastGames}
           futureGames={futureGames}
+          scheduledMatches={gameDay.scheduledMatches || []}
           onCheckIn={handleCheckIn}
           onShowWaiver={() => setShowWaiverModal(true)}
           onSubmitScore={setShowScoreModal}
@@ -254,6 +255,7 @@ export default function PlayerGameDay() {
       ) : (
         <OthersTab
           gameDay={gameDay}
+          allDivisions={gameDay.allDivisions || []}
           schedule={schedule}
           loadingSchedule={loadingSchedule}
           selectedDivisionId={selectedDivisionId}
@@ -301,12 +303,32 @@ function MyGamesTab({
   currentGame,
   pastGames,
   futureGames,
+  scheduledMatches,
   onCheckIn,
   onShowWaiver,
   onSubmitScore,
   onPlayerClick
 }) {
   const myDiv = gameDay.myDivisions?.[0]
+  const [selectedMatch, setSelectedMatch] = useState(null)
+
+  // Combine futureGames with scheduledMatches (avoid duplicates)
+  const futureGameIds = new Set(futureGames.map(g => g.matchId))
+  const additionalScheduled = scheduledMatches.filter(m => !futureGameIds.has(m.encounterId))
+  const allFutureGames = [...futureGames, ...additionalScheduled.map(m => ({
+    gameId: null,
+    matchId: m.encounterId,
+    status: m.status,
+    unit1Id: m.unit1Id,
+    unit1Name: m.unit1Name,
+    unit2Id: m.unit2Id,
+    unit2Name: m.unit2Name,
+    myUnitId: m.myUnitId,
+    divisionName: m.divisionName,
+    roundName: m.roundName,
+    roundType: m.roundType,
+    scheduledTime: m.scheduledTime
+  }))]
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
@@ -539,7 +561,11 @@ function MyGamesTab({
           {pastGames.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {pastGames.map(game => (
-                <PastGameCard key={game.gameId} game={game} />
+                <PastGameCard
+                  key={game.gameId}
+                  game={game}
+                  onClick={() => setSelectedMatch(game)}
+                />
               ))}
             </div>
           ) : (
@@ -554,12 +580,16 @@ function MyGamesTab({
         <div className="bg-white rounded-xl p-4 border">
           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-blue-500" />
-            Upcoming Games ({futureGames.length})
+            Upcoming Games ({allFutureGames.length})
           </h3>
-          {futureGames.length > 0 ? (
+          {allFutureGames.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {futureGames.map(game => (
-                <FutureGameCard key={game.gameId} game={game} />
+              {allFutureGames.map((game, idx) => (
+                <FutureGameCard
+                  key={game.gameId || game.matchId || idx}
+                  game={game}
+                  onClick={() => setSelectedMatch(game)}
+                />
               ))}
             </div>
           ) : (
@@ -570,18 +600,32 @@ function MyGamesTab({
           )}
         </div>
       </div>
+
+      {/* Match Detail Modal */}
+      {selectedMatch && (
+        <MatchDetailModal
+          match={selectedMatch}
+          onClose={() => setSelectedMatch(null)}
+          onPlayerClick={onPlayerClick}
+        />
+      )}
     </div>
   )
 }
 
-function PastGameCard({ game }) {
+function PastGameCard({ game, onClick }) {
   const isMyUnit1 = game.myUnitId === game.unit1Id
   const myScore = isMyUnit1 ? game.unit1Score : game.unit2Score
   const opponentScore = isMyUnit1 ? game.unit2Score : game.unit1Score
   const won = myScore > opponentScore
 
   return (
-    <div className={`p-3 rounded-lg border ${won ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+    <button
+      onClick={onClick}
+      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+        won ? 'bg-green-50 border-green-200 hover:bg-green-100' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+      }`}
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-gray-900 truncate">
@@ -589,23 +633,27 @@ function PastGameCard({ game }) {
           </div>
           <div className="text-xs text-gray-500">{game.roundName || game.divisionName}</div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex items-center gap-2">
           <div className={`text-lg font-bold ${won ? 'text-green-600' : 'text-gray-600'}`}>
             {myScore} - {opponentScore}
           </div>
-          {won && <Trophy className="w-4 h-4 text-yellow-500 ml-auto" />}
+          {won && <Trophy className="w-4 h-4 text-yellow-500" />}
+          <ChevronRight className="w-4 h-4 text-gray-400" />
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 
-function FutureGameCard({ game }) {
+function FutureGameCard({ game, onClick }) {
   const isMyUnit1 = game.myUnitId === game.unit1Id
   const opponent = isMyUnit1 ? game.unit2Name : game.unit1Name
 
   return (
-    <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+    <button
+      onClick={onClick}
+      className="w-full text-left p-3 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-colors"
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-gray-900 truncate">
@@ -613,9 +661,120 @@ function FutureGameCard({ game }) {
           </div>
           <div className="text-xs text-gray-500">{game.roundName || game.divisionName}</div>
         </div>
-        <span className="px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
-          {game.status || 'Scheduled'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">
+            {game.status || 'Scheduled'}
+          </span>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ============================================
+// Match Detail Modal
+// ============================================
+function MatchDetailModal({ match, onClose, onPlayerClick }) {
+  const isMyUnit1 = match.myUnitId === match.unit1Id
+  const myTeam = isMyUnit1 ? match.unit1Name : match.unit2Name
+  const opponent = isMyUnit1 ? match.unit2Name : match.unit1Name
+  const myScore = isMyUnit1 ? match.unit1Score : match.unit2Score
+  const opponentScore = isMyUnit1 ? match.unit2Score : match.unit1Score
+  const isFinished = match.status === 'Finished' || match.status === 'Completed'
+  const won = isFinished && myScore > opponentScore
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50">
+      <div className="bg-white rounded-t-2xl md:rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Info className="w-5 h-5 text-blue-500" />
+            Match Details
+          </h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Match Info */}
+          <div className="text-center">
+            <div className="text-xs text-gray-500 mb-1">
+              {match.roundName || match.roundType} • {match.divisionName}
+            </div>
+            <div className="text-lg font-bold text-gray-900">
+              {match.unit1Name || 'TBD'} vs {match.unit2Name || 'TBD'}
+            </div>
+          </div>
+
+          {/* Score (if finished) */}
+          {isFinished && (
+            <div className={`text-center p-4 rounded-lg ${won ? 'bg-green-50' : 'bg-gray-50'}`}>
+              <div className="text-3xl font-bold">
+                <span className={isMyUnit1 ? (won ? 'text-green-600' : 'text-gray-600') : 'text-gray-600'}>
+                  {match.unit1Score}
+                </span>
+                <span className="text-gray-400 mx-2">-</span>
+                <span className={!isMyUnit1 ? (won ? 'text-green-600' : 'text-gray-600') : 'text-gray-600'}>
+                  {match.unit2Score}
+                </span>
+              </div>
+              {won && (
+                <div className="flex items-center justify-center gap-1 mt-2 text-green-600">
+                  <Trophy className="w-4 h-4" />
+                  <span className="text-sm font-medium">Victory!</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <span className="text-sm text-gray-600">Status</span>
+            <span className={`px-2 py-1 text-xs font-medium rounded ${
+              match.status === 'Playing' || match.status === 'InProgress' ? 'bg-blue-100 text-blue-700' :
+              match.status === 'Finished' || match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+              match.status === 'Queued' || match.status === 'Ready' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {match.status || 'Scheduled'}
+            </span>
+          </div>
+
+          {/* Court (if assigned) */}
+          {match.courtName && (
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-600 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Court
+              </span>
+              <span className="font-medium text-gray-900">{match.courtName}</span>
+            </div>
+          )}
+
+          {/* Scheduled Time */}
+          {match.scheduledTime && (
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-600 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Scheduled
+              </span>
+              <span className="font-medium text-gray-900">
+                {new Date(match.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t">
+          <button
+            onClick={onClose}
+            className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -626,6 +785,7 @@ function FutureGameCard({ game }) {
 // ============================================
 function OthersTab({
   gameDay,
+  allDivisions,
   schedule,
   loadingSchedule,
   selectedDivisionId,
@@ -641,10 +801,13 @@ function OthersTab({
     }))
   }
 
+  // Use allDivisions, but highlight player's divisions
+  const myDivisionIds = new Set(gameDay.myDivisions?.map(d => d.divisionId) || [])
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
       {/* Division Selector */}
-      {gameDay.myDivisions?.length > 0 && (
+      {allDivisions?.length > 0 && (
         <div className="bg-white rounded-xl p-4 border">
           <label className="block text-sm font-medium text-gray-700 mb-2">Select Division</label>
           <select
@@ -652,12 +815,15 @@ function OthersTab({
             onChange={(e) => onDivisionChange(parseInt(e.target.value))}
             className="w-full px-3 py-2 border rounded-lg"
           >
-            {gameDay.myDivisions.map(div => (
-              <option key={div.divisionId} value={div.divisionId}>
-                {div.divisionName}
+            {allDivisions.map(div => (
+              <option key={div.id} value={div.id}>
+                {div.name}{myDivisionIds.has(div.id) ? ' ⭐' : ''}
               </option>
             ))}
           </select>
+          {myDivisionIds.size > 0 && (
+            <p className="text-xs text-gray-500 mt-1">⭐ = Your division</p>
+          )}
         </div>
       )}
 
