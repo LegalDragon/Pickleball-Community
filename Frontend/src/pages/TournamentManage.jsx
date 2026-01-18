@@ -120,6 +120,8 @@ export default function TournamentManage() {
     const removeListener = addListener((notification) => {
       if (notification.Type === 'ScoreUpdate' || notification.Type === 'GameUpdate') {
         console.log('Admin dashboard: Received game update, refreshing...', notification);
+        // Show toast to admin
+        toast.info(notification.Message || 'Score updated - refreshing...');
         loadDashboard();
         // Use ref to get current selectedDivision value (avoids stale closure)
         const currentDivision = selectedDivisionRef.current;
@@ -1303,11 +1305,16 @@ export default function TournamentManage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => loadDashboard()}
+                  onClick={() => {
+                    loadDashboard();
+                    if (selectedDivision?.scheduleReady) {
+                      loadSchedule(selectedDivision.id);
+                    }
+                  }}
                   className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
                   title="Refresh courts"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   Refresh
                 </button>
                 {isOrganizer && (
@@ -1591,10 +1598,15 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Match Schedule</h2>
               <button
-                onClick={loadDashboard}
+                onClick={() => {
+                  loadDashboard();
+                  if (selectedDivision?.scheduleReady) {
+                    loadSchedule(selectedDivision.id);
+                  }
+                }}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className={`w-5 h-5 ${loadingSchedule ? 'animate-spin' : ''}`} />
               </button>
             </div>
 
