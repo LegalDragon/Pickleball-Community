@@ -80,7 +80,7 @@ BEGIN
         UpdatedAt DATETIME NOT NULL DEFAULT GETDATE(),
         CONSTRAINT FK_EventStaff_Event FOREIGN KEY (EventId) REFERENCES Events(Id) ON DELETE CASCADE,
         CONSTRAINT FK_EventStaff_User FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE NO ACTION,
-        CONSTRAINT FK_EventStaff_Role FOREIGN KEY (RoleId) REFERENCES EventStaffRoles(Id) ON DELETE SET NULL,
+        CONSTRAINT FK_EventStaff_Role FOREIGN KEY (RoleId) REFERENCES EventStaffRoles(Id) ON DELETE NO ACTION,
         CONSTRAINT FK_EventStaff_AssignedBy FOREIGN KEY (AssignedByUserId) REFERENCES Users(Id) ON DELETE NO ACTION
     )
     PRINT 'Created EventStaff table'
