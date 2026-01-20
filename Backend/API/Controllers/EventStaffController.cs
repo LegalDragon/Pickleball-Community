@@ -226,21 +226,21 @@ public class EventStaffController : ControllerBase
     {
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<EventStaffDto> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<EventStaffDto> { Success = false, Message = "User not authenticated" });
 
         // Check if already registered
         var existing = await _context.EventStaff
             .FirstOrDefaultAsync(s => s.EventId == eventId && s.UserId == userId.Value);
 
         if (existing != null)
-            return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Error = "You are already registered as staff for this event" });
+            return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = "You are already registered as staff for this event" });
 
         // Validate role if provided
         if (dto.RoleId.HasValue)
         {
             var role = await _context.EventStaffRoles.FindAsync(dto.RoleId.Value);
             if (role == null || (!role.IsActive) || (role.EventId != null && role.EventId != eventId))
-                return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Error = "Invalid role selected" });
+                return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = "Invalid role selected" });
         }
 
         var staff = new EventStaff
@@ -286,7 +286,7 @@ public class EventStaffController : ControllerBase
             .FirstOrDefaultAsync(s => s.EventId == eventId && s.UserId == dto.UserId);
 
         if (existing != null)
-            return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Error = "User is already registered as staff for this event" });
+            return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = "User is already registered as staff for this event" });
 
         var staff = new EventStaff
         {
@@ -334,7 +334,7 @@ public class EventStaffController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == staffId && s.EventId == eventId);
 
         if (staff == null)
-            return NotFound(new ApiResponse<EventStaffDto> { Success = false, Error = "Staff assignment not found" });
+            return NotFound(new ApiResponse<EventStaffDto> { Success = false, Message = "Staff assignment not found" });
 
         var adminUserId = GetUserId()!.Value;
 
@@ -379,13 +379,13 @@ public class EventStaffController : ControllerBase
     {
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<bool> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
         var staff = await _context.EventStaff
             .FirstOrDefaultAsync(s => s.Id == staffId && s.EventId == eventId);
 
         if (staff == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Error = "Staff assignment not found" });
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Staff assignment not found" });
 
         // Allow self-removal or admin removal
         var isOwn = staff.UserId == userId.Value;
@@ -409,7 +409,7 @@ public class EventStaffController : ControllerBase
     {
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<EventStaffDto?> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<EventStaffDto?> { Success = false, Message = "User not authenticated" });
 
         var staff = await _context.EventStaff
             .Include(s => s.User)

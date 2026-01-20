@@ -6724,11 +6724,11 @@ public class TournamentController : ControllerBase
     {
         var division = await _context.EventDivisions.FindAsync(divisionId);
         if (division == null)
-            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Division not found" });
+            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "Division not found" });
 
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "User not authenticated" });
 
         // Check permission
         var evt = await _context.Events.FindAsync(division.EventId);
@@ -6738,13 +6738,13 @@ public class TournamentController : ControllerBase
         // Check if court exists and belongs to the same event
         var court = await _context.TournamentCourts.FindAsync(dto.TournamentCourtId);
         if (court == null || court.EventId != division.EventId)
-            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Invalid court" });
+            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "Invalid court" });
 
         // Check if already assigned
         var existing = await _context.DivisionCourtBlocks
             .FirstOrDefaultAsync(b => b.DivisionId == divisionId && b.TournamentCourtId == dto.TournamentCourtId);
         if (existing != null)
-            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Court is already assigned to this division" });
+            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "Court is already assigned to this division" });
 
         var block = new DivisionCourtBlock
         {
@@ -6796,11 +6796,11 @@ public class TournamentController : ControllerBase
             .FirstOrDefaultAsync(b => b.Id == blockId && b.DivisionId == divisionId);
 
         if (block == null)
-            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Court block not found" });
+            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "Court block not found" });
 
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Message = "User not authenticated" });
 
         // Check permission
         var evt = await _context.Events.FindAsync(block.Division!.EventId);
@@ -6852,11 +6852,11 @@ public class TournamentController : ControllerBase
             .FirstOrDefaultAsync(b => b.Id == blockId && b.DivisionId == divisionId);
 
         if (block == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Error = "Court block not found" });
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Court block not found" });
 
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<bool> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
         // Check permission
         var evt = await _context.Events.FindAsync(block.Division!.EventId);
@@ -6880,11 +6880,11 @@ public class TournamentController : ControllerBase
     {
         var division = await _context.EventDivisions.FindAsync(divisionId);
         if (division == null)
-            return NotFound(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = "Division not found" });
+            return NotFound(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Message = "Division not found" });
 
         var userId = GetUserId();
         if (!userId.HasValue)
-            return Unauthorized(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = "User not authenticated" });
+            return Unauthorized(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Message = "User not authenticated" });
 
         // Check permission
         var evt = await _context.Events.FindAsync(division.EventId);
@@ -6900,7 +6900,7 @@ public class TournamentController : ControllerBase
 
         var invalidCourts = courtIds.Except(validCourts).ToList();
         if (invalidCourts.Any())
-            return BadRequest(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = $"Invalid court IDs: {string.Join(", ", invalidCourts)}" });
+            return BadRequest(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Message = $"Invalid court IDs: {string.Join(", ", invalidCourts)}" });
 
         // Remove existing blocks
         var existingBlocks = await _context.DivisionCourtBlocks
