@@ -2396,16 +2396,16 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
         }
 
         // Update form data with geocoded coordinates AND address components
+        // Always use the geocoded values since user explicitly searched for a new address
         setFormData(prev => ({
           ...prev,
           latitude,
           longitude,
-          // Only update address fields if they're currently empty
-          addr1: prev.addr1 || streetAddress,
-          city: prev.city || city,
-          state: prev.state || state,
-          zip: prev.zip || zip,
-          country: prev.country === 'USA' && country !== 'USA' ? country : prev.country
+          addr1: streetAddress || prev.addr1,
+          city: city || prev.city,
+          state: state || prev.state,
+          zip: zip || prev.zip,
+          country: country && country !== 'USA' ? country : prev.country
         }));
 
         // Update marker and map if initialized
