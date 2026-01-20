@@ -366,6 +366,22 @@ public class ScoreboardController : ControllerBase
             .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
             .ToListAsync();
 
+        // Calculate pool assignments from UnitNumber if not already set
+        // This ensures correct pool grouping even if PoolNumber wasn't persisted
+        var evt = await _context.Events.FindAsync(eventId);
+        var poolCount = evt?.PoolCount ?? 2; // Default to 2 pools if not specified
+        foreach (var unit in units)
+        {
+            if ((!unit.PoolNumber.HasValue || unit.PoolNumber == 0) &&
+                unit.UnitNumber.HasValue && unit.UnitNumber > 0 && poolCount > 0)
+            {
+                // Pool assignment formula: ((UnitNumber - 1) % poolCount) + 1
+                var calculatedPool = ((unit.UnitNumber.Value - 1) % poolCount) + 1;
+                unit.PoolNumber = calculatedPool;
+                unit.PoolName = $"Pool {(char)('A' + calculatedPool - 1)}";
+            }
+        }
+
         var pools = units
             .GroupBy(u => u.PoolNumber ?? 0)
             .OrderBy(g => g.Key)

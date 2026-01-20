@@ -3570,18 +3570,23 @@ public class TournamentController : ControllerBase
             .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
-        // Extract pool assignments from pool encounters (since units may not have PoolNumber/PoolName set)
-        var unitPoolAssignments = new Dictionary<int, (int PoolNumber, string PoolName)>();
+        // Get pool count from Event settings or infer from encounters
         var poolEncounters = matches.Where(m => m.RoundType == "Pool").ToList();
+        var poolCount = poolEncounters.Any()
+            ? poolEncounters.Max(m => m.RoundNumber)
+            : division.Event?.PoolCount ?? 2; // Default to 2 pools if not specified
+
+        // Extract pool assignments from pool encounters as fallback (for units without UnitNumber)
+        var unitPoolAssignmentsFromEncounters = new Dictionary<int, (int PoolNumber, string PoolName)>();
         foreach (var enc in poolEncounters)
         {
             var poolNum = enc.RoundNumber;
             var poolName = enc.RoundName ?? $"Pool {(char)('A' + poolNum - 1)}";
 
-            if (enc.Unit1Id.HasValue && !unitPoolAssignments.ContainsKey(enc.Unit1Id.Value))
-                unitPoolAssignments[enc.Unit1Id.Value] = (poolNum, poolName);
-            if (enc.Unit2Id.HasValue && !unitPoolAssignments.ContainsKey(enc.Unit2Id.Value))
-                unitPoolAssignments[enc.Unit2Id.Value] = (poolNum, poolName);
+            if (enc.Unit1Id.HasValue && !unitPoolAssignmentsFromEncounters.ContainsKey(enc.Unit1Id.Value))
+                unitPoolAssignmentsFromEncounters[enc.Unit1Id.Value] = (poolNum, poolName);
+            if (enc.Unit2Id.HasValue && !unitPoolAssignmentsFromEncounters.ContainsKey(enc.Unit2Id.Value))
+                unitPoolAssignmentsFromEncounters[enc.Unit2Id.Value] = (poolNum, poolName);
         }
 
         // Include members to show team composition
@@ -3595,16 +3600,27 @@ public class TournamentController : ControllerBase
             .ThenBy(u => u.UnitNumber)
             .ToListAsync();
 
-        // Apply pool assignments from encounters to units (for display purposes)
+        // Apply pool assignments to units (for display purposes)
+        // Priority: 1) Calculate from UnitNumber (deterministic), 2) From encounters (fallback)
         foreach (var unit in units)
         {
-            if (unitPoolAssignments.TryGetValue(unit.Id, out var poolInfo))
+            if (!unit.PoolNumber.HasValue || unit.PoolNumber == 0)
             {
-                // Use encounter-derived pool info if unit doesn't have it set
-                if (!unit.PoolNumber.HasValue || unit.PoolNumber == 0)
+                // Calculate pool from UnitNumber if available (most reliable)
+                // Pool assignment: odd UnitNumbers to Pool 1, even to Pool 2 (for 2 pools)
+                // General formula: ((UnitNumber - 1) % poolCount) + 1
+                if (unit.UnitNumber.HasValue && unit.UnitNumber > 0 && poolCount > 0)
+                {
+                    var calculatedPool = ((unit.UnitNumber.Value - 1) % poolCount) + 1;
+                    unit.PoolNumber = calculatedPool;
+                    unit.PoolName = $"Pool {(char)('A' + calculatedPool - 1)}";
+                }
+                // Fallback to encounter-derived pool info
+                else if (unitPoolAssignmentsFromEncounters.TryGetValue(unit.Id, out var poolInfo))
+                {
                     unit.PoolNumber = poolInfo.PoolNumber;
-                if (string.IsNullOrEmpty(unit.PoolName))
                     unit.PoolName = poolInfo.PoolName;
+                }
             }
         }
 
@@ -6083,6 +6099,21 @@ public class TournamentController : ControllerBase
             unit.UnitNumber = null;
             unit.PoolNumber = null;
             unit.PoolName = null;
+        }
+
+        // Clear Unit1Id/Unit2Id from pool encounters to prevent stale pool assignments
+        // This ensures GetSchedule derives pools correctly after a new drawing
+        var poolEncounters = await _context.EventMatches
+            .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool")
+            .ToListAsync();
+
+        foreach (var encounter in poolEncounters)
+        {
+            encounter.Unit1Id = null;
+            encounter.Unit2Id = null;
+            encounter.WinnerUnitId = null;
+            encounter.Status = "Scheduled";
+            encounter.UpdatedAt = DateTime.Now;
         }
 
         // End the drawing session and reset status

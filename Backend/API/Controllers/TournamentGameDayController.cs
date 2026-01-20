@@ -972,6 +972,24 @@ public class TournamentGameDayController : ControllerBase
             }
         }
 
+        // Calculate pool assignments from UnitNumber if not already set
+        // This ensures correct pool grouping even if PoolNumber wasn't persisted
+        // Get pool count from Event (PoolCount is stored on Event, not Division)
+        var evt = await _context.Events.FindAsync(eventId);
+        var poolCount = evt?.PoolCount ?? 2; // Default to 2 pools if not specified
+        foreach (var unit in units)
+        {
+            if ((!unit.PoolNumber.HasValue || unit.PoolNumber == 0) &&
+                unit.UnitNumber.HasValue && unit.UnitNumber > 0 && poolCount > 0)
+            {
+                // Pool assignment formula: ((UnitNumber - 1) % poolCount) + 1
+                // e.g., for 2 pools: odd UnitNumbers → Pool 1, even → Pool 2
+                var calculatedPool = ((unit.UnitNumber.Value - 1) % poolCount) + 1;
+                unit.PoolNumber = calculatedPool;
+                unit.PoolName = $"Pool {(char)('A' + calculatedPool - 1)}";
+            }
+        }
+
         // Get all completed pool encounters with their games
         var poolEncounters = await _context.EventMatches
             .Where(m => m.DivisionId == divisionId && m.RoundType == "Pool" && m.Status == "Completed")
@@ -1165,6 +1183,20 @@ public class TournamentGameDayController : ControllerBase
             .OrderBy(u => u.PoolNumber)
             .ThenBy(u => u.PoolRank)
             .ToListAsync();
+
+        // Ensure pool assignments are set from UnitNumber if not already
+        var evt = await _context.Events.FindAsync(eventId);
+        var poolCount = evt?.PoolCount ?? 2;
+        foreach (var unit in units)
+        {
+            if ((!unit.PoolNumber.HasValue || unit.PoolNumber == 0) &&
+                unit.UnitNumber.HasValue && unit.UnitNumber > 0 && poolCount > 0)
+            {
+                var calculatedPool = ((unit.UnitNumber.Value - 1) % poolCount) + 1;
+                unit.PoolNumber = calculatedPool;
+                unit.PoolName = $"Pool {(char)('A' + calculatedPool - 1)}";
+            }
+        }
 
         // Group by pool and select top N from each
         var pools = units.GroupBy(u => u.PoolNumber ?? 0).OrderBy(g => g.Key).ToList();
