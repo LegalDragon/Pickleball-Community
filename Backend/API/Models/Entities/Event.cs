@@ -144,6 +144,8 @@ public class Event
     public ICollection<TournamentCourt> TournamentCourts { get; set; } = new List<TournamentCourt>();
     public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
     public ICollection<EventDocument> Documents { get; set; } = new List<EventDocument>();
+    public ICollection<EventStaff> Staff { get; set; } = new List<EventStaff>();
+    public ICollection<EventStaffRole> StaffRoles { get; set; } = new List<EventStaffRole>();
 }
 
 public class EventDivision
@@ -256,6 +258,22 @@ public class EventDivision
     /// </summary>
     public bool AllowLineupChangePerEncounter { get; set; } = true;
 
+    // =====================================================
+    // Scheduling Constraints
+    // =====================================================
+
+    /// <summary>
+    /// Minimum rest time (in minutes) between matches for the same team/unit.
+    /// Used by auto-allocation to ensure proper rest periods.
+    /// </summary>
+    public int? MinRestTimeMinutes { get; set; } = 15;
+
+    /// <summary>
+    /// Estimated duration of a match in minutes.
+    /// Used for scheduling calculations and court block planning.
+    /// </summary>
+    public int? EstimatedMatchDurationMinutes { get; set; } = 20;
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 
@@ -301,6 +319,7 @@ public class EventDivision
     public ICollection<EventUnit> Units { get; set; } = new List<EventUnit>();
     public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
     public ICollection<EncounterMatchFormat> EncounterMatchFormats { get; set; } = new List<EncounterMatchFormat>();
+    public ICollection<DivisionCourtBlock> CourtBlocks { get; set; } = new List<DivisionCourtBlock>();
 }
 
 public class EventRegistration

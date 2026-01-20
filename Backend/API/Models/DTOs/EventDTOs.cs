@@ -269,8 +269,15 @@ public class EventDivisionDto
     public int? PlayoffFromPools { get; set; }
     public int GamesPerMatch { get; set; } = 1;
 
+    // Scheduling constraints
+    public int? MinRestTimeMinutes { get; set; }
+    public int? EstimatedMatchDurationMinutes { get; set; }
+
     // Rewards
     public List<DivisionRewardDto> Rewards { get; set; } = new();
+
+    // Court blocks (pre-allocated courts)
+    public List<DivisionCourtBlockDto> CourtBlocks { get; set; } = new();
 }
 
 // DTO for updating a division
@@ -293,6 +300,10 @@ public class UpdateDivisionDto
     public string? BracketType { get; set; }
     public int? PlayoffFromPools { get; set; }
     public int? GamesPerMatch { get; set; }
+
+    // Scheduling constraints
+    public int? MinRestTimeMinutes { get; set; }
+    public int? EstimatedMatchDurationMinutes { get; set; }
 }
 
 // Division with registrations
@@ -648,4 +659,170 @@ public class UserEventDivisionDto
     public string DivisionName { get; set; } = "";
     public int UnitId { get; set; }
     public string? UnitName { get; set; }
+}
+
+// =====================================================
+// Event Staff DTOs
+// =====================================================
+
+/// <summary>
+/// Staff role definition
+/// </summary>
+public class EventStaffRoleDto
+{
+    public int Id { get; set; }
+    public int? EventId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool CanManageSchedule { get; set; }
+    public bool CanManageCourts { get; set; }
+    public bool CanRecordScores { get; set; }
+    public bool CanCheckInPlayers { get; set; }
+    public bool CanManageLineups { get; set; }
+    public bool CanViewAllData { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; }
+}
+
+/// <summary>
+/// Staff assignment for an event
+/// </summary>
+public class EventStaffDto
+{
+    public int Id { get; set; }
+    public int EventId { get; set; }
+    public int UserId { get; set; }
+    public string? UserName { get; set; }
+    public string? UserEmail { get; set; }
+    public string? UserProfileImageUrl { get; set; }
+    public int? RoleId { get; set; }
+    public string? RoleName { get; set; }
+    public bool IsSelfRegistered { get; set; }
+    public string Status { get; set; } = "Pending";
+    public int Priority { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableTo { get; set; }
+    public string? SelfRegistrationNotes { get; set; }
+    public string? AdminNotes { get; set; }
+    public int? AssignedByUserId { get; set; }
+    public string? AssignedByUserName { get; set; }
+    public DateTime? AssignedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    // Permission flags (from role)
+    public bool CanManageSchedule { get; set; }
+    public bool CanManageCourts { get; set; }
+    public bool CanRecordScores { get; set; }
+    public bool CanCheckInPlayers { get; set; }
+    public bool CanManageLineups { get; set; }
+    public bool CanViewAllData { get; set; }
+}
+
+/// <summary>
+/// Self-registration request from a user to volunteer as staff
+/// </summary>
+public class CreateEventStaffSelfRegistrationDto
+{
+    public int? RoleId { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableTo { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Admin creates/assigns staff member
+/// </summary>
+public class CreateEventStaffDto
+{
+    public int UserId { get; set; }
+    public int? RoleId { get; set; }
+    public string Status { get; set; } = "Active";
+    public int Priority { get; set; } = 0;
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableTo { get; set; }
+    public string? AdminNotes { get; set; }
+}
+
+/// <summary>
+/// Admin updates staff assignment
+/// </summary>
+public class UpdateEventStaffDto
+{
+    public int? RoleId { get; set; }
+    public string? Status { get; set; }
+    public int? Priority { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableTo { get; set; }
+    public string? AdminNotes { get; set; }
+}
+
+/// <summary>
+/// Create/update staff role
+/// </summary>
+public class CreateEventStaffRoleDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool CanManageSchedule { get; set; }
+    public bool CanManageCourts { get; set; }
+    public bool CanRecordScores { get; set; }
+    public bool CanCheckInPlayers { get; set; }
+    public bool CanManageLineups { get; set; }
+    public bool CanViewAllData { get; set; }
+    public int SortOrder { get; set; }
+}
+
+// =====================================================
+// Division Court Block DTOs
+// =====================================================
+
+/// <summary>
+/// Court block assignment for a division
+/// </summary>
+public class DivisionCourtBlockDto
+{
+    public int Id { get; set; }
+    public int DivisionId { get; set; }
+    public string? DivisionName { get; set; }
+    public int TournamentCourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public int Priority { get; set; }
+    public DateTime? IntendedStartTime { get; set; }
+    public DateTime? IntendedEndTime { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Create court block assignment
+/// </summary>
+public class CreateDivisionCourtBlockDto
+{
+    public int TournamentCourtId { get; set; }
+    public int Priority { get; set; } = 0;
+    public DateTime? IntendedStartTime { get; set; }
+    public DateTime? IntendedEndTime { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Update court block assignment
+/// </summary>
+public class UpdateDivisionCourtBlockDto
+{
+    public int? Priority { get; set; }
+    public DateTime? IntendedStartTime { get; set; }
+    public DateTime? IntendedEndTime { get; set; }
+    public string? Notes { get; set; }
+    public bool? IsActive { get; set; }
+}
+
+/// <summary>
+/// Bulk update court blocks for a division
+/// </summary>
+public class BulkUpdateDivisionCourtBlocksDto
+{
+    public List<CreateDivisionCourtBlockDto> CourtBlocks { get; set; } = new();
 }

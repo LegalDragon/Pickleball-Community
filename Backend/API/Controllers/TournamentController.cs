@@ -6678,4 +6678,272 @@ public class TournamentController : ControllerBase
             });
         }
     }
+
+    // ============================================
+    // Division Court Blocks (Court Pre-allocation)
+    // ============================================
+
+    /// <summary>
+    /// Get court blocks for a division (pre-allocated courts with priority)
+    /// </summary>
+    [HttpGet("division/{divisionId}/court-blocks")]
+    public async Task<ActionResult<ApiResponse<List<DivisionCourtBlockDto>>>> GetDivisionCourtBlocks(int divisionId)
+    {
+        var blocks = await _context.DivisionCourtBlocks
+            .Include(b => b.TournamentCourt)
+            .Include(b => b.Division)
+            .Where(b => b.DivisionId == divisionId && b.IsActive)
+            .OrderBy(b => b.Priority)
+            .Select(b => new DivisionCourtBlockDto
+            {
+                Id = b.Id,
+                DivisionId = b.DivisionId,
+                DivisionName = b.Division != null ? b.Division.Name : null,
+                TournamentCourtId = b.TournamentCourtId,
+                CourtLabel = b.TournamentCourt != null ? b.TournamentCourt.CourtLabel : null,
+                Priority = b.Priority,
+                IntendedStartTime = b.IntendedStartTime,
+                IntendedEndTime = b.IntendedEndTime,
+                Notes = b.Notes,
+                IsActive = b.IsActive,
+                CreatedAt = b.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<DivisionCourtBlockDto>> { Success = true, Data = blocks });
+    }
+
+    /// <summary>
+    /// Add a court block to a division
+    /// </summary>
+    [Authorize]
+    [HttpPost("division/{divisionId}/court-blocks")]
+    public async Task<ActionResult<ApiResponse<DivisionCourtBlockDto>>> CreateDivisionCourtBlock(
+        int divisionId,
+        [FromBody] CreateDivisionCourtBlockDto dto)
+    {
+        var division = await _context.EventDivisions.FindAsync(divisionId);
+        if (division == null)
+            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Division not found" });
+
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "User not authenticated" });
+
+        // Check permission
+        var evt = await _context.Events.FindAsync(division.EventId);
+        if (evt == null || (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync()))
+            return Forbid();
+
+        // Check if court exists and belongs to the same event
+        var court = await _context.TournamentCourts.FindAsync(dto.TournamentCourtId);
+        if (court == null || court.EventId != division.EventId)
+            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Invalid court" });
+
+        // Check if already assigned
+        var existing = await _context.DivisionCourtBlocks
+            .FirstOrDefaultAsync(b => b.DivisionId == divisionId && b.TournamentCourtId == dto.TournamentCourtId);
+        if (existing != null)
+            return BadRequest(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Court is already assigned to this division" });
+
+        var block = new DivisionCourtBlock
+        {
+            DivisionId = divisionId,
+            TournamentCourtId = dto.TournamentCourtId,
+            Priority = dto.Priority,
+            IntendedStartTime = dto.IntendedStartTime,
+            IntendedEndTime = dto.IntendedEndTime,
+            Notes = dto.Notes
+        };
+
+        _context.DivisionCourtBlocks.Add(block);
+        await _context.SaveChangesAsync();
+
+        await _context.Entry(block).Reference(b => b.TournamentCourt).LoadAsync();
+        await _context.Entry(block).Reference(b => b.Division).LoadAsync();
+
+        var result = new DivisionCourtBlockDto
+        {
+            Id = block.Id,
+            DivisionId = block.DivisionId,
+            DivisionName = block.Division?.Name,
+            TournamentCourtId = block.TournamentCourtId,
+            CourtLabel = block.TournamentCourt?.CourtLabel,
+            Priority = block.Priority,
+            IntendedStartTime = block.IntendedStartTime,
+            IntendedEndTime = block.IntendedEndTime,
+            Notes = block.Notes,
+            IsActive = block.IsActive,
+            CreatedAt = block.CreatedAt
+        };
+
+        return Ok(new ApiResponse<DivisionCourtBlockDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Update a court block
+    /// </summary>
+    [Authorize]
+    [HttpPut("division/{divisionId}/court-blocks/{blockId}")]
+    public async Task<ActionResult<ApiResponse<DivisionCourtBlockDto>>> UpdateDivisionCourtBlock(
+        int divisionId,
+        int blockId,
+        [FromBody] UpdateDivisionCourtBlockDto dto)
+    {
+        var block = await _context.DivisionCourtBlocks
+            .Include(b => b.Division)
+            .Include(b => b.TournamentCourt)
+            .FirstOrDefaultAsync(b => b.Id == blockId && b.DivisionId == divisionId);
+
+        if (block == null)
+            return NotFound(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "Court block not found" });
+
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<DivisionCourtBlockDto> { Success = false, Error = "User not authenticated" });
+
+        // Check permission
+        var evt = await _context.Events.FindAsync(block.Division!.EventId);
+        if (evt == null || (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync()))
+            return Forbid();
+
+        // Update fields
+        if (dto.Priority.HasValue)
+            block.Priority = dto.Priority.Value;
+        if (dto.IntendedStartTime.HasValue)
+            block.IntendedStartTime = dto.IntendedStartTime;
+        if (dto.IntendedEndTime.HasValue)
+            block.IntendedEndTime = dto.IntendedEndTime;
+        if (dto.Notes != null)
+            block.Notes = dto.Notes;
+        if (dto.IsActive.HasValue)
+            block.IsActive = dto.IsActive.Value;
+
+        block.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        var result = new DivisionCourtBlockDto
+        {
+            Id = block.Id,
+            DivisionId = block.DivisionId,
+            DivisionName = block.Division?.Name,
+            TournamentCourtId = block.TournamentCourtId,
+            CourtLabel = block.TournamentCourt?.CourtLabel,
+            Priority = block.Priority,
+            IntendedStartTime = block.IntendedStartTime,
+            IntendedEndTime = block.IntendedEndTime,
+            Notes = block.Notes,
+            IsActive = block.IsActive,
+            CreatedAt = block.CreatedAt
+        };
+
+        return Ok(new ApiResponse<DivisionCourtBlockDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Delete a court block
+    /// </summary>
+    [Authorize]
+    [HttpDelete("division/{divisionId}/court-blocks/{blockId}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteDivisionCourtBlock(int divisionId, int blockId)
+    {
+        var block = await _context.DivisionCourtBlocks
+            .Include(b => b.Division)
+            .FirstOrDefaultAsync(b => b.Id == blockId && b.DivisionId == divisionId);
+
+        if (block == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Error = "Court block not found" });
+
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Error = "User not authenticated" });
+
+        // Check permission
+        var evt = await _context.Events.FindAsync(block.Division!.EventId);
+        if (evt == null || (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync()))
+            return Forbid();
+
+        _context.DivisionCourtBlocks.Remove(block);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    /// <summary>
+    /// Bulk update court blocks for a division (replaces all blocks)
+    /// </summary>
+    [Authorize]
+    [HttpPut("division/{divisionId}/court-blocks")]
+    public async Task<ActionResult<ApiResponse<List<DivisionCourtBlockDto>>>> BulkUpdateDivisionCourtBlocks(
+        int divisionId,
+        [FromBody] BulkUpdateDivisionCourtBlocksDto dto)
+    {
+        var division = await _context.EventDivisions.FindAsync(divisionId);
+        if (division == null)
+            return NotFound(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = "Division not found" });
+
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = "User not authenticated" });
+
+        // Check permission
+        var evt = await _context.Events.FindAsync(division.EventId);
+        if (evt == null || (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync()))
+            return Forbid();
+
+        // Validate all courts
+        var courtIds = dto.CourtBlocks.Select(b => b.TournamentCourtId).ToList();
+        var validCourts = await _context.TournamentCourts
+            .Where(c => courtIds.Contains(c.Id) && c.EventId == division.EventId)
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        var invalidCourts = courtIds.Except(validCourts).ToList();
+        if (invalidCourts.Any())
+            return BadRequest(new ApiResponse<List<DivisionCourtBlockDto>> { Success = false, Error = $"Invalid court IDs: {string.Join(", ", invalidCourts)}" });
+
+        // Remove existing blocks
+        var existingBlocks = await _context.DivisionCourtBlocks
+            .Where(b => b.DivisionId == divisionId)
+            .ToListAsync();
+        _context.DivisionCourtBlocks.RemoveRange(existingBlocks);
+
+        // Add new blocks
+        var newBlocks = dto.CourtBlocks.Select(b => new DivisionCourtBlock
+        {
+            DivisionId = divisionId,
+            TournamentCourtId = b.TournamentCourtId,
+            Priority = b.Priority,
+            IntendedStartTime = b.IntendedStartTime,
+            IntendedEndTime = b.IntendedEndTime,
+            Notes = b.Notes
+        }).ToList();
+
+        _context.DivisionCourtBlocks.AddRange(newBlocks);
+        await _context.SaveChangesAsync();
+
+        // Load and return results
+        var blocks = await _context.DivisionCourtBlocks
+            .Include(b => b.TournamentCourt)
+            .Include(b => b.Division)
+            .Where(b => b.DivisionId == divisionId)
+            .OrderBy(b => b.Priority)
+            .Select(b => new DivisionCourtBlockDto
+            {
+                Id = b.Id,
+                DivisionId = b.DivisionId,
+                DivisionName = b.Division != null ? b.Division.Name : null,
+                TournamentCourtId = b.TournamentCourtId,
+                CourtLabel = b.TournamentCourt != null ? b.TournamentCourt.CourtLabel : null,
+                Priority = b.Priority,
+                IntendedStartTime = b.IntendedStartTime,
+                IntendedEndTime = b.IntendedEndTime,
+                Notes = b.Notes,
+                IsActive = b.IsActive,
+                CreatedAt = b.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<DivisionCourtBlockDto>> { Success = true, Data = blocks });
+    }
 }
