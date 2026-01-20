@@ -974,9 +974,7 @@ public class TournamentGameDayController : ControllerBase
 
         // Calculate pool assignments from UnitNumber if not already set
         // This ensures correct pool grouping even if PoolNumber wasn't persisted
-        // Get pool count from Event (PoolCount is stored on Event, not Division)
-        var evt = await _context.Events.FindAsync(eventId);
-        var poolCount = evt?.PoolCount ?? 2; // Default to 2 pools if not specified
+        var poolCount = division.PoolCount ?? 2; // Default to 2 pools if not specified
         foreach (var unit in units)
         {
             if ((!unit.PoolNumber.HasValue || unit.PoolNumber == 0) &&

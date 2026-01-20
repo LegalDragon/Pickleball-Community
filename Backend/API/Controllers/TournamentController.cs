@@ -3570,11 +3570,11 @@ public class TournamentController : ControllerBase
             .ThenBy(m => m.EncounterNumber)
             .ToListAsync();
 
-        // Get pool count from Event settings or infer from encounters
+        // Get pool count from division settings or infer from encounters
         var poolEncounters = matches.Where(m => m.RoundType == "Pool").ToList();
         var poolCount = poolEncounters.Any()
             ? poolEncounters.Max(m => m.RoundNumber)
-            : division.Event?.PoolCount ?? 2; // Default to 2 pools if not specified
+            : division.PoolCount ?? 2; // Default to 2 pools if not specified
 
         // Extract pool assignments from pool encounters as fallback (for units without UnitNumber)
         var unitPoolAssignmentsFromEncounters = new Dictionary<int, (int PoolNumber, string PoolName)>();
