@@ -2239,12 +2239,33 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
       if (!response.ok) return null;
 
       const result = await response.json();
-      if (result && result.address) {
-        const addr = result.address;
+      if (result) {
+        const addr = result.address || {};
+        const displayName = result.display_name || '';
+
+        // Build street address from house number and street
+        let streetAddress = [addr.house_number || '', addr.road || addr.street || addr.pedestrian || ''].filter(Boolean).join(' ');
+        let city = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || '';
+        let state = addr.state || addr.province || addr.region || '';
+
+        // If address components are empty, try to parse from display_name
+        if (displayName && (!streetAddress || !city || !state)) {
+          const parts = displayName.split(',').map(p => p.trim());
+          if (parts.length >= 1 && !streetAddress) {
+            streetAddress = parts[0];
+          }
+          if (parts.length >= 3 && !city) {
+            city = parts[parts.length - 3] || parts[parts.length - 2] || '';
+          }
+          if (parts.length >= 2 && !state) {
+            state = parts[parts.length - 2] || '';
+          }
+        }
+
         return {
-          addr1: [addr.house_number || '', addr.road || addr.street || addr.pedestrian || ''].filter(Boolean).join(' '),
-          city: addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || '',
-          state: addr.state || addr.province || addr.region || '',
+          addr1: streetAddress,
+          city: city,
+          state: state,
           zip: addr.postcode || '',
           country: addr.country || 'USA'
         };
@@ -2316,7 +2337,7 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
       const results = await response.json();
 
       if (results && results.length > 0) {
-        const { lat, lon, address } = results[0];
+        const { lat, lon, address, display_name } = results[0];
         const latitude = parseFloat(lat);
         const longitude = parseFloat(lon);
 
@@ -2325,19 +2346,38 @@ function AddCourtModal({ onClose, onCourtAdded, userLocation, courtTypes }) {
         // Build street address from house number and street
         const houseNumber = addr.house_number || '';
         const street = addr.road || addr.street || addr.pedestrian || '';
-        const streetAddress = [houseNumber, street].filter(Boolean).join(' ');
+        let streetAddress = [houseNumber, street].filter(Boolean).join(' ');
 
         // Get city from various possible fields
-        const city = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || '';
+        let city = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || '';
 
         // Get state/province
-        const state = addr.state || addr.province || addr.region || '';
+        let state = addr.state || addr.province || addr.region || '';
 
         // Get postal code
         const zip = addr.postcode || '';
 
         // Get country (use short code if available, default to USA)
         const country = addr.country || 'USA';
+
+        // If address components are empty, try to parse from display_name
+        // display_name format is typically: "123 Main St, City, State, ZIP, Country"
+        if (display_name && (!streetAddress || !city || !state)) {
+          const parts = display_name.split(',').map(p => p.trim());
+          if (parts.length >= 1 && !streetAddress) {
+            // First part is usually the most specific location (street address or place name)
+            streetAddress = parts[0];
+          }
+          // Try to find city and state from the remaining parts
+          if (parts.length >= 3 && !city) {
+            // Usually city is 2nd or 3rd from the end (before state/country)
+            city = parts[parts.length - 3] || parts[parts.length - 2] || '';
+          }
+          if (parts.length >= 2 && !state) {
+            // State is often 2nd from the end
+            state = parts[parts.length - 2] || '';
+          }
+        }
 
         // Update form data with geocoded coordinates AND address components
         setFormData(prev => ({
