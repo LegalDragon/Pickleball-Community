@@ -1183,8 +1183,7 @@ public class TournamentGameDayController : ControllerBase
             .ToListAsync();
 
         // Ensure pool assignments are set from UnitNumber if not already
-        var evt = await _context.Events.FindAsync(eventId);
-        var poolCount = evt?.PoolCount ?? 2;
+        var poolCount = division.PoolCount ?? 2;
         foreach (var unit in units)
         {
             if ((!unit.PoolNumber.HasValue || unit.PoolNumber == 0) &&
