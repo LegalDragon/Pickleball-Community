@@ -22,12 +22,23 @@ export const getAssetUrl = (path) => {
 }
 
 // Helper function to get asset URL from Funtime-Shared (for user avatars, profile images)
+// Routes through local proxy endpoint to add authentication headers
 export const getSharedAssetUrl = (path) => {
   if (!path) return null
   // If path is already a full URL, return as-is
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path
   }
+
+  // For Funtime-Shared asset paths like /asset/123, use local proxy
+  // This allows the backend to add API key authentication
+  const assetMatch = path.match(/^\/asset\/(\d+)/)
+  if (assetMatch) {
+    const assetId = assetMatch[1]
+    return `/api/assets/shared/${assetId}`
+  }
+
+  // For other paths, use direct Funtime-Shared URL (fallback)
   const baseUrl = SHARED_AUTH_URL
 
   // Keep the full path including /api if present
@@ -245,11 +256,11 @@ export const sharedAssetApi = {
   getInfo: (assetId) => sharedAuthApi.get(`/asset/${assetId}/info`),
 
   /**
-   * Get asset URL for display
+   * Get asset URL for display (uses local proxy to add authentication)
    * @param {number} assetId - Asset ID
-   * @returns {string} - Full URL to access the asset
+   * @returns {string} - Full URL to access the asset via local proxy
    */
-  getUrl: (assetId) => `${SHARED_AUTH_URL}/asset/${assetId}`,
+  getUrl: (assetId) => `/api/assets/shared/${assetId}`,
 
   /**
    * Delete an asset by ID

@@ -231,8 +231,8 @@ const Profile = () => {
           console.log('New avatar path:', assetPath)
           // Update local user with new avatar path
           updateUser({ ...user, avatar: assetPath, profileImageUrl: assetPath })
-          // Display using full URL
-          setAvatarPreview(`${SHARED_AUTH_URL}${assetPath}`)
+          // Display using full URL (via local proxy for authenticated access)
+          setAvatarPreview(getSharedAssetUrl(assetPath))
 
           // Save relative path to local backend
           await userApi.updateProfile({ profileImageUrl: assetPath })

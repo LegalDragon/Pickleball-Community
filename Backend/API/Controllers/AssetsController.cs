@@ -15,15 +15,21 @@ public class AssetsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly IAssetService _assetService;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AssetsController> _logger;
 
     public AssetsController(
         ApplicationDbContext context,
         IAssetService assetService,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
         ILogger<AssetsController> logger)
     {
         _context = context;
         _assetService = assetService;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -69,6 +75,74 @@ public class AssetsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving asset: {FileId}", fileId);
+            return StatusCode(500, "An error occurred while retrieving the asset");
+        }
+    }
+
+    /// <summary>
+    /// Proxy endpoint for Funtime-Shared assets. Fetches assets from the shared service
+    /// with API key authentication and serves them to the browser.
+    /// </summary>
+    /// <param name="assetId">The asset ID from Funtime-Shared</param>
+    [AllowAnonymous]
+    [HttpGet("shared/{assetId:int}")]
+    [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)] // Cache for 1 hour
+    public async Task<IActionResult> GetSharedAsset(int assetId)
+    {
+        try
+        {
+            if (assetId <= 0)
+            {
+                return BadRequest("Valid asset ID is required");
+            }
+
+            var httpClient = _httpClientFactory.CreateClient("SharedAuth");
+
+            // Add API key for authentication
+            var apiKey = _configuration["SharedAuth:ApiKey"];
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+            }
+
+            // Fetch asset from Funtime-Shared
+            var response = await httpClient.GetAsync($"asset/{assetId}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return NotFound("Asset not found");
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to fetch shared asset {AssetId}: {StatusCode} - {Error}",
+                    assetId, response.StatusCode, errorContent);
+                return StatusCode((int)response.StatusCode, "Failed to fetch asset from shared service");
+            }
+
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var stream = await response.Content.ReadAsStreamAsync();
+
+            // Enable range requests for video streaming
+            var isVideo = contentType.StartsWith("video/");
+            if (isVideo)
+            {
+                // For video, we need to read the full content to support range requests
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                return File(bytes, contentType, enableRangeProcessing: true);
+            }
+
+            return File(stream, contentType);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error fetching shared asset: {AssetId}", assetId);
+            return StatusCode(502, "Failed to connect to shared asset service");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving shared asset: {AssetId}", assetId);
             return StatusCode(500, "An error occurred while retrieving the asset");
         }
     }
