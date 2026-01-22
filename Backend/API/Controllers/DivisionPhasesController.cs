@@ -695,7 +695,9 @@ public class DivisionPhasesController : ControllerBase
             foreach (var pool in pools)
             {
                 var slots = pool.PoolSlots.OrderBy(ps => ps.PoolPosition).Select(ps => ps.Slot!).ToList();
-                encountersCreated += await GenerateRoundRobinForSlots(phase, slots, pool.Id, ref globalEncounterNumber);
+                var (created, nextNumber) = await GenerateRoundRobinForSlots(phase, slots, pool.Id, globalEncounterNumber);
+                encountersCreated += created;
+                globalEncounterNumber = nextNumber;
             }
         }
         else
@@ -706,13 +708,14 @@ public class DivisionPhasesController : ControllerBase
                 .OrderBy(s => s.SlotNumber)
                 .ToListAsync();
 
-            encountersCreated = await GenerateRoundRobinForSlots(phase, slots, null, ref globalEncounterNumber);
+            var (created, _) = await GenerateRoundRobinForSlots(phase, slots, null, globalEncounterNumber);
+            encountersCreated = created;
         }
 
         return encountersCreated;
     }
 
-    private async Task<int> GenerateRoundRobinForSlots(DivisionPhase phase, List<PhaseSlot> slots, int? poolId, ref int encounterNumber)
+    private async Task<(int created, int encounterNumber)> GenerateRoundRobinForSlots(DivisionPhase phase, List<PhaseSlot> slots, int? poolId, int encounterNumber)
     {
         int created = 0;
         int n = slots.Count;
@@ -761,7 +764,7 @@ public class DivisionPhasesController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
-        return created;
+        return (created, encounterNumber);
     }
 
     private async Task<int> GenerateSingleEliminationSchedule(DivisionPhase phase)
