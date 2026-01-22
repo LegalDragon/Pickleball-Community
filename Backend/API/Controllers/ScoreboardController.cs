@@ -176,48 +176,138 @@ public class ScoreboardController : ControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<EventResultsDto> { Success = false, Message = "Event not found" });
 
+        // Get all bracket/playoff encounters to calculate placements
+        var bracketEncountersQuery = _context.EventEncounters
+            .Where(e => e.EventId == eventId && e.RoundType == "Bracket" && e.Status == "Completed");
+
+        if (divisionId.HasValue)
+            bracketEncountersQuery = bracketEncountersQuery.Where(e => e.DivisionId == divisionId.Value);
+
+        var bracketEncounters = await bracketEncountersQuery
+            .OrderByDescending(e => e.RoundNumber)
+            .ThenBy(e => e.BracketPosition)
+            .ToListAsync();
+
+        // Calculate placements from bracket results per division
+        var calculatedPlacements = new Dictionary<int, int>(); // unitId -> placement
+        var divisionEncounters = bracketEncounters.GroupBy(e => e.DivisionId);
+
+        foreach (var divGroup in divisionEncounters)
+        {
+            var encounters = divGroup.OrderByDescending(e => e.RoundNumber).ThenBy(e => e.BracketPosition).ToList();
+            if (!encounters.Any()) continue;
+
+            var maxRound = encounters.Max(e => e.RoundNumber);
+
+            // Final match (highest round)
+            var finalMatch = encounters.FirstOrDefault(e => e.RoundNumber == maxRound);
+            if (finalMatch != null)
+            {
+                if (finalMatch.WinnerUnitId.HasValue)
+                    calculatedPlacements[finalMatch.WinnerUnitId.Value] = 1;
+
+                // Loser of final = 2nd
+                var loserOfFinal = finalMatch.Unit1Id == finalMatch.WinnerUnitId
+                    ? finalMatch.Unit2Id
+                    : finalMatch.Unit1Id;
+                if (loserOfFinal.HasValue)
+                    calculatedPlacements[loserOfFinal.Value] = 2;
+            }
+
+            // Semifinal losers = 3rd place (or we could check for 3rd place match)
+            var semiFinals = encounters.Where(e => e.RoundNumber == maxRound - 1).ToList();
+            var thirdPlaceMatch = encounters.FirstOrDefault(e =>
+                e.RoundName?.Contains("3rd", StringComparison.OrdinalIgnoreCase) == true ||
+                e.RoundName?.Contains("Third", StringComparison.OrdinalIgnoreCase) == true ||
+                e.RoundName?.Contains("Bronze", StringComparison.OrdinalIgnoreCase) == true);
+
+            if (thirdPlaceMatch != null && thirdPlaceMatch.WinnerUnitId.HasValue)
+            {
+                // 3rd place match exists
+                calculatedPlacements[thirdPlaceMatch.WinnerUnitId.Value] = 3;
+                var loserOf3rd = thirdPlaceMatch.Unit1Id == thirdPlaceMatch.WinnerUnitId
+                    ? thirdPlaceMatch.Unit2Id
+                    : thirdPlaceMatch.Unit1Id;
+                if (loserOf3rd.HasValue)
+                    calculatedPlacements[loserOf3rd.Value] = 4;
+            }
+            else
+            {
+                // No 3rd place match - semifinal losers are tied for 3rd
+                int placement = 3;
+                foreach (var semi in semiFinals)
+                {
+                    var loser = semi.Unit1Id == semi.WinnerUnitId ? semi.Unit2Id : semi.Unit1Id;
+                    if (loser.HasValue && !calculatedPlacements.ContainsKey(loser.Value))
+                    {
+                        calculatedPlacements[loser.Value] = placement;
+                    }
+                }
+            }
+
+            // Quarterfinal losers = 5th-8th, etc.
+            for (int round = maxRound - 2; round >= 1; round--)
+            {
+                var roundMatches = encounters.Where(e => e.RoundNumber == round).ToList();
+                int basePlacement = (int)Math.Pow(2, maxRound - round) + 1; // 5 for QF, 9 for R16, etc.
+
+                foreach (var match in roundMatches)
+                {
+                    var loser = match.Unit1Id == match.WinnerUnitId ? match.Unit2Id : match.Unit1Id;
+                    if (loser.HasValue && !calculatedPlacements.ContainsKey(loser.Value))
+                    {
+                        calculatedPlacements[loser.Value] = basePlacement;
+                    }
+                }
+            }
+        }
+
         var query = _context.EventUnits
             .Where(u => u.EventId == eventId && u.Status != "Cancelled" && u.Status != "Waitlisted");
 
         if (divisionId.HasValue)
             query = query.Where(u => u.DivisionId == divisionId.Value);
 
-        var standings = await query
+        var units = await query
             .Include(u => u.Division)
             .Include(u => u.Members)
                 .ThenInclude(m => m.User)
-            .OrderBy(u => u.DivisionId)
-            .ThenBy(u => u.FinalPlacement ?? 999)
-            .ThenBy(u => u.OverallRank ?? 999)
-            .ThenByDescending(u => u.MatchesWon)
-            .ThenByDescending(u => u.GamesWon - u.GamesLost)
-            .ThenByDescending(u => u.PointsScored - u.PointsAgainst)
-            .Select(u => new UnitResultDto
-            {
-                DivisionId = u.DivisionId,
-                DivisionName = u.Division!.Name,
-                UnitId = u.Id,
-                UnitName = u.Name,
-                Players = u.Members
-                    .Where(m => m.InviteStatus == "Accepted")
-                    .Select(m => m.User!.FirstName + " " + m.User.LastName)
-                    .ToList(),
-                PoolNumber = u.PoolNumber,
-                PoolName = u.PoolName,
-                PoolRank = u.PoolRank,
-                OverallRank = u.OverallRank,
-                FinalPlacement = u.FinalPlacement,
-                AdvancedToPlayoff = u.AdvancedToPlayoff,
-                MatchesPlayed = u.MatchesPlayed,
-                MatchesWon = u.MatchesWon,
-                MatchesLost = u.MatchesLost,
-                GamesWon = u.GamesWon,
-                GamesLost = u.GamesLost,
-                PointsFor = u.PointsScored,
-                PointsAgainst = u.PointsAgainst,
-                PointDiff = u.PointsScored - u.PointsAgainst
-            })
             .ToListAsync();
+
+        // Build standings with calculated placements
+        var standings = units.Select(u => new UnitResultDto
+        {
+            DivisionId = u.DivisionId,
+            DivisionName = u.Division!.Name,
+            UnitId = u.Id,
+            UnitName = u.Name,
+            Players = u.Members
+                .Where(m => m.InviteStatus == "Accepted")
+                .Select(m => m.User!.FirstName + " " + m.User.LastName)
+                .ToList(),
+            PoolNumber = u.PoolNumber,
+            PoolName = u.PoolName,
+            PoolRank = u.PoolRank,
+            OverallRank = u.OverallRank,
+            // Use manually set FinalPlacement, then calculated from bracket, then null
+            FinalPlacement = u.FinalPlacement ?? (calculatedPlacements.TryGetValue(u.Id, out var calc) ? calc : null),
+            AdvancedToPlayoff = u.AdvancedToPlayoff,
+            MatchesPlayed = u.MatchesPlayed,
+            MatchesWon = u.MatchesWon,
+            MatchesLost = u.MatchesLost,
+            GamesWon = u.GamesWon,
+            GamesLost = u.GamesLost,
+            PointsFor = u.PointsScored,
+            PointsAgainst = u.PointsAgainst,
+            PointDiff = u.PointsScored - u.PointsAgainst
+        })
+        .OrderBy(u => u.DivisionId)
+        .ThenBy(u => u.FinalPlacement ?? 999)
+        .ThenBy(u => u.OverallRank ?? 999)
+        .ThenByDescending(u => u.MatchesWon)
+        .ThenByDescending(u => u.GamesWon - u.GamesLost)
+        .ThenByDescending(u => u.PointsFor - u.PointsAgainst)
+        .ToList();
 
         return Ok(new ApiResponse<EventResultsDto>
         {
