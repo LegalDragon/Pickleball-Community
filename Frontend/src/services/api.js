@@ -950,7 +950,27 @@ export const eventsApi = {
     api.delete(`/events/${eventId}/documents/${docId}`),
 
   // Get user's active event registrations (for dashboard notices)
-  getMyActiveEvents: () => api.get('/events/my-active-events')
+  getMyActiveEvents: () => api.get('/events/my-active-events'),
+
+  // Admin event management
+  adminSearch: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.search) queryParams.append('search', params.search);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.isPublished !== undefined) queryParams.append('isPublished', params.isPublished);
+    if (params.isActive !== undefined) queryParams.append('isActive', params.isActive);
+    if (params.hasVenue !== undefined) queryParams.append('hasVenue', params.hasVenue);
+    if (params.eventTypeId) queryParams.append('eventTypeId', params.eventTypeId);
+    if (params.startDateFrom) queryParams.append('startDateFrom', params.startDateFrom);
+    if (params.startDateTo) queryParams.append('startDateTo', params.startDateTo);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortDesc !== undefined) queryParams.append('sortDesc', params.sortDesc);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    return api.get(`/events/admin/search?${queryParams.toString()}`);
+  },
+  adminGet: (eventId) => api.get(`/events/admin/${eventId}`),
+  adminUpdate: (eventId, data) => api.put(`/events/admin/${eventId}`, data)
 }
 
 // Clubs API

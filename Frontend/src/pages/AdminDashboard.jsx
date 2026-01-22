@@ -31,6 +31,7 @@ import GameFormatsAdmin from './GameFormatsAdmin'
 import ScoreMethodsAdmin from './ScoreMethodsAdmin'
 import HelpTopicsAdmin from './HelpTopicsAdmin'
 import ObjectAssetTypesAdmin from './ObjectAssetTypesAdmin'
+import EventsAdmin from './EventsAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -2428,14 +2429,8 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* Events Tab (Coming Soon) */}
-          {activeTab === 'events' && (
-            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-              <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Events Management</h3>
-              <p className="text-gray-500">Coming soon. Manage tournaments, workshops, and events.</p>
-            </div>
-          )}
+          {/* Events Admin */}
+          {activeTab === 'events' && <EventsAdmin embedded />}
 
           {/* Transactions Tab (Coming Soon) */}
           {activeTab === 'transactions' && (

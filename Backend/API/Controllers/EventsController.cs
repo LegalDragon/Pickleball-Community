@@ -2424,4 +2424,391 @@ public class EventsController : ControllerBase
             return firstName;
         return "Unknown";
     }
+
+    #region Admin Event Management
+
+    /// <summary>
+    /// Admin search for all events (including unpublished, drafts, inactive)
+    /// </summary>
+    [HttpGet("admin/search")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<PagedResult<AdminEventDto>>>> AdminSearchEvents([FromQuery] AdminEventSearchRequest request)
+    {
+        try
+        {
+            var query = _context.Events
+                .Include(e => e.EventType)
+                .Include(e => e.OrganizedBy)
+                .Include(e => e.OrganizedByClub)
+                .Include(e => e.Venue)
+                .Include(e => e.Divisions)
+                .AsQueryable();
+
+            // Search by name, organizer, venue
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var searchLower = request.Search.ToLower();
+                query = query.Where(e =>
+                    e.Name.ToLower().Contains(searchLower) ||
+                    (e.VenueName != null && e.VenueName.ToLower().Contains(searchLower)) ||
+                    (e.OrganizedBy != null && (e.OrganizedBy.FirstName + " " + e.OrganizedBy.LastName).ToLower().Contains(searchLower)) ||
+                    (e.OrganizedByClub != null && e.OrganizedByClub.Name.ToLower().Contains(searchLower)));
+            }
+
+            // Filter by status
+            if (!string.IsNullOrWhiteSpace(request.Status))
+            {
+                query = query.Where(e => e.TournamentStatus == request.Status);
+            }
+
+            // Filter by published state
+            if (request.IsPublished.HasValue)
+            {
+                query = query.Where(e => e.IsPublished == request.IsPublished.Value);
+            }
+
+            // Filter by active state
+            if (request.IsActive.HasValue)
+            {
+                query = query.Where(e => e.IsActive == request.IsActive.Value);
+            }
+
+            // Filter by has venue
+            if (request.HasVenue.HasValue)
+            {
+                if (request.HasVenue.Value)
+                    query = query.Where(e => e.VenueId != null);
+                else
+                    query = query.Where(e => e.VenueId == null);
+            }
+
+            // Filter by event type
+            if (request.EventTypeId.HasValue)
+            {
+                query = query.Where(e => e.EventTypeId == request.EventTypeId.Value);
+            }
+
+            // Filter by date range
+            if (request.StartDateFrom.HasValue)
+            {
+                query = query.Where(e => e.StartDate >= request.StartDateFrom.Value);
+            }
+            if (request.StartDateTo.HasValue)
+            {
+                query = query.Where(e => e.StartDate <= request.StartDateTo.Value);
+            }
+
+            // Get total count before pagination
+            var totalCount = await query.CountAsync();
+
+            // Apply sorting
+            query = request.SortBy?.ToLower() switch
+            {
+                "name" => request.SortDesc ? query.OrderByDescending(e => e.Name) : query.OrderBy(e => e.Name),
+                "createdat" => request.SortDesc ? query.OrderByDescending(e => e.CreatedAt) : query.OrderBy(e => e.CreatedAt),
+                "status" => request.SortDesc ? query.OrderByDescending(e => e.TournamentStatus) : query.OrderBy(e => e.TournamentStatus),
+                _ => request.SortDesc ? query.OrderByDescending(e => e.StartDate) : query.OrderBy(e => e.StartDate)
+            };
+
+            // Apply pagination
+            var events = await query
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToListAsync();
+
+            var result = events.Select(e => new AdminEventDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                Description = e.Description,
+                EventTypeId = e.EventTypeId,
+                EventTypeName = e.EventType?.Name,
+                StartDate = e.StartDate,
+                EndDate = e.EndDate,
+                RegistrationOpenDate = e.RegistrationOpenDate,
+                RegistrationCloseDate = e.RegistrationCloseDate,
+                IsPublished = e.IsPublished,
+                IsActive = e.IsActive,
+                IsPrivate = e.IsPrivate,
+                TournamentStatus = e.TournamentStatus,
+                VenueId = e.VenueId,
+                VenueName = e.Venue?.Name ?? e.VenueName,
+                Address = e.Address,
+                City = e.City,
+                State = e.State,
+                Country = e.Country,
+                OrganizedByUserId = e.OrganizedByUserId,
+                OrganizerName = e.OrganizedBy != null
+                    ? FormatName(e.OrganizedBy.LastName, e.OrganizedBy.FirstName)
+                    : null,
+                OrganizedByClubId = e.OrganizedByClubId,
+                ClubName = e.OrganizedByClub?.Name,
+                DivisionCount = e.Divisions?.Count ?? 0,
+                RegistrationFee = e.RegistrationFee,
+                PerDivisionFee = e.PerDivisionFee,
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt
+            }).ToList();
+
+            return Ok(new ApiResponse<PagedResult<AdminEventDto>>
+            {
+                Success = true,
+                Data = new PagedResult<AdminEventDto>
+                {
+                    Items = result,
+                    TotalCount = totalCount,
+                    Page = request.Page,
+                    PageSize = request.PageSize,
+                    TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in admin event search");
+            return StatusCode(500, new ApiResponse<PagedResult<AdminEventDto>> { Success = false, Message = "An error occurred" });
+        }
+    }
+
+    /// <summary>
+    /// Admin get single event with all details for editing
+    /// </summary>
+    [HttpGet("admin/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<AdminEventDto>>> AdminGetEvent(int id)
+    {
+        var evt = await _context.Events
+            .Include(e => e.EventType)
+            .Include(e => e.OrganizedBy)
+            .Include(e => e.OrganizedByClub)
+            .Include(e => e.Venue)
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<AdminEventDto> { Success = false, Message = "Event not found" });
+
+        var dto = new AdminEventDto
+        {
+            Id = evt.Id,
+            Name = evt.Name,
+            Description = evt.Description,
+            EventTypeId = evt.EventTypeId,
+            EventTypeName = evt.EventType?.Name,
+            StartDate = evt.StartDate,
+            EndDate = evt.EndDate,
+            RegistrationOpenDate = evt.RegistrationOpenDate,
+            RegistrationCloseDate = evt.RegistrationCloseDate,
+            IsPublished = evt.IsPublished,
+            IsActive = evt.IsActive,
+            IsPrivate = evt.IsPrivate,
+            TournamentStatus = evt.TournamentStatus,
+            VenueId = evt.VenueId,
+            VenueName = evt.Venue?.Name ?? evt.VenueName,
+            Address = evt.Address,
+            City = evt.City,
+            State = evt.State,
+            Country = evt.Country,
+            OrganizedByUserId = evt.OrganizedByUserId,
+            OrganizerName = evt.OrganizedBy != null
+                ? FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName)
+                : null,
+            OrganizedByClubId = evt.OrganizedByClubId,
+            ClubName = evt.OrganizedByClub?.Name,
+            DivisionCount = evt.Divisions?.Count ?? 0,
+            RegistrationFee = evt.RegistrationFee,
+            PerDivisionFee = evt.PerDivisionFee,
+            CreatedAt = evt.CreatedAt,
+            UpdatedAt = evt.UpdatedAt
+        };
+
+        return Ok(new ApiResponse<AdminEventDto> { Success = true, Data = dto });
+    }
+
+    /// <summary>
+    /// Admin update event - can update basic fields including venue binding
+    /// </summary>
+    [HttpPut("admin/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<AdminEventDto>>> AdminUpdateEvent(int id, [FromBody] AdminEventUpdateRequest request)
+    {
+        var evt = await _context.Events
+            .Include(e => e.EventType)
+            .Include(e => e.Venue)
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        if (evt == null)
+            return NotFound(new ApiResponse<AdminEventDto> { Success = false, Message = "Event not found" });
+
+        // Update fields if provided
+        if (request.Name != null) evt.Name = request.Name;
+        if (request.Description != null) evt.Description = request.Description;
+        if (request.EventTypeId.HasValue) evt.EventTypeId = request.EventTypeId.Value;
+        if (request.StartDate.HasValue) evt.StartDate = request.StartDate.Value;
+        if (request.EndDate.HasValue) evt.EndDate = request.EndDate.Value;
+        if (request.RegistrationOpenDate.HasValue) evt.RegistrationOpenDate = request.RegistrationOpenDate.Value;
+        if (request.RegistrationCloseDate.HasValue) evt.RegistrationCloseDate = request.RegistrationCloseDate.Value;
+        if (request.IsPublished.HasValue) evt.IsPublished = request.IsPublished.Value;
+        if (request.IsActive.HasValue) evt.IsActive = request.IsActive.Value;
+        if (request.IsPrivate.HasValue) evt.IsPrivate = request.IsPrivate.Value;
+        if (request.TournamentStatus != null) evt.TournamentStatus = request.TournamentStatus;
+
+        // Venue binding - key feature for fixing events without venues
+        if (request.VenueId.HasValue)
+        {
+            var venue = await _context.Venues.FindAsync(request.VenueId.Value);
+            if (venue != null)
+            {
+                evt.VenueId = venue.Id;
+                evt.VenueName = venue.Name;
+                evt.Address = venue.Address;
+                evt.City = venue.City;
+                evt.State = venue.State;
+                evt.Country = venue.Country;
+                evt.Latitude = venue.Latitude;
+                evt.Longitude = venue.Longitude;
+            }
+        }
+        else if (request.ClearVenue == true)
+        {
+            evt.VenueId = null;
+            // Keep the manual address fields
+        }
+
+        // Manual address override
+        if (request.VenueName != null) evt.VenueName = request.VenueName;
+        if (request.Address != null) evt.Address = request.Address;
+        if (request.City != null) evt.City = request.City;
+        if (request.State != null) evt.State = request.State;
+        if (request.Country != null) evt.Country = request.Country;
+
+        // Fees
+        if (request.RegistrationFee.HasValue) evt.RegistrationFee = request.RegistrationFee.Value;
+        if (request.PerDivisionFee.HasValue) evt.PerDivisionFee = request.PerDivisionFee.Value;
+
+        evt.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Admin updated event {EventId}: {EventName}", evt.Id, evt.Name);
+
+        // Reload with navigation properties
+        await _context.Entry(evt).Reference(e => e.EventType).LoadAsync();
+        await _context.Entry(evt).Reference(e => e.Venue).LoadAsync();
+        await _context.Entry(evt).Reference(e => e.OrganizedBy).LoadAsync();
+        await _context.Entry(evt).Reference(e => e.OrganizedByClub).LoadAsync();
+
+        var result = new AdminEventDto
+        {
+            Id = evt.Id,
+            Name = evt.Name,
+            Description = evt.Description,
+            EventTypeId = evt.EventTypeId,
+            EventTypeName = evt.EventType?.Name,
+            StartDate = evt.StartDate,
+            EndDate = evt.EndDate,
+            RegistrationOpenDate = evt.RegistrationOpenDate,
+            RegistrationCloseDate = evt.RegistrationCloseDate,
+            IsPublished = evt.IsPublished,
+            IsActive = evt.IsActive,
+            IsPrivate = evt.IsPrivate,
+            TournamentStatus = evt.TournamentStatus,
+            VenueId = evt.VenueId,
+            VenueName = evt.Venue?.Name ?? evt.VenueName,
+            Address = evt.Address,
+            City = evt.City,
+            State = evt.State,
+            Country = evt.Country,
+            OrganizedByUserId = evt.OrganizedByUserId,
+            OrganizerName = evt.OrganizedBy != null
+                ? FormatName(evt.OrganizedBy.LastName, evt.OrganizedBy.FirstName)
+                : null,
+            OrganizedByClubId = evt.OrganizedByClubId,
+            ClubName = evt.OrganizedByClub?.Name,
+            RegistrationFee = evt.RegistrationFee,
+            PerDivisionFee = evt.PerDivisionFee,
+            CreatedAt = evt.CreatedAt,
+            UpdatedAt = evt.UpdatedAt
+        };
+
+        return Ok(new ApiResponse<AdminEventDto> { Success = true, Data = result });
+    }
+
+    #endregion
 }
+
+#region Admin Event DTOs
+
+public class AdminEventSearchRequest
+{
+    public string? Search { get; set; }
+    public string? Status { get; set; }
+    public bool? IsPublished { get; set; }
+    public bool? IsActive { get; set; }
+    public bool? HasVenue { get; set; }
+    public int? EventTypeId { get; set; }
+    public DateTime? StartDateFrom { get; set; }
+    public DateTime? StartDateTo { get; set; }
+    public string? SortBy { get; set; } = "startdate";
+    public bool SortDesc { get; set; } = true;
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+}
+
+public class AdminEventDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int EventTypeId { get; set; }
+    public string? EventTypeName { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public DateTime? RegistrationOpenDate { get; set; }
+    public DateTime? RegistrationCloseDate { get; set; }
+    public bool IsPublished { get; set; }
+    public bool IsActive { get; set; }
+    public bool IsPrivate { get; set; }
+    public string? TournamentStatus { get; set; }
+    public int? VenueId { get; set; }
+    public string? VenueName { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public int? OrganizedByUserId { get; set; }
+    public string? OrganizerName { get; set; }
+    public int? OrganizedByClubId { get; set; }
+    public string? ClubName { get; set; }
+    public int DivisionCount { get; set; }
+    public decimal RegistrationFee { get; set; }
+    public decimal PerDivisionFee { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
+
+public class AdminEventUpdateRequest
+{
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public int? EventTypeId { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public DateTime? RegistrationOpenDate { get; set; }
+    public DateTime? RegistrationCloseDate { get; set; }
+    public bool? IsPublished { get; set; }
+    public bool? IsActive { get; set; }
+    public bool? IsPrivate { get; set; }
+    public string? TournamentStatus { get; set; }
+    public int? VenueId { get; set; }
+    public bool? ClearVenue { get; set; }
+    public string? VenueName { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? Country { get; set; }
+    public decimal? RegistrationFee { get; set; }
+    public decimal? PerDivisionFee { get; set; }
+}
+
+#endregion
