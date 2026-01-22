@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { messagingApi, friendsApi, getSharedAssetUrl } from '../services/api';
 import { useSignalR, SignalREvents } from '../hooks/useSignalR';
+import PublicProfileModal from '../components/ui/PublicProfileModal';
 
 export default function Messages() {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ export default function Messages() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const [profileModalUserId, setProfileModalUserId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -711,7 +713,7 @@ export default function Messages() {
                           )}
                         </div>
                         <button
-                          onClick={() => navigate(`/users/${selectedParticipant.userId}`)}
+                          onClick={() => setProfileModalUserId(selectedParticipant.userId)}
                           className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-1"
                         >
                           <User className="w-4 h-4" />
@@ -916,6 +918,14 @@ export default function Messages() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Public Profile Modal */}
+      {profileModalUserId && (
+        <PublicProfileModal
+          userId={profileModalUserId}
+          onClose={() => setProfileModalUserId(null)}
+        />
       )}
     </div>
   );

@@ -48,7 +48,6 @@ import BlogAdmin from './pages/BlogAdmin'
 import MyBlog from './pages/MyBlog'
 import Friends from './pages/Friends'
 import Messages from './pages/Messages'
-import PublicProfile from './pages/PublicProfile'
 import PlayerHistory from './pages/PlayerHistory'
 import ProtectedRoute from './components/ProtectedRoute'
 import ActiveEventNotices from './components/ActiveEventNotices'
@@ -206,13 +205,6 @@ function App() {
       <Route path="/messages" element={
         <ProtectedRoute>
           <Messages />
-        </ProtectedRoute>
-      } />
-
-      {/* Public Profile - View other users */}
-      <Route path="/users/:userId" element={
-        <ProtectedRoute>
-          <PublicProfile />
         </ProtectedRoute>
       } />
 
