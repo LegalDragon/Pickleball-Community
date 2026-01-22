@@ -144,19 +144,21 @@ public class UsersController : ControllerBase
 
             // Check if viewer is admin (admins can see email/phone regardless of settings)
             var isViewerAdmin = await IsCurrentUserAdminAsync();
+            // Check if viewing own profile (users always see their own contact info)
+            var isViewingSelf = currentUserId.HasValue && currentUserId.Value == id;
 
             var publicProfile = new PublicProfileDto
             {
                 Id = user.Id,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
-                // Show email if user enabled it or viewer is admin
-                Email = (user.ShowEmailInProfile || isViewerAdmin) ? user.Email : null,
-                // Show phone if user enabled it or viewer is admin
-                Phone = (user.ShowPhoneInProfile || isViewerAdmin) ? user.Phone : null,
+                // Show email if user enabled it, viewer is admin, or viewing own profile
+                Email = (user.ShowEmailInProfile || isViewerAdmin || isViewingSelf) ? user.Email : null,
+                // Show phone if user enabled it, viewer is admin, or viewing own profile
+                Phone = (user.ShowPhoneInProfile || isViewerAdmin || isViewingSelf) ? user.Phone : null,
                 // Show verification status when contact info is visible
-                EmailVerified = (user.ShowEmailInProfile || isViewerAdmin) ? user.EmailVerified : null,
-                PhoneVerified = (user.ShowPhoneInProfile || isViewerAdmin) ? user.PhoneVerified : null,
+                EmailVerified = (user.ShowEmailInProfile || isViewerAdmin || isViewingSelf) ? user.EmailVerified : null,
+                PhoneVerified = (user.ShowPhoneInProfile || isViewerAdmin || isViewingSelf) ? user.PhoneVerified : null,
                 Bio = user.Bio,
                 ProfileImageUrl = user.ProfileImageUrl,
                 City = user.City,
