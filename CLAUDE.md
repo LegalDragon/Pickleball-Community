@@ -359,6 +359,115 @@ Reference: https://github.com/LegalDragon/Funtime-Shared (branch: `claude/debug-
 @https://github.com/LegalDragon/Funtime-Shared
 @https://github.com/LegalDragon/Casec-project
 
+## Shared Services and Base Classes
+
+### EventControllerBase (`/Backend/API/Controllers/Base/EventControllerBase.cs`)
+Abstract base controller providing standardized authorization methods for event-related operations:
+
+```csharp
+protected int? GetUserId()                                    // Extract user ID from JWT claims
+protected async Task<bool> IsAdminAsync()                     // Check if current user is admin
+protected async Task<bool> IsEventOrganizerAsync(int eventId, int userId)  // Check organizer status
+protected async Task<bool> CanManageEventAsync(int eventId)   // Combined admin/organizer check
+protected async Task<bool> HasStaffPermissionAsync(int eventId, int userId, string permission)
+```
+
+**Staff Permissions**: `CanRecordScores`, `CanManageCheckIn`, `CanManageCourts`, `CanManageSchedule`, `CanViewAllData`
+
+**Usage**: New controllers should inherit from `EventControllerBase` instead of duplicating these methods.
+
+### ICourtAssignmentService (`/Backend/API/Services/CourtAssignmentService.cs`)
+Centralized service for court assignment operations, used by both `TournamentController` and `DivisionPhasesController`:
+
+```csharp
+// Auto-assign courts to encounters
+Task<CourtAssignmentResult> AutoAssignDivisionAsync(int divisionId, CourtAssignmentOptions options);
+Task<CourtAssignmentResult> AutoAssignPhaseAsync(int phaseId);
+
+// Calculate estimated start times
+Task<TimeCalculationResult> CalculatePhaseTimesAsync(int phaseId);
+
+// Clear assignments
+Task<int> ClearDivisionAssignmentsAsync(int divisionId);
+
+// Get available courts from court group assignments
+Task<List<TournamentCourt>> GetAvailableCourtsForDivisionAsync(int divisionId, int? phaseId = null);
+```
+
+**Registration**: Service is registered in `Program.cs` as scoped.
+
+## Court Planning Feature
+
+### Overview
+Dedicated court pre-planning page for tournament directors to:
+1. Create and manage court groups (e.g., "Courts 1-4", "North Side")
+2. Assign court groups to divisions
+3. Bulk assign courts to encounters with estimated times
+4. View schedule in timeline format
+
+### Components
+
+**Frontend**: `/Frontend/src/pages/CourtPlanning.jsx`
+- Route: `/event/:eventId/court-planning`
+- 4 tabs: Court Groups, Division Assignment, Schedule, Timeline
+- Access: Organizers only (link in TournamentManage.jsx header)
+
+**Backend Endpoints** (in `TournamentController`):
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/tournament/court-planning/{eventId}` | GET | Get complete planning data |
+| `/tournament/court-planning/bulk-assign` | POST | Bulk update court/time assignments |
+| `/tournament/court-planning/division-courts` | POST | Assign court groups to division |
+| `/tournament/court-planning/auto-assign/{divisionId}` | POST | Auto-assign with time calculation |
+| `/tournament/court-planning/clear/{divisionId}` | POST | Clear all assignments |
+
+### DTOs (in `TournamentDTOs.cs`)
+- `CourtPlanningDto` - Complete planning data response
+- `CourtGroupPlanningDto`, `CourtPlanningItemDto` - Court group data
+- `DivisionPlanningDto`, `DivisionCourtGroupAssignmentDto` - Division data
+- `EncounterPlanningDto` - Encounter data for planning view
+- `BulkCourtTimeAssignmentRequest`, `CourtTimeAssignment` - Bulk assignment requests
+- `DivisionCourtGroupsRequest`, `AutoAssignRequest` - Division assignment requests
+
+## Score Audit Trail
+
+### Overview
+Track all score changes with user, timestamp, and reason for TD/admin/scorekeeper visibility.
+
+### Components
+
+**Backend**:
+- `EventGameScoreHistory` entity (existing, Migration 077)
+- `GameDayController.UpdateScore` - Logs changes to history
+- `EventRunningController.GetGameScoreHistory` - Get history for a game
+- `EventRunningController.GetEncounterScoreHistory` - Get history for all games in encounter
+
+**Frontend**:
+- `GameScoreModal.jsx` - Expandable score history section
+- Props: `showScoreHistory={true}`, `eventId` required for history feature
+
+**Authorization**: Admin, Organizer, or Staff with `CanRecordScores` permission can view history.
+
+## Code Standardization Notes
+
+### DbSet Naming Convention
+- **Use `_context.EventEncounters`** (not `_context.EventMatches`)
+- `EventMatches` is a backward-compatible alias but new code should use `EventEncounters`
+- All controllers have been updated to use `EventEncounters` as of 2026-01-22
+
+### Authorization Pattern
+Instead of duplicating organizer checks inline:
+```csharp
+// OLD (avoid in new code)
+var isOrganizer = evt.OrganizedByUserId == userId.Value;
+var isAdmin = await IsAdminAsync();
+if (!isOrganizer && !isAdmin) return Forbid();
+
+// NEW (preferred)
+if (!await CanManageEventAsync(eventId)) return Forbid();
+// Or use IsEventOrganizerAsync from base class
+```
+
 ## Release Notes Checkpoints
 Track when release notes were last generated to avoid duplicates.
 
@@ -366,3 +475,4 @@ Track when release notes were last generated to avoid duplicates.
 |------|--------|-------|
 | 2026-01-14 | e2b491f | Initial 24-hour release notes covering: Help Topics system, Social Links, Game Day execution, Admin enhancements, Event management improvements, and numerous bug fixes |
 | 2026-01-17 | e3834c5 | 144 commits: Live Drawing system with SignalR, Admin user search & registration, Payment system overhaul (UserPayment), Waiver/Document management (ObjectAssets), Game Day enhancements, Public event view |
+| 2026-01-22 | 3fc7176 | Court Planning page, Score audit trail, Code consolidation (EventControllerBase, ICourtAssignmentService), EventMatches→EventEncounters standardization |
