@@ -209,10 +209,10 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Tests the API key connection to Funtime-Shared service (Admin only)
+    /// Tests the API key connection to Funtime-Shared service
+    /// Uses the API key from appsettings, no JWT authentication required
     /// </summary>
     [HttpGet("test-apikey")]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> TestApiKey()
     {
         try

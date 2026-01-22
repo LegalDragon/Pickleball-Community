@@ -383,17 +383,13 @@ const AdminDashboard = () => {
   }
 
   // Test API key connection to Funtime-Shared
+  // Uses only the API key from backend appsettings, no JWT auth required
   const testApiKey = async () => {
     setTestingApiKey(true)
     setApiKeyTestError(null)
     setApiKeyTestResult(null)
     try {
-      const token = localStorage.getItem('jwtToken')
-      const response = await fetch('/api/auth/test-apikey', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const response = await fetch('/api/auth/test-apikey')
       const data = await response.json()
       if (response.ok) {
         setApiKeyTestResult(data)
