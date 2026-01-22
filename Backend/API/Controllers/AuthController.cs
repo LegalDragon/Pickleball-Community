@@ -220,6 +220,9 @@ public class AuthController : ControllerBase
             var baseUrl = _configuration["SharedAuth:BaseUrl"];
             var apiKey = _configuration["SharedAuth:ApiKey"];
 
+            Console.WriteLine($"[TestApiKey] BaseUrl: {baseUrl}");
+            Console.WriteLine($"[TestApiKey] ApiKey: {apiKey}");
+
             if (string.IsNullOrEmpty(baseUrl))
             {
                 return BadRequest(new { success = false, message = "SharedAuth:BaseUrl not configured" });
