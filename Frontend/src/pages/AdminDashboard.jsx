@@ -884,6 +884,7 @@ const AdminDashboard = () => {
     {
       title: 'Organization',
       items: [
+        { id: 'events', label: 'Events', icon: Calendar },
         { id: 'leagues', label: 'Leagues', icon: Network },
         { id: 'leagueRoles', label: 'League Roles', icon: Shield }
       ]
@@ -905,7 +906,6 @@ const AdminDashboard = () => {
     {
       title: 'Coming Soon',
       items: [
-        { id: 'events', label: 'Events', icon: Calendar, count: 0, disabled: true },
         { id: 'transactions', label: 'Transactions', icon: DollarSign, count: 0, disabled: true }
       ]
     }
