@@ -253,12 +253,12 @@ BEGIN
 END
 GO
 
--- Add FK constraint for CourtGroupId
+-- Add FK constraint for CourtGroupId (NO ACTION to avoid cascade cycles through Events)
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_TournamentCourts_CourtGroup')
 BEGIN
     ALTER TABLE TournamentCourts
     ADD CONSTRAINT FK_TournamentCourts_CourtGroup FOREIGN KEY (CourtGroupId)
-        REFERENCES CourtGroups(Id) ON DELETE SET NULL
+        REFERENCES CourtGroups(Id) ON DELETE NO ACTION
     PRINT 'Added FK_TournamentCourts_CourtGroup constraint'
 END
 GO
@@ -326,7 +326,7 @@ BEGIN
         CONSTRAINT FK_DivisionCourtAssignments_Phase FOREIGN KEY (PhaseId)
             REFERENCES DivisionPhases(Id) ON DELETE NO ACTION,
         CONSTRAINT FK_DivisionCourtAssignments_CourtGroup FOREIGN KEY (CourtGroupId)
-            REFERENCES CourtGroups(Id) ON DELETE CASCADE
+            REFERENCES CourtGroups(Id) ON DELETE NO ACTION
     )
 
     CREATE INDEX IX_DivisionCourtAssignments_Division ON DivisionCourtAssignments(DivisionId)
