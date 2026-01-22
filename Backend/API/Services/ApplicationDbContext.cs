@@ -94,6 +94,12 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventDocument> EventDocuments { get; set; }
     public DbSet<DivisionPhase> DivisionPhases { get; set; }
     public DbSet<PhaseSlot> PhaseSlots { get; set; }
+    public DbSet<PhasePool> PhasePools { get; set; }
+    public DbSet<PhasePoolSlot> PhasePoolSlots { get; set; }
+    public DbSet<PhaseAdvancementRule> PhaseAdvancementRules { get; set; }
+    public DbSet<DivisionAward> DivisionAwards { get; set; }
+    public DbSet<CourtGroup> CourtGroups { get; set; }
+    public DbSet<DivisionCourtAssignment> DivisionCourtAssignments { get; set; }
 
     // Clubs
     public DbSet<Club> Clubs { get; set; }
@@ -855,6 +861,13 @@ public class ApplicationDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(c => c.CurrentGameId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.CourtGroup)
+                  .WithMany(g => g.Courts)
+                  .HasForeignKey(c => c.CourtGroupId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(c => c.CourtGroupId);
         });
 
         // Event Encounter configuration (renamed from EventMatch)
@@ -1134,6 +1147,28 @@ public class ApplicationDbContext : DbContext
                   .WithMany(s => s.EncountersAsUnit2)
                   .HasForeignKey(e => e.Unit2SlotId)
                   .OnDelete(DeleteBehavior.NoAction);
+
+            // Bracket progression relationships
+            entity.HasOne(e => e.WinnerNextEncounter)
+                  .WithMany(e => e.WinnerSourceEncounters)
+                  .HasForeignKey(e => e.WinnerNextEncounterId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.LoserNextEncounter)
+                  .WithMany(e => e.LoserSourceEncounters)
+                  .HasForeignKey(e => e.LoserNextEncounterId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.Pool)
+                  .WithMany(p => p.Encounters)
+                  .HasForeignKey(e => e.PoolId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            // Index for bracket progression queries
+            entity.HasIndex(e => e.WinnerNextEncounterId);
+            entity.HasIndex(e => e.LoserNextEncounterId);
+            entity.HasIndex(e => e.PoolId);
+            entity.HasIndex(e => e.EstimatedStartTime);
         });
 
         // Encounter Match configuration
@@ -1271,6 +1306,120 @@ public class ApplicationDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(s => s.ResolvedByUserId)
                   .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Phase Pool configuration (pools within a phase for round-robin)
+        modelBuilder.Entity<PhasePool>(entity =>
+        {
+            entity.Property(p => p.PoolName).IsRequired().HasMaxLength(20);
+            entity.Property(p => p.Status).HasMaxLength(20);
+
+            entity.HasIndex(p => p.PhaseId);
+            entity.HasIndex(p => new { p.PhaseId, p.PoolName }).IsUnique();
+
+            entity.HasOne(p => p.Phase)
+                  .WithMany(ph => ph.Pools)
+                  .HasForeignKey(p => p.PhaseId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Phase Pool Slot configuration (links slots to pools)
+        modelBuilder.Entity<PhasePoolSlot>(entity =>
+        {
+            entity.HasIndex(s => s.PoolId);
+            entity.HasIndex(s => new { s.PoolId, s.SlotId }).IsUnique();
+
+            entity.HasOne(s => s.Pool)
+                  .WithMany(p => p.PoolSlots)
+                  .HasForeignKey(s => s.PoolId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.Slot)
+                  .WithMany()
+                  .HasForeignKey(s => s.SlotId)
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // Phase Advancement Rule configuration (mapping between phases)
+        modelBuilder.Entity<PhaseAdvancementRule>(entity =>
+        {
+            entity.Property(r => r.Description).HasMaxLength(200);
+
+            entity.HasIndex(r => r.SourcePhaseId);
+            entity.HasIndex(r => r.TargetPhaseId);
+
+            entity.HasOne(r => r.SourcePhase)
+                  .WithMany(p => p.OutgoingAdvancementRules)
+                  .HasForeignKey(r => r.SourcePhaseId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.SourcePool)
+                  .WithMany()
+                  .HasForeignKey(r => r.SourcePoolId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.TargetPhase)
+                  .WithMany(p => p.IncomingAdvancementRules)
+                  .HasForeignKey(r => r.TargetPhaseId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Division Award configuration (placement awards)
+        modelBuilder.Entity<DivisionAward>(entity =>
+        {
+            entity.Property(a => a.AwardName).IsRequired().HasMaxLength(100);
+            entity.Property(a => a.AwardDescription).HasMaxLength(500);
+            entity.Property(a => a.PrizeValue).HasMaxLength(100);
+            entity.Property(a => a.BadgeImageUrl).HasMaxLength(500);
+            entity.Property(a => a.ColorCode).HasMaxLength(20);
+            entity.Property(a => a.IconName).HasMaxLength(50);
+
+            entity.HasIndex(a => a.DivisionId);
+            entity.HasIndex(a => new { a.DivisionId, a.Position }).IsUnique();
+
+            entity.HasOne(a => a.Division)
+                  .WithMany()
+                  .HasForeignKey(a => a.DivisionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Court Group configuration (logical grouping of courts)
+        modelBuilder.Entity<CourtGroup>(entity =>
+        {
+            entity.Property(g => g.GroupName).IsRequired().HasMaxLength(100);
+            entity.Property(g => g.GroupCode).HasMaxLength(20);
+            entity.Property(g => g.Description).HasMaxLength(500);
+            entity.Property(g => g.LocationArea).HasMaxLength(100);
+
+            entity.HasIndex(g => g.EventId);
+
+            entity.HasOne(g => g.Event)
+                  .WithMany()
+                  .HasForeignKey(g => g.EventId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Division Court Assignment configuration (assigns court groups to divisions)
+        modelBuilder.Entity<DivisionCourtAssignment>(entity =>
+        {
+            entity.HasIndex(a => a.DivisionId);
+            entity.HasIndex(a => a.PhaseId);
+            entity.HasIndex(a => a.CourtGroupId);
+
+            entity.HasOne(a => a.Division)
+                  .WithMany()
+                  .HasForeignKey(a => a.DivisionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Phase)
+                  .WithMany()
+                  .HasForeignKey(a => a.PhaseId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.CourtGroup)
+                  .WithMany(g => g.DivisionAssignments)
+                  .HasForeignKey(a => a.CourtGroupId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Blog Category configuration

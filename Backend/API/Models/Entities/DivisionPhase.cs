@@ -120,6 +120,30 @@ public class DivisionPhase
     /// </summary>
     public int? ScoreFormatId { get; set; }
 
+    // =====================================================
+    // Pool and Timing Configuration
+    // =====================================================
+
+    /// <summary>
+    /// Number of pools in this phase (1 for single bracket, 2+ for multi-pool)
+    /// </summary>
+    public int PoolCount { get; set; } = 1;
+
+    /// <summary>
+    /// When this phase is scheduled to begin
+    /// </summary>
+    public DateTime? StartTime { get; set; }
+
+    /// <summary>
+    /// Calculated end time based on matches and duration
+    /// </summary>
+    public DateTime? EstimatedEndTime { get; set; }
+
+    /// <summary>
+    /// Estimated match duration in minutes (overrides division default)
+    /// </summary>
+    public int? EstimatedMatchDurationMinutes { get; set; }
+
     /// <summary>
     /// Whether this phase has been manually locked (no automatic slot resolution)
     /// </summary>
@@ -157,4 +181,21 @@ public class DivisionPhase
     /// All encounters in this phase
     /// </summary>
     public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
+
+    /// <summary>
+    /// Pools within this phase (for multi-pool formats)
+    /// </summary>
+    public ICollection<PhasePool> Pools { get; set; } = new List<PhasePool>();
+
+    /// <summary>
+    /// Advancement rules where this phase is the source
+    /// </summary>
+    [InverseProperty("SourcePhase")]
+    public ICollection<PhaseAdvancementRule> OutgoingAdvancementRules { get; set; } = new List<PhaseAdvancementRule>();
+
+    /// <summary>
+    /// Advancement rules where this phase is the target
+    /// </summary>
+    [InverseProperty("TargetPhase")]
+    public ICollection<PhaseAdvancementRule> IncomingAdvancementRules { get; set; } = new List<PhaseAdvancementRule>();
 }

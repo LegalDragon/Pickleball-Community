@@ -142,6 +142,46 @@ public class EventEncounter
     /// </summary>
     public int? PlayoffAdvancePosition { get; set; }
 
+    // =====================================================
+    // Bracket Progression (for elimination brackets)
+    // =====================================================
+
+    /// <summary>
+    /// The encounter the winner advances to
+    /// </summary>
+    public int? WinnerNextEncounterId { get; set; }
+
+    /// <summary>
+    /// The encounter the loser advances to (for double elimination)
+    /// </summary>
+    public int? LoserNextEncounterId { get; set; }
+
+    /// <summary>
+    /// Which slot (1=Unit1, 2=Unit2) in the next encounter for winner
+    /// </summary>
+    public int? WinnerSlotPosition { get; set; }
+
+    /// <summary>
+    /// Which slot in the loser bracket for loser
+    /// </summary>
+    public int? LoserSlotPosition { get; set; }
+
+    /// <summary>
+    /// Pool within the phase (for multi-pool phases)
+    /// </summary>
+    public int? PoolId { get; set; }
+
+    /// <summary>
+    /// Display label like "Match 1", "SF1", "Final"
+    /// </summary>
+    [MaxLength(50)]
+    public string? EncounterLabel { get; set; }
+
+    /// <summary>
+    /// Calculated start time based on court assignment and sequence
+    /// </summary>
+    public DateTime? EstimatedStartTime { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
@@ -176,9 +216,30 @@ public class EventEncounter
     [ForeignKey("ScoreFormatId")]
     public ScoreFormat? ScoreFormat { get; set; }
 
+    [ForeignKey("WinnerNextEncounterId")]
+    public EventEncounter? WinnerNextEncounter { get; set; }
+
+    [ForeignKey("LoserNextEncounterId")]
+    public EventEncounter? LoserNextEncounter { get; set; }
+
+    [ForeignKey("PoolId")]
+    public PhasePool? Pool { get; set; }
+
     /// <summary>
     /// Matches within this encounter (1 for simple, multiple for team scrimmages)
     /// Always has at least 1 match - simple divisions auto-create 1 match.
     /// </summary>
     public ICollection<EncounterMatch> Matches { get; set; } = new List<EncounterMatch>();
+
+    /// <summary>
+    /// Encounters that feed winners into this encounter
+    /// </summary>
+    [InverseProperty("WinnerNextEncounter")]
+    public ICollection<EventEncounter> WinnerSourceEncounters { get; set; } = new List<EventEncounter>();
+
+    /// <summary>
+    /// Encounters that feed losers into this encounter
+    /// </summary>
+    [InverseProperty("LoserNextEncounter")]
+    public ICollection<EventEncounter> LoserSourceEncounters { get; set; } = new List<EventEncounter>();
 }

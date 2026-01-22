@@ -44,6 +44,11 @@ public class TournamentCourt
     [MaxLength(200)]
     public string? LocationDescription { get; set; }
 
+    /// <summary>
+    /// Group this court belongs to (for organizing related courts)
+    /// </summary>
+    public int? CourtGroupId { get; set; }
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
 
@@ -56,4 +61,7 @@ public class TournamentCourt
 
     [ForeignKey("CurrentGameId")]
     public EventGame? CurrentGame { get; set; }
+
+    [ForeignKey("CourtGroupId")]
+    public CourtGroup? CourtGroup { get; set; }
 }

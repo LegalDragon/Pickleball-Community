@@ -133,6 +133,176 @@ Note: C# code may use `_context.EventMatches` which is a backward-compatible ali
 - Migrations 041-105 reference `EventMatches` (old table name)
 - Migrations 106+ must reference `EventEncounters` (renamed table)
 
+## Phase-Based Tournament Scheduling (Migration 114+)
+
+Multi-phase tournament support allowing divisions to have multiple phases (Pool Play, Semifinals, Finals) with placeholder-based scheduling, bracket progression tracking, and court group assignments.
+
+### Architecture Overview
+
+```
+EventDivision
+  └── DivisionPhase[] (Pool Play, Semifinals, Finals, etc.)
+        ├── PhaseSlot[] (placeholder slots for units entering/advancing)
+        ├── PhasePool[] (multiple pools within a phase)
+        │     └── PhasePoolSlot[] (assigns slots to specific pools)
+        ├── PhaseAdvancementRule[] (maps finishing positions to next phase slots)
+        └── EventEncounter[] (scheduled matches with bracket progression)
+              ├── WinnerNextEncounter (bracket link for winner)
+              └── LoserNextEncounter (bracket link for loser - double elim)
+
+CourtGroup[] (logical groupings of nearby courts)
+  └── TournamentCourt[] (individual courts assigned to group)
+
+DivisionCourtAssignment[] (assigns court groups to divisions/phases)
+DivisionAward[] (defines placement awards: 1st, 2nd, 3rd, etc.)
+```
+
+### Key Concepts
+
+**Placeholder-Based Scheduling**: Schedules are built using PhaseSlots as placeholders before the drawing. Each slot has a `SourceType`:
+- `Seeded` - Filled during initial drawing
+- `WinnerOf` - Winner of a specific encounter
+- `LoserOf` - Loser of a specific encounter (double elimination)
+- `RankFromPhase` - Based on standings from previous phase/pool
+- `Manual` - Manually assigned by TD
+- `Bye` - Slot receives a bye
+
+**Bracket Progression**: EventEncounters track where winners/losers advance:
+- `WinnerNextEncounterId` - The encounter the winner advances to
+- `LoserNextEncounterId` - The encounter the loser advances to (double elim, consolation)
+- `WinnerSlotPosition` / `LoserSlotPosition` - Which position (1 or 2) in the next encounter
+- `EncounterLabel` - Display label like "Winner of Match 3" vs "Winner of Match 5"
+
+**Pool Play**: Phases can have multiple pools running in parallel:
+- `PhasePool` - Represents a pool (Pool A, Pool B, etc.)
+- `PhasePoolSlot` - Links phase slots to specific pools
+- Standings calculated per pool, then advancement rules determine which pool positions advance
+
+### New/Modified Entities
+
+| Entity | DB Table | Purpose |
+|--------|----------|---------|
+| `DivisionPhase.cs` | `DivisionPhases` | Tournament phase configuration (added: `PoolCount`, timing fields) |
+| `PhaseSlot.cs` | `PhaseSlots` | Placeholder slots for unit assignment |
+| `PhasePool.cs` | `PhasePools` | Pool within a phase |
+| `PhasePoolSlot.cs` | `PhasePoolSlots` | Links slots to pools |
+| `PhaseAdvancementRule.cs` | `PhaseAdvancementRules` | Defines how units advance between phases |
+| `DivisionAward.cs` | `DivisionAwards` | Placement awards (Gold, Silver, Bronze, etc.) |
+| `CourtGroup.cs` | `CourtGroups` | Logical grouping of nearby courts |
+| `DivisionCourtAssignment.cs` | `DivisionCourtAssignments` | Assigns court groups to divisions/phases |
+| `EventEncounter.cs` | `EventEncounters` | Added bracket progression fields |
+| `TournamentCourt.cs` | `TournamentCourts` | Added `CourtGroupId` |
+
+### EventEncounter Bracket Fields (Added in Migration 114)
+
+```csharp
+// Bracket progression
+public int? WinnerNextEncounterId { get; set; }
+public int? LoserNextEncounterId { get; set; }
+public int? WinnerSlotPosition { get; set; }  // 1 = Unit1, 2 = Unit2
+public int? LoserSlotPosition { get; set; }
+
+// Pool reference
+public int? PoolId { get; set; }
+
+// Display
+public string? EncounterLabel { get; set; }  // "Match 5", "Semifinal 1"
+public DateTime? EstimatedStartTime { get; set; }
+
+// Navigation
+public EventEncounter? WinnerNextEncounter { get; set; }
+public EventEncounter? LoserNextEncounter { get; set; }
+public PhasePool? Pool { get; set; }
+public ICollection<EventEncounter> WinnerSourceEncounters { get; set; }
+public ICollection<EventEncounter> LoserSourceEncounters { get; set; }
+```
+
+### API Endpoints
+
+**DivisionPhasesController** (`/divisionphases`):
+- `GET /division/{divisionId}` - Get all phases for a division
+- `GET /{id}` - Get phase with slots and pools
+- `POST` - Create phase
+- `PUT /{id}` - Update phase
+- `DELETE /{id}` - Delete phase
+- `POST /{id}/generate-schedule` - Generate schedule (RoundRobin, SingleElim, DoubleElim)
+- `GET /{id}/schedule` - Get encounters for phase
+- `POST /{id}/pools` - Create pools for phase
+- `POST /{id}/advancement-rules` - Set advancement rules
+- `POST /{id}/assign-courts` - Assign court group to phase
+- `POST /{id}/auto-assign-courts` - Auto-assign available courts
+- `POST /{id}/calculate-times` - Calculate estimated start times
+
+**CourtGroupsController** (`/courtgroups`):
+- `GET /event/{eventId}` - Get all court groups for event
+- `GET /{id}` - Get court group details
+- `POST` - Create court group
+- `PUT /{id}` - Update court group
+- `DELETE /{id}` - Delete court group
+- `POST /{id}/courts` - Assign courts to group
+- `POST /event/{eventId}/auto-create` - Auto-create groups by size
+
+### Stored Procedures (Migration 115)
+
+- `sp_AdvanceWinner` - Move winner to next encounter after match completion
+- `sp_AdvanceLoser` - Move loser to next encounter (double elimination)
+- `sp_ResolvePhaseSlots` - Apply advancement rules to resolve slots
+- `sp_CalculateEncounterTimes` - Calculate estimated start times based on court availability
+- `sp_GetPhaseStandings` - Get standings for a phase/pool
+
+### Frontend Components
+
+**PhaseManager.jsx** (`/Frontend/src/components/tournament/PhaseManager.jsx`):
+- Phase CRUD interface for tournament directors
+- Phase type selection (RoundRobin, SingleElimination, DoubleElimination, Swiss, Pools)
+- Pool configuration (count, size)
+- Slot count configuration (incoming, advancing)
+- Schedule generation trigger
+
+**SchedulePreview.jsx** (`/Frontend/src/components/tournament/SchedulePreview.jsx`):
+- Displays phase schedules with filtering
+- Pool/round/status filters
+- List view and Bracket view modes
+- Shows placeholder labels before drawing, real units after
+- Court and estimated time display
+
+### Schedule Generation Logic
+
+**Round Robin** (circle method):
+- For N units, generates N-1 rounds with N/2 matches per round
+- Handles odd numbers with byes
+- Creates pool-specific schedules when pools > 1
+
+**Single Elimination**:
+- Generates bracket encounters with `WinnerNextEncounter` links
+- Seeds arranged for 1v8, 4v5, 2v7, 3v6 style matchups
+- Labels: "Semifinal 1", "Final", etc.
+
+**Double Elimination**:
+- Winner's bracket with `WinnerNextEncounter` links
+- Loser's bracket with `LoserNextEncounter` links
+- Championship match (winner's bracket champion vs loser's bracket champion)
+- Grand final if loser's bracket winner beats winner's bracket champion
+
+### Migration Files
+
+- **Migration_113_DivisionPhases.sql** - Base DivisionPhases and PhaseSlots tables
+- **Migration_114_PhaseScheduling.sql** - Bracket progression, pools, court groups, awards
+- **Migration_115_PhaseSchedulingProcs.sql** - Stored procedures for advancement and calculations
+
+### Usage Flow
+
+1. **Configure Division**: Set division settings, match formats
+2. **Create Phases**: Add phases (Pool Play → Semifinals → Finals)
+3. **Configure Pools**: If pool play, create multiple pools
+4. **Set Advancement Rules**: Define how units advance between phases
+5. **Generate Schedules**: Create placeholder-based schedules for each phase
+6. **Assign Courts**: Assign court groups to phases/divisions
+7. **Calculate Times**: Generate estimated start times
+8. **Preview**: View complete schedule with placeholders
+9. **Drawing**: Fill phase 1 slots with actual units
+10. **Execute**: As matches complete, winners/losers advance automatically
+
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:
 - **UserId**: All Users.Id values come from the shared auth service (no local IDENTITY)

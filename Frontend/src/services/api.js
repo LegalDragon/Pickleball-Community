@@ -1522,7 +1522,42 @@ export const tournamentApi = {
   endDrawingMode: (eventId) => api.post(`/tournament/events/${eventId}/drawing/end-mode`),
 
   // Tournament Reset (for testing/dry runs)
-  resetTournament: (eventId) => api.post(`/tournament/reset-tournament/${eventId}`)
+  resetTournament: (eventId) => api.post(`/tournament/reset-tournament/${eventId}`),
+
+  // =====================================================
+  // Division Phases (multi-phase tournament scheduling)
+  // =====================================================
+
+  // Phase CRUD
+  getDivisionPhases: (divisionId) => api.get(`/divisionphases/division/${divisionId}`),
+  getPhase: (phaseId) => api.get(`/divisionphases/${phaseId}`),
+  createPhase: (data) => api.post('/divisionphases', data),
+  updatePhase: (phaseId, data) => api.put(`/divisionphases/${phaseId}`, data),
+  deletePhase: (phaseId) => api.delete(`/divisionphases/${phaseId}`),
+
+  // Schedule Generation
+  generatePhaseSchedule: (phaseId) => api.post(`/divisionphases/${phaseId}/generate-schedule`),
+  getPhaseSchedule: (phaseId) => api.get(`/divisionphases/${phaseId}/schedule`),
+
+  // Advancement Rules
+  setAdvancementRules: (phaseId, rules) => api.post(`/divisionphases/${phaseId}/advancement-rules`, rules),
+
+  // Court Assignments
+  setPhaseCourtAssignments: (phaseId, assignments) => api.post(`/divisionphases/${phaseId}/court-assignments`, assignments),
+  autoAssignPhaseCourts: (phaseId) => api.post(`/divisionphases/${phaseId}/auto-assign-courts`),
+  calculatePhaseTimes: (phaseId) => api.post(`/divisionphases/${phaseId}/calculate-times`),
+
+  // =====================================================
+  // Court Groups
+  // =====================================================
+
+  getCourtGroups: (eventId) => api.get(`/courtgroups/event/${eventId}`),
+  getCourtGroup: (groupId) => api.get(`/courtgroups/${groupId}`),
+  createCourtGroup: (data) => api.post('/courtgroups', data),
+  updateCourtGroup: (groupId, data) => api.put(`/courtgroups/${groupId}`, data),
+  deleteCourtGroup: (groupId) => api.delete(`/courtgroups/${groupId}`),
+  assignCourtsToGroup: (groupId, courtIds) => api.post(`/courtgroups/${groupId}/courts`, { courtIds }),
+  autoCreateCourtGroups: (eventId, groupSize = 4) => api.post(`/courtgroups/event/${eventId}/auto-create?groupSize=${groupSize}`)
 }
 
 // Messaging API
