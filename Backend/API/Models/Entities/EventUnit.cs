@@ -57,6 +57,18 @@ public class EventUnit
     /// </summary>
     public int CaptainUserId { get; set; }
 
+    /// <summary>
+    /// How partners can join this unit: "Approval" (captain approves requests) or "Code" (join with code)
+    /// </summary>
+    [MaxLength(20)]
+    public string JoinMethod { get; set; } = "Approval";
+
+    /// <summary>
+    /// Short code for code-based joining (e.g., "ABC123"). Only used when JoinMethod = "Code"
+    /// </summary>
+    [MaxLength(10)]
+    public string? JoinCode { get; set; }
+
     // Payment
     /// <summary>
     /// Payment status: Pending, Paid, Partial, Waived

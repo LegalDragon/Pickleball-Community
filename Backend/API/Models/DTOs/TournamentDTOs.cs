@@ -146,6 +146,16 @@ public class EventUnitDto
     /// </summary>
     public string RegistrationStatus { get; set; } = "Team Complete";
 
+    /// <summary>
+    /// How partners can join: "Approval" or "Code"
+    /// </summary>
+    public string JoinMethod { get; set; } = "Approval";
+
+    /// <summary>
+    /// Join code for code-based joining (only shown to captain)
+    /// </summary>
+    public string? JoinCode { get; set; }
+
     // Stats
     public int MatchesPlayed { get; set; }
     public int MatchesWon { get; set; }
@@ -697,6 +707,10 @@ public class EventRegistrationRequest
     public List<int> DivisionIds { get; set; } = new();
     public string? PartnerName { get; set; } // For finding partner
     public int? PartnerUserId { get; set; } // If already have partner
+    /// <summary>
+    /// How partners can join: "Approval" (default) or "Code"
+    /// </summary>
+    public string JoinMethod { get; set; } = "Approval";
 }
 
 public class EventDetailWithDivisionsDto

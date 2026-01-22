@@ -417,6 +417,14 @@ public class TournamentController : ControllerBase
                 ? Utility.FormatName(user.LastName, user.FirstName)
                 : $"{user.FirstName}'s Team";
 
+            // For team divisions, use the requested join method
+            var joinMethod = isSingles ? "Approval" : (request.JoinMethod ?? "Approval");
+            string? joinCode = null;
+            if (joinMethod == "Code" && !isSingles)
+            {
+                joinCode = GenerateJoinCode();
+            }
+
             var unit = new EventUnit
             {
                 EventId = eventId,
@@ -425,6 +433,8 @@ public class TournamentController : ControllerBase
                 Status = isWaitlisted ? "Waitlisted" : "Registered",
                 WaitlistPosition = isWaitlisted ? await GetNextWaitlistPosition(divisionId) : null,
                 CaptainUserId = userId.Value,
+                JoinMethod = joinMethod,
+                JoinCode = joinCode,
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
             };
@@ -4754,6 +4764,8 @@ public class TournamentController : ControllerBase
             CaptainName = u.Captain != null ? FormatName(u.Captain.LastName, u.Captain.FirstName) : null,
             CaptainProfileImageUrl = u.Captain?.ProfileImageUrl,
             RegistrationStatus = registrationStatus,
+            JoinMethod = u.JoinMethod ?? "Approval",
+            JoinCode = u.JoinCode,
             MatchesPlayed = u.MatchesPlayed,
             MatchesWon = u.MatchesWon,
             MatchesLost = u.MatchesLost,
@@ -7067,4 +7079,230 @@ public class TournamentController : ControllerBase
 
         return Ok(new ApiResponse<List<DivisionCourtBlockDto>> { Success = true, Data = blocks });
     }
+
+    #region Join Code Methods
+
+    /// <summary>
+    /// Generate a unique 6-character alphanumeric join code
+    /// </summary>
+    private string GenerateJoinCode()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Exclude confusing chars like 0/O, 1/I/L
+        var random = new Random();
+        var code = new char[6];
+        for (int i = 0; i < 6; i++)
+        {
+            code[i] = chars[random.Next(chars.Length)];
+        }
+        return new string(code);
+    }
+
+    /// <summary>
+    /// Join a unit using a join code (for code-based joining)
+    /// </summary>
+    [Authorize]
+    [HttpPost("units/join-by-code")]
+    public async Task<ActionResult<ApiResponse<EventUnitDto>>> JoinUnitByCode([FromBody] JoinByCodeRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventUnitDto> { Success = false, Message = "Unauthorized" });
+
+        if (string.IsNullOrWhiteSpace(request.JoinCode))
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "Join code is required" });
+
+        var code = request.JoinCode.ToUpper().Trim();
+
+        // Find unit by code
+        var unit = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Event)
+            .Include(u => u.Captain)
+            .FirstOrDefaultAsync(u => u.JoinCode == code && u.JoinMethod == "Code");
+
+        if (unit == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Invalid join code. Please check the code and try again." });
+
+        // Check if unit is full
+        var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? unit.Division?.TeamSize ?? 2;
+        var acceptedCount = unit.Members.Count(m => m.InviteStatus == "Accepted");
+        if (acceptedCount >= teamSize)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "This team is already full" });
+
+        // Check if user is already a member
+        if (unit.Members.Any(m => m.UserId == userId.Value && m.InviteStatus == "Accepted"))
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are already a member of this team" });
+
+        // Check if user is already registered in this division
+        var alreadyInDivision = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+            .AnyAsync(m => m.UserId == userId.Value &&
+                m.Unit!.DivisionId == unit.DivisionId &&
+                m.Unit.Status != "Cancelled" &&
+                m.InviteStatus == "Accepted");
+
+        if (alreadyInDivision)
+            return BadRequest(new ApiResponse<EventUnitDto> { Success = false, Message = "You are already registered in this division" });
+
+        // Add user as member (directly accepted for code-based join)
+        var member = new EventUnitMember
+        {
+            UnitId = unit.Id,
+            UserId = userId.Value,
+            Role = "Player",
+            InviteStatus = "Accepted",
+            CreatedAt = DateTime.Now,
+            ReferenceId = $"E{unit.EventId}-U{unit.Id}-P{userId.Value}"
+        };
+        _context.EventUnitMembers.Add(member);
+
+        // Clear the join code after use (one-time use)
+        unit.JoinCode = null;
+        unit.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        // Reload with all navigation properties
+        unit = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Event)
+            .Include(u => u.Captain)
+            .Include(u => u.JoinRequests)
+            .FirstOrDefaultAsync(u => u.Id == unit.Id);
+
+        return Ok(new ApiResponse<EventUnitDto>
+        {
+            Success = true,
+            Message = $"Successfully joined {unit!.Name}!",
+            Data = MapToUnitDto(unit)
+        });
+    }
+
+    /// <summary>
+    /// Regenerate a join code for a unit (captain only)
+    /// </summary>
+    [Authorize]
+    [HttpPost("units/{unitId}/regenerate-code")]
+    public async Task<ActionResult<ApiResponse<string>>> RegenerateJoinCode(int unitId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<string> { Success = false, Message = "Unauthorized" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .FirstOrDefaultAsync(u => u.Id == unitId);
+
+        if (unit == null)
+            return NotFound(new ApiResponse<string> { Success = false, Message = "Unit not found" });
+
+        // Only captain can regenerate code
+        if (unit.CaptainUserId != userId.Value)
+            return Forbid();
+
+        // Check if unit is full (no need to regenerate)
+        var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? unit.Division?.TeamSize ?? 2;
+        var acceptedCount = await _context.EventUnitMembers
+            .CountAsync(m => m.UnitId == unitId && m.InviteStatus == "Accepted");
+        if (acceptedCount >= teamSize)
+            return BadRequest(new ApiResponse<string> { Success = false, Message = "Team is already full" });
+
+        // Generate new code
+        unit.JoinCode = GenerateJoinCode();
+        unit.JoinMethod = "Code"; // Ensure method is set
+        unit.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<string>
+        {
+            Success = true,
+            Message = "New join code generated",
+            Data = unit.JoinCode
+        });
+    }
+
+    /// <summary>
+    /// Get joinable units in a division (for "Join Existing Team" list)
+    /// Now includes JoinMethod indicator
+    /// </summary>
+    [Authorize]
+    [HttpGet("events/{eventId}/divisions/{divisionId}/joinable-units-v2")]
+    public async Task<ActionResult<ApiResponse<List<JoinableUnitDto>>>> GetJoinableUnitsV2(int eventId, int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<JoinableUnitDto>> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.TeamUnit)
+            .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == eventId && d.IsActive);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<JoinableUnitDto>> { Success = false, Message = "Division not found" });
+
+        var teamSize = division.TeamUnit?.TotalPlayers ?? 2;
+
+        // Find units that are incomplete (fewer accepted members than team size)
+        var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division).ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .Where(u => u.DivisionId == divisionId &&
+                u.EventId == eventId &&
+                u.Status != "Cancelled" &&
+                u.Members.Count(m => m.InviteStatus == "Accepted") < teamSize)
+            .OrderBy(u => u.CreatedAt)
+            .ToListAsync();
+
+        var result = units.Select(u => new JoinableUnitDto
+        {
+            Id = u.Id,
+            Name = u.Name,
+            CaptainUserId = u.CaptainUserId,
+            CaptainName = u.Captain != null ? FormatName(u.Captain.LastName, u.Captain.FirstName) : null,
+            CaptainProfileImageUrl = u.Captain?.ProfileImageUrl,
+            JoinMethod = u.JoinMethod ?? "Approval",
+            MemberCount = u.Members.Count(m => m.InviteStatus == "Accepted"),
+            RequiredPlayers = teamSize,
+            Members = u.Members.Where(m => m.InviteStatus == "Accepted").Select(m => new JoinableUnitMemberDto
+            {
+                UserId = m.UserId,
+                Name = m.User != null ? FormatName(m.User.LastName, m.User.FirstName) : null,
+                ProfileImageUrl = m.User?.ProfileImageUrl
+            }).ToList()
+        }).ToList();
+
+        return Ok(new ApiResponse<List<JoinableUnitDto>> { Success = true, Data = result });
+    }
+
+    #endregion
+}
+
+// DTOs for join code feature
+public class JoinByCodeRequest
+{
+    public string JoinCode { get; set; } = string.Empty;
+}
+
+public class JoinableUnitDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int CaptainUserId { get; set; }
+    public string? CaptainName { get; set; }
+    public string? CaptainProfileImageUrl { get; set; }
+    public string JoinMethod { get; set; } = "Approval";
+    public int MemberCount { get; set; }
+    public int RequiredPlayers { get; set; }
+    public List<JoinableUnitMemberDto> Members { get; set; } = new();
+}
+
+public class JoinableUnitMemberDto
+{
+    public int UserId { get; set; }
+    public string? Name { get; set; }
+    public string? ProfileImageUrl { get; set; }
 }
