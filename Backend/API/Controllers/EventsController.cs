@@ -2477,9 +2477,9 @@ public class EventsController : ControllerBase
             if (request.HasVenue.HasValue)
             {
                 if (request.HasVenue.Value)
-                    query = query.Where(e => e.VenueId != null);
+                    query = query.Where(e => e.CourtId != null);
                 else
-                    query = query.Where(e => e.VenueId == null);
+                    query = query.Where(e => e.CourtId == null);
             }
 
             // Filter by event type
@@ -2531,7 +2531,7 @@ public class EventsController : ControllerBase
                 IsActive = e.IsActive,
                 IsPrivate = e.IsPrivate,
                 TournamentStatus = e.TournamentStatus,
-                VenueId = e.VenueId,
+                VenueId = e.CourtId,
                 VenueName = e.Venue?.Name ?? e.VenueName,
                 Address = e.Address,
                 City = e.City,
@@ -2558,8 +2558,7 @@ public class EventsController : ControllerBase
                     Items = result,
                     TotalCount = totalCount,
                     Page = request.Page,
-                    PageSize = request.PageSize,
-                    TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
+                    PageSize = request.PageSize
                 }
             });
         }
@@ -2603,7 +2602,7 @@ public class EventsController : ControllerBase
             IsActive = evt.IsActive,
             IsPrivate = evt.IsPrivate,
             TournamentStatus = evt.TournamentStatus,
-            VenueId = evt.VenueId,
+            VenueId = evt.CourtId,
             VenueName = evt.Venue?.Name ?? evt.VenueName,
             Address = evt.Address,
             City = evt.City,
@@ -2659,19 +2658,22 @@ public class EventsController : ControllerBase
             var venue = await _context.Venues.FindAsync(request.VenueId.Value);
             if (venue != null)
             {
-                evt.VenueId = venue.Id;
+                evt.CourtId = venue.VenueId;
                 evt.VenueName = venue.Name;
-                evt.Address = venue.Address;
+                evt.Address = venue.Addr1;
                 evt.City = venue.City;
                 evt.State = venue.State;
                 evt.Country = venue.Country;
-                evt.Latitude = venue.Latitude;
-                evt.Longitude = venue.Longitude;
+                // Parse GPS coordinates from strings
+                if (double.TryParse(venue.GpsLat, out var lat))
+                    evt.Latitude = lat;
+                if (double.TryParse(venue.GpsLng, out var lng))
+                    evt.Longitude = lng;
             }
         }
         else if (request.ClearVenue == true)
         {
-            evt.VenueId = null;
+            evt.CourtId = null;
             // Keep the manual address fields
         }
 
@@ -2713,7 +2715,7 @@ public class EventsController : ControllerBase
             IsActive = evt.IsActive,
             IsPrivate = evt.IsPrivate,
             TournamentStatus = evt.TournamentStatus,
-            VenueId = evt.VenueId,
+            VenueId = evt.CourtId,
             VenueName = evt.Venue?.Name ?? evt.VenueName,
             Address = evt.Address,
             City = evt.City,
