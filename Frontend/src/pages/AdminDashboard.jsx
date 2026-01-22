@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { userApi, themeApi, notificationTemplateApi, getAssetUrl, sharedAssetApi, getSharedAssetUrl, SHARED_AUTH_URL, notificationsApi } from '../services/api'
+import { userApi, themeApi, notificationTemplateApi, getAssetUrl, sharedAssetApi, getSharedAssetUrl, SHARED_AUTH_URL, notificationsApi, API_BASE_URL } from '../services/api'
 import {
   Users, BookOpen, Calendar, DollarSign, Search, Edit2, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, MoreVertical, Eye, X,
@@ -389,7 +389,7 @@ const AdminDashboard = () => {
     setApiKeyTestError(null)
     setApiKeyTestResult(null)
     try {
-      const response = await fetch('/api/auth/test-apikey')
+      const response = await fetch(`${API_BASE_URL}/auth/test-apikey`)
       const data = await response.json()
       if (response.ok) {
         setApiKeyTestResult(data)
