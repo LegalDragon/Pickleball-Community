@@ -6,7 +6,7 @@ import {
   User, MapPin, Calendar, UserPlus, UserCheck, Clock,
   Award, Target, Zap, Heart, Activity, Play, X, Check, MessageCircle,
   Twitter, Instagram, Facebook, Linkedin, Youtube, Globe, Link as LinkIcon, ExternalLink,
-  KeyRound, Mail
+  KeyRound, Mail, Phone, BadgeCheck
 } from 'lucide-react'
 import AdminEditCredentialsModal from './AdminEditCredentialsModal'
 
@@ -192,7 +192,7 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -211,8 +211,8 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
           </div>
         ) : (
           <>
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-t-xl p-6 relative">
+            {/* Header - Fixed */}
+            <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-purple-700 rounded-t-xl p-6 relative">
               <button
                 onClick={onClose}
                 className="absolute top-4 right-4 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
@@ -254,10 +254,25 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
                     </div>
                   )}
 
+                  {/* Email (shown if user enabled or viewer is admin/self) */}
                   {profile.email && (
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
                       <Mail className="w-4 h-4" />
-                      <span>{profile.email}</span>
+                      <a href={`mailto:${profile.email}`} className="hover:text-white hover:underline">{profile.email}</a>
+                      {profile.emailVerified && (
+                        <BadgeCheck className="w-4 h-4 text-green-300" title="Verified email" />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Phone (shown if user enabled or viewer is admin/self) */}
+                  {profile.phone && (
+                    <div className="flex items-center justify-center sm:justify-start gap-2 text-white/70 mt-1 text-sm">
+                      <Phone className="w-4 h-4" />
+                      <a href={`tel:${profile.phone}`} className="hover:text-white hover:underline">{profile.phone}</a>
+                      {profile.phoneVerified && (
+                        <BadgeCheck className="w-4 h-4 text-green-300" title="Verified phone" />
+                      )}
                     </div>
                   )}
 
@@ -345,8 +360,8 @@ export default function PublicProfileModal({ userId, onClose, onFriendshipChange
               </div>
             </div>
 
-            {/* Content */}
-            <div className="p-6 space-y-6">
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Bio Section */}
               {profile.bio && (
                 <div>
