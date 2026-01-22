@@ -1,70 +1,25 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class EventStaffController : ControllerBase
+public class EventStaffController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<EventStaffController> _logger;
 
     public EventStaffController(
         ApplicationDbContext context,
         ILogger<EventStaffController> logger)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
-    }
-
-    private int? GetUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : null;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetUserId();
-        if (!userId.HasValue) return false;
-
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
-    }
-
-    private async Task<bool> IsEventOrganizerAsync(int eventId)
-    {
-        var userId = GetUserId();
-        if (!userId.HasValue) return false;
-
-        var ev = await _context.Events.FindAsync(eventId);
-        return ev?.OrganizedByUserId == userId.Value;
-    }
-
-    private async Task<bool> CanManageEventAsync(int eventId)
-    {
-        if (await IsAdminAsync() || await IsEventOrganizerAsync(eventId))
-            return true;
-
-        // Check if user has Event Admin staff role
-        var userId = GetUserId();
-        if (!userId.HasValue) return false;
-
-        var staff = await _context.EventStaff
-            .Include(s => s.Role)
-            .FirstOrDefaultAsync(s => s.EventId == eventId
-                                   && s.UserId == userId.Value
-                                   && s.Status == "Active"
-                                   && s.Role != null
-                                   && s.Role.CanFullyManageEvent);
-
-        return staff != null;
     }
 
     // ============================================

@@ -1,21 +1,20 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Constants;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Hubs;
 using Pickleball.Community.Services;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class TournamentController : ControllerBase
+public class TournamentController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<TournamentController> _logger;
     private readonly IDrawingBroadcaster _drawingBroadcaster;
     private readonly INotificationService _notificationService;
@@ -31,35 +30,14 @@ public class TournamentController : ControllerBase
         IBracketProgressionService bracketProgressionService,
         IScoreBroadcaster scoreBroadcaster,
         ICourtAssignmentService courtAssignmentService)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
         _drawingBroadcaster = drawingBroadcaster;
         _notificationService = notificationService;
         _bracketProgressionService = bracketProgressionService;
         _scoreBroadcaster = scoreBroadcaster;
         _courtAssignmentService = courtAssignmentService;
-    }
-
-    private int? GetUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : null;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetUserId();
-        if (!userId.HasValue) return false;
-
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
-    }
-
-    private async Task<bool> IsEventOrganizerAsync(int eventId, int userId)
-    {
-        var evt = await _context.Events.FindAsync(eventId);
-        return evt?.OrganizedByUserId == userId;
     }
 
     // ============================================
@@ -545,10 +523,7 @@ public class TournamentController : ControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<List<UserSearchResultDto>> { Success = false, Message = "Event not found" });
 
-        var isOrganizer = evt.OrganizedByUserId == userId.Value;
-        var isAdmin = await IsAdminAsync();
-
-        if (!isOrganizer && !isAdmin)
+        if (!await CanManageEventAsync(eventId))
             return Forbid();
 
         if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
@@ -1019,11 +994,11 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Request not found" });
 
         // Allow captain, site admin, or event organizer to respond
-        var isAdmin = await IsAdminAsync();
-        var isOrganizer = joinRequest.Unit?.Event?.OrganizedByUserId == userId.Value;
         var isCaptain = joinRequest.Unit?.CaptainUserId == userId.Value;
+        var eventId = joinRequest.Unit?.EventId ?? 0;
+        var canManage = eventId > 0 && await CanManageEventAsync(eventId);
 
-        if (!isCaptain && !isAdmin && !isOrganizer)
+        if (!isCaptain && !canManage)
             return Forbid();
 
         // If accepting, check MaxPlayers capacity (allow but waitlist if over capacity)
@@ -1485,10 +1460,7 @@ public class TournamentController : ControllerBase
             return NotFound(new ApiResponse<object> { Success = false, Message = "Unit not found" });
 
         // Only site admin or event organizer can break units
-        var isAdmin = await IsAdminAsync();
-        var isOrganizer = unit.Event?.OrganizedByUserId == userId.Value;
-
-        if (!isAdmin && !isOrganizer)
+        if (!await CanManageEventAsync(unit.EventId))
             return Forbid();
 
         // Check if unit has scheduled matches
@@ -1653,11 +1625,11 @@ public class TournamentController : ControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<PaymentInfoDto> { Success = false, Message = "Registration not found" });
 
-        // Check if user is a member of this unit or the event organizer
+        // Check if user is a member of this unit or the event organizer/admin
         var isMember = unit.Members.Any(m => m.UserId == userId.Value);
-        var isOrganizer = unit.Event?.OrganizedByUserId == userId.Value;
+        var canManage = await CanManageEventAsync(unit.EventId);
 
-        if (!isMember && !isOrganizer)
+        if (!isMember && !canManage)
             return Forbid();
 
         // Determine which members to apply payment to
@@ -6772,9 +6744,8 @@ public class TournamentController : ControllerBase
         // Get current viewers
         var viewers = DrawingHub.GetEventViewers(eventId);
 
-        // Check if current user is organizer
-        var userId = GetUserId();
-        var isOrganizer = userId.HasValue && (evt.OrganizedByUserId == userId.Value || await IsAdminAsync());
+        // Check if current user can manage event
+        var isOrganizer = await CanManageEventAsync(eventId);
 
         var state = new EventDrawingStateDto
         {

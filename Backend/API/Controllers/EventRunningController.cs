@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Services;
-using System.Security.Claims;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -14,9 +14,8 @@ namespace Pickleball.Community.API.Controllers;
 [ApiController]
 [Route("event-running")]
 [Authorize]
-public class EventRunningController : ControllerBase
+public class EventRunningController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly INotificationService _notificationService;
     private readonly ILogger<EventRunningController> _logger;
 
@@ -24,32 +23,10 @@ public class EventRunningController : ControllerBase
         ApplicationDbContext context,
         INotificationService notificationService,
         ILogger<EventRunningController> logger)
+        : base(context)
     {
-        _context = context;
         _notificationService = notificationService;
         _logger = logger;
-    }
-
-    private int? GetUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out int userId))
-            return userId;
-        return null;
-    }
-
-    private async Task<bool> IsEventOrganizerAsync(int eventId, int userId)
-    {
-        var evt = await _context.Events.FindAsync(eventId);
-        return evt != null && evt.OrganizedByUserId == userId;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetUserId();
-        if (!userId.HasValue) return false;
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
     }
 
     // ==========================================
@@ -1099,31 +1076,6 @@ public class EventRunningController : ControllerBase
                 history
             }
         });
-    }
-
-    /// <summary>
-    /// Helper to check if user has a specific staff permission for an event
-    /// </summary>
-    private async Task<bool> HasStaffPermissionAsync(int eventId, int userId, string permission)
-    {
-        var staff = await _context.EventStaff
-            .Include(s => s.Role)
-            .FirstOrDefaultAsync(s => s.EventId == eventId
-                                   && s.UserId == userId
-                                   && s.Status == "Active"
-                                   && s.Role != null);
-
-        if (staff?.Role == null) return false;
-
-        return permission switch
-        {
-            "CanRecordScores" => staff.Role.CanRecordScores,
-            "CanManageSchedule" => staff.Role.CanManageSchedule,
-            "CanManageCourts" => staff.Role.CanManageCourts,
-            "CanCheckInPlayers" => staff.Role.CanCheckInPlayers,
-            "CanFullyManageEvent" => staff.Role.CanFullyManageEvent,
-            _ => false
-        };
     }
 
     /// <summary>

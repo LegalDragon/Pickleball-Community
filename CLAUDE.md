@@ -468,6 +468,51 @@ if (!await CanManageEventAsync(eventId)) return Forbid();
 // Or use IsEventOrganizerAsync from base class
 ```
 
+### Controllers Inheriting EventControllerBase
+All event-related controllers now inherit from `EventControllerBase` to use standardized auth methods:
+
+| Controller | Notes |
+|------------|-------|
+| `TournamentController` | Main tournament management |
+| `EventRunningController` | Running event management (TD & Player) |
+| `GameDayController` | Casual game day events |
+| `EventStaffController` | Staff roles and assignments |
+| `CheckInController` | Player check-in and waivers |
+| `EventsController` | Event CRUD and registration |
+| `CourtGroupsController` | Court group management |
+
+**Not using EventControllerBase** (by design):
+- `DivisionPhasesController` - Uses attribute-based auth `[Authorize(Roles = "Admin,Organizer")]`
+
+## Staff Dashboard
+
+### Overview
+Role-specific dashboards for event staff based on their permissions.
+
+### Route
+`/event/:eventId/staff-dashboard`
+
+### Backend Endpoint
+`GET /eventstaff/event/{eventId}/dashboard` - Returns role-specific data based on user permissions
+
+### Staff Permissions (from EventStaffRole)
+- `CanRecordScores` - Access scoring section
+- `CanCheckInPlayers` - Access check-in section
+- `CanManageCourts` - Access court status section
+- `CanManageSchedule` - Access schedule section
+- `CanManageLineups` - Manage team lineups
+- `CanViewAllData` - Access all sections
+- `CanFullyManageEvent` - Full event admin access
+
+### DTOs
+- `StaffDashboardDto` - Main dashboard response
+- `StaffPermissionsDto` - Permission flags
+- `EncounterSummaryDto` - Match summary for scoring/schedule
+- `CheckInItemDto` - Player check-in item
+- `CheckInStatsDto` - Check-in statistics
+- `CourtStatusDto` - Court status with active matches
+- `DivisionScheduleStatsDto` - Division progress tracking
+
 ## Release Notes Checkpoints
 Track when release notes were last generated to avoid duplicates.
 

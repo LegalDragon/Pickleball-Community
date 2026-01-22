@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.Controllers;
 
@@ -12,14 +13,13 @@ namespace Pickleball.Community.Controllers;
 /// </summary>
 [ApiController]
 [Route("[controller]")]
-public class CourtGroupsController : ControllerBase
+public class CourtGroupsController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<CourtGroupsController> _logger;
 
     public CourtGroupsController(ApplicationDbContext context, ILogger<CourtGroupsController> logger)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
     }
 
@@ -115,12 +115,15 @@ public class CourtGroupsController : ControllerBase
     /// Create a new court group
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "Admin,Organizer")]
+    [Authorize]
     public async Task<IActionResult> CreateCourtGroup([FromBody] CreateCourtGroupRequest request)
     {
         var eventEntity = await _context.Events.FindAsync(request.EventId);
         if (eventEntity == null)
             return NotFound(new { success = false, message = "Event not found" });
+
+        if (!await CanManageEventAsync(request.EventId))
+            return Forbid();
 
         var maxOrder = await _context.CourtGroups
             .Where(g => g.EventId == request.EventId)
@@ -164,12 +167,15 @@ public class CourtGroupsController : ControllerBase
     /// Update a court group
     /// </summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin,Organizer")]
+    [Authorize]
     public async Task<IActionResult> UpdateCourtGroup(int id, [FromBody] UpdateCourtGroupRequest request)
     {
         var group = await _context.CourtGroups.FindAsync(id);
         if (group == null)
             return NotFound(new { success = false, message = "Court group not found" });
+
+        if (!await CanManageEventAsync(group.EventId))
+            return Forbid();
 
         if (!string.IsNullOrEmpty(request.GroupName)) group.GroupName = request.GroupName;
         if (request.GroupCode != null) group.GroupCode = request.GroupCode;
@@ -189,7 +195,7 @@ public class CourtGroupsController : ControllerBase
     /// Delete a court group
     /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin,Organizer")]
+    [Authorize]
     public async Task<IActionResult> DeleteCourtGroup(int id)
     {
         var group = await _context.CourtGroups
@@ -198,6 +204,9 @@ public class CourtGroupsController : ControllerBase
 
         if (group == null)
             return NotFound(new { success = false, message = "Court group not found" });
+
+        if (!await CanManageEventAsync(group.EventId))
+            return Forbid();
 
         // Unassign courts
         foreach (var court in group.Courts)
@@ -215,12 +224,15 @@ public class CourtGroupsController : ControllerBase
     /// Assign courts to a group
     /// </summary>
     [HttpPost("{id}/courts")]
-    [Authorize(Roles = "Admin,Organizer")]
+    [Authorize]
     public async Task<IActionResult> AssignCourts(int id, [FromBody] AssignCourtsRequest request)
     {
         var group = await _context.CourtGroups.FindAsync(id);
         if (group == null)
             return NotFound(new { success = false, message = "Court group not found" });
+
+        if (!await CanManageEventAsync(group.EventId))
+            return Forbid();
 
         // Remove existing courts from this group
         var existingCourts = await _context.TournamentCourts
@@ -261,9 +273,12 @@ public class CourtGroupsController : ControllerBase
     /// Groups courts by location or creates one group with all courts
     /// </summary>
     [HttpPost("event/{eventId}/auto-create")]
-    [Authorize(Roles = "Admin,Organizer")]
+    [Authorize]
     public async Task<IActionResult> AutoCreateGroups(int eventId, [FromQuery] int groupSize = 4)
     {
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive && c.CourtGroupId == null)
             .OrderBy(c => c.SortOrder)

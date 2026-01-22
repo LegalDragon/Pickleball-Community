@@ -1,19 +1,18 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Services;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class EventsController : ControllerBase
+public class EventsController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<EventsController> _logger;
     private readonly INotificationService _notificationService;
     private readonly IActivityAwardService _activityAwardService;
@@ -23,32 +22,17 @@ public class EventsController : ControllerBase
         ILogger<EventsController> logger,
         INotificationService notificationService,
         IActivityAwardService activityAwardService)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
         _notificationService = notificationService;
         _activityAwardService = activityAwardService;
     }
 
-    private int? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : null;
-    }
-
-    private async Task<bool> IsAdminAsync()
-    {
-        var userId = GetCurrentUserId();
-        if (!userId.HasValue) return false;
-
-        var user = await _context.Users.FindAsync(userId.Value);
-        return user?.Role == "Admin";
-    }
-
     // Check if user has completed their profile (not a "New User")
     private async Task<bool> HasCompletedProfileAsync()
     {
-        var userId = GetCurrentUserId();
+        var userId = GetUserId();
         if (!userId.HasValue) return false;
 
         var user = await _context.Users.FindAsync(userId.Value);
@@ -64,7 +48,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
 
             var query = _context.Events
                 .AsSplitQuery() // Use split queries to avoid cartesian explosion with multiple collections
@@ -532,7 +516,7 @@ public class EventsController : ControllerBase
             if (evt == null)
                 return NotFound(new ApiResponse<EventDetailDto> { Success = false, Message = "Event not found" });
 
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             var isAdmin = await IsAdminAsync();
 
             // Get user's pending join requests for this event
@@ -764,7 +748,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDetailDto> { Success = false, Message = "User not authenticated" });
 
@@ -884,7 +868,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDetailDto> { Success = false, Message = "User not authenticated" });
 
@@ -1035,7 +1019,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1071,7 +1055,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1104,7 +1088,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1141,7 +1125,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventRegistrationDto> { Success = false, Message = "User not authenticated" });
 
@@ -1265,7 +1249,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1334,7 +1318,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<PartnerRequestDto> { Success = false, Message = "User not authenticated" });
 
@@ -1439,7 +1423,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1469,7 +1453,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<MyEventsDto> { Success = false, Message = "User not authenticated" });
 
@@ -1621,7 +1605,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDivisionDto> { Success = false, Message = "User not authenticated" });
 
@@ -1764,7 +1748,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDivisionDto> { Success = false, Message = "User not authenticated" });
 
@@ -1867,7 +1851,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -1908,7 +1892,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             var isAdmin = await IsAdminAsync();
 
             var evt = await _context.Events.FindAsync(id);
@@ -1965,7 +1949,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDocumentDto> { Success = false, Message = "User not authenticated" });
 
@@ -2034,7 +2018,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventDocumentDto> { Success = false, Message = "User not authenticated" });
 
@@ -2099,7 +2083,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
 
@@ -2135,7 +2119,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "User not authenticated" });
 
@@ -2190,7 +2174,7 @@ public class EventsController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = GetUserId();
             if (!userId.HasValue)
                 return Unauthorized(new ApiResponse<EventRegistrationDto> { Success = false, Message = "User not authenticated" });
 
@@ -2332,7 +2316,7 @@ public class EventsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponse<List<UserActiveEventDto>>>> GetMyActiveEvents()
     {
-        var userId = GetCurrentUserId();
+        var userId = GetUserId();
         if (!userId.HasValue)
             return Unauthorized(new ApiResponse<List<UserActiveEventDto>> { Success = false, Message = "Unauthorized" });
 

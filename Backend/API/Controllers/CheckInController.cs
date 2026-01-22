@@ -5,23 +5,22 @@ using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Services;
-using System.Security.Claims;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.Controllers;
 
 [Route("[controller]")]
 [ApiController]
-public class CheckInController : ControllerBase
+public class CheckInController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<CheckInController> _logger;
     private readonly IWaiverPdfService _waiverPdfService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
 
     public CheckInController(ApplicationDbContext context, ILogger<CheckInController> logger, IWaiverPdfService waiverPdfService, IHttpClientFactory httpClientFactory, IConfiguration configuration)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
         _waiverPdfService = waiverPdfService;
         _httpClientFactory = httpClientFactory;
@@ -81,13 +80,6 @@ public class CheckInController : ControllerBase
         return string.Empty;
     }
 
-    private int GetUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var id) ? id : 0;
-    }
-
     /// <summary>
     /// Get check-in status for current user at an event
     /// </summary>
@@ -98,14 +90,14 @@ public class CheckInController : ControllerBase
         try
         {
             var userId = GetUserId();
-            if (userId == 0) return Unauthorized();
+            if (!userId.HasValue) return Unauthorized();
 
             // Check if redo mode is enabled (allows re-signing waiver)
             var redoWaiver = redo?.ToLower() == "waiver";
 
             // Get user's registrations in this event
             var registrations = await _context.EventUnitMembers
-                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
                 .Include(m => m.User)
                 .Include(m => m.Unit)
                     .ThenInclude(u => u!.Division)
@@ -228,7 +220,7 @@ public class CheckInController : ControllerBase
                         PaymentProofUrl = m.PaymentProofUrl
                     }).ToList() ?? new List<CheckInMemberDto>(),
                 Partners = firstUnit.Members?
-                    .Where(m => m.InviteStatus == "Accepted" && m.UserId != userId)
+                    .Where(m => m.InviteStatus == "Accepted" && m.UserId != userId.Value)
                     .Select(m => new CheckInPartnerDto
                     {
                         UserId = m.UserId,
@@ -281,7 +273,7 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<object>>> SignWaiver(int eventId, [FromBody] SignWaiverRequest request)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Get the event info
         var evt = await _context.Events.FindAsync(eventId);
@@ -307,13 +299,13 @@ public class CheckInController : ControllerBase
         }
 
         // Get user info for legal record
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FindAsync(userId.Value);
         if (user == null)
             return Unauthorized(new ApiResponse<object> { Success = false, Message = "User not found" });
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .ToListAsync();
 
         if (!registrations.Any())
@@ -428,11 +420,11 @@ public class CheckInController : ControllerBase
         try
         {
             var userId = GetUserId();
-            if (userId == 0) return Unauthorized();
+            if (!userId.HasValue) return Unauthorized();
 
             // Verify user is registered
             var registrations = await _context.EventUnitMembers
-                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
                 .Include(m => m.Unit)
                 .ToListAsync();
 
@@ -471,14 +463,14 @@ public class CheckInController : ControllerBase
             try
             {
                 var existingCheckIn = await _context.EventCheckIns
-                    .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+                    .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId.Value);
 
                 if (existingCheckIn == null)
                 {
                     existingCheckIn = new EventCheckIn
                     {
                         EventId = eventId,
-                        UserId = userId,
+                        UserId = userId.Value,
                         CheckInMethod = CheckInMethod.Self,
                         CheckedInAt = DateTime.Now,
                         IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
@@ -582,7 +574,7 @@ public class CheckInController : ControllerBase
         try
         {
             var userId = GetUserId();
-            if (userId == 0) return Unauthorized();
+            if (!userId.HasValue) return Unauthorized();
 
             // Get event
             var evt = await _context.Events.FindAsync(eventId);
@@ -591,7 +583,7 @@ public class CheckInController : ControllerBase
 
             // Get user's registrations
             var registrations = await _context.EventUnitMembers
-                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+                .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
                 .Include(m => m.Unit)
                 .ToListAsync();
 
@@ -677,7 +669,7 @@ public class CheckInController : ControllerBase
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .Include(m => m.Unit)
             .ToListAsync();
 
@@ -686,14 +678,14 @@ public class CheckInController : ControllerBase
 
         // Create event check-in record
         var existingCheckIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId.Value);
 
         if (existingCheckIn == null)
         {
             existingCheckIn = new EventCheckIn
             {
                 EventId = eventId,
-                UserId = userId,
+                UserId = userId.Value,
                 CheckInMethod = CheckInMethod.Manual,
                 CheckedInByUserId = currentUserId,
                 CheckedInAt = DateTime.Now,
@@ -738,15 +730,15 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<EventCheckInSummaryDto>>> GetEventCheckIns(int eventId)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Verify user is TD/organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
             return NotFound(new ApiResponse<EventCheckInSummaryDto> { Success = false, Message = "Event not found" });
 
-        var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
+        var currentUser = await _context.Users.FindAsync(userId.Value);
+        var isOrganizer = evt.OrganizedByUserId == userId.Value || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
@@ -874,15 +866,15 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<WaiverDto>>> CreateWaiver(int eventId, [FromBody] CreateWaiverRequest request)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Verify user is organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
             return NotFound(new ApiResponse<WaiverDto> { Success = false, Message = "Event not found" });
 
-        var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
+        var currentUser = await _context.Users.FindAsync(userId.Value);
+        var isOrganizer = evt.OrganizedByUserId == userId.Value || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
@@ -950,14 +942,14 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> DeleteWaiver(int eventId, int waiverId)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Verify user is organizer
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId);
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
 
-        var isOrganizer = evt.OrganizedByUserId == userId;
+        var isOrganizer = evt.OrganizedByUserId == userId.Value;
         if (!isOrganizer)
             return Forbid();
 
@@ -988,15 +980,15 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<WaiverDto>>> CreateDocument(int eventId, [FromBody] CreateWaiverRequest request)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Verify user is organizer
         var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
             return NotFound(new ApiResponse<WaiverDto> { Success = false, Message = "Event not found" });
 
-        var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
+        var currentUser = await _context.Users.FindAsync(userId.Value);
+        var isOrganizer = evt.OrganizedByUserId == userId.Value || currentUser?.Role == "Admin";
 
         if (!isOrganizer)
             return Forbid();
@@ -1085,7 +1077,7 @@ public class CheckInController : ControllerBase
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .ToListAsync();
 
         if (!registrations.Any())
@@ -1121,7 +1113,7 @@ public class CheckInController : ControllerBase
 
         // Remove event-level check-in record
         var eventCheckIn = await _context.EventCheckIns
-            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.EventId == eventId && c.UserId == userId.Value);
         if (eventCheckIn != null)
         {
             _context.EventCheckIns.Remove(eventCheckIn);
@@ -1162,7 +1154,7 @@ public class CheckInController : ControllerBase
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .ToListAsync();
 
         if (!registrations.Any())
@@ -1210,7 +1202,7 @@ public class CheckInController : ControllerBase
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .ToListAsync();
 
         if (!registrations.Any())
@@ -1587,7 +1579,7 @@ public class CheckInController : ControllerBase
 
         // Get user's registrations
         var registrations = await _context.EventUnitMembers
-            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted")
+            .Where(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted")
             .ToListAsync();
 
         if (!registrations.Any())
@@ -1650,7 +1642,7 @@ public class CheckInController : ControllerBase
 
         // Check if user is registered
         var registration = await _context.EventUnitMembers
-            .FirstOrDefaultAsync(m => m.Unit!.EventId == eventId && m.UserId == userId && m.InviteStatus == "Accepted");
+            .FirstOrDefaultAsync(m => m.Unit!.EventId == eventId && m.UserId == userId.Value && m.InviteStatus == "Accepted");
 
         if (registration == null)
             return BadRequest(new ApiResponse<object> { Success = false, Message = "User is not registered for this event" });
@@ -1696,15 +1688,15 @@ public class CheckInController : ControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> DeleteDocument(int eventId, int documentId)
     {
         var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        if (!userId.HasValue) return Unauthorized();
 
         // Verify user is organizer
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId);
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
 
-        var currentUser = await _context.Users.FindAsync(userId);
-        var isOrganizer = evt.OrganizedByUserId == userId || currentUser?.Role == "Admin";
+        var currentUser = await _context.Users.FindAsync(userId.Value);
+        var isOrganizer = evt.OrganizedByUserId == userId.Value || currentUser?.Role == "Admin";
         if (!isOrganizer)
             return Forbid();
 

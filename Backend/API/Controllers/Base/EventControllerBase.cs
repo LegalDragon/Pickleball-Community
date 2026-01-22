@@ -49,19 +49,46 @@ public abstract class EventControllerBase : ControllerBase
     }
 
     /// <summary>
-    /// Checks if the current user can manage an event (is admin or organizer)
+    /// Checks if the current user is the organizer of an event
+    /// </summary>
+    protected async Task<bool> IsEventOrganizerAsync(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return false;
+        return await IsEventOrganizerAsync(eventId, userId.Value);
+    }
+
+    /// <summary>
+    /// Checks if the current user can manage an event (is admin, organizer, or has CanFullyManageEvent staff permission)
     /// </summary>
     protected async Task<bool> CanManageEventAsync(int eventId)
     {
         var userId = GetUserId();
         if (!userId.HasValue) return false;
 
+        // Admin can manage any event
         if (await IsAdminAsync()) return true;
-        return await IsEventOrganizerAsync(eventId, userId.Value);
+
+        // Organizer can manage their event
+        if (await IsEventOrganizerAsync(eventId, userId.Value)) return true;
+
+        // Staff with CanFullyManageEvent permission can also manage
+        var staff = await _context.EventStaff
+            .Include(s => s.Role)
+            .FirstOrDefaultAsync(s => s.EventId == eventId
+                                   && s.UserId == userId.Value
+                                   && s.Status == "Active"
+                                   && s.Role != null
+                                   && s.Role.CanFullyManageEvent);
+
+        return staff != null;
     }
 
     /// <summary>
-    /// Checks if a user has a specific staff permission for an event
+    /// Checks if a user has a specific staff permission for an event.
+    /// Permission names match EventStaffRole properties:
+    /// CanRecordScores, CanCheckInPlayers, CanManageCourts, CanManageSchedule,
+    /// CanManageLineups, CanViewAllData, CanFullyManageEvent
     /// </summary>
     protected async Task<bool> HasStaffPermissionAsync(int eventId, int userId, string permission)
     {
@@ -77,12 +104,24 @@ public abstract class EventControllerBase : ControllerBase
         return permission switch
         {
             "CanRecordScores" => staff.Role.CanRecordScores,
-            "CanManageCheckIn" => staff.Role.CanManageCheckIn,
+            "CanCheckInPlayers" => staff.Role.CanCheckInPlayers,
             "CanManageCourts" => staff.Role.CanManageCourts,
             "CanManageSchedule" => staff.Role.CanManageSchedule,
+            "CanManageLineups" => staff.Role.CanManageLineups,
             "CanViewAllData" => staff.Role.CanViewAllData,
+            "CanFullyManageEvent" => staff.Role.CanFullyManageEvent,
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Checks if the current user has a specific staff permission for an event
+    /// </summary>
+    protected async Task<bool> HasStaffPermissionAsync(int eventId, string permission)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return false;
+        return await HasStaffPermissionAsync(eventId, userId.Value, permission);
     }
 
     /// <summary>

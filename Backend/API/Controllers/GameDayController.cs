@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
-using System.Security.Claims;
+using Pickleball.Community.Controllers.Base;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -13,31 +13,14 @@ namespace Pickleball.Community.API.Controllers;
 [ApiController]
 [Route("gameday")]
 [Authorize]
-public class GameDayController : ControllerBase
+public class GameDayController : EventControllerBase
 {
-    private readonly ApplicationDbContext _context;
     private readonly ILogger<GameDayController> _logger;
 
     public GameDayController(ApplicationDbContext context, ILogger<GameDayController> logger)
+        : base(context)
     {
-        _context = context;
         _logger = logger;
-    }
-
-    private int? GetUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out int userId))
-        {
-            return userId;
-        }
-        return null;
-    }
-
-    private async Task<bool> IsEventOrganizer(int eventId, int userId)
-    {
-        var evt = await _context.Events.FindAsync(eventId);
-        return evt != null && evt.OrganizedByUserId == userId;
     }
 
     // ==========================================
@@ -187,7 +170,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         var maxSort = await _context.TournamentCourts
@@ -229,7 +212,7 @@ public class GameDayController : ControllerBase
         if (court == null)
             return NotFound(new { success = false, message = "Court not found" });
 
-        if (!await IsEventOrganizer(court.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(court.EventId, userId.Value))
             return Forbid();
 
         if (dto.Label != null)
@@ -279,7 +262,7 @@ public class GameDayController : ControllerBase
         if (court == null)
             return NotFound(new { success = false, message = "Court not found" });
 
-        if (!await IsEventOrganizer(court.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(court.EventId, userId.Value))
             return Forbid();
 
         // Check if court has active games
@@ -309,7 +292,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         // Validate units
@@ -421,7 +404,7 @@ public class GameDayController : ControllerBase
         if (match == null)
             return NotFound(new { success = false, message = "Game not found" });
 
-        if (!await IsEventOrganizer(match.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(match.EventId, userId.Value))
             return Forbid();
 
         var now = DateTime.Now;
@@ -485,7 +468,7 @@ public class GameDayController : ControllerBase
         if (match == null)
             return NotFound(new { success = false, message = "Game not found" });
 
-        if (!await IsEventOrganizer(match.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(match.EventId, userId.Value))
             return Forbid();
 
         var game = match.Matches.SelectMany(m => m.Games).FirstOrDefault(g => g.GameNumber == (dto.GameNumber ?? 1));
@@ -596,7 +579,7 @@ public class GameDayController : ControllerBase
         if (match == null)
             return NotFound(new { success = false, message = "Game not found" });
 
-        if (!await IsEventOrganizer(match.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(match.EventId, userId.Value))
             return Forbid();
 
         // Free previous court if any
@@ -652,7 +635,7 @@ public class GameDayController : ControllerBase
         if (match == null)
             return NotFound(new { success = false, message = "Game not found" });
 
-        if (!await IsEventOrganizer(match.EventId, userId.Value))
+        if (!await IsEventOrganizerAsync(match.EventId, userId.Value))
             return Forbid();
 
         // Free court if assigned
@@ -686,7 +669,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         var format = new ScoreFormat
@@ -749,7 +732,7 @@ public class GameDayController : ControllerBase
         if (division == null)
             return NotFound(new { success = false, message = "Division not found" });
 
-        if (division.Event == null || !await IsEventOrganizer(division.Event.Id, userId.Value))
+        if (division.Event == null || !await IsEventOrganizerAsync(division.Event.Id, userId.Value))
             return Forbid();
 
         division.DefaultScoreFormatId = dto.ScoreFormatId;
@@ -772,7 +755,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         var evt = await _context.Events
@@ -1068,7 +1051,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         // Get all units for this event (optionally filtered by division)
@@ -1148,7 +1131,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         var evt = await _context.Events
@@ -1329,7 +1312,7 @@ public class GameDayController : ControllerBase
         if (!organizerId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, organizerId.Value))
+        if (!await IsEventOrganizerAsync(eventId, organizerId.Value))
             return Forbid();
 
         // Find the player's membership in this event
@@ -1381,7 +1364,7 @@ public class GameDayController : ControllerBase
         if (!organizerId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, organizerId.Value))
+        if (!await IsEventOrganizerAsync(eventId, organizerId.Value))
             return Forbid();
 
         if (dto.UserIds == null || dto.UserIds.Count == 0)
@@ -1444,7 +1427,7 @@ public class GameDayController : ControllerBase
         if (!organizerId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, organizerId.Value))
+        if (!await IsEventOrganizerAsync(eventId, organizerId.Value))
             return Forbid();
 
         var memberships = await _context.EventUnitMembers
@@ -1482,7 +1465,7 @@ public class GameDayController : ControllerBase
         if (!organizerId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, organizerId.Value))
+        if (!await IsEventOrganizerAsync(eventId, organizerId.Value))
             return Forbid();
 
         var membership = await _context.EventUnitMembers
@@ -1524,7 +1507,7 @@ public class GameDayController : ControllerBase
         if (!userId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, userId.Value))
+        if (!await IsEventOrganizerAsync(eventId, userId.Value))
             return Forbid();
 
         if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
@@ -1567,7 +1550,7 @@ public class GameDayController : ControllerBase
         if (!organizerId.HasValue)
             return Unauthorized(new { success = false, message = "Unauthorized" });
 
-        if (!await IsEventOrganizer(eventId, organizerId.Value))
+        if (!await IsEventOrganizerAsync(eventId, organizerId.Value))
             return Forbid();
 
         var evt = await _context.Events
