@@ -2277,6 +2277,8 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
 
     const start = extractDateTime(event.startDate);
     const end = extractDateTime(event.endDate);
+    const regOpen = extractDateTime(event.registrationOpenDate);
+    const regClose = extractDateTime(event.registrationCloseDate);
 
     setEditFormData({
       name: event.name || '',
@@ -2286,6 +2288,10 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
       startTime: start.time || '09:00',
       endDate: end.date,
       endTime: end.time || '17:00',
+      registrationOpenDate: regOpen.date,
+      registrationOpenTime: regOpen.time || '00:00',
+      registrationCloseDate: regClose.date,
+      registrationCloseTime: regClose.time || '23:59',
       courtId: event.courtId,
       venueName: event.venueName || '',
       address: event.address || '',
@@ -2571,6 +2577,14 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         ? `${editFormData.endDate}T${editFormData.endTime}:00`
         : `${editFormData.startDate}T${editFormData.endTime}:00`;
 
+      // Registration dates (optional)
+      const registrationOpenDate = editFormData.registrationOpenDate
+        ? `${editFormData.registrationOpenDate}T${editFormData.registrationOpenTime || '00:00'}:00`
+        : null;
+      const registrationCloseDate = editFormData.registrationCloseDate
+        ? `${editFormData.registrationCloseDate}T${editFormData.registrationCloseTime || '23:59'}:00`
+        : null;
+
       // Prepare divisions for update - use null for new divisions, number for existing
       const divisionsToSave = editDivisions.map(d => ({
         id: d.isNew ? null : (typeof d.id === 'number' ? d.id : parseInt(d.id) || null),
@@ -2594,6 +2608,8 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         ...editFormData,
         startDate: startDateTime,
         endDate: endDateTime,
+        registrationOpenDate,
+        registrationCloseDate,
         registrationFee: parseFloat(editFormData.registrationFee) || 0,
         perDivisionFee: parseFloat(editFormData.perDivisionFee) || 0,
         maxParticipants: editFormData.maxParticipants ? parseInt(editFormData.maxParticipants) : null,
@@ -5229,6 +5245,35 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                     </div>
                   </div>
 
+                  {/* Registration Window */}
+                  <div className="border-t pt-4 mt-4">
+                    <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-orange-600" />
+                      Registration Window
+                      <span className="text-xs font-normal text-gray-500">(optional)</span>
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 mb-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Registration Opens</label>
+                        <input type="date" value={editFormData?.registrationOpenDate || ''} onChange={(e) => setEditFormData({ ...editFormData, registrationOpenDate: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Open Time</label>
+                        <input type="time" value={editFormData?.registrationOpenTime || ''} onChange={(e) => setEditFormData({ ...editFormData, registrationOpenTime: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Registration Closes</label>
+                        <input type="date" value={editFormData?.registrationCloseDate || ''} onChange={(e) => setEditFormData({ ...editFormData, registrationCloseDate: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Close Time</label>
+                        <input type="time" value={editFormData?.registrationCloseTime || ''} onChange={(e) => setEditFormData({ ...editFormData, registrationCloseTime: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2" />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Registration Fee ($)</label>
@@ -6998,6 +7043,10 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
     startTime: '09:00',
     endDate: '',
     endTime: '17:00',
+    registrationOpenDate: '',
+    registrationOpenTime: '00:00',
+    registrationCloseDate: '',
+    registrationCloseTime: '23:59',
     venueName: courtName ? decodeURIComponent(courtName) : '',
     city: '',
     state: '',
@@ -7191,10 +7240,20 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
         ? `${formData.endDate}T${formData.endTime}:00`
         : `${formData.startDate}T${formData.endTime}:00`;
 
+      // Registration dates (optional)
+      const registrationOpenDate = formData.registrationOpenDate
+        ? `${formData.registrationOpenDate}T${formData.registrationOpenTime}:00`
+        : null;
+      const registrationCloseDate = formData.registrationCloseDate
+        ? `${formData.registrationCloseDate}T${formData.registrationCloseTime}:00`
+        : null;
+
       const response = await eventsApi.create({
         ...formData,
         startDate: startDateTime,
         endDate: endDateTime,
+        registrationOpenDate,
+        registrationCloseDate,
         courtId: selectedCourt?.courtId || undefined
       });
 
@@ -7689,6 +7748,60 @@ function CreateEventModal({ eventTypes, teamUnits = [], skillLevels = [], courtI
                     onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg p-2"
                   />
+                </div>
+              </div>
+
+              {/* Registration Window */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-orange-600" />
+                  Registration Window
+                  <span className="text-xs font-normal text-gray-500">(optional)</span>
+                </h4>
+                <p className="text-xs text-gray-500 mb-3">
+                  Set when registration opens and closes. Leave blank for no restrictions.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Registration Opens</label>
+                    <input
+                      type="date"
+                      value={formData.registrationOpenDate}
+                      onChange={(e) => setFormData({ ...formData, registrationOpenDate: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Open Time</label>
+                    <input
+                      type="time"
+                      value={formData.registrationOpenTime}
+                      onChange={(e) => setFormData({ ...formData, registrationOpenTime: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Registration Closes</label>
+                    <input
+                      type="date"
+                      value={formData.registrationCloseDate}
+                      onChange={(e) => setFormData({ ...formData, registrationCloseDate: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Close Time</label>
+                    <input
+                      type="time"
+                      value={formData.registrationCloseTime}
+                      onChange={(e) => setFormData({ ...formData, registrationCloseTime: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    />
+                  </div>
                 </div>
               </div>
             </>

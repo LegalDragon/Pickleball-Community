@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { eventsApi, eventTypesApi, venuesApi } from '../services/api'
 import {
   Search, Calendar, MapPin, Building2, Users, Filter, ChevronDown, ChevronUp,
-  Edit2, ExternalLink, Eye, EyeOff, Check, X, RefreshCw, AlertTriangle
+  Edit2, ExternalLink, Eye, EyeOff, Check, X, RefreshCw, AlertTriangle, Clock
 } from 'lucide-react'
 
 const EventsAdmin = ({ embedded = false }) => {
@@ -95,11 +95,26 @@ const EventsAdmin = ({ embedded = false }) => {
     }
   }
 
+  // Helper to extract date and time from ISO date string
+  const extractDateTime = (isoString) => {
+    if (!isoString) return { date: '', time: '' }
+    try {
+      const dt = new Date(isoString)
+      const date = dt.toISOString().split('T')[0]
+      const time = dt.toTimeString().slice(0, 5)
+      return { date, time }
+    } catch {
+      return { date: '', time: '' }
+    }
+  }
+
   // Open edit modal
   const handleEdit = async (eventId) => {
     try {
       const response = await eventsApi.adminGet(eventId)
       if (response.success) {
+        const regOpen = extractDateTime(response.data.registrationOpenDate)
+        const regClose = extractDateTime(response.data.registrationCloseDate)
         setEditingEvent(response.data)
         setEditForm({
           name: response.data.name || '',
@@ -116,7 +131,11 @@ const EventsAdmin = ({ embedded = false }) => {
           state: response.data.state || '',
           country: response.data.country || '',
           registrationFee: response.data.registrationFee || 0,
-          perDivisionFee: response.data.perDivisionFee || 0
+          perDivisionFee: response.data.perDivisionFee || 0,
+          registrationOpenDate: regOpen.date,
+          registrationOpenTime: regOpen.time || '00:00',
+          registrationCloseDate: regClose.date,
+          registrationCloseTime: regClose.time || '23:59'
         })
       }
     } catch (err) {
@@ -129,6 +148,14 @@ const EventsAdmin = ({ embedded = false }) => {
     if (!editingEvent) return
     setSaving(true)
     try {
+      // Registration dates (optional)
+      const registrationOpenDate = editForm.registrationOpenDate
+        ? `${editForm.registrationOpenDate}T${editForm.registrationOpenTime || '00:00'}:00`
+        : null
+      const registrationCloseDate = editForm.registrationCloseDate
+        ? `${editForm.registrationCloseDate}T${editForm.registrationCloseTime || '23:59'}:00`
+        : null
+
       const updateData = {
         name: editForm.name,
         description: editForm.description,
@@ -144,7 +171,9 @@ const EventsAdmin = ({ embedded = false }) => {
         state: editForm.state || null,
         country: editForm.country || null,
         registrationFee: editForm.registrationFee ? parseFloat(editForm.registrationFee) : 0,
-        perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0
+        perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0,
+        registrationOpenDate,
+        registrationCloseDate
       }
       const response = await eventsApi.adminUpdate(editingEvent.id, updateData)
       if (response.success) {
@@ -624,6 +653,55 @@ const EventsAdmin = ({ embedded = false }) => {
                     onChange={(e) => setEditForm(prev => ({ ...prev, perDivisionFee: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+              </div>
+
+              {/* Registration Window */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  Registration Window
+                  <span className="text-xs font-normal text-gray-500">(optional)</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Registration Opens</label>
+                    <input
+                      type="date"
+                      value={editForm.registrationOpenDate || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationOpenDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Open Time</label>
+                    <input
+                      type="time"
+                      value={editForm.registrationOpenTime || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationOpenTime: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Registration Closes</label>
+                    <input
+                      type="date"
+                      value={editForm.registrationCloseDate || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationCloseDate: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Close Time</label>
+                    <input
+                      type="time"
+                      value={editForm.registrationCloseTime || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationCloseTime: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
 
