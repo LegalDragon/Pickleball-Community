@@ -53,6 +53,12 @@ public class TournamentController : ControllerBase
         return user?.Role == "Admin";
     }
 
+    private async Task<bool> IsEventOrganizerAsync(int eventId, int userId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        return evt?.OrganizedByUserId == userId;
+    }
+
     // ============================================
     // Score Formats
     // ============================================

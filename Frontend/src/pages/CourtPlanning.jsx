@@ -6,11 +6,12 @@ import {
   Play, AlertCircle, Loader2, Settings, Layers, LayoutGrid
 } from 'lucide-react'
 import { tournamentApi } from '../services/api'
-import toast from 'react-hot-toast'
+import { useToast } from '../contexts/ToastContext'
 
 export default function CourtPlanning() {
   const { eventId } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
