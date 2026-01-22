@@ -49,7 +49,22 @@ public class EventStaffController : ControllerBase
 
     private async Task<bool> CanManageEventAsync(int eventId)
     {
-        return await IsAdminAsync() || await IsEventOrganizerAsync(eventId);
+        if (await IsAdminAsync() || await IsEventOrganizerAsync(eventId))
+            return true;
+
+        // Check if user has Event Admin staff role
+        var userId = GetUserId();
+        if (!userId.HasValue) return false;
+
+        var staff = await _context.EventStaff
+            .Include(s => s.Role)
+            .FirstOrDefaultAsync(s => s.EventId == eventId
+                                   && s.UserId == userId.Value
+                                   && s.Status == "Active"
+                                   && s.Role != null
+                                   && s.Role.CanFullyManageEvent);
+
+        return staff != null;
     }
 
     // ============================================
@@ -77,12 +92,146 @@ public class EventStaffController : ControllerBase
                 CanCheckInPlayers = r.CanCheckInPlayers,
                 CanManageLineups = r.CanManageLineups,
                 CanViewAllData = r.CanViewAllData,
+                CanFullyManageEvent = r.CanFullyManageEvent,
+                AllowSelfRegistration = r.AllowSelfRegistration,
                 SortOrder = r.SortOrder,
                 IsActive = r.IsActive
             })
             .ToListAsync();
 
         return Ok(new ApiResponse<List<EventStaffRoleDto>> { Success = true, Data = roles });
+    }
+
+    /// <summary>
+    /// Admin creates a global staff role (template available for all events)
+    /// </summary>
+    [Authorize(Roles = "Admin")]
+    [HttpPost("roles/global")]
+    public async Task<ActionResult<ApiResponse<EventStaffRoleDto>>> CreateGlobalStaffRole(
+        [FromBody] CreateEventStaffRoleDto dto)
+    {
+        var role = new EventStaffRole
+        {
+            EventId = null, // Global role
+            Name = dto.Name,
+            Description = dto.Description,
+            CanManageSchedule = dto.CanManageSchedule,
+            CanManageCourts = dto.CanManageCourts,
+            CanRecordScores = dto.CanRecordScores,
+            CanCheckInPlayers = dto.CanCheckInPlayers,
+            CanManageLineups = dto.CanManageLineups,
+            CanViewAllData = dto.CanViewAllData,
+            CanFullyManageEvent = dto.CanFullyManageEvent,
+            AllowSelfRegistration = dto.AllowSelfRegistration,
+            SortOrder = dto.SortOrder
+        };
+
+        _context.EventStaffRoles.Add(role);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Admin created global staff role: {RoleName}", role.Name);
+
+        return Ok(new ApiResponse<EventStaffRoleDto>
+        {
+            Success = true,
+            Data = MapRoleToDto(role)
+        });
+    }
+
+    /// <summary>
+    /// Admin updates a global staff role
+    /// </summary>
+    [Authorize(Roles = "Admin")]
+    [HttpPut("roles/global/{roleId}")]
+    public async Task<ActionResult<ApiResponse<EventStaffRoleDto>>> UpdateGlobalStaffRole(
+        int roleId,
+        [FromBody] CreateEventStaffRoleDto dto)
+    {
+        var role = await _context.EventStaffRoles
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.EventId == null);
+
+        if (role == null)
+            return NotFound(new ApiResponse<EventStaffRoleDto> { Success = false, Message = "Global role not found" });
+
+        role.Name = dto.Name;
+        role.Description = dto.Description;
+        role.CanManageSchedule = dto.CanManageSchedule;
+        role.CanManageCourts = dto.CanManageCourts;
+        role.CanRecordScores = dto.CanRecordScores;
+        role.CanCheckInPlayers = dto.CanCheckInPlayers;
+        role.CanManageLineups = dto.CanManageLineups;
+        role.CanViewAllData = dto.CanViewAllData;
+        role.CanFullyManageEvent = dto.CanFullyManageEvent;
+        role.AllowSelfRegistration = dto.AllowSelfRegistration;
+        role.SortOrder = dto.SortOrder;
+        role.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Admin updated global staff role: {RoleId} - {RoleName}", role.Id, role.Name);
+
+        return Ok(new ApiResponse<EventStaffRoleDto>
+        {
+            Success = true,
+            Data = MapRoleToDto(role)
+        });
+    }
+
+    /// <summary>
+    /// Admin deletes (soft-deletes) a global staff role
+    /// </summary>
+    [Authorize(Roles = "Admin")]
+    [HttpDelete("roles/global/{roleId}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteGlobalStaffRole(int roleId)
+    {
+        var role = await _context.EventStaffRoles
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.EventId == null);
+
+        if (role == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Global role not found" });
+
+        // Check if any staff are using this role
+        var staffUsingRole = await _context.EventStaff
+            .AnyAsync(s => s.RoleId == roleId);
+
+        if (staffUsingRole)
+        {
+            // Soft delete - keep for historical records
+            role.IsActive = false;
+            role.UpdatedAt = DateTime.Now;
+        }
+        else
+        {
+            // Hard delete if no staff using it
+            _context.EventStaffRoles.Remove(role);
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Admin deleted global staff role: {RoleId} - {RoleName}", roleId, role.Name);
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    private static EventStaffRoleDto MapRoleToDto(EventStaffRole r)
+    {
+        return new EventStaffRoleDto
+        {
+            Id = r.Id,
+            EventId = r.EventId,
+            Name = r.Name,
+            Description = r.Description,
+            CanManageSchedule = r.CanManageSchedule,
+            CanManageCourts = r.CanManageCourts,
+            CanRecordScores = r.CanRecordScores,
+            CanCheckInPlayers = r.CanCheckInPlayers,
+            CanManageLineups = r.CanManageLineups,
+            CanViewAllData = r.CanViewAllData,
+            CanFullyManageEvent = r.CanFullyManageEvent,
+            AllowSelfRegistration = r.AllowSelfRegistration,
+            SortOrder = r.SortOrder,
+            IsActive = r.IsActive
+        };
     }
 
     /// <summary>
@@ -107,6 +256,8 @@ public class EventStaffController : ControllerBase
                 CanCheckInPlayers = r.CanCheckInPlayers,
                 CanManageLineups = r.CanManageLineups,
                 CanViewAllData = r.CanViewAllData,
+                CanFullyManageEvent = r.CanFullyManageEvent,
+                AllowSelfRegistration = r.AllowSelfRegistration,
                 SortOrder = r.SortOrder,
                 IsActive = r.IsActive
             })
@@ -138,6 +289,8 @@ public class EventStaffController : ControllerBase
             CanCheckInPlayers = dto.CanCheckInPlayers,
             CanManageLineups = dto.CanManageLineups,
             CanViewAllData = dto.CanViewAllData,
+            CanFullyManageEvent = dto.CanFullyManageEvent,
+            AllowSelfRegistration = dto.AllowSelfRegistration,
             SortOrder = dto.SortOrder
         };
 
@@ -156,6 +309,8 @@ public class EventStaffController : ControllerBase
             CanCheckInPlayers = role.CanCheckInPlayers,
             CanManageLineups = role.CanManageLineups,
             CanViewAllData = role.CanViewAllData,
+            CanFullyManageEvent = role.CanFullyManageEvent,
+            AllowSelfRegistration = role.AllowSelfRegistration,
             SortOrder = role.SortOrder,
             IsActive = role.IsActive
         };
@@ -208,7 +363,8 @@ public class EventStaffController : ControllerBase
                 CanRecordScores = s.Role != null && s.Role.CanRecordScores,
                 CanCheckInPlayers = s.Role != null && s.Role.CanCheckInPlayers,
                 CanManageLineups = s.Role != null && s.Role.CanManageLineups,
-                CanViewAllData = s.Role != null && s.Role.CanViewAllData
+                CanViewAllData = s.Role != null && s.Role.CanViewAllData,
+                CanFullyManageEvent = s.Role != null && s.Role.CanFullyManageEvent
             })
             .ToListAsync();
 
@@ -454,6 +610,7 @@ public class EventStaffController : ControllerBase
             "checkinplayers" => staff.Role.CanCheckInPlayers,
             "managelineups" => staff.Role.CanManageLineups,
             "viewalldata" => staff.Role.CanViewAllData,
+            "fullymanageevent" => staff.Role.CanFullyManageEvent,
             _ => false
         };
 
@@ -489,7 +646,8 @@ public class EventStaffController : ControllerBase
             CanRecordScores = s.Role?.CanRecordScores ?? false,
             CanCheckInPlayers = s.Role?.CanCheckInPlayers ?? false,
             CanManageLineups = s.Role?.CanManageLineups ?? false,
-            CanViewAllData = s.Role?.CanViewAllData ?? false
+            CanViewAllData = s.Role?.CanViewAllData ?? false,
+            CanFullyManageEvent = s.Role?.CanFullyManageEvent ?? false
         };
     }
 }

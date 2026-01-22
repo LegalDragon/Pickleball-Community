@@ -31,6 +31,16 @@ public class EventStaffRole
     public bool CanManageLineups { get; set; } = false;
     public bool CanViewAllData { get; set; } = false;
 
+    /// <summary>
+    /// Full event admin - can do everything the organizer can do
+    /// </summary>
+    public bool CanFullyManageEvent { get; set; } = false;
+
+    /// <summary>
+    /// Whether this role is available for user self-registration
+    /// </summary>
+    public bool AllowSelfRegistration { get; set; } = true;
+
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.Now;

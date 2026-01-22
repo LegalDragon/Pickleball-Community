@@ -2316,4 +2316,30 @@ export const locationApi = {
     api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`)
 }
 
+// Event Staff API
+export const eventStaffApi = {
+  // Global staff roles (admin-managed templates)
+  getGlobalRoles: () => api.get('/eventstaff/roles/global'),
+  createGlobalRole: (data) => api.post('/eventstaff/roles/global', data),
+  updateGlobalRole: (roleId, data) => api.put(`/eventstaff/roles/global/${roleId}`, data),
+  deleteGlobalRole: (roleId) => api.delete(`/eventstaff/roles/global/${roleId}`),
+
+  // Event-specific roles
+  getEventRoles: (eventId) => api.get(`/eventstaff/event/${eventId}/roles`),
+  createEventRole: (eventId, data) => api.post(`/eventstaff/event/${eventId}/roles`, data),
+
+  // Staff management
+  getEventStaff: (eventId) => api.get(`/eventstaff/event/${eventId}`),
+  assignStaff: (eventId, data) => api.post(`/eventstaff/event/${eventId}`, data),
+  updateStaff: (eventId, staffId, data) => api.put(`/eventstaff/event/${eventId}/staff/${staffId}`, data),
+  removeStaff: (eventId, staffId) => api.delete(`/eventstaff/event/${eventId}/staff/${staffId}`),
+
+  // Self-registration
+  selfRegister: (eventId, data) => api.post(`/eventstaff/event/${eventId}/self-register`, data),
+  getMyStatus: (eventId) => api.get(`/eventstaff/event/${eventId}/my-status`),
+
+  // Permission check
+  hasPermission: (eventId, permission) => api.get(`/eventstaff/event/${eventId}/has-permission/${permission}`)
+}
+
 export default api
