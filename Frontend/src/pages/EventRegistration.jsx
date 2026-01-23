@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   Calendar, MapPin, Users, DollarSign, ChevronLeft, ChevronRight,
   UserPlus, User, Loader2, AlertCircle, Check, Plus, LogIn,
@@ -32,9 +32,13 @@ const PAYMENT_METHODS = [
 
 export default function EventRegistration() {
   const { eventId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
   const toast = useToast();
+
+  // Query params for pre-selection
+  const preSelectDivisionId = searchParams.get('divisionId');
 
   // Data state
   const [event, setEvent] = useState(null);
@@ -144,6 +148,17 @@ export default function EventRegistration() {
       loadData();
     }
   }, [eventId, isAuthenticated, user?.id]);
+
+  // Auto-select division from query param
+  useEffect(() => {
+    if (event && preSelectDivisionId && !selectedDivision) {
+      const division = event.divisions?.find(d => d.id === parseInt(preSelectDivisionId, 10));
+      if (division) {
+        setSelectedDivision(division);
+        setCurrentStep(2); // Skip to team formation step
+      }
+    }
+  }, [event, preSelectDivisionId, selectedDivision]);
 
   // Load units looking for partners when division is selected
   const loadUnitsLookingForPartners = async (divisionId) => {

@@ -4124,65 +4124,12 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                       : 'Looking for partner'}
                                   </span>
                                   <button
-                                    onClick={() => loadAvailableUnits(reg)}
-                                    disabled={loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId}
-                                    className="text-xs text-orange-700 underline hover:no-underline disabled:opacity-50"
+                                    onClick={() => navigate(`/event/${event.id}/register?divisionId=${reg.divisionId}`)}
+                                    className="text-xs text-orange-700 underline hover:no-underline"
                                   >
-                                    {loadingAvailableUnits && findingPartnerForReg?.unitId === reg.unitId
-                                      ? 'Loading...'
-                                      : (reg.partners?.length > 0 ? 'Change Partner' : 'Find a partner')}
+                                    {reg.partners?.length > 0 ? 'Change Partner' : 'Find a partner'}
                                   </button>
-                                  {findingPartnerForReg?.unitId === reg.unitId && (
-                                    <button
-                                      onClick={() => { setFindingPartnerForReg(null); setAvailableUnits([]); }}
-                                      className="text-xs text-gray-500 hover:text-gray-700"
-                                    >
-                                      Close
-                                    </button>
-                                  )}
                                 </div>
-                                {/* Available units list */}
-                                {findingPartnerForReg?.unitId === reg.unitId && !loadingAvailableUnits && (
-                                  <div className="mt-2 border border-orange-200 rounded-lg overflow-hidden">
-                                    {availableUnits.length === 0 ? (
-                                      <div className="p-3 text-sm text-gray-500 text-center">
-                                        No other players looking for partners in this division yet
-                                      </div>
-                                    ) : (
-                                      <div className="divide-y divide-orange-100">
-                                        {availableUnits.map(unit => (
-                                          <div key={unit.id} className="p-3 flex items-center justify-between bg-orange-50/50">
-                                            <div className="flex items-center gap-2">
-                                              {unit.members?.map(member => (
-                                                <button
-                                                  key={member.id}
-                                                  onClick={() => setSelectedProfileUserId(member.userId)}
-                                                  className="flex items-center gap-1.5 hover:opacity-80"
-                                                >
-                                                  {member.profileImageUrl ? (
-                                                    <img src={getSharedAssetUrl(member.profileImageUrl)} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                                  ) : (
-                                                    <div className="w-6 h-6 rounded-full bg-orange-200 flex items-center justify-center text-xs text-orange-700">
-                                                      {member.firstName?.charAt(0) || '?'}
-                                                    </div>
-                                                  )}
-                                                  <span className="text-sm text-gray-700">{member.firstName} {member.lastName}</span>
-                                                </button>
-                                              ))}
-                                            </div>
-                                            <button
-                                              onClick={() => handleJoinPartnerUnit(unit.id)}
-                                              disabled={joiningUnitId === unit.id}
-                                              className="px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                                            >
-                                              {joiningUnitId === unit.id ? 'Joining...' : 'Join'}
-                                            </button>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                             )}
                           </div>
