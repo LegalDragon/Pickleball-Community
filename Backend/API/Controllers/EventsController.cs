@@ -424,7 +424,7 @@ public class EventsController : EventControllerBase
                 Country = evt.Country,
                 Latitude = evt.Latitude,
                 Longitude = evt.Longitude,
-                CourtId = evt.CourtId,
+                VenueId = evt.CourtId,
                 PosterImageUrl = evt.PosterImageUrl,
                 BannerImageUrl = evt.BannerImageUrl,
                 RegistrationFee = evt.RegistrationFee,
@@ -575,7 +575,7 @@ public class EventsController : EventControllerBase
                 Country = evt.Country,
                 Latitude = evt.Latitude,
                 Longitude = evt.Longitude,
-                CourtId = evt.CourtId,
+                VenueId = evt.CourtId,
                 CourtName = evt.Venue?.Name,
                 PosterImageUrl = evt.PosterImageUrl,
                 BannerImageUrl = evt.BannerImageUrl,
@@ -773,7 +773,7 @@ public class EventsController : EventControllerBase
                     : null,
                 IsPrivate = dto.IsPrivate,
                 AllowMultipleDivisions = dto.AllowMultipleDivisions,
-                CourtId = dto.CourtId,
+                CourtId = dto.VenueId,
                 VenueName = dto.VenueName,
                 Address = dto.Address,
                 City = dto.City,
@@ -904,7 +904,7 @@ public class EventsController : EventControllerBase
             evt.IsPublished = dto.IsPublished;
             evt.IsPrivate = dto.IsPrivate;
             evt.AllowMultipleDivisions = dto.AllowMultipleDivisions;
-            evt.CourtId = dto.CourtId;
+            evt.CourtId = dto.VenueId;
             evt.VenueName = dto.VenueName;
             evt.Address = dto.Address;
             evt.City = dto.City;
@@ -2037,7 +2037,7 @@ public class EventsController : EventControllerBase
             Country = evt.Country,
             Latitude = latitude,
             Longitude = longitude,
-            CourtId = evt.CourtId,
+            VenueId = evt.CourtId,
             PosterImageUrl = evt.PosterImageUrl,
             RegistrationFee = evt.RegistrationFee,
             PerDivisionFee = evt.PerDivisionFee,

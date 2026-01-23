@@ -106,7 +106,7 @@ public class EventDto
     public string? Country { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
-    public int? CourtId { get; set; }
+    public int? VenueId { get; set; }
     public string? PosterImageUrl { get; set; }
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
@@ -380,7 +380,7 @@ public class CreateEventDto
     public DateTime? RegistrationCloseDate { get; set; }
     public bool IsPrivate { get; set; } = false;
     public bool AllowMultipleDivisions { get; set; } = true;
-    public int? CourtId { get; set; }
+    public int? VenueId { get; set; }
     public string? VenueName { get; set; }
     public string? Address { get; set; }
     public string? City { get; set; }
