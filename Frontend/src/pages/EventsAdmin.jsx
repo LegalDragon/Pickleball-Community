@@ -438,7 +438,12 @@ const EventsAdmin = ({ embedded = false }) => {
                 events.map(event => (
                   <tr key={event.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{event.name}</div>
+                      <button
+                        onClick={() => navigate(`/event/${event.id}`)}
+                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+                      >
+                        {event.name}
+                      </button>
                       <div className="text-sm text-gray-500">{event.eventTypeName}</div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
