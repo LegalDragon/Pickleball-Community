@@ -5977,7 +5977,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                     <Plus className="w-4 h-4" />
-                    {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Find Partner' : 'Create New Team'}
+                    {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Let Teammate Join' : 'Create New Team'}
                   </h4>
                   <p className="text-sm text-gray-600 mb-3">
                     {selectedDivisionForRegistration.teamSize === 2
@@ -6031,7 +6031,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                     ) : (
                       <>
                         <Plus className="w-4 h-4" />
-                        {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Find Partner Later' : 'Create Team & Find Players Later'}
+                        {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Let Teammate Join Later' : 'Create Team & Find Players Later'}
                       </>
                     )}
                   </button>
@@ -6043,7 +6043,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
               <div>
                 <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                   <UserPlus className="w-4 h-4" />
-                  {selectedDivisionForRegistration.teamSize === 2 ? 'Partner with Someone' : 'Join Existing Team'}
+                  {selectedDivisionForRegistration.teamSize === 2 ? 'Join Existing Registration' : 'Join Existing Team'}
                 </h4>
 
                 {/* Join by Code Input */}

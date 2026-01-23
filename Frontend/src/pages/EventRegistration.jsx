@@ -1328,7 +1328,7 @@ export default function EventRegistration() {
                   <div className="mb-6">
                     <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <Plus className="w-4 h-4" />
-                      {getTeamSize(selectedDivision) === 2 ? 'Register & Find Partner' : 'Create New Team'}
+                      {getTeamSize(selectedDivision) === 2 ? 'Register & Let Teammate Join' : 'Create New Team'}
                     </h3>
                     <p className="text-sm text-gray-600 mb-4">
                       {getTeamSize(selectedDivision) === 2
@@ -1382,7 +1382,7 @@ export default function EventRegistration() {
                       ) : (
                         <>
                           <Plus className="w-4 h-4" />
-                          Register & Find Partner Later
+                          Register & Let Teammate Join Later
                         </>
                       )}
                     </button>
