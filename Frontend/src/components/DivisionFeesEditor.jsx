@@ -1,35 +1,27 @@
 import { useState, useEffect } from 'react';
-import { Plus, DollarSign, Loader2, ChevronDown, ChevronUp, Star, ToggleLeft, ToggleRight, RefreshCw, Calendar } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, DollarSign, Calendar, Star, ToggleLeft, ToggleRight, RefreshCw, Plus } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
 /**
- * Component for managing multiple fee options for a division
- * Matches the same format as EventFeesEditor
+ * Component for managing fee options for a division.
+ * Matches the same table format as EventFeesEditor.
+ * Shows all event fee types and allows setting amounts + custom fees.
  */
 export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, onFeesChange }) {
   const toast = useToast();
-  const [fees, setFees] = useState([]);
   const [feeTypes, setFeeTypes] = useState([]);
+  const [fees, setFees] = useState([]); // Existing division fees
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [isExpanded, setIsExpanded] = useState(false);
-  const [editingFeeId, setEditingFeeId] = useState(null);
+  const [editingId, setEditingId] = useState(null); // feeTypeId for type-based, or 'custom-{id}' for custom fees
   const [editValues, setEditValues] = useState({});
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newFee, setNewFee] = useState({
-    feeTypeId: '',
-    name: '',
-    description: '',
-    amount: 0,
-    isDefault: false,
-    availableFrom: '',
-    availableUntil: '',
-    isActive: true
-  });
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customFee, setCustomFee] = useState({ name: '', amount: 0 });
 
   useEffect(() => {
-    if (divisionId) {
+    if (divisionId && eventId) {
       loadData();
     } else {
       setFees([]);
@@ -39,19 +31,18 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
   }, [divisionId, eventId]);
 
   const loadData = async () => {
-    if (!divisionId) return;
+    if (!divisionId || !eventId) return;
     setLoading(true);
     try {
-      const requests = [tournamentApi.getDivisionFees(divisionId)];
-      if (eventId) {
-        requests.push(tournamentApi.getEventFeeTypes(eventId));
+      const [feesResponse, feeTypesResponse] = await Promise.all([
+        tournamentApi.getDivisionFees(divisionId),
+        tournamentApi.getEventFeeTypes(eventId)
+      ]);
+      if (feesResponse.success) {
+        setFees(feesResponse.data || []);
       }
-      const results = await Promise.all(requests);
-      if (results[0].success) {
-        setFees(results[0].data || []);
-      }
-      if (results.length > 1 && results[1].success) {
-        setFeeTypes(results[1].data || []);
+      if (feeTypesResponse.success) {
+        setFeeTypes(feeTypesResponse.data || []);
       }
     } catch (error) {
       console.error('Failed to load fees:', error);
@@ -66,63 +57,117 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     return date.toISOString().slice(0, 16);
   };
 
-  const handleStartEdit = (fee) => {
-    setEditingFeeId(fee.id);
+  // Get the existing division fee for a fee type (if any)
+  const getFeeForType = (feeTypeId) => {
+    return fees.find(f => f.feeTypeId === feeTypeId);
+  };
+
+  // Get custom fees (fees without a feeTypeId)
+  const getCustomFees = () => {
+    return fees.filter(f => !f.feeTypeId);
+  };
+
+  const handleStartEdit = (feeTypeId, existingFee) => {
+    setEditingId(feeTypeId);
     setEditValues({
-      feeTypeId: fee.feeTypeId || '',
-      name: fee.name,
-      description: fee.description || '',
-      amount: fee.amount ?? 0,
-      isDefault: fee.isDefault ?? false,
-      availableFrom: fee.availableFrom ? formatDateForInput(fee.availableFrom) : '',
-      availableUntil: fee.availableUntil ? formatDateForInput(fee.availableUntil) : '',
-      isActive: fee.isActive ?? true
+      amount: existingFee?.amount ?? 0,
+      isDefault: existingFee?.isDefault ?? false,
+      availableFrom: existingFee?.availableFrom ? formatDateForInput(existingFee.availableFrom) : '',
+      availableUntil: existingFee?.availableUntil ? formatDateForInput(existingFee.availableUntil) : '',
+      isActive: existingFee?.isActive ?? true,
+      name: existingFee?.name || ''
     });
   };
 
   const handleCancelEdit = () => {
-    setEditingFeeId(null);
+    setEditingId(null);
     setEditValues({});
   };
 
-  const handleSaveFee = async (feeId) => {
-    if (!editValues.name?.trim()) {
-      toast.error('Fee name is required');
-      return;
-    }
+  const handleSaveFee = async (feeTypeId, feeType = null) => {
+    const existingFee = feeTypeId ? getFeeForType(feeTypeId) : null;
+    const saveKey = feeTypeId || 'custom';
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
 
-    setSaving(prev => ({ ...prev, [feeId]: true }));
     try {
       const payload = {
-        feeTypeId: editValues.feeTypeId || null,
-        name: editValues.name,
-        description: editValues.description,
+        feeTypeId: feeTypeId || null,
+        name: feeType?.name || editValues.name || 'Custom Fee',
+        description: feeType?.description || '',
         amount: parseFloat(editValues.amount) || 0,
         isDefault: editValues.isDefault,
         availableFrom: editValues.availableFrom || null,
         availableUntil: editValues.availableUntil || null,
-        isActive: editValues.isActive
+        isActive: editValues.isActive,
+        sortOrder: fees.length
       };
 
-      const response = await tournamentApi.updateDivisionFee(divisionId, feeId, payload);
+      let response;
+      if (existingFee) {
+        response = await tournamentApi.updateDivisionFee(divisionId, existingFee.id, payload);
+      } else {
+        response = await tournamentApi.createDivisionFee(divisionId, payload);
+      }
+
       if (response.success) {
-        setFees(fees.map(f => f.id === feeId ? response.data : f));
-        setEditingFeeId(null);
+        if (existingFee) {
+          setFees(fees.map(f => f.id === existingFee.id ? response.data : f));
+        } else {
+          setFees([...fees, response.data]);
+        }
+        setEditingId(null);
+        setEditValues({});
+        toast.success(existingFee ? 'Fee updated' : 'Fee created');
+        onFeesChange?.();
+      } else {
+        toast.error(response.message || 'Failed to save fee');
+      }
+    } catch (error) {
+      toast.error('Failed to save fee');
+    } finally {
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
+    }
+  };
+
+  const handleSaveCustomFee = async (customFeeRecord) => {
+    const saveKey = `custom-${customFeeRecord.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
+    try {
+      const payload = {
+        feeTypeId: null,
+        name: editValues.name || customFeeRecord.name,
+        description: '',
+        amount: parseFloat(editValues.amount) || 0,
+        isDefault: editValues.isDefault,
+        availableFrom: editValues.availableFrom || null,
+        availableUntil: editValues.availableUntil || null,
+        isActive: editValues.isActive,
+        sortOrder: customFeeRecord.sortOrder
+      };
+
+      const response = await tournamentApi.updateDivisionFee(divisionId, customFeeRecord.id, payload);
+
+      if (response.success) {
+        setFees(fees.map(f => f.id === customFeeRecord.id ? response.data : f));
+        setEditingId(null);
         setEditValues({});
         toast.success('Fee updated');
         onFeesChange?.();
       } else {
-        toast.error(response.message || 'Failed to update fee');
+        toast.error(response.message || 'Failed to save fee');
       }
     } catch (error) {
-      toast.error('Failed to update fee');
+      toast.error('Failed to save fee');
     } finally {
-      setSaving(prev => ({ ...prev, [feeId]: false }));
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
     }
   };
 
   const handleToggleActive = async (fee) => {
-    setSaving(prev => ({ ...prev, [fee.id]: true }));
+    const saveKey = fee.feeTypeId || `custom-${fee.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
     try {
       const response = await tournamentApi.updateDivisionFee(divisionId, fee.id, {
         feeTypeId: fee.feeTypeId || null,
@@ -145,18 +190,20 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     } catch (error) {
       toast.error('Failed to update fee');
     } finally {
-      setSaving(prev => ({ ...prev, [fee.id]: false }));
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
     }
   };
 
-  const handleDeleteFee = async (feeId) => {
-    if (!confirm('Remove this fee option?')) return;
+  const handleDeleteFee = async (fee) => {
+    if (!confirm('Remove this fee?')) return;
 
-    setSaving(prev => ({ ...prev, [feeId]: true }));
+    const saveKey = fee.feeTypeId || `custom-${fee.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
     try {
-      const response = await tournamentApi.deleteDivisionFee(divisionId, feeId);
+      const response = await tournamentApi.deleteDivisionFee(divisionId, fee.id);
       if (response.success) {
-        setFees(fees.filter(f => f.id !== feeId));
+        setFees(fees.filter(f => f.id !== fee.id));
         toast.success('Fee removed');
         onFeesChange?.();
       } else {
@@ -165,61 +212,32 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     } catch (error) {
       toast.error('Failed to remove fee');
     } finally {
-      setSaving(prev => ({ ...prev, [feeId]: false }));
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
     }
   };
 
-  const handleFeeTypeChange = (feeTypeId, isNew = true) => {
-    if (feeTypeId) {
-      const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
-      if (feeType) {
-        const values = {
-          feeTypeId: feeType.id,
-          name: feeType.name,
-          description: feeType.description || '',
-          amount: feeType.defaultAmount,
-          availableFrom: feeType.availableFrom ? formatDateForInput(feeType.availableFrom) : '',
-          availableUntil: feeType.availableUntil ? formatDateForInput(feeType.availableUntil) : ''
-        };
-        if (isNew) {
-          setNewFee({ ...newFee, ...values });
-        } else {
-          setEditValues({ ...editValues, ...values });
-        }
-        return;
-      }
-    }
-    if (isNew) {
-      setNewFee({ ...newFee, feeTypeId: '' });
-    } else {
-      setEditValues({ ...editValues, feeTypeId: '' });
-    }
-  };
-
-  const handleAddFee = async () => {
-    if (!newFee.name.trim()) {
+  const handleAddCustomFee = async () => {
+    if (!customFee.name.trim()) {
       toast.error('Fee name is required');
       return;
     }
 
-    setSaving(prev => ({ ...prev, new: true }));
+    setSaving(prev => ({ ...prev, addCustom: true }));
     try {
       const response = await tournamentApi.createDivisionFee(divisionId, {
-        feeTypeId: newFee.feeTypeId || null,
-        name: newFee.name,
-        description: newFee.description,
-        amount: parseFloat(newFee.amount) || 0,
-        isDefault: newFee.isDefault,
-        availableFrom: newFee.availableFrom || null,
-        availableUntil: newFee.availableUntil || null,
+        feeTypeId: null,
+        name: customFee.name,
+        description: '',
+        amount: parseFloat(customFee.amount) || 0,
+        isDefault: false,
         isActive: true,
         sortOrder: fees.length
       });
 
       if (response.success) {
         setFees([...fees, response.data]);
-        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
-        setShowAddForm(false);
+        setAddingCustom(false);
+        setCustomFee({ name: '', amount: 0 });
         toast.success('Fee added');
         onFeesChange?.();
       } else {
@@ -228,11 +246,12 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     } catch (error) {
       toast.error('Failed to add fee');
     } finally {
-      setSaving(prev => ({ ...prev, new: false }));
+      setSaving(prev => ({ ...prev, addCustom: false }));
     }
   };
 
-  const hasFees = fees.length > 0;
+  const hasFeeTypes = feeTypes.length > 0;
+  const customFees = getCustomFees();
   const configuredFees = fees.filter(f => f.isActive);
 
   if (!divisionId) {
@@ -266,14 +285,14 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                 {configuredFees.map(f => `${f.name}: $${f.amount}`).join(', ')}
               </p>
             )}
-            {!isExpanded && !hasFees && divisionFee > 0 && (
+            {!isExpanded && !hasFeeTypes && configuredFees.length === 0 && divisionFee > 0 && (
               <p className="text-sm text-gray-500 mt-1">
                 Using single division fee: ${divisionFee}
               </p>
             )}
-            {!isExpanded && !hasFees && !divisionFee && (
+            {!isExpanded && !hasFeeTypes && configuredFees.length === 0 && !divisionFee && (
               <p className="text-sm text-gray-500 mt-1">
-                No division fees configured yet. Click to add fee options.
+                No fees configured. Click to set up fee options.
               </p>
             )}
           </div>
@@ -305,8 +324,8 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                 Set fee options for this division (e.g., Early Bird, Regular, Late Registration).
               </p>
 
-              {/* Fee table */}
-              {hasFees && (
+              {/* Fee types table */}
+              {(hasFeeTypes || customFees.length > 0 || fees.length > 0) && (
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-gray-50">
@@ -319,17 +338,19 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {fees.map(fee => {
-                        const isEditing = editingFeeId === fee.id;
-                        const isSaving = saving[fee.id];
+                      {/* Fee types from event */}
+                      {feeTypes.map(feeType => {
+                        const divisionFeeRecord = getFeeForType(feeType.id);
+                        const isEditing = editingId === feeType.id;
+                        const isSaving = saving[feeType.id];
 
                         return (
-                          <tr key={fee.id} className={`${!fee.isActive ? 'bg-gray-50' : ''}`}>
+                          <tr key={`type-${feeType.id}`} className={`${divisionFeeRecord?.isActive === false ? 'bg-gray-50' : ''}`}>
                             <td className="px-3 py-2">
                               <div>
-                                <span className="font-medium text-gray-900">{fee.name}</span>
-                                {fee.description && (
-                                  <p className="text-xs text-gray-500">{fee.description}</p>
+                                <span className="font-medium text-gray-900">{feeType.name}</span>
+                                {feeType.description && (
+                                  <p className="text-xs text-gray-500">{feeType.description}</p>
                                 )}
                               </div>
                             </td>
@@ -345,6 +366,130 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                                     onChange={(e) => setEditValues({ ...editValues, amount: e.target.value })}
                                     className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
                                     autoFocus
+                                  />
+                                </div>
+                              ) : divisionFeeRecord ? (
+                                <span className={`font-medium ${divisionFeeRecord.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                                  ${divisionFeeRecord.amount?.toFixed(2) || '0.00'}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {divisionFeeRecord ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleActive(divisionFeeRecord)}
+                                  disabled={isSaving}
+                                  className="text-gray-500 hover:text-gray-700"
+                                >
+                                  {isSaving ? (
+                                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                                  ) : divisionFeeRecord.isActive ? (
+                                    <ToggleRight className="w-6 h-6 text-green-500" />
+                                  ) : (
+                                    <ToggleLeft className="w-6 h-6 text-gray-300" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {isEditing ? (
+                                <input
+                                  type="checkbox"
+                                  checked={editValues.isDefault}
+                                  onChange={(e) => setEditValues({ ...editValues, isDefault: e.target.checked })}
+                                  className="rounded"
+                                />
+                              ) : divisionFeeRecord?.isDefault ? (
+                                <Star className="w-4 h-4 text-yellow-500 mx-auto" />
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {isEditing ? (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveFee(feeType.id, feeType)}
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    {isSaving ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(feeType.id, divisionFeeRecord)}
+                                    className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    {divisionFeeRecord ? 'Edit' : 'Set Amount'}
+                                  </button>
+                                  {divisionFeeRecord && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFee(divisionFeeRecord)}
+                                      disabled={isSaving}
+                                      className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* Custom fees (not based on fee type) */}
+                      {customFees.map(fee => {
+                        const editKey = `custom-${fee.id}`;
+                        const isEditing = editingId === editKey;
+                        const isSaving = saving[editKey];
+
+                        return (
+                          <tr key={editKey} className={`${fee.isActive === false ? 'bg-gray-50' : ''}`}>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editValues.name}
+                                  onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                                  placeholder="Fee name"
+                                />
+                              ) : (
+                                <div>
+                                  <span className="font-medium text-gray-900">{fee.name}</span>
+                                  <span className="ml-2 text-xs text-gray-400">(custom)</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-gray-500">$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editValues.amount}
+                                    onChange={(e) => setEditValues({ ...editValues, amount: e.target.value })}
+                                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
                                   />
                                 </div>
                               ) : (
@@ -388,7 +533,7 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                                 <div className="flex justify-end gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleSaveFee(fee.id)}
+                                    onClick={() => handleSaveCustomFee(fee)}
                                     disabled={isSaving}
                                     className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                                   >
@@ -406,14 +551,14 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                                 <div className="flex justify-end gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEdit(fee)}
+                                    onClick={() => handleStartEdit(editKey, fee)}
                                     className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
                                   >
                                     Edit
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteFee(fee.id)}
+                                    onClick={() => handleDeleteFee(fee)}
                                     disabled={isSaving}
                                     className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
                                   >
@@ -425,192 +570,115 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
                           </tr>
                         );
                       })}
+
+                      {/* Add custom fee row */}
+                      {addingCustom && (
+                        <tr className="bg-green-50">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={customFee.name}
+                              onChange={(e) => setCustomFee({ ...customFee, name: e.target.value })}
+                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                              placeholder="Fee name"
+                              autoFocus
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500">$</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={customFee.amount}
+                                onChange={(e) => setCustomFee({ ...customFee, amount: e.target.value })}
+                                className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-gray-300">-</span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-gray-300">-</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={handleAddCustomFee}
+                                disabled={saving.addCustom || !customFee.name.trim()}
+                                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {saving.addCustom ? 'Adding...' : 'Add'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddingCustom(false);
+                                  setCustomFee({ name: '', amount: 0 });
+                                }}
+                                className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               )}
 
               {/* Date range editing when in edit mode */}
-              {editingFeeId && (
+              {editingId && (
                 <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg">
-                  <div className="space-y-3">
-                    {feeTypes.length > 0 && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
-                        <select
-                          value={editValues.feeTypeId || ''}
-                          onChange={(e) => handleFeeTypeChange(e.target.value, false)}
-                          className="w-full border border-gray-300 rounded p-2 text-sm"
-                        >
-                          <option value="">Custom (no fee type)</option>
-                          {feeTypes.map(ft => (
-                            <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-                        <input
-                          type="text"
-                          value={editValues.name || ''}
-                          onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
-                          className="w-full border border-gray-300 rounded p-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                        <input
-                          type="text"
-                          value={editValues.description || ''}
-                          onChange={(e) => setEditValues({ ...editValues, description: e.target.value })}
-                          className="w-full border border-gray-300 rounded p-2 text-sm"
-                        />
-                      </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">Date Range (optional)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Available From</label>
+                      <input
+                        type="datetime-local"
+                        value={editValues.availableFrom || ''}
+                        onChange={(e) => setEditValues({ ...editValues, availableFrom: e.target.value })}
+                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                      />
                     </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium text-gray-700">Date Range (optional)</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Available From</label>
-                        <input
-                          type="datetime-local"
-                          value={editValues.availableFrom || ''}
-                          onChange={(e) => setEditValues({ ...editValues, availableFrom: e.target.value })}
-                          className="w-full border border-gray-300 rounded p-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Available Until</label>
-                        <input
-                          type="datetime-local"
-                          value={editValues.availableUntil || ''}
-                          onChange={(e) => setEditValues({ ...editValues, availableUntil: e.target.value })}
-                          className="w-full border border-gray-300 rounded p-2 text-sm"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Available Until</label>
+                      <input
+                        type="datetime-local"
+                        value={editValues.availableUntil || ''}
+                        onChange={(e) => setEditValues({ ...editValues, availableUntil: e.target.value })}
+                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                      />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Add new fee form */}
-              {showAddForm ? (
-                <div className="p-3 border border-green-200 bg-green-50 rounded-lg space-y-3">
-                  <h5 className="font-medium text-gray-900 text-sm">Add New Fee Option</h5>
-                  {feeTypes.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
-                      <select
-                        value={newFee.feeTypeId || ''}
-                        onChange={(e) => handleFeeTypeChange(e.target.value, true)}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      >
-                        <option value="">Custom (no fee type)</option>
-                        {feeTypes.map(ft => (
-                          <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
-                      <input
-                        type="text"
-                        value={newFee.name}
-                        onChange={(e) => setNewFee({ ...newFee, name: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        placeholder="e.g., Early Bird"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Amount ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={newFee.amount}
-                        onChange={(e) => setNewFee({ ...newFee, amount: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                    <input
-                      type="text"
-                      value={newFee.description}
-                      onChange={(e) => setNewFee({ ...newFee, description: e.target.value })}
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      placeholder="Optional description"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available From</label>
-                      <input
-                        type="datetime-local"
-                        value={newFee.availableFrom}
-                        onChange={(e) => setNewFee({ ...newFee, availableFrom: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available Until</label>
-                      <input
-                        type="datetime-local"
-                        value={newFee.availableUntil}
-                        onChange={(e) => setNewFee({ ...newFee, availableUntil: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={newFee.isDefault}
-                        onChange={(e) => setNewFee({ ...newFee, isDefault: e.target.checked })}
-                        className="rounded"
-                      />
-                      Default selection
-                    </label>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddForm(false);
-                        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
-                      }}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddFee}
-                      disabled={saving.new || !newFee.name.trim()}
-                      className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {saving.new && <Loader2 className="w-3 h-3 animate-spin" />}
-                      Add Fee
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              {/* Add custom fee button */}
+              {!addingCustom && (
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => setAddingCustom(true)}
                   className="w-full p-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Fee Option
+                  Add Custom Fee
                 </button>
+              )}
+
+              {/* Empty state when no fee types */}
+              {!hasFeeTypes && customFees.length === 0 && fees.length === 0 && !addingCustom && (
+                <div className="text-center py-4 text-gray-500">
+                  <p>No fee types defined for this event. Add custom fees or define fee types at the event level.</p>
+                </div>
               )}
             </>
           )}
