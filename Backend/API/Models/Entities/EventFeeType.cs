@@ -4,8 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Pickleball.Community.Models.Entities;
 
 /// <summary>
-/// Defines a fee type template for an event (e.g., "Early Bird", "Regular", "Late Registration").
-/// Fee types are defined once at the event level and can be used by both event fees and division fees.
+/// Defines a fee type name/template for an event (e.g., "Early Bird", "Regular", "Late Registration").
+/// Fee types are defined once at the event level and referenced by both event fees (DivisionId=0) and division fees.
+/// This is just a name/label - actual amounts are stored in DivisionFees table.
 /// </summary>
 public class EventFeeType
 {
@@ -24,22 +25,6 @@ public class EventFeeType
     public string? Description { get; set; } // e.g., "Register before Jan 15 for discounted rate"
 
     /// <summary>
-    /// Default amount for this fee type (can be overridden per division)
-    /// </summary>
-    [Column(TypeName = "decimal(10,2)")]
-    public decimal DefaultAmount { get; set; } = 0;
-
-    /// <summary>
-    /// Optional: Date when this fee type becomes available
-    /// </summary>
-    public DateTime? AvailableFrom { get; set; }
-
-    /// <summary>
-    /// Optional: Date when this fee type expires (useful for Early Bird pricing)
-    /// </summary>
-    public DateTime? AvailableUntil { get; set; }
-
-    /// <summary>
     /// Whether this fee type is currently active
     /// </summary>
     public bool IsActive { get; set; } = true;
@@ -54,23 +39,7 @@ public class EventFeeType
     public Event? Event { get; set; }
 
     /// <summary>
-    /// Division fees that use this fee type
+    /// Fees that use this fee type (both event-level and division-level)
     /// </summary>
-    public ICollection<DivisionFee> DivisionFees { get; set; } = new List<DivisionFee>();
-
-    /// <summary>
-    /// Helper to check if this fee type is currently available based on date range
-    /// </summary>
-    [NotMapped]
-    public bool IsCurrentlyAvailable
-    {
-        get
-        {
-            if (!IsActive) return false;
-            var now = DateTime.UtcNow;
-            if (AvailableFrom.HasValue && now < AvailableFrom.Value) return false;
-            if (AvailableUntil.HasValue && now > AvailableUntil.Value) return false;
-            return true;
-        }
-    }
+    public ICollection<DivisionFee> Fees { get; set; } = new List<DivisionFee>();
 }

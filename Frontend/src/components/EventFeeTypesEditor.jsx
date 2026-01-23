@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, Edit3, Loader2, ChevronDown, ChevronUp, Tag } from 'lucide-react';
+import { Plus, Trash2, Edit3, Loader2, ChevronDown, ChevronUp, Tag, Check, X } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
 /**
- * Component for managing fee type templates at the event level.
- * Fee types define the available fee options (e.g., Early Bird, Regular, Late Registration)
- * that can be used by both event fees and division fees.
+ * Component for managing fee type names at the event level.
+ * Fee types are just names (e.g., "Early Bird", "Regular", "Late Registration").
+ * Actual amounts are set separately for event fees and division fees.
  */
 export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
   const toast = useToast();
@@ -14,18 +14,13 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [editingFeeType, setEditingFeeType] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newFeeType, setNewFeeType] = useState({
-    name: '',
-    description: '',
-    defaultAmount: 0,
-    availableFrom: '',
-    availableUntil: '',
-    isActive: true
-  });
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
 
-  // Load fee types when eventId changes
   useEffect(() => {
     if (eventId) {
       loadFeeTypes();
@@ -51,7 +46,7 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
   };
 
   const handleAddFeeType = async () => {
-    if (!newFeeType.name.trim()) {
+    if (!newName.trim()) {
       toast.error('Fee type name is required');
       return;
     }
@@ -59,18 +54,16 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
     setSaving(true);
     try {
       const response = await tournamentApi.createEventFeeType(eventId, {
-        name: newFeeType.name,
-        description: newFeeType.description,
-        defaultAmount: parseFloat(newFeeType.defaultAmount) || 0,
-        availableFrom: newFeeType.availableFrom || null,
-        availableUntil: newFeeType.availableUntil || null,
+        name: newName.trim(),
+        description: newDescription.trim() || null,
         isActive: true,
         sortOrder: feeTypes.length
       });
 
       if (response.success) {
         setFeeTypes([...feeTypes, response.data]);
-        setNewFeeType({ name: '', description: '', defaultAmount: 0, availableFrom: '', availableUntil: '', isActive: true });
+        setNewName('');
+        setNewDescription('');
         setShowAddForm(false);
         toast.success('Fee type added');
         onFeeTypesChange?.();
@@ -84,22 +77,39 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
     }
   };
 
-  const handleUpdateFeeType = async (feeType) => {
+  const handleStartEdit = (feeType) => {
+    setEditingId(feeType.id);
+    setEditingName(feeType.name);
+    setEditingDescription(feeType.description || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingName('');
+    setEditingDescription('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingName.trim()) {
+      toast.error('Fee type name is required');
+      return;
+    }
+
     setSaving(true);
     try {
-      const response = await tournamentApi.updateEventFeeType(eventId, feeType.id, {
-        name: feeType.name,
-        description: feeType.description,
-        defaultAmount: parseFloat(feeType.defaultAmount) || 0,
-        availableFrom: feeType.availableFrom || null,
-        availableUntil: feeType.availableUntil || null,
+      const feeType = feeTypes.find(ft => ft.id === editingId);
+      const response = await tournamentApi.updateEventFeeType(eventId, editingId, {
+        name: editingName.trim(),
+        description: editingDescription.trim() || null,
         isActive: feeType.isActive,
         sortOrder: feeType.sortOrder
       });
 
       if (response.success) {
-        setFeeTypes(feeTypes.map(ft => ft.id === feeType.id ? response.data : ft));
-        setEditingFeeType(null);
+        setFeeTypes(feeTypes.map(ft => ft.id === editingId ? response.data : ft));
+        setEditingId(null);
+        setEditingName('');
+        setEditingDescription('');
         toast.success('Fee type updated');
         onFeeTypesChange?.();
       } else {
@@ -132,14 +142,7 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
     }
   };
 
-  const formatDateForInput = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
-  };
-
   const hasFeeTypes = feeTypes.length > 0;
-  const activeFeeTypes = feeTypes.filter(ft => ft.isActive && ft.isCurrentlyAvailable);
 
   if (!eventId) {
     return (
@@ -173,7 +176,7 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
           )}
           {!isExpanded && !hasFeeTypes && (
             <p className="text-sm text-gray-500 mt-1">
-              Define fee types (Early Bird, Regular, Late) that can be used by event and division fees.
+              Define fee type names (e.g., Early Bird, Regular, Late) first.
             </p>
           )}
         </div>
@@ -188,227 +191,123 @@ export default function EventFeeTypesEditor({ eventId, onFeeTypesChange }) {
             </div>
           ) : (
             <>
-              {/* Help text */}
               <p className="text-sm text-gray-500">
-                Define fee type templates here. These types can then be used when setting up event fees or division fees.
-                Date ranges control when each fee type is available for registration.
+                Define fee type names here. Then set amounts for each type in the Event Fees section below.
               </p>
 
               {/* Fee type list */}
               {feeTypes.length > 0 && (
                 <div className="space-y-2">
                   {feeTypes.map(feeType => (
-                    <div key={feeType.id} className={`p-3 border rounded-lg ${feeType.isActive ? 'bg-white' : 'bg-gray-50'}`}>
-                      {editingFeeType?.id === feeType.id ? (
+                    <div key={feeType.id} className="flex items-center gap-2 p-2 border rounded-lg bg-white">
+                      {editingId === feeType.id ? (
                         // Edit mode
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-                              <input
-                                type="text"
-                                value={editingFeeType.name}
-                                onChange={(e) => setEditingFeeType({ ...editingFeeType, name: e.target.value })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Default Amount ($)</label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={editingFeeType.defaultAmount}
-                                onChange={(e) => setEditingFeeType({ ...editingFeeType, defaultAmount: e.target.value })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                        <>
+                          <div className="flex-1 flex gap-2">
                             <input
                               type="text"
-                              value={editingFeeType.description || ''}
-                              onChange={(e) => setEditingFeeType({ ...editingFeeType, description: e.target.value })}
-                              className="w-full border border-gray-300 rounded p-2 text-sm"
-                              placeholder="Optional description"
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                              placeholder="Name"
+                              autoFocus
+                            />
+                            <input
+                              type="text"
+                              value={editingDescription}
+                              onChange={(e) => setEditingDescription(e.target.value)}
+                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                              placeholder="Description (optional)"
                             />
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Available From</label>
-                              <input
-                                type="datetime-local"
-                                value={formatDateForInput(editingFeeType.availableFrom)}
-                                onChange={(e) => setEditingFeeType({ ...editingFeeType, availableFrom: e.target.value || null })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Available Until</label>
-                              <input
-                                type="datetime-local"
-                                value={formatDateForInput(editingFeeType.availableUntil)}
-                                onChange={(e) => setEditingFeeType({ ...editingFeeType, availableUntil: e.target.value || null })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={editingFeeType.isActive}
-                                onChange={(e) => setEditingFeeType({ ...editingFeeType, isActive: e.target.checked })}
-                                className="rounded"
-                              />
-                              Active
-                            </label>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingFeeType(null)}
-                              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateFeeType(editingFeeType)}
-                              disabled={saving}
-                              className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
-                            >
-                              {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                              Save
-                            </button>
-                          </div>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={handleSaveEdit}
+                            disabled={saving}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
                       ) : (
                         // View mode
-                        <div className="flex items-center justify-between">
+                        <>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">{feeType.name}</span>
-                              <span className="text-green-600 font-medium">${feeType.defaultAmount}</span>
-                              {!feeType.isActive && (
-                                <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Inactive</span>
-                              )}
-                              {feeType.isActive && !feeType.isCurrentlyAvailable && (
-                                <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Not in date range</span>
-                              )}
-                            </div>
+                            <span className="font-medium text-gray-900">{feeType.name}</span>
                             {feeType.description && (
-                              <p className="text-sm text-gray-500 mt-0.5">{feeType.description}</p>
+                              <span className="text-sm text-gray-500 ml-2">- {feeType.description}</span>
                             )}
-                            {(feeType.availableFrom || feeType.availableUntil) && (
-                              <p className="text-xs text-gray-400 mt-1">
-                                {feeType.availableFrom && `From: ${new Date(feeType.availableFrom).toLocaleDateString()}`}
-                                {feeType.availableFrom && feeType.availableUntil && ' - '}
-                                {feeType.availableUntil && `Until: ${new Date(feeType.availableUntil).toLocaleDateString()}`}
-                              </p>
+                            {feeType.hasEventFee && (
+                              <span className="text-xs text-green-600 ml-2">(${feeType.eventFeeAmount})</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setEditingFeeType({ ...feeType })}
-                              className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteFeeType(feeType.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(feeType)}
+                            className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFeeType(feeType.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Add new fee type form */}
+              {/* Add new fee type */}
               {showAddForm ? (
-                <div className="p-3 border border-purple-200 bg-purple-50 rounded-lg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
-                      <input
-                        type="text"
-                        value={newFeeType.name}
-                        onChange={(e) => setNewFeeType({ ...newFeeType, name: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        placeholder="e.g., Early Bird"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Default Amount ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={newFeeType.defaultAmount}
-                        onChange={(e) => setNewFeeType({ ...newFeeType, defaultAmount: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                <div className="flex items-center gap-2 p-2 border border-purple-200 bg-purple-50 rounded-lg">
+                  <div className="flex-1 flex gap-2">
                     <input
                       type="text"
-                      value={newFeeType.description}
-                      onChange={(e) => setNewFeeType({ ...newFeeType, description: e.target.value })}
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      placeholder="Optional description"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                      placeholder="Name (e.g., Early Bird)"
+                      autoFocus
+                    />
+                    <input
+                      type="text"
+                      value={newDescription}
+                      onChange={(e) => setNewDescription(e.target.value)}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+                      placeholder="Description (optional)"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available From</label>
-                      <input
-                        type="datetime-local"
-                        value={newFeeType.availableFrom}
-                        onChange={(e) => setNewFeeType({ ...newFeeType, availableFrom: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available Until</label>
-                      <input
-                        type="datetime-local"
-                        value={newFeeType.availableUntil}
-                        onChange={(e) => setNewFeeType({ ...newFeeType, availableUntil: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddForm(false);
-                        setNewFeeType({ name: '', description: '', defaultAmount: 0, availableFrom: '', availableUntil: '', isActive: true });
-                      }}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddFeeType}
-                      disabled={saving || !newFeeType.name.trim()}
-                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                      Add Fee Type
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddFeeType}
+                    disabled={saving || !newName.trim()}
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewName('');
+                      setNewDescription('');
+                    }}
+                    className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               ) : (
                 <button

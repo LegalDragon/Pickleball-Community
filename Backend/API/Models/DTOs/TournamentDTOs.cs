@@ -1239,22 +1239,28 @@ public class DivisionCourtAssignmentRequest
 // =====================================================
 
 /// <summary>
-/// Fee option for a division or event, shown during registration
+/// Fee option for a division or event, shown during registration.
+/// DivisionId = 0 for event-level fees, actual ID for division fees.
 /// </summary>
 public class DivisionFeeDto
 {
     public int Id { get; set; }
-    public int? DivisionId { get; set; }
-    public int? EventId { get; set; }
     /// <summary>
-    /// Reference to the fee type template (if using fee types)
+    /// Division this fee belongs to. 0 for event-level fees.
     /// </summary>
-    public int? FeeTypeId { get; set; }
+    public int DivisionId { get; set; }
+    public int EventId { get; set; }
     /// <summary>
-    /// Name of the fee type (if FeeTypeId is set)
+    /// Reference to the fee type template (required)
     /// </summary>
-    public string? FeeTypeName { get; set; }
+    public int FeeTypeId { get; set; }
+    /// <summary>
+    /// Name from the fee type
+    /// </summary>
     public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// Description from the fee type
+    /// </summary>
     public string? Description { get; set; }
     public decimal Amount { get; set; }
     public bool IsDefault { get; set; }
@@ -1267,22 +1273,21 @@ public class DivisionFeeDto
     /// </summary>
     public bool IsCurrentlyAvailable { get; set; }
     /// <summary>
-    /// True if this is an event-level fee (not division-specific)
+    /// True if this is an event-level fee (DivisionId = 0)
     /// </summary>
-    public bool IsEventFee => DivisionId == null;
+    public bool IsEventFee => DivisionId == 0;
 }
 
 /// <summary>
-/// Request to create or update a division fee
+/// Request to create or update a division/event fee.
+/// FeeTypeId is required - name/description come from the fee type.
 /// </summary>
 public class DivisionFeeRequest
 {
     /// <summary>
-    /// Optional: Reference to a fee type template. If set, Name/Description/dates can be inherited from the fee type.
+    /// Required: Reference to the fee type (provides name/description)
     /// </summary>
-    public int? FeeTypeId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
+    public int FeeTypeId { get; set; }
     public decimal Amount { get; set; }
     public bool IsDefault { get; set; }
     public DateTime? AvailableFrom { get; set; }
@@ -1305,7 +1310,8 @@ public class BulkDivisionFeesRequest
 // ============================================
 
 /// <summary>
-/// Fee type template defined at event level, used by both event fees and division fees
+/// Fee type template defined at event level, used by both event fees and division fees.
+/// Just a name/description - amounts are set on DivisionFees.
 /// </summary>
 public class EventFeeTypeDto
 {
@@ -1313,28 +1319,26 @@ public class EventFeeTypeDto
     public int EventId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public decimal DefaultAmount { get; set; }
-    public DateTime? AvailableFrom { get; set; }
-    public DateTime? AvailableUntil { get; set; }
     public bool IsActive { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedAt { get; set; }
     /// <summary>
-    /// Whether this fee type is currently available based on AvailableFrom/AvailableUntil dates
+    /// Event-level fee amount for this fee type (if configured)
     /// </summary>
-    public bool IsCurrentlyAvailable { get; set; }
+    public decimal? EventFeeAmount { get; set; }
+    /// <summary>
+    /// Whether there's an event-level fee configured for this type
+    /// </summary>
+    public bool HasEventFee { get; set; }
 }
 
 /// <summary>
-/// Request to create or update an event fee type
+/// Request to create or update an event fee type (just name/description)
 /// </summary>
 public class EventFeeTypeRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public decimal DefaultAmount { get; set; } = 0;
-    public DateTime? AvailableFrom { get; set; }
-    public DateTime? AvailableUntil { get; set; }
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 0;
 }

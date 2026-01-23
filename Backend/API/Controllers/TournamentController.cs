@@ -8291,49 +8291,49 @@ public class TournamentController : EventControllerBase
     #region Division Fees
 
     /// <summary>
-    /// Get all fees for a division
+    /// Get all fees for a division (fees with DivisionId matching the division)
     /// </summary>
     [HttpGet("divisions/{divisionId}/fees")]
     public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> GetDivisionFees(int divisionId)
     {
-        var division = await _context.EventDivisions
-            .Include(d => d.Fees)
-            .FirstOrDefaultAsync(d => d.Id == divisionId);
-
+        var division = await _context.EventDivisions.FindAsync(divisionId);
         if (division == null)
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Division not found" });
 
-        var fees = division.Fees.OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+        var fees = await _context.DivisionFees
+            .Include(f => f.FeeType)
+            .Where(f => f.DivisionId == divisionId)
+            .OrderBy(f => f.SortOrder)
+            .ToListAsync();
+
+        var result = fees.Select(f => new DivisionFeeDto
         {
             Id = f.Id,
             DivisionId = f.DivisionId,
-            EventId = f.EventId ?? division.EventId,
-            Name = f.Name,
-            Description = f.Description,
+            EventId = f.EventId,
+            FeeTypeId = f.FeeTypeId,
+            Name = f.FeeType?.Name ?? "",
+            Description = f.FeeType?.Description,
             Amount = f.Amount,
             IsDefault = f.IsDefault,
             AvailableFrom = f.AvailableFrom,
             AvailableUntil = f.AvailableUntil,
             IsActive = f.IsActive,
             SortOrder = f.SortOrder,
-            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = f.IsCurrentlyAvailable
         }).ToList();
 
-        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = fees });
+        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = result });
     }
 
     /// <summary>
-    /// Create a new fee for a division
+    /// Create a new fee for a division (requires FeeTypeId)
     /// </summary>
     [HttpPost("divisions/{divisionId}/fees")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> CreateDivisionFee(int divisionId, [FromBody] DivisionFeeRequest request)
     {
-        var division = await _context.EventDivisions
-            .Include(d => d.Event)
-            .FirstOrDefaultAsync(d => d.Id == divisionId);
-
+        var division = await _context.EventDivisions.FindAsync(divisionId);
         if (division == null)
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Division not found" });
 
@@ -8341,13 +8341,27 @@ public class TournamentController : EventControllerBase
         if (!await CanManageEventAsync(division.EventId))
             return Forbid();
 
+        // Validate FeeTypeId
+        var feeType = await _context.EventFeeTypes
+            .FirstOrDefaultAsync(ft => ft.Id == request.FeeTypeId && ft.EventId == division.EventId);
+        if (feeType == null)
+            return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee type not found for this event" });
+
+        // Check if fee already exists for this fee type in this division
+        var existingFee = await _context.DivisionFees
+            .FirstOrDefaultAsync(f => f.DivisionId == divisionId && f.FeeTypeId == request.FeeTypeId);
+        if (existingFee != null)
+            return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "A fee already exists for this fee type in this division" });
+
         // If this is set as default, clear other defaults
         if (request.IsDefault)
         {
-            var existingFees = await _context.DivisionFees.Where(f => f.DivisionId == divisionId && f.IsDefault).ToListAsync();
-            foreach (var existingFee in existingFees)
+            var existingDefaults = await _context.DivisionFees
+                .Where(f => f.DivisionId == divisionId && f.IsDefault)
+                .ToListAsync();
+            foreach (var existing in existingDefaults)
             {
-                existingFee.IsDefault = false;
+                existing.IsDefault = false;
             }
         }
 
@@ -8355,8 +8369,7 @@ public class TournamentController : EventControllerBase
         {
             DivisionId = divisionId,
             EventId = division.EventId,
-            Name = request.Name,
-            Description = request.Description,
+            FeeTypeId = request.FeeTypeId,
             Amount = request.Amount,
             IsDefault = request.IsDefault,
             AvailableFrom = request.AvailableFrom,
@@ -8374,16 +8387,16 @@ public class TournamentController : EventControllerBase
             Id = fee.Id,
             DivisionId = fee.DivisionId,
             EventId = fee.EventId,
-            Name = fee.Name,
-            Description = fee.Description,
+            FeeTypeId = fee.FeeTypeId,
+            Name = feeType.Name,
+            Description = feeType.Description,
             Amount = fee.Amount,
             IsDefault = fee.IsDefault,
             AvailableFrom = fee.AvailableFrom,
             AvailableUntil = fee.AvailableUntil,
             IsActive = fee.IsActive,
             SortOrder = fee.SortOrder,
-            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = fee.IsCurrentlyAvailable
         };
 
         return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
@@ -8397,28 +8410,39 @@ public class TournamentController : EventControllerBase
     public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> UpdateDivisionFee(int divisionId, int feeId, [FromBody] DivisionFeeRequest request)
     {
         var fee = await _context.DivisionFees
-            .Include(f => f.Division)
+            .Include(f => f.FeeType)
             .FirstOrDefaultAsync(f => f.Id == feeId && f.DivisionId == divisionId);
 
         if (fee == null)
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(fee.Division!.EventId))
+        if (!await CanManageEventAsync(fee.EventId))
             return Forbid();
+
+        // Validate FeeTypeId if being changed
+        EventFeeType? feeType = fee.FeeType;
+        if (request.FeeTypeId != fee.FeeTypeId)
+        {
+            feeType = await _context.EventFeeTypes
+                .FirstOrDefaultAsync(ft => ft.Id == request.FeeTypeId && ft.EventId == fee.EventId);
+            if (feeType == null)
+                return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee type not found for this event" });
+        }
 
         // If this is set as default, clear other defaults
         if (request.IsDefault && !fee.IsDefault)
         {
-            var existingFees = await _context.DivisionFees.Where(f => f.DivisionId == divisionId && f.IsDefault && f.Id != feeId).ToListAsync();
-            foreach (var existingFee in existingFees)
+            var existingDefaults = await _context.DivisionFees
+                .Where(f => f.DivisionId == divisionId && f.IsDefault && f.Id != feeId)
+                .ToListAsync();
+            foreach (var existing in existingDefaults)
             {
-                existingFee.IsDefault = false;
+                existing.IsDefault = false;
             }
         }
 
-        fee.Name = request.Name;
-        fee.Description = request.Description;
+        fee.FeeTypeId = request.FeeTypeId;
         fee.Amount = request.Amount;
         fee.IsDefault = request.IsDefault;
         fee.AvailableFrom = request.AvailableFrom;
@@ -8433,17 +8457,17 @@ public class TournamentController : EventControllerBase
         {
             Id = fee.Id,
             DivisionId = fee.DivisionId,
-            EventId = fee.EventId ?? fee.Division?.EventId,
-            Name = fee.Name,
-            Description = fee.Description,
+            EventId = fee.EventId,
+            FeeTypeId = fee.FeeTypeId,
+            Name = feeType?.Name ?? "",
+            Description = feeType?.Description,
             Amount = fee.Amount,
             IsDefault = fee.IsDefault,
             AvailableFrom = fee.AvailableFrom,
             AvailableUntil = fee.AvailableUntil,
             IsActive = fee.IsActive,
             SortOrder = fee.SortOrder,
-            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = fee.IsCurrentlyAvailable
         };
 
         return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
@@ -8457,14 +8481,13 @@ public class TournamentController : EventControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> DeleteDivisionFee(int divisionId, int feeId)
     {
         var fee = await _context.DivisionFees
-            .Include(f => f.Division)
             .FirstOrDefaultAsync(f => f.Id == feeId && f.DivisionId == divisionId);
 
         if (fee == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(fee.Division!.EventId))
+        if (!await CanManageEventAsync(fee.EventId))
             return Forbid();
 
         // Check if any registrations are using this fee
@@ -8480,16 +8503,14 @@ public class TournamentController : EventControllerBase
     }
 
     /// <summary>
-    /// Bulk update division fees (replaces all fees for a division)
+    /// Bulk update division fees (replaces all fees for a division).
+    /// Each request must have a valid FeeTypeId.
     /// </summary>
     [HttpPut("divisions/{divisionId}/fees")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> BulkUpdateDivisionFees(int divisionId, [FromBody] List<DivisionFeeRequest> fees)
     {
-        var division = await _context.EventDivisions
-            .Include(d => d.Fees)
-            .FirstOrDefaultAsync(d => d.Id == divisionId);
-
+        var division = await _context.EventDivisions.FindAsync(divisionId);
         if (division == null)
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Division not found" });
 
@@ -8497,15 +8518,31 @@ public class TournamentController : EventControllerBase
         if (!await CanManageEventAsync(division.EventId))
             return Forbid();
 
+        // Validate all FeeTypeIds
+        var feeTypeIds = fees.Select(f => f.FeeTypeId).Distinct().ToList();
+        var validFeeTypes = await _context.EventFeeTypes
+            .Where(ft => ft.EventId == division.EventId && feeTypeIds.Contains(ft.Id))
+            .ToDictionaryAsync(ft => ft.Id, ft => ft);
+
+        var invalidIds = feeTypeIds.Where(id => !validFeeTypes.ContainsKey(id)).ToList();
+        if (invalidIds.Any())
+            return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = $"Invalid fee type IDs: {string.Join(", ", invalidIds)}" });
+
+        // Get existing fees for this division
+        var existingFees = await _context.DivisionFees
+            .Where(f => f.DivisionId == divisionId)
+            .ToListAsync();
+
         // Check if any existing fees are in use
-        var existingFeeIds = division.Fees.Select(f => f.Id).ToList();
-        var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId != null && existingFeeIds.Contains(m.SelectedFeeId.Value));
+        var existingFeeIds = existingFees.Select(f => f.Id).ToList();
+        var usedByMembers = await _context.EventUnitMembers
+            .AnyAsync(m => m.SelectedFeeId != null && existingFeeIds.Contains(m.SelectedFeeId.Value));
 
         if (usedByMembers)
             return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Cannot replace fees that are in use by existing registrations. Please update individual fees instead." });
 
         // Remove existing fees
-        _context.DivisionFees.RemoveRange(division.Fees);
+        _context.DivisionFees.RemoveRange(existingFees);
 
         // Ensure only one default
         var hasDefault = false;
@@ -8516,8 +8553,7 @@ public class TournamentController : EventControllerBase
             {
                 DivisionId = divisionId,
                 EventId = division.EventId,
-                Name = f.Name,
-                Description = f.Description,
+                FeeTypeId = f.FeeTypeId,
                 Amount = f.Amount,
                 IsDefault = isDefault,
                 AvailableFrom = f.AvailableFrom,
@@ -8536,16 +8572,16 @@ public class TournamentController : EventControllerBase
             Id = f.Id,
             DivisionId = f.DivisionId,
             EventId = f.EventId,
-            Name = f.Name,
-            Description = f.Description,
+            FeeTypeId = f.FeeTypeId,
+            Name = validFeeTypes[f.FeeTypeId].Name,
+            Description = validFeeTypes[f.FeeTypeId].Description,
             Amount = f.Amount,
             IsDefault = f.IsDefault,
             AvailableFrom = f.AvailableFrom,
             AvailableUntil = f.AvailableUntil,
             IsActive = f.IsActive,
             SortOrder = f.SortOrder,
-            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = f.IsCurrentlyAvailable
         }).ToList();
 
         return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = result });
@@ -8556,47 +8592,49 @@ public class TournamentController : EventControllerBase
     #region Event Fees
 
     /// <summary>
-    /// Get all event-level fees for an event (not division-specific)
+    /// Get all event-level fees for an event (DivisionId = 0)
     /// </summary>
     [HttpGet("events/{eventId}/fees")]
     public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> GetEventFees(int eventId)
     {
-        var evt = await _context.Events
-            .Include(e => e.Fees.Where(f => f.DivisionId == null))
-            .FirstOrDefaultAsync(e => e.Id == eventId);
-
+        var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Event not found" });
 
-        var fees = evt.Fees.Where(f => f.DivisionId == null).OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+        var fees = await _context.DivisionFees
+            .Include(f => f.FeeType)
+            .Where(f => f.EventId == eventId && f.DivisionId == 0)
+            .OrderBy(f => f.SortOrder)
+            .ToListAsync();
+
+        var result = fees.Select(f => new DivisionFeeDto
         {
             Id = f.Id,
             DivisionId = f.DivisionId,
             EventId = f.EventId,
-            Name = f.Name,
-            Description = f.Description,
+            FeeTypeId = f.FeeTypeId,
+            Name = f.FeeType?.Name ?? "",
+            Description = f.FeeType?.Description,
             Amount = f.Amount,
             IsDefault = f.IsDefault,
             AvailableFrom = f.AvailableFrom,
             AvailableUntil = f.AvailableUntil,
             IsActive = f.IsActive,
             SortOrder = f.SortOrder,
-            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = f.IsCurrentlyAvailable
         }).ToList();
 
-        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = fees });
+        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = result });
     }
 
     /// <summary>
-    /// Create a new event-level fee
+    /// Create a new event-level fee (DivisionId = 0, requires FeeTypeId)
     /// </summary>
     [HttpPost("events/{eventId}/fees")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> CreateEventFee(int eventId, [FromBody] DivisionFeeRequest request)
     {
         var evt = await _context.Events.FindAsync(eventId);
-
         if (evt == null)
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Event not found" });
 
@@ -8604,22 +8642,35 @@ public class TournamentController : EventControllerBase
         if (!await CanManageEventAsync(eventId))
             return Forbid();
 
+        // Validate FeeTypeId exists and belongs to this event
+        var feeType = await _context.EventFeeTypes
+            .FirstOrDefaultAsync(ft => ft.Id == request.FeeTypeId && ft.EventId == eventId);
+        if (feeType == null)
+            return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee type not found for this event" });
+
+        // Check if fee already exists for this fee type at event level
+        var existingFee = await _context.DivisionFees
+            .FirstOrDefaultAsync(f => f.EventId == eventId && f.DivisionId == 0 && f.FeeTypeId == request.FeeTypeId);
+        if (existingFee != null)
+            return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "An event fee already exists for this fee type" });
+
         // If setting as default, clear other defaults for event fees
         if (request.IsDefault)
         {
-            var existingFees = await _context.DivisionFees.Where(f => f.EventId == eventId && f.DivisionId == null && f.IsDefault).ToListAsync();
-            foreach (var existingFee in existingFees)
+            var existingDefaults = await _context.DivisionFees
+                .Where(f => f.EventId == eventId && f.DivisionId == 0 && f.IsDefault)
+                .ToListAsync();
+            foreach (var existingDefault in existingDefaults)
             {
-                existingFee.IsDefault = false;
+                existingDefault.IsDefault = false;
             }
         }
 
         var fee = new DivisionFee
         {
-            DivisionId = null, // Event-level fee
+            DivisionId = 0, // Event-level fee
             EventId = eventId,
-            Name = request.Name,
-            Description = request.Description,
+            FeeTypeId = request.FeeTypeId,
             Amount = request.Amount,
             IsDefault = request.IsDefault,
             AvailableFrom = request.AvailableFrom,
@@ -8637,30 +8688,31 @@ public class TournamentController : EventControllerBase
             Id = fee.Id,
             DivisionId = fee.DivisionId,
             EventId = fee.EventId,
-            Name = fee.Name,
-            Description = fee.Description,
+            FeeTypeId = fee.FeeTypeId,
+            Name = feeType.Name,
+            Description = feeType.Description,
             Amount = fee.Amount,
             IsDefault = fee.IsDefault,
             AvailableFrom = fee.AvailableFrom,
             AvailableUntil = fee.AvailableUntil,
             IsActive = fee.IsActive,
             SortOrder = fee.SortOrder,
-            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = fee.IsCurrentlyAvailable
         };
 
         return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
     }
 
     /// <summary>
-    /// Update an event-level fee
+    /// Update an event-level fee (DivisionId = 0)
     /// </summary>
     [HttpPut("events/{eventId}/fees/{feeId}")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> UpdateEventFee(int eventId, int feeId, [FromBody] DivisionFeeRequest request)
     {
         var fee = await _context.DivisionFees
-            .FirstOrDefaultAsync(f => f.Id == feeId && f.EventId == eventId && f.DivisionId == null);
+            .Include(f => f.FeeType)
+            .FirstOrDefaultAsync(f => f.Id == feeId && f.EventId == eventId && f.DivisionId == 0);
 
         if (fee == null)
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee not found" });
@@ -8669,18 +8721,28 @@ public class TournamentController : EventControllerBase
         if (!await CanManageEventAsync(eventId))
             return Forbid();
 
+        // Validate FeeTypeId if being changed
+        if (request.FeeTypeId != fee.FeeTypeId)
+        {
+            var feeType = await _context.EventFeeTypes
+                .FirstOrDefaultAsync(ft => ft.Id == request.FeeTypeId && ft.EventId == eventId);
+            if (feeType == null)
+                return BadRequest(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee type not found for this event" });
+        }
+
         // If setting as default, clear other defaults
         if (request.IsDefault && !fee.IsDefault)
         {
-            var existingFees = await _context.DivisionFees.Where(f => f.EventId == eventId && f.DivisionId == null && f.IsDefault && f.Id != feeId).ToListAsync();
-            foreach (var existingFee in existingFees)
+            var existingDefaults = await _context.DivisionFees
+                .Where(f => f.EventId == eventId && f.DivisionId == 0 && f.IsDefault && f.Id != feeId)
+                .ToListAsync();
+            foreach (var existing in existingDefaults)
             {
-                existingFee.IsDefault = false;
+                existing.IsDefault = false;
             }
         }
 
-        fee.Name = request.Name;
-        fee.Description = request.Description;
+        fee.FeeTypeId = request.FeeTypeId;
         fee.Amount = request.Amount;
         fee.IsDefault = request.IsDefault;
         fee.AvailableFrom = request.AvailableFrom;
@@ -8691,35 +8753,41 @@ public class TournamentController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Reload FeeType if changed
+        if (fee.FeeType == null || fee.FeeType.Id != fee.FeeTypeId)
+        {
+            fee.FeeType = await _context.EventFeeTypes.FindAsync(fee.FeeTypeId);
+        }
+
         var dto = new DivisionFeeDto
         {
             Id = fee.Id,
             DivisionId = fee.DivisionId,
             EventId = fee.EventId,
-            Name = fee.Name,
-            Description = fee.Description,
+            FeeTypeId = fee.FeeTypeId,
+            Name = fee.FeeType?.Name ?? "",
+            Description = fee.FeeType?.Description,
             Amount = fee.Amount,
             IsDefault = fee.IsDefault,
             AvailableFrom = fee.AvailableFrom,
             AvailableUntil = fee.AvailableUntil,
             IsActive = fee.IsActive,
             SortOrder = fee.SortOrder,
-            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = fee.IsCurrentlyAvailable
         };
 
         return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
     }
 
     /// <summary>
-    /// Delete an event-level fee
+    /// Delete an event-level fee (DivisionId = 0)
     /// </summary>
     [HttpDelete("events/{eventId}/fees/{feeId}")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteEventFee(int eventId, int feeId)
     {
         var fee = await _context.DivisionFees
-            .FirstOrDefaultAsync(f => f.Id == feeId && f.EventId == eventId && f.DivisionId == null);
+            .FirstOrDefaultAsync(f => f.Id == feeId && f.EventId == eventId && f.DivisionId == 0);
 
         if (fee == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee not found" });
@@ -8740,16 +8808,14 @@ public class TournamentController : EventControllerBase
     }
 
     /// <summary>
-    /// Bulk update event-level fees
+    /// Bulk update event-level fees (DivisionId = 0).
+    /// Each request must have a valid FeeTypeId.
     /// </summary>
     [HttpPut("events/{eventId}/fees")]
     [Authorize]
     public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> BulkUpdateEventFees(int eventId, [FromBody] List<DivisionFeeRequest> fees)
     {
-        var evt = await _context.Events
-            .Include(e => e.Fees.Where(f => f.DivisionId == null))
-            .FirstOrDefaultAsync(e => e.Id == eventId);
-
+        var evt = await _context.Events.FindAsync(eventId);
         if (evt == null)
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Event not found" });
 
@@ -8757,16 +8823,31 @@ public class TournamentController : EventControllerBase
         if (!await CanManageEventAsync(eventId))
             return Forbid();
 
+        // Validate all FeeTypeIds
+        var feeTypeIds = fees.Select(f => f.FeeTypeId).Distinct().ToList();
+        var validFeeTypes = await _context.EventFeeTypes
+            .Where(ft => ft.EventId == eventId && feeTypeIds.Contains(ft.Id))
+            .ToDictionaryAsync(ft => ft.Id, ft => ft);
+
+        var invalidIds = feeTypeIds.Where(id => !validFeeTypes.ContainsKey(id)).ToList();
+        if (invalidIds.Any())
+            return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = $"Invalid fee type IDs: {string.Join(", ", invalidIds)}" });
+
+        // Get existing event fees
+        var existingFees = await _context.DivisionFees
+            .Where(f => f.EventId == eventId && f.DivisionId == 0)
+            .ToListAsync();
+
         // Check if any existing fees are in use
-        var existingFeeIds = evt.Fees.Where(f => f.DivisionId == null).Select(f => f.Id).ToList();
-        var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId.HasValue && existingFeeIds.Contains(m.SelectedFeeId.Value));
+        var existingFeeIds = existingFees.Select(f => f.Id).ToList();
+        var usedByMembers = await _context.EventUnitMembers
+            .AnyAsync(m => m.SelectedFeeId.HasValue && existingFeeIds.Contains(m.SelectedFeeId.Value));
 
         if (usedByMembers)
             return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Cannot replace fees that are in use by existing registrations. Please update individual fees instead." });
 
         // Remove existing event fees
-        var existingEventFees = evt.Fees.Where(f => f.DivisionId == null).ToList();
-        _context.DivisionFees.RemoveRange(existingEventFees);
+        _context.DivisionFees.RemoveRange(existingFees);
 
         // Ensure only one default
         var hasDefault = false;
@@ -8775,10 +8856,9 @@ public class TournamentController : EventControllerBase
             if (isDefault) hasDefault = true;
             return new DivisionFee
             {
-                DivisionId = null,
+                DivisionId = 0,
                 EventId = eventId,
-                Name = f.Name,
-                Description = f.Description,
+                FeeTypeId = f.FeeTypeId,
                 Amount = f.Amount,
                 IsDefault = isDefault,
                 AvailableFrom = f.AvailableFrom,
@@ -8797,16 +8877,16 @@ public class TournamentController : EventControllerBase
             Id = f.Id,
             DivisionId = f.DivisionId,
             EventId = f.EventId,
-            Name = f.Name,
-            Description = f.Description,
+            FeeTypeId = f.FeeTypeId,
+            Name = validFeeTypes[f.FeeTypeId].Name,
+            Description = validFeeTypes[f.FeeTypeId].Description,
             Amount = f.Amount,
             IsDefault = f.IsDefault,
             AvailableFrom = f.AvailableFrom,
             AvailableUntil = f.AvailableUntil,
             IsActive = f.IsActive,
             SortOrder = f.SortOrder,
-            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
-                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+            IsCurrentlyAvailable = f.IsCurrentlyAvailable
         }).ToList();
 
         return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = result });
@@ -8817,7 +8897,7 @@ public class TournamentController : EventControllerBase
     #region Event Fee Types
 
     /// <summary>
-    /// Get all fee types for an event
+    /// Get all fee types for an event (with their event-level fee amounts if configured)
     /// </summary>
     [HttpGet("events/{eventId}/fee-types")]
     public async Task<ActionResult<ApiResponse<List<EventFeeTypeDto>>>> GetEventFeeTypes(int eventId)
@@ -8826,32 +8906,39 @@ public class TournamentController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<List<EventFeeTypeDto>> { Success = false, Message = "Event not found" });
 
+        // Get fee types with their event-level fees (DivisionId = 0)
         var feeTypes = await _context.EventFeeTypes
             .Where(ft => ft.EventId == eventId)
             .OrderBy(ft => ft.SortOrder)
-            .Select(ft => new EventFeeTypeDto
+            .ToListAsync();
+
+        // Get event-level fees (DivisionId = 0) to show amounts
+        var eventFees = await _context.DivisionFees
+            .Where(f => f.EventId == eventId && f.DivisionId == 0)
+            .ToListAsync();
+
+        var result = feeTypes.Select(ft =>
+        {
+            var eventFee = eventFees.FirstOrDefault(f => f.FeeTypeId == ft.Id);
+            return new EventFeeTypeDto
             {
                 Id = ft.Id,
                 EventId = ft.EventId,
                 Name = ft.Name,
                 Description = ft.Description,
-                DefaultAmount = ft.DefaultAmount,
-                AvailableFrom = ft.AvailableFrom,
-                AvailableUntil = ft.AvailableUntil,
                 IsActive = ft.IsActive,
                 SortOrder = ft.SortOrder,
                 CreatedAt = ft.CreatedAt,
-                IsCurrentlyAvailable = ft.IsActive &&
-                    (!ft.AvailableFrom.HasValue || ft.AvailableFrom <= DateTime.UtcNow) &&
-                    (!ft.AvailableUntil.HasValue || ft.AvailableUntil > DateTime.UtcNow)
-            })
-            .ToListAsync();
+                EventFeeAmount = eventFee?.Amount,
+                HasEventFee = eventFee != null
+            };
+        }).ToList();
 
-        return Ok(new ApiResponse<List<EventFeeTypeDto>> { Success = true, Data = feeTypes });
+        return Ok(new ApiResponse<List<EventFeeTypeDto>> { Success = true, Data = result });
     }
 
     /// <summary>
-    /// Create a new fee type for an event
+    /// Create a new fee type for an event (just name/description)
     /// </summary>
     [HttpPost("events/{eventId}/fee-types")]
     [Authorize]
@@ -8869,9 +8956,6 @@ public class TournamentController : EventControllerBase
             EventId = eventId,
             Name = request.Name,
             Description = request.Description,
-            DefaultAmount = request.DefaultAmount,
-            AvailableFrom = request.AvailableFrom,
-            AvailableUntil = request.AvailableUntil,
             IsActive = request.IsActive,
             SortOrder = request.SortOrder,
             CreatedAt = DateTime.UtcNow
@@ -8886,20 +8970,16 @@ public class TournamentController : EventControllerBase
             EventId = feeType.EventId,
             Name = feeType.Name,
             Description = feeType.Description,
-            DefaultAmount = feeType.DefaultAmount,
-            AvailableFrom = feeType.AvailableFrom,
-            AvailableUntil = feeType.AvailableUntil,
             IsActive = feeType.IsActive,
             SortOrder = feeType.SortOrder,
-            CreatedAt = feeType.CreatedAt,
-            IsCurrentlyAvailable = feeType.IsCurrentlyAvailable
+            CreatedAt = feeType.CreatedAt
         };
 
         return Ok(new ApiResponse<EventFeeTypeDto> { Success = true, Data = result });
     }
 
     /// <summary>
-    /// Update a fee type
+    /// Update a fee type (name/description only)
     /// </summary>
     [HttpPut("events/{eventId}/fee-types/{feeTypeId}")]
     [Authorize]
@@ -8914,14 +8994,15 @@ public class TournamentController : EventControllerBase
 
         feeType.Name = request.Name;
         feeType.Description = request.Description;
-        feeType.DefaultAmount = request.DefaultAmount;
-        feeType.AvailableFrom = request.AvailableFrom;
-        feeType.AvailableUntil = request.AvailableUntil;
         feeType.IsActive = request.IsActive;
         feeType.SortOrder = request.SortOrder;
         feeType.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        // Get event-level fee amount if exists
+        var eventFee = await _context.DivisionFees
+            .FirstOrDefaultAsync(f => f.EventId == eventId && f.DivisionId == 0 && f.FeeTypeId == feeTypeId);
 
         var result = new EventFeeTypeDto
         {
@@ -8929,13 +9010,11 @@ public class TournamentController : EventControllerBase
             EventId = feeType.EventId,
             Name = feeType.Name,
             Description = feeType.Description,
-            DefaultAmount = feeType.DefaultAmount,
-            AvailableFrom = feeType.AvailableFrom,
-            AvailableUntil = feeType.AvailableUntil,
             IsActive = feeType.IsActive,
             SortOrder = feeType.SortOrder,
             CreatedAt = feeType.CreatedAt,
-            IsCurrentlyAvailable = feeType.IsCurrentlyAvailable
+            EventFeeAmount = eventFee?.Amount,
+            HasEventFee = eventFee != null
         };
 
         return Ok(new ApiResponse<EventFeeTypeDto> { Success = true, Data = result });
