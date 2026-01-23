@@ -61,7 +61,9 @@ export default function EventRegistration() {
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
 
   // Registration state
-  const [selectedDivision, setSelectedDivision] = useState(null);
+  const [selectedDivision, setSelectedDivision] = useState(null); // For backwards compatibility during team formation
+  const [selectedDivisions, setSelectedDivisions] = useState([]); // Multi-division selection
+  const [divisionFeeSelections, setDivisionFeeSelections] = useState({}); // { divisionId: feeId }
   const [selectedFeeId, setSelectedFeeId] = useState(null);
   const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -306,6 +308,11 @@ export default function EventRegistration() {
 
   // Get the effective fee amount (selected fee or fallback to division/event fee)
   const getEffectiveFeeAmount = () => {
+    // If multiple divisions selected, return total
+    if (selectedDivisions.length > 0) {
+      return getTotalFeeForSelectedDivisions();
+    }
+    // Single division mode
     const selectedFee = getSelectedFee();
     if (selectedFee) return selectedFee.amount;
     return selectedDivision?.divisionFee || event?.perDivisionFee || event?.registrationFee || 0;
@@ -315,6 +322,89 @@ export default function EventRegistration() {
   const hasFeeOptions = (division) => {
     const availableFees = (division?.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
     return availableFees.length > 0;
+  };
+
+  // Toggle division selection (for multi-division mode)
+  const toggleDivisionSelection = (division) => {
+    if (!canRegisterForDivision(division.id)) {
+      toast.error('You are already registered for this division');
+      return;
+    }
+
+    const isSelected = selectedDivisions.some(d => d.id === division.id);
+
+    if (isSelected) {
+      // Remove from selection
+      setSelectedDivisions(prev => prev.filter(d => d.id !== division.id));
+      // Clean up fee selection for this division
+      setDivisionFeeSelections(prev => {
+        const updated = { ...prev };
+        delete updated[division.id];
+        return updated;
+      });
+    } else {
+      // Check team size compatibility with already selected divisions
+      if (selectedDivisions.length > 0) {
+        const existingTeamSize = getTeamSize(selectedDivisions[0]);
+        const newTeamSize = getTeamSize(division);
+        if (existingTeamSize !== newTeamSize) {
+          toast.error(`Cannot mix divisions with different team sizes (${existingTeamSize} vs ${newTeamSize}). Register for them separately.`);
+          return;
+        }
+      }
+
+      // Add to selection
+      setSelectedDivisions(prev => [...prev, division]);
+
+      // Auto-select default fee if division has fee options
+      const availableFees = (division.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
+      if (availableFees.length > 0) {
+        const defaultFee = availableFees.find(f => f.isDefault) || availableFees[0];
+        setDivisionFeeSelections(prev => ({ ...prev, [division.id]: defaultFee.id }));
+      }
+    }
+  };
+
+  // Get total fee for all selected divisions
+  const getTotalFeeForSelectedDivisions = () => {
+    return selectedDivisions.reduce((total, div) => {
+      const selectedFeeForDiv = divisionFeeSelections[div.id];
+      if (selectedFeeForDiv) {
+        const fee = (div.fees || []).find(f => f.id === selectedFeeForDiv);
+        return total + (fee?.amount || 0);
+      }
+      return total + (div.divisionFee || event?.perDivisionFee || event?.registrationFee || 0);
+    }, 0);
+  };
+
+  // Proceed with selected divisions
+  const handleProceedWithDivisions = () => {
+    if (selectedDivisions.length === 0) {
+      toast.error('Please select at least one division');
+      return;
+    }
+
+    // Validate fee selections for divisions with fee options
+    for (const div of selectedDivisions) {
+      if (hasFeeOptions(div) && !divisionFeeSelections[div.id]) {
+        toast.error(`Please select a fee option for ${div.name}`);
+        return;
+      }
+    }
+
+    const teamSize = getTeamSize(selectedDivisions[0]);
+
+    // Set the primary division for team formation (if doubles/teams)
+    setSelectedDivision(selectedDivisions[0]);
+
+    if (teamSize === 1) {
+      // Singles - skip to step 3 (confirmation)
+      setCurrentStep(3);
+    } else {
+      // Doubles/Teams - go to step 2
+      loadUnitsLookingForPartners(selectedDivisions[0].id);
+      setCurrentStep(2);
+    }
   };
 
   // Load staff roles when switching to staff registration
@@ -394,23 +484,35 @@ export default function EventRegistration() {
 
   // Handle registration
   const handleRegister = async (partnerUserId = null) => {
-    if (!isAuthenticated || !selectedDivision) return;
+    if (!isAuthenticated) return;
 
-    // Validate fee selection if division has fee options
-    if (hasFeeOptions(selectedDivision) && !selectedFeeId) {
-      toast.error('Please select a fee option');
-      return;
+    // Determine which divisions to register for
+    const divisionsToRegister = selectedDivisions.length > 0 ? selectedDivisions : (selectedDivision ? [selectedDivision] : []);
+    if (divisionsToRegister.length === 0) return;
+
+    // Validate fee selections for divisions with fee options
+    for (const div of divisionsToRegister) {
+      const feeId = divisionFeeSelections[div.id] || selectedFeeId;
+      if (hasFeeOptions(div) && !feeId) {
+        toast.error(`Please select a fee option for ${div.name}`);
+        return;
+      }
     }
 
     setRegistering(true);
     try {
-      const teamSize = getTeamSize(selectedDivision);
+      const teamSize = getTeamSize(divisionsToRegister[0]);
+      const divisionIds = divisionsToRegister.map(d => d.id);
+
+      // For single division, use the selected fee. For multiple, the backend handles per-division fees
+      const primaryFeeId = divisionFeeSelections[divisionsToRegister[0].id] || selectedFeeId || null;
+
       const response = await tournamentApi.registerForEvent(event.id, {
         eventId: event.id,
-        divisionIds: [selectedDivision.id],
+        divisionIds: divisionIds,
         partnerUserId: partnerUserId > 0 ? partnerUserId : null,
         joinMethod: teamSize > 1 ? selectedJoinMethod : 'Approval',
-        selectedFeeId: selectedFeeId || null
+        selectedFeeId: primaryFeeId
       });
 
       if (response.success) {
@@ -426,20 +528,30 @@ export default function EventRegistration() {
           setNewJoinCode(response.data[0].joinCode);
         }
 
-        // Load unit members for payment step
-        const unitId = response.data?.[0]?.unitId || response.data?.unitId;
-        if (unitId) {
-          try {
-            const unitsResponse = await tournamentApi.getEventUnits(event.id);
-            if (unitsResponse.success) {
-              const registeredUnit = unitsResponse.data?.find(u => u.id === unitId);
-              if (registeredUnit?.members) {
-                setUnitMembers(registeredUnit.members.filter(m => m.inviteStatus === 'Accepted'));
-              }
-            }
-          } catch (e) {
-            console.log('Could not load unit members:', e);
+        // Load unit members for payment step (from ALL registered divisions)
+        try {
+          const unitsResponse = await tournamentApi.getEventUnits(event.id);
+          if (unitsResponse.success && unitsResponse.data) {
+            // Get all units where current user is a member
+            const myUnits = unitsResponse.data.filter(u =>
+              u.members?.some(m => m.userId === user?.id && m.inviteStatus === 'Accepted')
+            );
+
+            // Collect all accepted members across all divisions, deduping by userId
+            const allMembersMap = new Map();
+            myUnits.forEach(unit => {
+              (unit.members || [])
+                .filter(m => m.inviteStatus === 'Accepted')
+                .forEach(m => {
+                  if (!allMembersMap.has(m.userId)) {
+                    allMembersMap.set(m.userId, { ...m, divisionName: unit.divisionName });
+                  }
+                });
+            });
+            setUnitMembers(Array.from(allMembersMap.values()));
           }
+        } catch (e) {
+          console.log('Could not load unit members:', e);
         }
 
         // Load waivers for this event and navigate accordingly
@@ -1138,8 +1250,12 @@ export default function EventRegistration() {
             {/* Player Registration: Division Selection */}
             {registrationType === 'Player' && (
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a Division</h2>
-              <p className="text-gray-600 mb-6">Choose the division you want to register for.</p>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select Division(s)</h2>
+              <p className="text-gray-600 mb-6">
+                {event.allowMultipleDivisions
+                  ? 'Choose one or more divisions to register for. Divisions with the same team size can be registered together.'
+                  : 'Choose the division you want to register for.'}
+              </p>
 
               {/* Profile Reminder */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mb-6">
@@ -1154,76 +1270,164 @@ export default function EventRegistration() {
                   const isRegistered = userRegistrations.some(u => u.divisionId === division.id);
                   const teamSize = getTeamSize(division);
                   const isFull = division.maxUnits && division.registeredCount >= division.maxUnits;
+                  const isSelected = selectedDivisions.some(d => d.id === division.id);
+
+                  // Check if this division can be selected with current selections
+                  const canSelectWithCurrent = selectedDivisions.length === 0 ||
+                    getTeamSize(selectedDivisions[0]) === teamSize;
 
                   return (
-                    <button
-                      key={division.id}
-                      onClick={() => !isRegistered && !isFull && handleSelectDivision(division)}
-                      disabled={isRegistered || isFull}
-                      className={`
-                        w-full p-4 rounded-lg border-2 text-left transition-all
-                        ${isRegistered ? 'border-green-300 bg-green-50 cursor-not-allowed' : ''}
-                        ${isFull && !isRegistered ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60' : ''}
-                        ${!isRegistered && !isFull ? 'border-gray-200 hover:border-orange-300 hover:bg-orange-50 cursor-pointer' : ''}
-                      `}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-gray-900">{division.name}</h3>
-                            {isRegistered && (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
-                                <Check className="w-3 h-3" /> Registered
-                              </span>
+                    <div key={division.id}>
+                      <button
+                        onClick={() => {
+                          if (isRegistered || isFull) return;
+                          if (event.allowMultipleDivisions) {
+                            toggleDivisionSelection(division);
+                          } else {
+                            handleSelectDivision(division);
+                          }
+                        }}
+                        disabled={isRegistered || isFull}
+                        className={`
+                          w-full p-4 rounded-lg border-2 text-left transition-all
+                          ${isRegistered ? 'border-green-300 bg-green-50 cursor-not-allowed' : ''}
+                          ${isFull && !isRegistered ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60' : ''}
+                          ${isSelected ? 'border-orange-500 bg-orange-50' : ''}
+                          ${!isRegistered && !isFull && !isSelected ? 'border-gray-200 hover:border-orange-300 hover:bg-orange-50 cursor-pointer' : ''}
+                          ${!canSelectWithCurrent && !isSelected && !isRegistered && !isFull ? 'opacity-50' : ''}
+                        `}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            {/* Checkbox for multi-select mode */}
+                            {event.allowMultipleDivisions && !isRegistered && !isFull && (
+                              <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                                isSelected ? 'border-orange-500 bg-orange-500' : 'border-gray-300'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </div>
                             )}
-                            {isFull && !isRegistered && (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-                                Full
-                              </span>
-                            )}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-gray-900">{division.name}</h3>
+                                {isRegistered && (
+                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Registered
+                                  </span>
+                                )}
+                                {isFull && !isRegistered && (
+                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                                    Full
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-sm">
+                                {division.teamUnitName && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                                    {division.teamUnitName}
+                                  </span>
+                                )}
+                                {division.skillLevelName && (
+                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                                    {division.skillLevelName}
+                                  </span>
+                                )}
+                                {division.ageGroupName && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                                    {division.ageGroupName}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex flex-wrap gap-2 text-sm">
-                            {division.teamUnitName && (
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                                {division.teamUnitName}
-                              </span>
-                            )}
-                            {division.skillLevelName && (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                                {division.skillLevelName}
-                              </span>
-                            )}
-                            {division.ageGroupName && (
-                              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                                {division.ageGroupName}
-                              </span>
-                            )}
+                          <div className="text-right text-sm">
+                            <p className="text-gray-600">
+                              {division.registeredCount || 0}
+                              {division.maxUnits && ` / ${division.maxUnits}`}
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              {teamSize === 1 ? 'Singles' : teamSize === 2 ? 'Doubles' : `Teams of ${teamSize}`}
+                            </p>
+                            {hasFeeOptions(division) ? (
+                              <p className="text-orange-600 font-medium mt-1">
+                                ${Math.min(...division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).map(f => f.amount))}
+                                {division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).length > 1 && '+'}
+                              </p>
+                            ) : (division.divisionFee || event.perDivisionFee) ? (
+                              <p className="text-orange-600 font-medium mt-1">
+                                ${division.divisionFee || event.perDivisionFee}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
-                        <div className="text-right text-sm">
-                          <p className="text-gray-600">
-                            {division.registeredCount || 0}
-                            {division.maxUnits && ` / ${division.maxUnits}`}
-                          </p>
-                          <p className="text-gray-400 text-xs">
-                            {teamSize === 1 ? 'Singles' : teamSize === 2 ? 'Doubles' : `Teams of ${teamSize}`}
-                          </p>
-                          {hasFeeOptions(division) ? (
-                            <p className="text-orange-600 font-medium mt-1">
-                              ${Math.min(...division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).map(f => f.amount))}
-                              {division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).length > 1 && '+'}
-                            </p>
-                          ) : (division.divisionFee || event.perDivisionFee) ? (
-                            <p className="text-orange-600 font-medium mt-1">
-                              ${division.divisionFee || event.perDivisionFee}
-                            </p>
-                          ) : null}
+                      </button>
+
+                      {/* Fee selection for this division (shown when selected and has fee options) */}
+                      {isSelected && hasFeeOptions(division) && (
+                        <div className="mt-2 ml-8 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <p className="text-sm font-medium text-gray-700 mb-2">Select fee for {division.name}:</p>
+                          <div className="space-y-1">
+                            {division.fees
+                              .filter(f => f.isActive && f.isCurrentlyAvailable)
+                              .map(fee => (
+                                <label
+                                  key={fee.id}
+                                  className={`flex items-center justify-between p-2 border rounded cursor-pointer transition-colors ${
+                                    divisionFeeSelections[division.id] === fee.id
+                                      ? 'border-orange-500 bg-white'
+                                      : 'border-gray-200 bg-white hover:border-orange-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="radio"
+                                      name={`fee-${division.id}`}
+                                      value={fee.id}
+                                      checked={divisionFeeSelections[division.id] === fee.id}
+                                      onChange={() => setDivisionFeeSelections(prev => ({
+                                        ...prev,
+                                        [division.id]: fee.id
+                                      }))}
+                                      className="text-orange-600"
+                                    />
+                                    <span className="text-sm text-gray-900">{fee.name}</span>
+                                  </div>
+                                  <span className="text-sm font-semibold text-orange-600">${fee.amount}</span>
+                                </label>
+                              ))}
+                          </div>
                         </div>
-                      </div>
-                    </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
+
+              {/* Continue button for multi-division selection */}
+              {event.allowMultipleDivisions && selectedDivisions.length > 0 && (
+                <div className="mt-6 pt-4 border-t">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {selectedDivisions.length} division{selectedDivisions.length > 1 ? 's' : ''} selected
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {selectedDivisions.map(d => d.name).join(', ')}
+                      </p>
+                    </div>
+                    <p className="text-lg font-semibold text-orange-600">
+                      Total: ${getTotalFeeForSelectedDivisions()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleProceedWithDivisions}
+                    className="w-full py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 font-medium"
+                  >
+                    Continue with {selectedDivisions.length} Division{selectedDivisions.length > 1 ? 's' : ''}
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </div>
             )}
           </div>
@@ -1242,6 +1446,8 @@ export default function EventRegistration() {
                   onClick={() => {
                     setCurrentStep(1);
                     setSelectedDivision(null);
+                    setSelectedDivisions([]);
+                    setDivisionFeeSelections({});
                     setSelectedFeeId(null);
                     setSelectedJoinMethod('Approval');
                   }}
@@ -1485,9 +1691,20 @@ export default function EventRegistration() {
                     <Check className="w-8 h-8 text-green-600" />
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">You're Registered!</h2>
-                  <p className="text-gray-600 mb-6">
-                    You have successfully registered for {selectedDivision?.name || 'this division'}.
+                  <p className="text-gray-600 mb-4">
+                    {selectedDivisions.length > 1
+                      ? `You have successfully registered for ${selectedDivisions.length} divisions:`
+                      : `You have successfully registered for ${selectedDivision?.name || 'this division'}.`}
                   </p>
+                  {selectedDivisions.length > 1 && (
+                    <div className="flex flex-wrap justify-center gap-2 mb-6">
+                      {selectedDivisions.map(div => (
+                        <span key={div.id} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          {div.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {newJoinCode && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
@@ -1592,10 +1809,23 @@ export default function EventRegistration() {
                         <span className="text-gray-600">Event</span>
                         <span className="font-medium">{event.name}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Division</span>
-                        <span className="font-medium">{selectedDivision?.name}</span>
-                      </div>
+                      {selectedDivisions.length > 1 ? (
+                        <div>
+                          <span className="text-gray-600">Divisions ({selectedDivisions.length})</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {selectedDivisions.map(div => (
+                              <span key={div.id} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                {div.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Division</span>
+                          <span className="font-medium">{selectedDivision?.name}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-gray-600">Player</span>
                         <span className="font-medium">{user?.firstName} {user?.lastName}</span>
@@ -1603,7 +1833,7 @@ export default function EventRegistration() {
                       {getEffectiveFeeAmount() > 0 && (
                         <div className="flex justify-between pt-2 border-t">
                           <span className="text-gray-600">
-                            {getSelectedFee() ? getSelectedFee().name : 'Fee'}
+                            {selectedDivisions.length > 1 ? 'Total Fee' : (getSelectedFee() ? getSelectedFee().name : 'Fee')}
                           </span>
                           <span className="font-medium text-orange-600">
                             ${getEffectiveFeeAmount()}
@@ -1618,6 +1848,8 @@ export default function EventRegistration() {
                       onClick={() => {
                         setCurrentStep(1);
                         setSelectedDivision(null);
+                        setSelectedDivisions([]);
+                        setDivisionFeeSelections({});
                         setSelectedFeeId(null);
                       }}
                       className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
