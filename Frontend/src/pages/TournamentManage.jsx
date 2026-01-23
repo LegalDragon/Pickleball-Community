@@ -6,13 +6,15 @@ import {
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
   CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
-  Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3
+  Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3,
+  Hammer
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi, teamUnitsApi, skillLevelsApi, ageGroupsApi } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
+import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -122,6 +124,14 @@ export default function TournamentManage() {
   const [verifyingPayment, setVerifyingPayment] = useState(null);
   const [viewingProofUrl, setViewingProofUrl] = useState(null); // URL to display in modal
 
+  // Division editing state
+  const [editingDivision, setEditingDivision] = useState(null);
+  const [showEditDivision, setShowEditDivision] = useState(false);
+  const [savingDivision, setSavingDivision] = useState(false);
+  const [teamUnits, setTeamUnits] = useState([]);
+  const [skillLevels, setSkillLevels] = useState([]);
+  const [ageGroups, setAgeGroups] = useState([]);
+
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
     { value: '', label: 'Select method...' },
@@ -140,6 +150,43 @@ export default function TournamentManage() {
       loadEvent();
     }
   }, [eventId]);
+
+  // Load reference data for division editing
+  useEffect(() => {
+    const loadTeamUnits = async () => {
+      try {
+        const response = await teamUnitsApi.getAll();
+        if (response.success) {
+          setTeamUnits(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading team units:', err);
+      }
+    };
+    const loadSkillLevels = async () => {
+      try {
+        const response = await skillLevelsApi.getAll();
+        if (response.success) {
+          setSkillLevels(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading skill levels:', err);
+      }
+    };
+    const loadAgeGroups = async () => {
+      try {
+        const response = await ageGroupsApi.getAll();
+        if (response.success) {
+          setAgeGroups(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading age groups:', err);
+      }
+    };
+    loadTeamUnits();
+    loadSkillLevels();
+    loadAgeGroups();
+  }, []);
 
   // Keep ref in sync with selectedDivision for SignalR listener
   useEffect(() => {
@@ -568,6 +615,58 @@ export default function TournamentManage() {
     } catch (err) {
       console.error(`Error ${action}ing division:`, err);
       toast.error(`Failed to ${action} division`);
+    }
+  };
+
+  // Open edit division modal
+  const handleOpenEditDivision = (division) => {
+    setEditingDivision({
+      id: division.id,
+      name: division.name || '',
+      description: division.description || '',
+      teamUnitId: division.teamUnitId || null,
+      skillLevelId: division.skillLevelId || null,
+      ageGroupId: division.ageGroupId || null,
+      maxUnits: division.maxUnits || '',
+      maxPlayers: division.maxPlayers || '',
+      divisionFee: division.divisionFee || '',
+      scheduleStatus: division.scheduleReady ? 'Generated' : 'NotGenerated'
+    });
+    setShowEditDivision(true);
+  };
+
+  // Save division changes
+  const handleSaveDivision = async () => {
+    if (!editingDivision) return;
+
+    setSavingDivision(true);
+    try {
+      const updateData = {
+        name: editingDivision.name,
+        description: editingDivision.description,
+        teamUnitId: editingDivision.teamUnitId || null,
+        skillLevelId: editingDivision.skillLevelId || null,
+        ageGroupId: editingDivision.ageGroupId || null,
+        maxUnits: editingDivision.maxUnits ? parseInt(editingDivision.maxUnits) : null,
+        maxPlayers: editingDivision.maxPlayers ? parseInt(editingDivision.maxPlayers) : null,
+        divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null
+      };
+
+      const response = await eventsApi.updateDivision(eventId, editingDivision.id, updateData);
+      if (response.success) {
+        toast.success('Division updated successfully');
+        setShowEditDivision(false);
+        setEditingDivision(null);
+        loadDashboard();
+        loadEvent();
+      } else {
+        toast.error(response.message || 'Failed to update division');
+      }
+    } catch (err) {
+      console.error('Error updating division:', err);
+      toast.error('Failed to update division');
+    } finally {
+      setSavingDivision(false);
     }
   };
 
@@ -2005,6 +2104,16 @@ export default function TournamentManage() {
                   </div>
                   {isOrganizer && (
                     <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {/* Edit Division */}
+                      <button
+                        onClick={() => handleOpenEditDivision(div)}
+                        className="px-3 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 flex items-center gap-2"
+                        title="Edit division settings"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+
                       {/* Toggle Active Status */}
                       <button
                         onClick={() => handleToggleDivisionActive(div)}
@@ -4129,7 +4238,7 @@ export default function TournamentManage() {
                                       {isProcessing && processingUnitAction?.action === 'break' ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
                                       ) : (
-                                        <Shuffle className="w-4 h-4" />
+                                        <Hammer className="w-4 h-4" />
                                       )}
                                     </button>
                                   )}
@@ -5046,6 +5155,175 @@ export default function TournamentManage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Division Modal */}
+      {showEditDivision && editingDivision && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Edit Division</h3>
+              <button
+                onClick={() => {
+                  setShowEditDivision(false);
+                  setEditingDivision(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Basic Info */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Division Name</label>
+                <input
+                  type="text"
+                  value={editingDivision.name || ''}
+                  onChange={(e) => setEditingDivision({ ...editingDivision, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editingDivision.description || ''}
+                  onChange={(e) => setEditingDivision({ ...editingDivision, description: e.target.value })}
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              {/* Division Classification */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Division Classification</h4>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Format</label>
+                    <select
+                      value={editingDivision.teamUnitId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, teamUnitId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select format...</option>
+                      {teamUnits.map(unit => (
+                        <option key={unit.id} value={unit.id}>{unit.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
+                    <select
+                      value={editingDivision.skillLevelId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, skillLevelId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select skill level...</option>
+                      {skillLevels.map(level => (
+                        <option key={level.id} value={level.id}>{level.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Age Group</label>
+                    <select
+                      value={editingDivision.ageGroupId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, ageGroupId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select age group...</option>
+                      {ageGroups.map(group => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Teams</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingDivision.maxUnits || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, maxUnits: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Players</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingDivision.maxPlayers || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, maxPlayers: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Division Fee ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingDivision.divisionFee || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, divisionFee: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Single fee for all registrations. Use "Fee Options" below for multiple fee tiers.
+                  </p>
+                </div>
+              </div>
+
+              {/* Division Fee Options */}
+              <DivisionFeesEditor
+                divisionId={editingDivision.id}
+                divisionFee={editingDivision.divisionFee || 0}
+                onFeesChange={() => loadEvent()}
+              />
+
+              {/* Schedule Status Display */}
+              {editingDivision.scheduleStatus && editingDivision.scheduleStatus !== 'NotGenerated' && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm text-gray-700">
+                      Schedule Status: <strong>{editingDivision.scheduleStatus}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEditDivision(false);
+                  setEditingDivision(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDivision}
+                disabled={savingDivision}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingDivision && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
