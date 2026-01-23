@@ -80,6 +80,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ScoreFormat> ScoreFormats { get; set; }
     public DbSet<EventUnit> EventUnits { get; set; }
     public DbSet<EventUnitMember> EventUnitMembers { get; set; }
+    public DbSet<EventUnitMemberWaiver> EventUnitMemberWaivers { get; set; }
     public DbSet<EventUnitJoinRequest> EventUnitJoinRequests { get; set; }
     public DbSet<UserPayment> UserPayments { get; set; }
     public DbSet<EventEncounter> EventEncounters { get; set; }

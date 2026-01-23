@@ -284,6 +284,12 @@ public class EventUnitMember
     [MaxLength(100)]
     public string? ChineseName { get; set; }
 
+    /// <summary>
+    /// URL to merged PDF containing all signed waivers
+    /// </summary>
+    [MaxLength(500)]
+    public string? MergedWaiverPdfUrl { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation
@@ -301,6 +307,11 @@ public class EventUnitMember
 
     [ForeignKey("SelectedFeeId")]
     public DivisionFee? SelectedFee { get; set; }
+
+    /// <summary>
+    /// Collection of signed waivers for this member
+    /// </summary>
+    public ICollection<EventUnitMemberWaiver> SignedWaivers { get; set; } = new List<EventUnitMemberWaiver>();
 }
 
 /// <summary>
