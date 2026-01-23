@@ -58,6 +58,7 @@ const AdminDashboard = () => {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
 
   // Theme state
   const [themeSettings, setThemeSettings] = useState(null)
@@ -838,6 +839,23 @@ const AdminDashboard = () => {
       alert(error?.message || 'Failed to set password')
     } finally {
       setSavingPassword(false)
+    }
+  }
+
+  // Send test email to user
+  const handleSendTestEmail = async () => {
+    if (!selectedUser) return
+    if (!confirm(`Send a test email to ${selectedUser.email}?`)) return
+
+    setSendingTestEmail(true)
+    try {
+      const response = await userApi.adminSendTestEmail(selectedUser.id)
+      alert(response?.message || 'Test email sent successfully')
+    } catch (error) {
+      console.error('Error sending test email:', error)
+      alert(error?.message || 'Failed to send test email')
+    } finally {
+      setSendingTestEmail(false)
     }
   }
 
@@ -3039,6 +3057,21 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Test Email */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Test Email</label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500">Send a test email to verify notifications work</span>
+                      <button
+                        onClick={handleSendTestEmail}
+                        disabled={sendingTestEmail || !selectedUser.email}
+                        className="text-sm text-green-600 hover:text-green-800 disabled:opacity-50"
+                      >
+                        {sendingTestEmail ? 'Sending...' : 'Send Test Email'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

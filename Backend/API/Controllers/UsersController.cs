@@ -18,17 +18,20 @@ public class UsersController : ControllerBase
     private readonly IAssetService _assetService;
     private readonly ILogger<UsersController> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IEmailNotificationService _emailService;
 
     public UsersController(
         ApplicationDbContext context,
         IAssetService assetService,
         ILogger<UsersController> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IEmailNotificationService emailService)
     {
         _context = context;
         _assetService = assetService;
         _logger = logger;
         _configuration = configuration;
+        _emailService = emailService;
     }
 
     private int? GetCurrentUserId()
@@ -1463,6 +1466,88 @@ public class UsersController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Admin: Send a test email to a user
+    /// </summary>
+    [HttpPost("{id}/admin-test-email")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<object>>> AdminSendTestEmail(int id, [FromBody] AdminTestEmailRequest? request)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            if (string.IsNullOrEmpty(user.Email))
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User does not have an email address"
+                });
+            }
+
+            var subject = request?.Subject ?? "Test Email from Pickleball Community";
+            var body = request?.Body ?? $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+</head>
+<body style='font-family: -apple-system, BlinkMacSystemFont, ""Segoe UI"", Roboto, ""Helvetica Neue"", Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+    <div style='background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;'>
+        <h1 style='color: white; margin: 0; font-size: 24px;'>Test Email</h1>
+    </div>
+    <div style='background: #fff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;'>
+        <p style='font-size: 16px;'>Hi {user.FirstName ?? "there"},</p>
+        <p>This is a test email from the Pickleball Community admin panel.</p>
+        <p>If you received this email, your email notifications are working correctly.</p>
+        <div style='background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+            <p style='margin: 0;'><strong>User ID:</strong> {user.Id}</p>
+            <p style='margin: 5px 0 0 0;'><strong>Email:</strong> {user.Email}</p>
+            <p style='margin: 5px 0 0 0;'><strong>Sent at:</strong> {DateTime.Now:MMMM d, yyyy 'at' h:mm tt}</p>
+        </div>
+        <p style='margin-top: 30px; font-size: 14px; color: #6b7280;'>
+            <strong>Pickleball Community</strong>
+        </p>
+    </div>
+</body>
+</html>";
+
+            await _emailService.SendSimpleAsync(user.Id, user.Email, subject, body);
+
+            _logger.LogInformation("Admin sent test email to user {UserId} ({Email})", id, user.Email);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = $"Test email sent to {user.Email}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending test email to user {UserId}", id);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while sending test email: " + ex.Message
+            });
+        }
+    }
+}
+
+public class AdminTestEmailRequest
+{
+    public string? Subject { get; set; }
+    public string? Body { get; set; }
 }
 
 public class AdminUpdateEmailRequest
