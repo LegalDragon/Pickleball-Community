@@ -107,6 +107,14 @@ export default function TournamentManage() {
   const [courtGroups, setCourtGroups] = useState([]);
   const [loadingCourtGroups, setLoadingCourtGroups] = useState(false);
 
+  // Unit management state
+  const [unitsData, setUnitsData] = useState(null); // All units grouped by division
+  const [loadingUnits, setLoadingUnits] = useState(false);
+  const [selectedUnitsForMerge, setSelectedUnitsForMerge] = useState([]);
+  const [processingUnitAction, setProcessingUnitAction] = useState(null); // { unitId, action }
+  const [expandedUnit, setExpandedUnit] = useState(null); // unitId for expanded view
+  const [movingUnitToDivision, setMovingUnitToDivision] = useState(null); // { unit, targetDivisionId }
+
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
     { value: '', label: 'Select method...' },
@@ -948,6 +956,150 @@ export default function TournamentManage() {
       grouped[player.divisionId].players.push(player);
     });
     return Object.values(grouped);
+  };
+
+  // Unit Management functions
+  const loadUnits = async () => {
+    setLoadingUnits(true);
+    try {
+      const response = await tournamentApi.getEventUnits(eventId);
+      if (response.success) {
+        // Group units by division
+        const grouped = {};
+        (response.data || []).forEach(unit => {
+          if (unit.status === 'Cancelled') return;
+          const divId = unit.divisionId;
+          if (!grouped[divId]) {
+            grouped[divId] = {
+              divisionId: divId,
+              divisionName: unit.divisionName || 'Unknown Division',
+              units: []
+            };
+          }
+          grouped[divId].units.push(unit);
+        });
+        setUnitsData(grouped);
+      } else {
+        toast.error(response.message || 'Failed to load units');
+      }
+    } catch (err) {
+      console.error('Error loading units:', err);
+      toast.error('Failed to load units');
+    } finally {
+      setLoadingUnits(false);
+    }
+  };
+
+  const handleBreakUnit = async (unit) => {
+    if (!confirm(`Break "${unit.name}" apart? Each member will become their own registration.`)) return;
+    setProcessingUnitAction({ unitId: unit.id, action: 'break' });
+    try {
+      const response = await tournamentApi.adminBreakUnit(unit.id);
+      if (response.success) {
+        toast.success('Unit broken apart - members now have individual registrations');
+        loadUnits();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to break unit');
+      }
+    } catch (err) {
+      console.error('Error breaking unit:', err);
+      toast.error(err.message || 'Failed to break unit');
+    } finally {
+      setProcessingUnitAction(null);
+    }
+  };
+
+  const handleMergeUnits = async () => {
+    if (selectedUnitsForMerge.length !== 2) {
+      toast.error('Select exactly 2 units to merge');
+      return;
+    }
+    const [target, source] = selectedUnitsForMerge;
+    if (target.divisionId !== source.divisionId) {
+      toast.error('Units must be in the same division to merge');
+      return;
+    }
+    if (!confirm(`Merge "${source.name}" into "${target.name}"? Members from the second unit will join the first.`)) return;
+
+    setProcessingUnitAction({ unitId: target.id, action: 'merge' });
+    try {
+      const response = await tournamentApi.mergeRegistrations(eventId, target.id, source.id);
+      if (response.success) {
+        toast.success('Units merged successfully');
+        setSelectedUnitsForMerge([]);
+        loadUnits();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to merge units');
+      }
+    } catch (err) {
+      console.error('Error merging units:', err);
+      toast.error(err.message || 'Failed to merge units');
+    } finally {
+      setProcessingUnitAction(null);
+    }
+  };
+
+  const handleMoveUnitToDivision = async (unit, newDivisionId) => {
+    if (!confirm(`Move "${unit.name}" to a different division? Fees will be adjusted if possible.`)) return;
+    setProcessingUnitAction({ unitId: unit.id, action: 'move' });
+    try {
+      const response = await tournamentApi.moveRegistration(eventId, unit.id, newDivisionId);
+      if (response.success) {
+        const feeWarning = response.message?.includes('Warning') ? ' ' + response.message : '';
+        toast.success('Unit moved to new division.' + feeWarning);
+        setMovingUnitToDivision(null);
+        loadUnits();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to move unit');
+      }
+    } catch (err) {
+      console.error('Error moving unit:', err);
+      toast.error(err.message || 'Failed to move unit');
+    } finally {
+      setProcessingUnitAction(null);
+    }
+  };
+
+  const handleRemoveMember = async (unit, member) => {
+    if (!confirm(`Remove ${member.firstName} ${member.lastName} from "${unit.name}"?`)) return;
+    setProcessingUnitAction({ unitId: unit.id, action: 'remove-member' });
+    try {
+      const response = await tournamentApi.removeRegistration(eventId, unit.id, member.userId);
+      if (response.success) {
+        toast.success('Member removed from unit');
+        loadUnits();
+        loadDashboard();
+        loadCheckIns();
+      } else {
+        toast.error(response.message || 'Failed to remove member');
+      }
+    } catch (err) {
+      console.error('Error removing member:', err);
+      toast.error(err.message || 'Failed to remove member');
+    } finally {
+      setProcessingUnitAction(null);
+    }
+  };
+
+  const toggleUnitForMerge = (unit) => {
+    setSelectedUnitsForMerge(prev => {
+      const exists = prev.find(u => u.id === unit.id);
+      if (exists) {
+        return prev.filter(u => u.id !== unit.id);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], unit]; // Replace oldest selection
+      }
+      return [...prev, unit];
+    });
+  };
+
+  const getUnitsByDivision = () => {
+    if (!unitsData) return [];
+    return Object.values(unitsData).filter(d => d.units.length > 0);
   };
 
   const handleOverrideRank = async (unitId, poolRank) => {
@@ -3740,6 +3892,299 @@ export default function TournamentManage() {
                 Players can check in from their Member Dashboard after signing the waiver and completing payment.
                 Check-in is typically enabled when the tournament status is set to "Running".
               </p>
+            </div>
+
+            {/* Unit Management Section */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-purple-600" />
+                  Unit/Team Management
+                </h2>
+                <div className="flex items-center gap-2">
+                  {selectedUnitsForMerge.length === 2 && (
+                    <button
+                      onClick={handleMergeUnits}
+                      disabled={processingUnitAction?.action === 'merge'}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                    >
+                      {processingUnitAction?.action === 'merge' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Users className="w-4 h-4" />
+                      )}
+                      Merge Selected ({selectedUnitsForMerge.length})
+                    </button>
+                  )}
+                  {selectedUnitsForMerge.length > 0 && (
+                    <button
+                      onClick={() => setSelectedUnitsForMerge([])}
+                      className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    onClick={loadUnits}
+                    disabled={loadingUnits}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${loadingUnits ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {!unitsData ? (
+                <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                  <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">Click refresh to load unit data for management</p>
+                  <button
+                    onClick={loadUnits}
+                    disabled={loadingUnits}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2 mx-auto"
+                  >
+                    {loadingUnits ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+                    Load Units
+                  </button>
+                </div>
+              ) : getUnitsByDivision().length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+                  <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No registered units found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {getUnitsByDivision().map(divGroup => (
+                    <div key={divGroup.divisionId} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 bg-purple-50 border-b">
+                        <h3 className="font-semibold text-gray-900">{divGroup.divisionName}</h3>
+                        <p className="text-sm text-gray-500">
+                          {divGroup.units.length} {divGroup.units.length === 1 ? 'unit' : 'units'}
+                        </p>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {divGroup.units.map(unit => {
+                          const isSelected = selectedUnitsForMerge.some(u => u.id === unit.id);
+                          const isExpanded = expandedUnit === unit.id;
+                          const isProcessing = processingUnitAction?.unitId === unit.id;
+
+                          return (
+                            <div key={unit.id} className={`${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                              {/* Unit header row */}
+                              <div
+                                className="p-4 cursor-pointer"
+                                onClick={() => setExpandedUnit(isExpanded ? null : unit.id)}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    {/* Checkbox for merge selection */}
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        toggleUnitForMerge(unit);
+                                      }}
+                                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+
+                                    {/* Unit info */}
+                                    <div>
+                                      <div className="font-medium text-gray-900 flex items-center gap-2">
+                                        {unit.name}
+                                        {unit.isComplete && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">Complete</span>
+                                        )}
+                                        {unit.status === 'Waitlisted' && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">Waitlisted</span>
+                                        )}
+                                      </div>
+                                      <div className="text-sm text-gray-500">
+                                        {unit.members?.filter(m => m.inviteStatus === 'Accepted').length || 0} / {unit.requiredPlayers || 2} members
+                                        {unit.captainName && ` • Captain: ${unit.captainName}`}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Quick actions */}
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                      unit.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+                                      unit.paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {unit.paymentStatus || 'Unpaid'}
+                                    </span>
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                                    ) : (
+                                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Expanded unit details */}
+                              {isExpanded && (
+                                <div className="px-4 pb-4">
+                                  <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                    {/* Members list */}
+                                    <div>
+                                      <h4 className="text-sm font-medium text-gray-700 mb-2">Members</h4>
+                                      <div className="space-y-2">
+                                        {unit.members?.filter(m => m.inviteStatus === 'Accepted').map(member => (
+                                          <div key={member.id} className="flex items-center justify-between bg-white p-2 rounded-lg">
+                                            <div className="flex items-center gap-2">
+                                              {member.profileImageUrl ? (
+                                                <img
+                                                  src={getSharedAssetUrl(member.profileImageUrl)}
+                                                  alt=""
+                                                  className="w-8 h-8 rounded-full object-cover"
+                                                />
+                                              ) : (
+                                                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                                  <User className="w-4 h-4 text-gray-400" />
+                                                </div>
+                                              )}
+                                              <div>
+                                                <button
+                                                  onClick={() => setProfileModalUserId(member.userId)}
+                                                  className="text-sm font-medium text-gray-900 hover:text-purple-600"
+                                                >
+                                                  {member.firstName} {member.lastName}
+                                                </button>
+                                                {member.role === 'Captain' && (
+                                                  <span className="text-xs text-purple-600 ml-1">(Captain)</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                                member.hasPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                                              }`}>
+                                                {member.hasPaid ? 'Paid' : 'Unpaid'}
+                                              </span>
+                                              {unit.members.filter(m => m.inviteStatus === 'Accepted').length > 1 && (
+                                                <button
+                                                  onClick={() => handleRemoveMember(unit, member)}
+                                                  disabled={isProcessing}
+                                                  className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-50"
+                                                  title="Remove from unit"
+                                                >
+                                                  <X className="w-4 h-4" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Admin Actions */}
+                                    <div className="pt-3 border-t border-gray-200">
+                                      <h4 className="text-sm font-medium text-gray-700 mb-2">Admin Actions</h4>
+                                      <div className="flex flex-wrap gap-2">
+                                        {/* Break Unit */}
+                                        {unit.members?.filter(m => m.inviteStatus === 'Accepted').length > 1 && (
+                                          <button
+                                            onClick={() => handleBreakUnit(unit)}
+                                            disabled={isProcessing}
+                                            className="px-3 py-2 text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50 flex items-center gap-1"
+                                          >
+                                            {isProcessing && processingUnitAction?.action === 'break' ? (
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                              <Shuffle className="w-4 h-4" />
+                                            )}
+                                            Break Unit
+                                          </button>
+                                        )}
+
+                                        {/* Move to Division */}
+                                        {dashboard?.divisions?.filter(d => d.id !== unit.divisionId).length > 0 && (
+                                          <>
+                                            {movingUnitToDivision?.unit?.id === unit.id ? (
+                                              <div className="flex items-center gap-2">
+                                                <select
+                                                  value={movingUnitToDivision.targetDivisionId || ''}
+                                                  onChange={(e) => setMovingUnitToDivision({
+                                                    ...movingUnitToDivision,
+                                                    targetDivisionId: parseInt(e.target.value)
+                                                  })}
+                                                  className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                >
+                                                  <option value="">Select division...</option>
+                                                  {dashboard?.divisions?.filter(d => d.id !== unit.divisionId).map(d => (
+                                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                                  ))}
+                                                </select>
+                                                <button
+                                                  onClick={() => movingUnitToDivision.targetDivisionId && handleMoveUnitToDivision(unit, movingUnitToDivision.targetDivisionId)}
+                                                  disabled={!movingUnitToDivision.targetDivisionId || isProcessing}
+                                                  className="px-2 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                                >
+                                                  {isProcessing && processingUnitAction?.action === 'move' ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                  ) : 'Move'}
+                                                </button>
+                                                <button
+                                                  onClick={() => setMovingUnitToDivision(null)}
+                                                  className="px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                                                >
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                onClick={() => setMovingUnitToDivision({ unit, targetDivisionId: null })}
+                                                className="px-3 py-2 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-1"
+                                              >
+                                                <ArrowRight className="w-4 h-4" />
+                                                Move Division
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+
+                                        {/* Cancel Registration */}
+                                        <button
+                                          onClick={() => {
+                                            if (!confirm(`Cancel registration for "${unit.name}"? This will remove all members.`)) return;
+                                            // Use remove with captain to delete entire unit
+                                            handleRemoveMember(unit, unit.members.find(m => m.userId === unit.captainUserId) || unit.members[0]);
+                                          }}
+                                          disabled={isProcessing}
+                                          className="px-3 py-2 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center gap-1"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          Cancel Registration
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-purple-700 mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-5 h-5" />
+                  <span className="font-medium">Unit Management Tips</span>
+                </div>
+                <ul className="text-sm space-y-1 list-disc list-inside">
+                  <li><strong>Break Unit:</strong> Split a team into individual registrations</li>
+                  <li><strong>Merge Units:</strong> Select 2 units (same division) and click Merge</li>
+                  <li><strong>Move Division:</strong> Move a unit to a different division (fees adjust automatically)</li>
+                  <li><strong>Remove Member:</strong> Remove a player from their team</li>
+                </ul>
+              </div>
             </div>
           </div>
         )}

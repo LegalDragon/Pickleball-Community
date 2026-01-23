@@ -2652,39 +2652,114 @@ public class TournamentController : EventControllerBase
 
     /// <summary>
     /// Move a registration to a different division (organizer only)
+    /// Handles fee adjustment by finding matching fee types in the new division
     /// </summary>
     [Authorize]
     [HttpPost("events/{eventId}/registrations/{unitId}/move")]
-    public async Task<ActionResult<ApiResponse<bool>>> MoveRegistration(int eventId, int unitId, [FromBody] MoveRegistrationRequest request)
+    public async Task<ActionResult<ApiResponse<object>>> MoveRegistration(int eventId, int unitId, [FromBody] MoveRegistrationRequest request)
     {
         var currentUserId = GetUserId();
         if (!currentUserId.HasValue)
-            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
 
         // Check if user is organizer or site admin
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
         if (evt == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
 
         var isAdmin = await IsAdminAsync();
         if (evt.OrganizedByUserId != currentUserId.Value && !isAdmin)
             return Forbid();
 
-        var unit = await _context.EventUnits.FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
+        var unit = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.SelectedFee)
+            .FirstOrDefaultAsync(u => u.Id == unitId && u.EventId == eventId);
         if (unit == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Message = "Unit not found" });
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Unit not found" });
+
+        var oldDivisionId = unit.DivisionId;
 
         // Verify target division exists and belongs to this event
         var targetDivision = await _context.EventDivisions
             .FirstOrDefaultAsync(d => d.Id == request.NewDivisionId && d.EventId == eventId && d.IsActive);
         if (targetDivision == null)
-            return NotFound(new ApiResponse<bool> { Success = false, Message = "Target division not found" });
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Target division not found" });
+
+        // Get fees for the new division (division-specific first, then event-level fallback)
+        var newDivisionFees = await _context.DivisionFees
+            .Include(f => f.FeeType)
+            .Where(f => f.EventId == eventId && (f.DivisionId == request.NewDivisionId || f.DivisionId == 0) && f.IsActive)
+            .ToListAsync();
+
+        // Prioritize division-specific fees over event-level fees
+        var newFeesByType = newDivisionFees
+            .GroupBy(f => f.FeeTypeId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.FirstOrDefault(f => f.DivisionId == request.NewDivisionId) ?? g.First()
+            );
+
+        // Track fee changes for response
+        var feeChanges = new List<object>();
+
+        // Update each member's SelectedFeeId to point to matching fee in new division
+        foreach (var member in unit.Members.Where(m => m.SelectedFeeId.HasValue && m.SelectedFee != null))
+        {
+            var oldFeeTypeId = member.SelectedFee!.FeeTypeId;
+            var oldAmount = member.SelectedFee.Amount;
+
+            if (newFeesByType.TryGetValue(oldFeeTypeId, out var newFee))
+            {
+                member.SelectedFeeId = newFee.Id;
+                feeChanges.Add(new
+                {
+                    memberId = member.Id,
+                    userId = member.UserId,
+                    oldFeeId = member.SelectedFee.Id,
+                    newFeeId = newFee.Id,
+                    feeTypeName = newFee.FeeType?.Name ?? "Unknown",
+                    oldAmount = oldAmount,
+                    newAmount = newFee.Amount
+                });
+            }
+            else
+            {
+                // No matching fee type in new division - clear selection
+                // Admin will need to manually assign a new fee
+                feeChanges.Add(new
+                {
+                    memberId = member.Id,
+                    userId = member.UserId,
+                    oldFeeId = member.SelectedFeeId,
+                    newFeeId = (int?)null,
+                    feeTypeName = member.SelectedFee.FeeType?.Name ?? "Unknown",
+                    oldAmount = oldAmount,
+                    newAmount = (decimal?)null,
+                    warning = "No matching fee type in target division"
+                });
+                member.SelectedFeeId = null;
+            }
+        }
 
         unit.DivisionId = request.NewDivisionId;
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
-        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration moved to new division" });
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Data = new
+            {
+                unitId = unit.Id,
+                oldDivisionId,
+                newDivisionId = request.NewDivisionId,
+                feeChanges
+            },
+            Message = feeChanges.Any(fc => ((dynamic)fc).newFeeId == null)
+                ? "Registration moved. Warning: Some members had fees that don't exist in the new division."
+                : "Registration moved to new division"
+        });
     }
 
     /// <summary>
