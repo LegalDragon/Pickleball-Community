@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Calendar, MapPin, Users, DollarSign, ChevronLeft, ChevronRight,
   UserPlus, User, Loader2, AlertCircle, Check, Plus, LogIn,
-  Copy, X, Upload, Image, FileText, ExternalLink, CreditCard
+  Copy, X, Upload, Image, FileText, ExternalLink, CreditCard,
+  ScrollText, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi } from '../services/api';
+import SignatureCanvas from '../components/SignatureCanvas';
 
 const STEPS = [
   { id: 1, name: 'Select Division', description: 'Choose your division' },
   { id: 2, name: 'Team Formation', description: 'Set up your team' },
   { id: 3, name: 'Confirmation', description: 'Review & complete' },
-  { id: 4, name: 'Payment', description: 'Complete payment' }
+  { id: 4, name: 'Waiver', description: 'Sign waiver' },
+  { id: 5, name: 'Payment', description: 'Complete payment' }
 ];
 
 const PAYMENT_METHODS = [
@@ -67,6 +70,19 @@ export default function EventRegistration() {
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [selectedTeammateIds, setSelectedTeammateIds] = useState([]); // For paying for teammates
   const [unitMembers, setUnitMembers] = useState([]); // Members of the registered unit
+
+  // Waiver state
+  const [waivers, setWaivers] = useState([]);
+  const [currentWaiverIndex, setCurrentWaiverIndex] = useState(0);
+  const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
+  const [signatureImage, setSignatureImage] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
+  const [signerRole, setSignerRole] = useState('Participant');
+  const [guardianName, setGuardianName] = useState('');
+  const [agreedToWaiver, setAgreedToWaiver] = useState(false);
+  const [isSigningWaiver, setIsSigningWaiver] = useState(false);
+  const [loadingWaivers, setLoadingWaivers] = useState(false);
+  const waiverContentRef = useRef(null);
 
   // Load event data
   useEffect(() => {
@@ -136,6 +152,107 @@ export default function EventRegistration() {
     } finally {
       setLoadingUnits(false);
     }
+  };
+
+  // Load event waivers
+  const loadWaivers = async () => {
+    setLoadingWaivers(true);
+    try {
+      const response = await checkInApi.getWaivers(eventId);
+      if (response.success && response.data?.length > 0) {
+        setWaivers(response.data);
+        setCurrentWaiverIndex(0);
+        setHasScrolledToEnd(false);
+        setSignatureImage('');
+        setAgreedToWaiver(false);
+      } else {
+        setWaivers([]);
+      }
+    } catch (err) {
+      console.log('Error loading waivers:', err);
+      setWaivers([]);
+    } finally {
+      setLoadingWaivers(false);
+    }
+  };
+
+  // Handle scroll to detect when user reaches the end of waiver content
+  const handleWaiverScroll = useCallback((e) => {
+    const element = e.target;
+    const scrolledToBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 20;
+    if (scrolledToBottom && !hasScrolledToEnd) {
+      setHasScrolledToEnd(true);
+    }
+  }, [hasScrolledToEnd]);
+
+  // Reset waiver state for next waiver
+  const resetWaiverState = () => {
+    setHasScrolledToEnd(false);
+    setSignatureImage('');
+    setAgreedToWaiver(false);
+    setSignerRole('Participant');
+    setGuardianName('');
+    setEmergencyPhone('');
+  };
+
+  // Check if current waiver content needs scrolling
+  const checkIfScrollNeeded = useCallback(() => {
+    if (waiverContentRef.current) {
+      const element = waiverContentRef.current;
+      // If content doesn't need scrolling (fits in view), auto-reveal signing block
+      if (element.scrollHeight <= element.clientHeight + 10) {
+        setHasScrolledToEnd(true);
+      }
+    }
+  }, []);
+
+  // Check scroll need when waiver changes
+  useEffect(() => {
+    if (currentStep === 4 && waivers.length > 0) {
+      setTimeout(checkIfScrollNeeded, 100);
+    }
+  }, [currentStep, currentWaiverIndex, waivers, checkIfScrollNeeded]);
+
+  // Helper to determine if current signer is guardian/parent
+  const isGuardianSigning = signerRole !== 'Participant';
+  const currentWaiver = waivers[currentWaiverIndex];
+
+  // Get player's full name for signature
+  const playerFullName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '';
+
+  // Render markdown content (simplified version)
+  const renderWaiverContent = (content) => {
+    if (!content) return null;
+
+    // Check if content looks like markdown
+    const isMarkdown = /^#|\*\*|^-\s|^\d+\.\s/m.test(content);
+
+    if (isMarkdown) {
+      // Simple markdown rendering
+      const lines = content.split('\n');
+      return lines.map((line, i) => {
+        // Headers
+        if (line.startsWith('# ')) return <h1 key={i} className="text-xl font-bold mt-4 mb-2">{line.slice(2)}</h1>;
+        if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-bold mt-3 mb-2">{line.slice(3)}</h2>;
+        if (line.startsWith('### ')) return <h3 key={i} className="text-base font-bold mt-2 mb-1">{line.slice(4)}</h3>;
+        // Bold
+        const boldText = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // List items
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+          return <li key={i} className="ml-4" dangerouslySetInnerHTML={{ __html: boldText.slice(2) }} />;
+        }
+        if (/^\d+\.\s/.test(line)) {
+          return <li key={i} className="ml-4 list-decimal" dangerouslySetInnerHTML={{ __html: line.replace(/^\d+\.\s/, '') }} />;
+        }
+        // Empty line
+        if (!line.trim()) return <br key={i} />;
+        // Regular paragraph
+        return <p key={i} className="mb-2" dangerouslySetInnerHTML={{ __html: boldText }} />;
+      });
+    }
+
+    // Plain text or HTML
+    return <div dangerouslySetInnerHTML={{ __html: content }} />;
   };
 
   // Check if user can register for a division
@@ -255,13 +372,34 @@ export default function EventRegistration() {
           }
         }
 
-        // Go to payment step if there's a fee
-        const hasFee = getEffectiveFeeAmount() > 0;
-        if (hasFee) {
-          setCurrentStep(4);
-        } else {
-          setCurrentStep(3); // Show success without payment
+        // Load waivers for this event and navigate accordingly
+        try {
+          const waiverResponse = await checkInApi.getWaivers(eventId);
+          if (waiverResponse.success && waiverResponse.data?.length > 0) {
+            setWaivers(waiverResponse.data);
+            setCurrentWaiverIndex(0);
+            resetWaiverState();
+            setCurrentStep(4); // Go to waiver step
+          } else {
+            // No waivers, check for payment
+            const hasFee = getEffectiveFeeAmount() > 0;
+            if (hasFee) {
+              setCurrentStep(5); // Go to payment step
+            } else {
+              setCurrentStep(3); // Show success confirmation
+            }
+          }
+        } catch (e) {
+          console.log('Could not load waivers:', e);
+          // No waivers or error, check for payment
+          const hasFee = getEffectiveFeeAmount() > 0;
+          if (hasFee) {
+            setCurrentStep(5);
+          } else {
+            setCurrentStep(3);
+          }
         }
+
         toast.success('Successfully registered!');
       } else {
         toast.error(response.message || 'Failed to register');
@@ -410,6 +548,68 @@ export default function EventRegistration() {
     setCurrentStep(3); // Go to success step
   };
 
+  // Handle waiver signing
+  const handleSignWaiver = async () => {
+    if (!currentWaiver || !signatureImage || !agreedToWaiver) {
+      toast.error('Please complete all required fields');
+      return;
+    }
+
+    // Validate guardian name if signing as guardian
+    if (isGuardianSigning && !guardianName.trim()) {
+      toast.error(`Please enter the ${signerRole.toLowerCase()}'s full name`);
+      return;
+    }
+
+    setIsSigningWaiver(true);
+    try {
+      const signatureData = {
+        signature: isGuardianSigning ? guardianName.trim() : playerFullName,
+        signatureImage,
+        signerRole,
+        parentGuardianName: isGuardianSigning ? guardianName.trim() : null,
+        emergencyPhone: emergencyPhone || null
+      };
+
+      const response = await checkInApi.signWaiver(eventId, currentWaiver.id, signatureData);
+
+      if (response.success) {
+        // Check if there are more waivers to sign
+        if (currentWaiverIndex < waivers.length - 1) {
+          setCurrentWaiverIndex(currentWaiverIndex + 1);
+          resetWaiverState();
+          toast.success('Waiver signed! Please sign the next waiver.');
+        } else {
+          // All waivers signed, move to next step
+          toast.success('All waivers signed successfully!');
+          const hasFee = getEffectiveFeeAmount() > 0;
+          if (hasFee) {
+            setCurrentStep(5); // Go to payment step
+          } else {
+            setCurrentStep(3); // Go to success confirmation
+          }
+        }
+      } else {
+        toast.error(response.message || 'Failed to sign waiver');
+      }
+    } catch (err) {
+      console.error('Error signing waiver:', err);
+      toast.error(err?.response?.data?.message || 'Failed to sign waiver');
+    } finally {
+      setIsSigningWaiver(false);
+    }
+  };
+
+  // Handle skip waivers (for testing or when waivers are optional)
+  const handleSkipWaivers = () => {
+    const hasFee = getEffectiveFeeAmount() > 0;
+    if (hasFee) {
+      setCurrentStep(5);
+    } else {
+      setCurrentStep(3);
+    }
+  };
+
   // Handle join by code
   const handleJoinByCode = async () => {
     if (!joinCodeInput.trim()) {
@@ -457,12 +657,31 @@ export default function EventRegistration() {
           }
         }
 
-        // Go to payment step if there's a fee, otherwise show success
-        const hasFee = getEffectiveFeeAmount() > 0;
-        if (hasFee) {
-          setCurrentStep(4);
-        } else {
-          setCurrentStep(3);
+        // Load waivers and navigate accordingly
+        try {
+          const waiverResponse = await checkInApi.getWaivers(eventId);
+          if (waiverResponse.success && waiverResponse.data?.length > 0) {
+            setWaivers(waiverResponse.data);
+            setCurrentWaiverIndex(0);
+            resetWaiverState();
+            setCurrentStep(4); // Go to waiver step
+          } else {
+            // No waivers, check for payment
+            const hasFee = getEffectiveFeeAmount() > 0;
+            if (hasFee) {
+              setCurrentStep(5);
+            } else {
+              setCurrentStep(3);
+            }
+          }
+        } catch (e) {
+          console.log('Could not load waivers:', e);
+          const hasFee = getEffectiveFeeAmount() > 0;
+          if (hasFee) {
+            setCurrentStep(5);
+          } else {
+            setCurrentStep(3);
+          }
         }
         toast.success(response.message || 'Successfully joined the team!');
       } else {
@@ -669,12 +888,14 @@ export default function EventRegistration() {
                 const isCurrent = currentStep === step.id;
                 // Skip team formation step for singles
                 const teamSize = selectedDivision ? getTeamSize(selectedDivision) : 1;
-                const isSkipped = step.id === 2 && teamSize === 1;
+                const isTeamSkipped = step.id === 2 && teamSize === 1;
+                // Skip waiver step if no waivers (we'll know after registration)
+                const isWaiverSkipped = step.id === 4 && waivers.length === 0 && !registrationResult;
                 // Skip payment step if no fee
                 const hasFee = selectedDivision ? (hasFeeOptions(selectedDivision) || selectedDivision.divisionFee > 0 || event?.perDivisionFee > 0 || event?.registrationFee > 0) : (event?.perDivisionFee > 0 || event?.registrationFee > 0);
-                const isPaymentSkipped = step.id === 4 && !hasFee;
+                const isPaymentSkipped = step.id === 5 && !hasFee;
 
-                if (isSkipped || isPaymentSkipped) return null;
+                if (isTeamSkipped || isWaiverSkipped || isPaymentSkipped) return null;
 
                 return (
                   <li key={step.id} className="flex-1 relative">
@@ -695,7 +916,7 @@ export default function EventRegistration() {
                       </div>
                     </div>
                     {/* Connector line */}
-                    {index < STEPS.length - 1 && !isSkipped && (
+                    {index < STEPS.length - 1 && !isTeamSkipped && !isWaiverSkipped && !isPaymentSkipped && (
                       <div className={`
                         absolute top-5 left-1/2 w-full h-0.5
                         ${isCompleted ? 'bg-orange-600' : 'bg-gray-200'}
@@ -1220,8 +1441,258 @@ export default function EventRegistration() {
           </div>
         )}
 
-        {/* Step 4: Payment */}
-        {currentStep === 4 && registrationResult && (
+        {/* Step 4: Waiver */}
+        {currentStep === 4 && registrationResult && waivers.length > 0 && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              {/* Success message */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-center">
+                <Check className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                <h3 className="font-semibold text-green-800">Registration Successful!</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  Please sign the required waiver{waivers.length > 1 ? 's' : ''} to complete your registration.
+                </p>
+                {newJoinCode && (
+                  <div className="mt-3 p-3 bg-white border border-green-300 rounded-lg">
+                    <p className="text-sm text-gray-600 mb-1">Share this code with your partner:</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-2xl font-mono font-bold text-green-700">{newJoinCode}</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(newJoinCode);
+                          toast.success('Copied!');
+                        }}
+                        className="p-1 hover:bg-green-100 rounded"
+                      >
+                        <Copy className="w-4 h-4 text-green-600" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Waiver header */}
+              <h2 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <ScrollText className="w-5 h-5" />
+                Sign Waiver {waivers.length > 1 && `(${currentWaiverIndex + 1} of ${waivers.length})`}
+              </h2>
+
+              {loadingWaivers ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+                </div>
+              ) : currentWaiver ? (
+                <>
+                  {/* Waiver title */}
+                  <h3 className="font-medium text-gray-800 mb-4">{currentWaiver.title}</h3>
+
+                  {/* Waiver content - scrollable */}
+                  <div className="relative mb-4">
+                    <div
+                      ref={waiverContentRef}
+                      onScroll={handleWaiverScroll}
+                      className="max-h-80 overflow-y-auto p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm prose prose-sm max-w-none"
+                    >
+                      {currentWaiver.content ? (
+                        renderWaiverContent(currentWaiver.content)
+                      ) : currentWaiver.fileUrl ? (
+                        <div className="text-center py-4">
+                          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                          <a
+                            href={currentWaiver.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center gap-2"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            View Waiver Document
+                          </a>
+                          <p className="text-xs text-gray-500 mt-2">
+                            Please read the full document before signing below.
+                          </p>
+                          <button
+                            onClick={() => setHasScrolledToEnd(true)}
+                            className="mt-4 text-sm text-orange-600 hover:underline"
+                          >
+                            I have read the waiver document
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-gray-500">No waiver content available.</p>
+                      )}
+                    </div>
+
+                    {/* Scroll indicator */}
+                    {!hasScrolledToEnd && currentWaiver.content && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-100 to-transparent h-16 flex items-end justify-center pb-2 pointer-events-none">
+                        <div className="flex items-center gap-1 text-sm text-orange-600 bg-white px-3 py-1 rounded-full shadow">
+                          <ChevronDown className="w-4 h-4 animate-bounce" />
+                          Scroll to read entire waiver
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signing block - only visible after scrolling to end */}
+                  {hasScrolledToEnd ? (
+                    <div className="border-t pt-6 space-y-4">
+                      {/* Signer Role Selection */}
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Who is signing this waiver?
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                            signerRole === 'Participant'
+                              ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="signerRole"
+                              value="Participant"
+                              checked={signerRole === 'Participant'}
+                              onChange={(e) => setSignerRole(e.target.value)}
+                              className="sr-only"
+                            />
+                            <span className="font-medium text-sm">Self (Participant)</span>
+                          </label>
+                          <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                            signerRole === 'Parent'
+                              ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="signerRole"
+                              value="Parent"
+                              checked={signerRole === 'Parent'}
+                              onChange={(e) => setSignerRole(e.target.value)}
+                              className="sr-only"
+                            />
+                            <span className="font-medium text-sm">Parent</span>
+                          </label>
+                          <label className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-colors ${
+                            signerRole === 'Guardian'
+                              ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                          }`}>
+                            <input
+                              type="radio"
+                              name="signerRole"
+                              value="Guardian"
+                              checked={signerRole === 'Guardian'}
+                              onChange={(e) => setSignerRole(e.target.value)}
+                              className="sr-only"
+                            />
+                            <span className="font-medium text-sm">Legal Guardian</span>
+                          </label>
+                        </div>
+
+                        {/* Guardian Name Field */}
+                        {isGuardianSigning && (
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {signerRole === 'Parent' ? "Parent's" : "Guardian's"} Full Legal Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={guardianName}
+                              onChange={(e) => setGuardianName(e.target.value)}
+                              placeholder={`Enter ${signerRole.toLowerCase()}'s full name`}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                              required
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              By signing as {signerRole.toLowerCase()}, you confirm you have legal authority to sign on behalf of {playerFullName || 'the participant'}.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Emergency Phone */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Emergency Contact Phone (optional)
+                        </label>
+                        <input
+                          type="tel"
+                          value={emergencyPhone}
+                          onChange={(e) => setEmergencyPhone(e.target.value)}
+                          placeholder="(555) 123-4567"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        />
+                      </div>
+
+                      {/* Drawn Signature */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          {isGuardianSigning ? `Draw ${signerRole.toLowerCase()}'s signature` : 'Draw your signature'} *
+                        </label>
+                        <SignatureCanvas
+                          onSignatureChange={setSignatureImage}
+                          className="border border-gray-300 rounded-lg"
+                          width={Math.min(350, window.innerWidth - 80)}
+                          height={150}
+                        />
+                      </div>
+
+                      {/* Agreement Checkbox */}
+                      <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={agreedToWaiver}
+                          onChange={(e) => setAgreedToWaiver(e.target.checked)}
+                          className="mt-1 w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {isGuardianSigning ? (
+                            <>I, as the {signerRole.toLowerCase()} of {playerFullName || 'the participant'}, have read and agree to the terms of this waiver.
+                            I confirm I have legal authority to sign on behalf of the participant and understand that by signing this document,
+                            I am waiving certain legal rights on their behalf.</>
+                          ) : (
+                            <>I have read and agree to the terms of this waiver. I understand that by signing this document,
+                            I am waiving certain legal rights.</>
+                          )}
+                        </span>
+                      </label>
+
+                      {/* Submit Button */}
+                      <div className="flex gap-3 pt-4">
+                        <button
+                          onClick={handleSignWaiver}
+                          disabled={!signatureImage || !agreedToWaiver || isSigningWaiver || (isGuardianSigning && !guardianName.trim())}
+                          className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                        >
+                          {isSigningWaiver ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Signing...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4" />
+                              {currentWaiverIndex < waivers.length - 1 ? 'Sign & Continue' : 'Sign Waiver'}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-gray-500">
+                      <p className="text-sm">Please scroll through and read the entire waiver before signing.</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No waiver found.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Payment */}
+        {currentStep === 5 && registrationResult && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl shadow-sm p-6">
               {/* Success message */}
