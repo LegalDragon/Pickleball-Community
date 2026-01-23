@@ -23,28 +23,53 @@ public class EmailNotificationService : IEmailNotificationService
     /// <inheritdoc/>
     public async Task<int> CreateAsync(int userId, string userEmail, string subject, string htmlBody)
     {
+        return await CreateNotificationAsync(userId, "email", false, null, userEmail, subject, htmlBody);
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CreateNotificationAsync(int userId, string sendType, bool instantSend, string? userPhone, string? userEmail, string subject, string body)
+    {
         // Build the JSON body
         var bodyJson = JsonSerializer.Serialize(new
         {
             SUBJECT = subject,
-            BODY = htmlBody
+            BODY = body
         });
 
         var userIdParam = new SqlParameter("@UserId", SqlDbType.Int) { Value = userId };
-        var userEmailParam = new SqlParameter("@UserEmail", SqlDbType.VarChar, 255) { Value = userEmail };
+        var sendTypeParam = new SqlParameter("@SendType", SqlDbType.VarChar, 50) { Value = sendType };
+        var instantSendParam = new SqlParameter("@InstantSend", SqlDbType.Bit) { Value = instantSend };
+        var userPhoneParam = new SqlParameter("@UserPhone", SqlDbType.VarChar, 25) { Value = (object?)userPhone ?? DBNull.Value };
+        var userEmailParam = new SqlParameter("@UserEmail", SqlDbType.VarChar, 100) { Value = (object?)userEmail ?? DBNull.Value };
         var bodyJsonParam = new SqlParameter("@BodyJSON", SqlDbType.NVarChar, -1) { Value = bodyJson };
         var enidParam = new SqlParameter("@ENID", SqlDbType.Int) { Direction = ParameterDirection.Output };
 
         await _context.Database.ExecuteSqlRawAsync(
-            "EXEC sp_EN_Create @UserId, @UserEmail, @BodyJSON, @ENID OUTPUT",
-            userIdParam, userEmailParam, bodyJsonParam, enidParam
+            "EXEC sp_EN_Create @UserId, @SendType, @InstantSend, @UserPhone, @UserEmail, @BodyJSON, @ENID OUTPUT",
+            userIdParam, sendTypeParam, instantSendParam, userPhoneParam, userEmailParam, bodyJsonParam, enidParam
         );
 
         var enid = (int)enidParam.Value;
-        _logger.LogInformation("Created email notification {ENID} for user {UserId} ({Email}), subject: {Subject}",
-            enid, userId, userEmail, subject);
+
+        if (sendType == "phone")
+        {
+            _logger.LogInformation("Created SMS notification {ENID} for user {UserId} ({Phone}), instant: {Instant}",
+                enid, userId, userPhone, instantSend);
+        }
+        else
+        {
+            _logger.LogInformation("Created email notification {ENID} for user {UserId} ({Email}), subject: {Subject}, instant: {Instant}",
+                enid, userId, userEmail, subject, instantSend);
+        }
 
         return enid;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> SendSmsAsync(int userId, string userPhone, string message)
+    {
+        // SMS is sent immediately with InstantSend=true
+        return await CreateNotificationAsync(userId, "phone", true, userPhone, null, "", message);
     }
 
     /// <inheritdoc/>
@@ -85,8 +110,8 @@ public class EmailNotificationService : IEmailNotificationService
     /// <inheritdoc/>
     public async Task SendSimpleAsync(int userId, string userEmail, string subject, string htmlBody)
     {
-        var enid = await CreateAsync(userId, userEmail, subject, htmlBody);
-        await ReleaseAsync(enid);
+        // Use InstantSend=true to avoid separate Release call
+        await CreateNotificationAsync(userId, "email", true, null, userEmail, subject, htmlBody);
     }
 
     /// <inheritdoc/>

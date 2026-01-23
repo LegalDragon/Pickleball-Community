@@ -1542,6 +1542,110 @@ public class UsersController : ControllerBase
             });
         }
     }
+
+    /// <summary>
+    /// Admin: Send a test SMS to a user
+    /// </summary>
+    [HttpPost("{id}/admin-test-sms")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<object>>> AdminSendTestSms(int id, [FromBody] AdminTestSmsRequest? request)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            if (string.IsNullOrEmpty(user.Phone))
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User does not have a phone number"
+                });
+            }
+
+            var message = request?.Message ?? $"Test SMS from Pickleball Community. Your account ({user.Email}) is configured correctly. Sent at {DateTime.Now:h:mm tt}";
+
+            await _emailService.SendSmsAsync(user.Id, user.Phone, message);
+
+            _logger.LogInformation("Admin sent test SMS to user {UserId} ({Phone})", id, user.Phone);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = $"Test SMS sent to {user.Phone}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending test SMS to user {UserId}", id);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while sending test SMS: " + ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Admin: Update a user's phone number
+    /// </summary>
+    [HttpPut("{id}/admin-phone")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<object>>> AdminUpdatePhone(int id, [FromBody] AdminUpdatePhoneRequest request)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            var oldPhone = user.Phone;
+            user.Phone = request.NewPhone;
+            user.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Admin updated phone for user {UserId} from {OldPhone} to {NewPhone}",
+                id, oldPhone, request.NewPhone);
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = $"Phone updated from {oldPhone ?? "(none)"} to {request.NewPhone ?? "(cleared)"}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating phone for user {UserId}", id);
+            return StatusCode(500, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while updating phone"
+            });
+        }
+    }
+}
+
+public class AdminTestSmsRequest
+{
+    public string? Message { get; set; }
+}
+
+public class AdminUpdatePhoneRequest
+{
+    public string? NewPhone { get; set; }
 }
 
 public class AdminTestEmailRequest

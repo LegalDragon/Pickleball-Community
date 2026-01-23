@@ -499,7 +499,13 @@ export const userApi = {
   adminSetPassword: (userId, newPassword) => api.put(`/users/${userId}/admin-password`, { newPassword }),
 
   // Admin: Send a test email to a user
-  adminSendTestEmail: (userId, subject = null, body = null) => api.post(`/users/${userId}/admin-test-email`, { subject, body })
+  adminSendTestEmail: (userId, subject = null, body = null) => api.post(`/users/${userId}/admin-test-email`, { subject, body }),
+
+  // Admin: Send a test SMS to a user
+  adminSendTestSms: (userId, message = null) => api.post(`/users/${userId}/admin-test-sms`, { message }),
+
+  // Admin: Update a user's phone number
+  adminUpdatePhone: (userId, newPhone) => api.put(`/users/${userId}/admin-phone`, { newPhone })
 }
 
 // Content Types API

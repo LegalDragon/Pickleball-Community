@@ -59,6 +59,10 @@ const AdminDashboard = () => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingPassword, setSavingPassword] = useState(false)
   const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [editingPhone, setEditingPhone] = useState(false)
+  const [newPhone, setNewPhone] = useState('')
+  const [savingPhone, setSavingPhone] = useState(false)
+  const [sendingTestSms, setSendingTestSms] = useState(false)
 
   // Theme state
   const [themeSettings, setThemeSettings] = useState(null)
@@ -744,6 +748,13 @@ const AdminDashboard = () => {
   // Handle user edit
   const handleEditUser = (userData) => {
     setSelectedUser({ ...userData })
+    setEditingEmail(false)
+    setNewEmail('')
+    setEditingPassword(false)
+    setNewPassword('')
+    setConfirmPassword('')
+    setEditingPhone(false)
+    setNewPhone('')
     setIsUserModalOpen(true)
   }
 
@@ -856,6 +867,44 @@ const AdminDashboard = () => {
       alert(error?.message || 'Failed to send test email')
     } finally {
       setSendingTestEmail(false)
+    }
+  }
+
+  const handleUpdatePhone = async () => {
+    if (!selectedUser) return
+    setSavingPhone(true)
+    try {
+      const response = await userApi.adminUpdatePhone(selectedUser.id, newPhone || null)
+      alert(response?.message || 'Phone updated successfully')
+      setSelectedUser({ ...selectedUser, phone: newPhone || null })
+      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, phone: newPhone || null } : u))
+      setEditingPhone(false)
+      setNewPhone('')
+    } catch (error) {
+      console.error('Error updating phone:', error)
+      alert(error?.message || 'Failed to update phone')
+    } finally {
+      setSavingPhone(false)
+    }
+  }
+
+  const handleSendTestSms = async () => {
+    if (!selectedUser) return
+    if (!selectedUser.phone) {
+      alert('User does not have a phone number')
+      return
+    }
+    if (!confirm(`Send a test SMS to ${selectedUser.phone}?`)) return
+
+    setSendingTestSms(true)
+    try {
+      const response = await userApi.adminSendTestSms(selectedUser.id)
+      alert(response?.message || 'Test SMS sent successfully')
+    } catch (error) {
+      console.error('Error sending test SMS:', error)
+      alert(error?.message || 'Failed to send test SMS')
+    } finally {
+      setSendingTestSms(false)
     }
   }
 
@@ -1090,6 +1139,7 @@ const AdminDashboard = () => {
                                     {u.firstName || ''} {u.lastName || ''}
                                   </button>
                                   <div className="text-sm text-gray-500">{u.email || 'No email'}</div>
+                                  {u.phone && <div className="text-xs text-gray-400">{u.phone}</div>}
                                 </div>
                               </div>
                             </td>
@@ -3070,6 +3120,62 @@ const AdminDashboard = () => {
                         className="text-sm text-green-600 hover:text-green-800 disabled:opacity-50"
                       >
                         {sendingTestEmail ? 'Sending...' : 'Send Test Email'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                    {editingPhone ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="tel"
+                          value={newPhone}
+                          onChange={(e) => setNewPhone(e.target.value)}
+                          placeholder="Phone number (e.g., +1234567890)"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        <button
+                          onClick={handleUpdatePhone}
+                          disabled={savingPhone}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+                        >
+                          {savingPhone ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => { setEditingPhone(false); setNewPhone(''); }}
+                          className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">{selectedUser.phone || '(not set)'}</span>
+                        <button
+                          onClick={() => { setEditingPhone(true); setNewPhone(selectedUser.phone || ''); }}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          {selectedUser.phone ? 'Change Phone' : 'Add Phone'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Test SMS */}
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Test SMS</label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500">
+                        {selectedUser.phone ? 'Send a test SMS to verify SMS notifications work' : 'Add a phone number to enable SMS testing'}
+                      </span>
+                      <button
+                        onClick={handleSendTestSms}
+                        disabled={sendingTestSms || !selectedUser.phone}
+                        className="text-sm text-green-600 hover:text-green-800 disabled:opacity-50"
+                      >
+                        {sendingTestSms ? 'Sending...' : 'Send Test SMS'}
                       </button>
                     </div>
                   </div>
