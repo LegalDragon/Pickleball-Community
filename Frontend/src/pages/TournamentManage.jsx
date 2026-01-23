@@ -146,6 +146,15 @@ export default function TournamentManage() {
   const [editingDocument, setEditingDocument] = useState(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
 
+  // Add Player registration state
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [playerSearchResults, setPlayerSearchResults] = useState([]);
+  const [searchingPlayers, setSearchingPlayers] = useState(false);
+  const [selectedPlayerForReg, setSelectedPlayerForReg] = useState(null);
+  const [selectedDivisionForReg, setSelectedDivisionForReg] = useState('');
+  const [registeringPlayer, setRegisteringPlayer] = useState(false);
+
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
     { value: '', label: 'Select method...' },
@@ -798,6 +807,57 @@ export default function TournamentManage() {
       toast.error(`Failed to ${editingDivision.id ? 'update' : 'create'} division`);
     } finally {
       setSavingDivision(false);
+    }
+  };
+
+  // Search for users to add as players
+  const handleSearchPlayers = async (query) => {
+    if (!query || query.length < 2) {
+      setPlayerSearchResults([]);
+      return;
+    }
+    setSearchingPlayers(true);
+    try {
+      const response = await tournamentApi.searchUsersForRegistration(eventId, query);
+      if (response.success) {
+        setPlayerSearchResults(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error searching players:', err);
+    } finally {
+      setSearchingPlayers(false);
+    }
+  };
+
+  // Admin register a player
+  const handleAdminRegisterPlayer = async () => {
+    if (!selectedPlayerForReg || !selectedDivisionForReg) {
+      toast.error('Please select a player and division');
+      return;
+    }
+    setRegisteringPlayer(true);
+    try {
+      const response = await tournamentApi.adminRegisterUser(eventId, {
+        userId: selectedPlayerForReg.id,
+        divisionId: parseInt(selectedDivisionForReg)
+      });
+      if (response.success) {
+        toast.success(`${selectedPlayerForReg.displayName || selectedPlayerForReg.email} registered successfully`);
+        setShowAddPlayer(false);
+        setPlayerSearchQuery('');
+        setPlayerSearchResults([]);
+        setSelectedPlayerForReg(null);
+        setSelectedDivisionForReg('');
+        loadCheckIns();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to register player');
+      }
+    } catch (err) {
+      console.error('Error registering player:', err);
+      toast.error('Failed to register player');
+    } finally {
+      setRegisteringPlayer(false);
     }
   };
 
@@ -3959,13 +4019,24 @@ export default function TournamentManage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Player Registrations & Check-in</h2>
-              <button
-                onClick={() => { loadCheckIns(); loadDashboard(); }}
-                disabled={loadingCheckIns}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-5 h-5 ${loadingCheckIns ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                {isOrganizer && (
+                  <button
+                    onClick={() => setShowAddPlayer(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Player
+                  </button>
+                )}
+                <button
+                  onClick={() => { loadCheckIns(); loadDashboard(); }}
+                  disabled={loadingCheckIns}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loadingCheckIns ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Check-in stats */}
@@ -5880,6 +5951,160 @@ export default function TournamentManage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Player Modal */}
+      {showAddPlayer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Add Player Registration</h3>
+              <button
+                onClick={() => {
+                  setShowAddPlayer(false);
+                  setPlayerSearchQuery('');
+                  setPlayerSearchResults([]);
+                  setSelectedPlayerForReg(null);
+                  setSelectedDivisionForReg('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Division Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Division *</label>
+                <select
+                  value={selectedDivisionForReg}
+                  onChange={(e) => setSelectedDivisionForReg(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                >
+                  <option value="">Select division...</option>
+                  {dashboard?.divisions?.filter(d => d.isActive).map(div => (
+                    <option key={div.id} value={div.id}>{div.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Player Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search Player *</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={playerSearchQuery}
+                    onChange={(e) => {
+                      setPlayerSearchQuery(e.target.value);
+                      handleSearchPlayers(e.target.value);
+                    }}
+                    placeholder="Search by name or email..."
+                    className="w-full border border-gray-300 rounded-lg p-2 pr-10"
+                  />
+                  {searchingPlayers && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                  )}
+                </div>
+              </div>
+
+              {/* Search Results */}
+              {playerSearchResults.length > 0 && !selectedPlayerForReg && (
+                <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {playerSearchResults.map(player => (
+                    <button
+                      key={player.id}
+                      onClick={() => {
+                        setSelectedPlayerForReg(player);
+                        setPlayerSearchQuery(player.displayName || player.email);
+                        setPlayerSearchResults([]);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
+                    >
+                      {player.avatarUrl ? (
+                        <img
+                          src={getSharedAssetUrl(player.avatarUrl)}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-4 h-4 text-gray-500" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium text-gray-900">{player.displayName || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{player.email}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected Player */}
+              {selectedPlayerForReg && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {selectedPlayerForReg.avatarUrl ? (
+                        <img
+                          src={getSharedAssetUrl(selectedPlayerForReg.avatarUrl)}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-500" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedPlayerForReg.displayName || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{selectedPlayerForReg.email}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedPlayerForReg(null);
+                        setPlayerSearchQuery('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {playerSearchQuery.length > 0 && playerSearchQuery.length < 2 && (
+                <p className="text-sm text-gray-500">Type at least 2 characters to search</p>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddPlayer(false);
+                  setPlayerSearchQuery('');
+                  setPlayerSearchResults([]);
+                  setSelectedPlayerForReg(null);
+                  setSelectedDivisionForReg('');
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdminRegisterPlayer}
+                disabled={registeringPlayer || !selectedPlayerForReg || !selectedDivisionForReg}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {registeringPlayer && <Loader2 className="w-4 h-4 animate-spin" />}
+                Register Player
+              </button>
             </div>
           </div>
         </div>
