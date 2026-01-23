@@ -108,6 +108,10 @@ export default function TournamentManage() {
   // Court groups state
   const [courtGroups, setCourtGroups] = useState([]);
   const [loadingCourtGroups, setLoadingCourtGroups] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [expandedGroupId, setExpandedGroupId] = useState(null);
+  const [deletingGroupId, setDeletingGroupId] = useState(null);
 
   // Unit management state
   const [unitsData, setUnitsData] = useState(null); // All units grouped by division
@@ -519,15 +523,102 @@ export default function TournamentManage() {
   const loadCourtGroups = async () => {
     setLoadingCourtGroups(true);
     try {
-      const response = await tournamentApi.getCourtPlanningData(eventId);
+      const response = await tournamentApi.getCourtGroups(eventId);
       if (response.success) {
-        setCourtGroups(response.data?.courtGroups || []);
+        setCourtGroups(response.data || []);
       }
     } catch (err) {
       console.error('Error loading court groups:', err);
     } finally {
       setLoadingCourtGroups(false);
     }
+  };
+
+  const handleCreateCourtGroup = async () => {
+    if (!newGroupName.trim()) {
+      toast.error('Please enter a group name');
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const response = await tournamentApi.createCourtGroup({
+        eventId: parseInt(eventId),
+        groupName: newGroupName.trim()
+      });
+      if (response.success) {
+        toast.success('Court group created');
+        setNewGroupName('');
+        loadCourtGroups();
+      } else {
+        toast.error(response.message || 'Failed to create group');
+      }
+    } catch (err) {
+      console.error('Error creating court group:', err);
+      toast.error('Failed to create court group');
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
+  const handleDeleteCourtGroup = async (groupId) => {
+    if (!confirm('Delete this court group? Courts will be unassigned.')) return;
+    setDeletingGroupId(groupId);
+    try {
+      const response = await tournamentApi.deleteCourtGroup(groupId);
+      if (response.success) {
+        toast.success('Court group deleted');
+        loadCourtGroups();
+      } else {
+        toast.error(response.message || 'Failed to delete group');
+      }
+    } catch (err) {
+      console.error('Error deleting court group:', err);
+      toast.error('Failed to delete court group');
+    } finally {
+      setDeletingGroupId(null);
+    }
+  };
+
+  const handleAddCourtToGroup = async (groupId, courtId) => {
+    try {
+      const response = await tournamentApi.addCourtToGroup(groupId, courtId);
+      if (response.success) {
+        toast.success('Court added to group');
+        loadCourtGroups();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to add court');
+      }
+    } catch (err) {
+      console.error('Error adding court to group:', err);
+      toast.error('Failed to add court');
+    }
+  };
+
+  const handleRemoveCourtFromGroup = async (groupId, courtId) => {
+    try {
+      const response = await tournamentApi.removeCourtFromGroup(groupId, courtId);
+      if (response.success) {
+        toast.success('Court removed from group');
+        loadCourtGroups();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to remove court');
+      }
+    } catch (err) {
+      console.error('Error removing court from group:', err);
+      toast.error('Failed to remove court');
+    }
+  };
+
+  // Get courts not in any group
+  const getUnassignedCourts = () => {
+    if (!dashboard?.courts || courtGroups.length === 0) return dashboard?.courts || [];
+    const assignedCourtIds = new Set();
+    courtGroups.forEach(group => {
+      (group.courts || []).forEach(court => assignedCourtIds.add(court.id));
+    });
+    return dashboard.courts.filter(court => !assignedCourtIds.has(court.id));
   };
 
   const handleAddCourts = async () => {
@@ -2386,33 +2477,165 @@ export default function TournamentManage() {
         {/* Courts Tab */}
         {activeTab === 'courts' && (
           <div className="space-y-6">
-            {/* Court Groups Summary */}
-            {courtGroups.length > 0 && (
+            {/* Court Groups Management */}
+            {isOrganizer && (
               <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-gray-900 flex items-center gap-2">
                     <Layers className="w-5 h-5 text-blue-600" />
                     Court Groups ({courtGroups.length})
                   </h3>
-                  <Link
-                    to={`/event/${eventId}/court-planning`}
-                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                </div>
+
+                {/* Create New Group */}
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="New group name..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateCourtGroup()}
+                  />
+                  <button
+                    onClick={handleCreateCourtGroup}
+                    disabled={creatingGroup || !newGroupName.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <Settings className="w-4 h-4" />
-                    Manage Groups
-                  </Link>
+                    {creatingGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Add Group
+                  </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {courtGroups.map(group => (
-                    <div
-                      key={group.id}
-                      className="px-3 py-2 bg-gray-100 rounded-lg text-sm"
-                    >
-                      <span className="font-medium">{group.groupName}</span>
-                      <span className="text-gray-500 ml-2">({group.courts?.length || 0} courts)</span>
+
+                {/* Court Groups List */}
+                {courtGroups.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-4 bg-gray-50 rounded-lg">
+                    No court groups yet. Create groups to organize courts by location.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {courtGroups.map(group => (
+                      <div key={group.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                          onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {expandedGroupId === group.id ? (
+                              <ChevronUp className="w-4 h-4 text-gray-500" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-gray-500" />
+                            )}
+                            <span className="font-medium text-gray-900">{group.groupName}</span>
+                            <span className="text-sm text-gray-500">({group.courts?.length || 0} courts)</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCourtGroup(group.id);
+                            }}
+                            disabled={deletingGroupId === group.id}
+                            className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                            title="Delete group"
+                          >
+                            {deletingGroupId === group.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        {expandedGroupId === group.id && (
+                          <div className="p-4 bg-white border-t border-gray-200">
+                            {/* Courts in this group */}
+                            {group.courts?.length > 0 ? (
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {group.courts.map(court => (
+                                  <div
+                                    key={court.id}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm"
+                                  >
+                                    <span>{court.courtLabel}</span>
+                                    <button
+                                      onClick={() => handleRemoveCourtFromGroup(group.id, court.id)}
+                                      className="text-blue-500 hover:text-red-600"
+                                      title="Remove from group"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm mb-3">No courts assigned to this group</p>
+                            )}
+
+                            {/* Add court to this group */}
+                            {dashboard?.courts?.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleAddCourtToGroup(group.id, parseInt(e.target.value));
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  defaultValue=""
+                                >
+                                  <option value="">Add court to this group...</option>
+                                  {dashboard.courts
+                                    .filter(c => !(group.courts || []).some(gc => gc.id === c.id))
+                                    .map(court => (
+                                      <option key={court.id} value={court.id}>
+                                        {court.courtLabel}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Unassigned Courts */}
+                {getUnassignedCourts().length > 0 && courtGroups.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Unassigned Courts ({getUnassignedCourts().length})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {getUnassignedCourts().map(court => (
+                        <div
+                          key={court.id}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm"
+                        >
+                          <span>{court.courtLabel}</span>
+                          <select
+                            className="text-xs border-none bg-transparent text-blue-600 cursor-pointer focus:ring-0"
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAddCourtToGroup(parseInt(e.target.value), court.id);
+                              }
+                            }}
+                            defaultValue=""
+                          >
+                            <option value="">→ Add to...</option>
+                            {courtGroups.map(group => (
+                              <option key={group.id} value={group.id}>
+                                {group.groupName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -5746,6 +5969,7 @@ export default function TournamentManage() {
               {/* Division Fee Options */}
               <DivisionFeesEditor
                 divisionId={editingDivision.id}
+                eventId={parseInt(eventId)}
                 divisionFee={editingDivision.divisionFee || 0}
                 onFeesChange={() => loadEvent()}
               />

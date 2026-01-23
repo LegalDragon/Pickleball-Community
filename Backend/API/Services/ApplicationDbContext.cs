@@ -102,6 +102,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<PhaseAdvancementRule> PhaseAdvancementRules { get; set; }
     public DbSet<DivisionAward> DivisionAwards { get; set; }
     public DbSet<CourtGroup> CourtGroups { get; set; }
+    public DbSet<CourtGroupCourt> CourtGroupCourts { get; set; }
     public DbSet<DivisionCourtAssignment> DivisionCourtAssignments { get; set; }
 
     // Clubs
@@ -865,12 +866,31 @@ public class ApplicationDbContext : DbContext
                   .HasForeignKey(c => c.CurrentGameId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            // Legacy: Keep one-to-many for backward compatibility
             entity.HasOne(c => c.CourtGroup)
-                  .WithMany(g => g.Courts)
+                  .WithMany()
                   .HasForeignKey(c => c.CourtGroupId)
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(c => c.CourtGroupId);
+        });
+
+        // CourtGroupCourt junction table (many-to-many: courts can belong to multiple groups)
+        modelBuilder.Entity<CourtGroupCourt>(entity =>
+        {
+            entity.HasIndex(cgc => cgc.CourtGroupId);
+            entity.HasIndex(cgc => cgc.TournamentCourtId);
+            entity.HasIndex(cgc => new { cgc.CourtGroupId, cgc.TournamentCourtId }).IsUnique();
+
+            entity.HasOne(cgc => cgc.CourtGroup)
+                  .WithMany(g => g.CourtGroupCourts)
+                  .HasForeignKey(cgc => cgc.CourtGroupId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cgc => cgc.Court)
+                  .WithMany(c => c.CourtGroupCourts)
+                  .HasForeignKey(cgc => cgc.TournamentCourtId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Event Encounter configuration (renamed from EventMatch)

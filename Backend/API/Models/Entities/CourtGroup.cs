@@ -60,9 +60,9 @@ public class CourtGroup
     public Event? Event { get; set; }
 
     /// <summary>
-    /// Courts in this group
+    /// Courts in this group (many-to-many via junction table)
     /// </summary>
-    public ICollection<TournamentCourt> Courts { get; set; } = new List<TournamentCourt>();
+    public ICollection<CourtGroupCourt> CourtGroupCourts { get; set; } = new List<CourtGroupCourt>();
 
     /// <summary>
     /// Division/phase court assignments for this group

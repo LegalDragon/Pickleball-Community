@@ -62,6 +62,14 @@ public class TournamentCourt
     [ForeignKey("CurrentGameId")]
     public EventGame? CurrentGame { get; set; }
 
+    /// <summary>
+    /// Legacy: Single group this court belongs to (for backward compatibility)
+    /// </summary>
     [ForeignKey("CourtGroupId")]
     public CourtGroup? CourtGroup { get; set; }
+
+    /// <summary>
+    /// Groups this court belongs to (many-to-many via junction table)
+    /// </summary>
+    public ICollection<CourtGroupCourt> CourtGroupCourts { get; set; } = new List<CourtGroupCourt>();
 }
