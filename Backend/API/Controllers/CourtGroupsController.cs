@@ -247,9 +247,14 @@ public class CourtGroupsController : EventControllerBase
         // Assign new courts
         if (request.CourtIds?.Any() == true)
         {
-            var courts = await _context.TournamentCourts
-                .Where(c => request.CourtIds.Contains(c.Id) && c.EventId == group.EventId)
+            // Load all courts for this event then filter in memory
+            // (avoids EF Core CTE generation issues with Contains on lists)
+            var eventCourts = await _context.TournamentCourts
+                .Where(c => c.EventId == group.EventId)
                 .ToListAsync();
+
+            var courtIdSet = new HashSet<int>(request.CourtIds);
+            var courts = eventCourts.Where(c => courtIdSet.Contains(c.Id)).ToList();
 
             foreach (var court in courts)
             {
