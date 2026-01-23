@@ -15,10 +15,12 @@ BEGIN
         SortOrder INT NOT NULL DEFAULT 0,
         CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
 
+        -- Use NO ACTION to avoid multiple cascade path errors
+        -- Application code handles cleanup when courts/groups are deleted
         CONSTRAINT FK_CourtGroupCourts_CourtGroup FOREIGN KEY (CourtGroupId)
-            REFERENCES CourtGroups(Id) ON DELETE CASCADE,
+            REFERENCES CourtGroups(Id) ON DELETE NO ACTION,
         CONSTRAINT FK_CourtGroupCourts_TournamentCourt FOREIGN KEY (TournamentCourtId)
-            REFERENCES TournamentCourts(Id) ON DELETE CASCADE,
+            REFERENCES TournamentCourts(Id) ON DELETE NO ACTION,
         CONSTRAINT UQ_CourtGroupCourts_GroupCourt UNIQUE (CourtGroupId, TournamentCourtId)
     );
 

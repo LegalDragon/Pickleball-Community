@@ -222,7 +222,12 @@ public class CourtGroupsController : EventControllerBase
         if (!await CanManageEventAsync(group.EventId))
             return Forbid();
 
-        // CourtGroupCourts will be cascade deleted
+        // Manually delete junction table entries (no cascade due to SQL Server limitation)
+        if (group.CourtGroupCourts?.Any() == true)
+        {
+            _context.CourtGroupCourts.RemoveRange(group.CourtGroupCourts);
+        }
+
         _context.CourtGroups.Remove(group);
         await _context.SaveChangesAsync();
 

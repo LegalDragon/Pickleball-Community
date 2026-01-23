@@ -885,12 +885,12 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(cgc => cgc.CourtGroup)
                   .WithMany(g => g.CourtGroupCourts)
                   .HasForeignKey(cgc => cgc.CourtGroupId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(cgc => cgc.Court)
                   .WithMany(c => c.CourtGroupCourts)
                   .HasForeignKey(cgc => cgc.TournamentCourtId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.NoAction);
         });
 
         // Event Encounter configuration (renamed from EventMatch)
