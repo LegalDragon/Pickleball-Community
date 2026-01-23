@@ -4236,16 +4236,16 @@ public class TournamentController : EventControllerBase
                         MatchFormatName = a.MatchFormat != null ? a.MatchFormat.Name : null
                     }).ToList(),
                 Phases = _context.DivisionPhases
-                    .Where(p => p.DivisionId == d.Id && p.IsActive)
-                    .OrderBy(p => p.SortOrder)
+                    .Where(p => p.DivisionId == d.Id)
+                    .OrderBy(p => p.PhaseOrder)
                     .Select(p => new DivisionPhasePlanningDto
                     {
                         Id = p.Id,
                         Name = p.Name,
                         PhaseType = p.PhaseType,
-                        SortOrder = p.SortOrder,
+                        SortOrder = p.PhaseOrder,
                         EncounterCount = _context.EventEncounters.Count(e => e.PhaseId == p.Id),
-                        EstimatedStartTime = p.EstimatedStartTime,
+                        EstimatedStartTime = p.StartTime,
                         EstimatedEndTime = p.EstimatedEndTime
                     }).ToList()
             })
@@ -4927,12 +4927,11 @@ public class TournamentController : EventControllerBase
             .Where(e => e.EstimatedStartTime.HasValue && (e.Unit1Id.HasValue || e.Unit2Id.HasValue))
             .SelectMany(e => new[]
             {
-                e.Unit1Id.HasValue ? (UnitId: e.Unit1Id.Value, Encounter: e) : ((int, EventEncounter)?)null,
-                e.Unit2Id.HasValue ? (UnitId: e.Unit2Id.Value, Encounter: e) : ((int, EventEncounter)?)null
+                e.Unit1Id.HasValue ? new { UnitId = e.Unit1Id.Value, Encounter = e } : null,
+                e.Unit2Id.HasValue ? new { UnitId = e.Unit2Id.Value, Encounter = e } : null
             })
-            .Where(x => x.HasValue)
-            .Select(x => x!.Value)
-            .GroupBy(x => x.UnitId)
+            .Where(x => x != null)
+            .GroupBy(x => x!.UnitId)
             .ToList();
 
         foreach (var unitGroup in unitEncounters)

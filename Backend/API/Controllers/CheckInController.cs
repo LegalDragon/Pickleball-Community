@@ -207,7 +207,7 @@ public class CheckInController : EventControllerBase
                 DivisionName = firstUnit.Division?.Name,
                 TeamUnitName = firstUnit.Name,
                 SkillLevelName = firstUnit.Division?.SkillLevel?.Name,
-                AmountDue = firstUnit.Division?.DivisionFee ?? 0,
+                AmountDue = firstUnit.Division?.DivisionFee ?? 0m,
                 AmountPaid = firstUnit.Members?.Where(m => m.InviteStatus == "Accepted").Sum(m => m.AmountPaid) ?? 0,
                 PaymentStatus = firstUnit.PaymentStatus ?? "Pending",
                 PaymentReference = firstReg.PaymentReference,
@@ -739,7 +739,7 @@ public class CheckInController : EventControllerBase
                 return BadRequest(new ApiResponse<CheckInResultDto> { Success = false, Message = "Please sign the waiver first" });
 
             // If payment is required, verify payment info is submitted
-            if (evt.RegistrationFee > 0 || (firstReg.Unit?.Division?.DivisionFee ?? 0) > 0)
+            if (evt.RegistrationFee > 0 || (firstReg.Unit?.Division?.DivisionFee ?? 0m) > 0)
             {
                 // Payment info must be submitted (proof or reference)
                 var hasPaymentInfo = !string.IsNullOrEmpty(firstReg.PaymentProofUrl) ||
@@ -1487,7 +1487,7 @@ public class CheckInController : EventControllerBase
                 DivisionName = firstUnit.Division?.Name,
                 TeamUnitName = firstUnit.Name,
                 SkillLevelName = firstUnit.Division?.SkillLevel?.Name,
-                AmountDue = firstUnit.Division?.DivisionFee ?? 0,
+                AmountDue = firstUnit.Division?.DivisionFee ?? 0m,
                 AmountPaid = firstUnit.Members?.Where(m => m.InviteStatus == "Accepted").Sum(m => m.AmountPaid) ?? 0,
                 PaymentStatus = firstUnit.PaymentStatus ?? "Pending",
                 PaymentReference = firstReg.PaymentReference,
