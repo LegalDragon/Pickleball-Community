@@ -216,6 +216,11 @@ public class EventUnitMember
     public int? PaymentId { get; set; }
 
     /// <summary>
+    /// The fee option selected by this member during registration
+    /// </summary>
+    public int? SelectedFeeId { get; set; }
+
+    /// <summary>
     /// When the waiver was signed
     /// </summary>
     public DateTime? WaiverSignedAt { get; set; }
@@ -293,6 +298,9 @@ public class EventUnitMember
 
     [ForeignKey("PaymentId")]
     public UserPayment? Payment { get; set; }
+
+    [ForeignKey("SelectedFeeId")]
+    public DivisionFee? SelectedFee { get; set; }
 }
 
 /// <summary>

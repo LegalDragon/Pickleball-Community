@@ -34,6 +34,7 @@ export default function EventRegistration() {
 
   // Registration state
   const [selectedDivision, setSelectedDivision] = useState(null);
+  const [selectedFeeId, setSelectedFeeId] = useState(null);
   const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [registering, setRegistering] = useState(false);
@@ -133,6 +134,26 @@ export default function EventRegistration() {
     return division.teamSize || 1;
   };
 
+  // Get the currently selected fee
+  const getSelectedFee = () => {
+    if (!selectedDivision || !selectedFeeId) return null;
+    const availableFees = (selectedDivision.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
+    return availableFees.find(f => f.id === selectedFeeId) || null;
+  };
+
+  // Get the effective fee amount (selected fee or fallback to division/event fee)
+  const getEffectiveFeeAmount = () => {
+    const selectedFee = getSelectedFee();
+    if (selectedFee) return selectedFee.amount;
+    return selectedDivision?.divisionFee || event?.perDivisionFee || event?.registrationFee || 0;
+  };
+
+  // Check if division has multiple fee options
+  const hasFeeOptions = (division) => {
+    const availableFees = (division?.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
+    return availableFees.length > 0;
+  };
+
   // Handle division selection
   const handleSelectDivision = (division) => {
     if (!canRegisterForDivision(division.id)) {
@@ -140,6 +161,16 @@ export default function EventRegistration() {
       return;
     }
     setSelectedDivision(division);
+
+    // Auto-select default fee if division has multiple fee options
+    const availableFees = (division.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
+    if (availableFees.length > 0) {
+      const defaultFee = availableFees.find(f => f.isDefault) || availableFees[0];
+      setSelectedFeeId(defaultFee.id);
+    } else {
+      setSelectedFeeId(null);
+    }
+
     const teamSize = getTeamSize(division);
 
     if (teamSize === 1) {
@@ -163,7 +194,8 @@ export default function EventRegistration() {
         eventId: event.id,
         divisionIds: [selectedDivision.id],
         partnerUserId: partnerUserId > 0 ? partnerUserId : null,
-        joinMethod: teamSize > 1 ? selectedJoinMethod : 'Approval'
+        joinMethod: teamSize > 1 ? selectedJoinMethod : 'Approval',
+        selectedFeeId: selectedFeeId || null
       });
 
       if (response.success) {
@@ -522,11 +554,16 @@ export default function EventRegistration() {
                           <p className="text-gray-400 text-xs">
                             {teamSize === 1 ? 'Singles' : teamSize === 2 ? 'Doubles' : `Teams of ${teamSize}`}
                           </p>
-                          {(division.divisionFee || event.perDivisionFee) && (
+                          {hasFeeOptions(division) ? (
+                            <p className="text-orange-600 font-medium mt-1">
+                              ${Math.min(...division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).map(f => f.amount))}
+                              {division.fees.filter(f => f.isActive && f.isCurrentlyAvailable).length > 1 && '+'}
+                            </p>
+                          ) : (division.divisionFee || event.perDivisionFee) ? (
                             <p className="text-orange-600 font-medium mt-1">
                               ${division.divisionFee || event.perDivisionFee}
                             </p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </button>
@@ -550,6 +587,7 @@ export default function EventRegistration() {
                   onClick={() => {
                     setCurrentStep(1);
                     setSelectedDivision(null);
+                    setSelectedFeeId(null);
                     setSelectedJoinMethod('Approval');
                   }}
                   className="text-sm text-orange-600 hover:text-orange-700"
@@ -557,6 +595,48 @@ export default function EventRegistration() {
                   Change Division
                 </button>
               </div>
+
+              {/* Fee Selection */}
+              {hasFeeOptions(selectedDivision) && (
+                <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" />
+                    Select Registration Fee
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedDivision.fees
+                      .filter(f => f.isActive && f.isCurrentlyAvailable)
+                      .map(fee => (
+                        <label
+                          key={fee.id}
+                          className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedFeeId === fee.id
+                              ? 'border-orange-500 bg-orange-100'
+                              : 'border-gray-200 bg-white hover:border-orange-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="fee"
+                              value={fee.id}
+                              checked={selectedFeeId === fee.id}
+                              onChange={() => setSelectedFeeId(fee.id)}
+                              className="text-orange-600"
+                            />
+                            <div>
+                              <span className="font-medium text-gray-900">{fee.name}</span>
+                              {fee.description && (
+                                <p className="text-sm text-gray-500">{fee.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-lg font-semibold text-orange-600">${fee.amount}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               {/* Show join code if just registered */}
               {newJoinCode ? (
@@ -807,6 +887,48 @@ export default function EventRegistration() {
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">Confirm Registration</h2>
 
+                  {/* Fee Selection for singles */}
+                  {hasFeeOptions(selectedDivision) && (
+                    <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                      <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4" />
+                        Select Registration Fee
+                      </h3>
+                      <div className="space-y-2">
+                        {selectedDivision.fees
+                          .filter(f => f.isActive && f.isCurrentlyAvailable)
+                          .map(fee => (
+                            <label
+                              key={fee.id}
+                              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                                selectedFeeId === fee.id
+                                  ? 'border-orange-500 bg-orange-100'
+                                  : 'border-gray-200 bg-white hover:border-orange-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="radio"
+                                  name="fee"
+                                  value={fee.id}
+                                  checked={selectedFeeId === fee.id}
+                                  onChange={() => setSelectedFeeId(fee.id)}
+                                  className="text-orange-600"
+                                />
+                                <div>
+                                  <span className="font-medium text-gray-900">{fee.name}</span>
+                                  {fee.description && (
+                                    <p className="text-sm text-gray-500">{fee.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-lg font-semibold text-orange-600">${fee.amount}</span>
+                            </label>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-gray-50 rounded-lg p-4 mb-6">
                     <h3 className="font-medium text-gray-900 mb-3">Registration Summary</h3>
                     <div className="space-y-2 text-sm">
@@ -822,12 +944,13 @@ export default function EventRegistration() {
                         <span className="text-gray-600">Player</span>
                         <span className="font-medium">{user?.firstName} {user?.lastName}</span>
                       </div>
-                      {(selectedDivision?.divisionFee || event.perDivisionFee || event.registrationFee) && (
+                      {getEffectiveFeeAmount() > 0 && (
                         <div className="flex justify-between pt-2 border-t">
-                          <span className="text-gray-600">Fee</span>
-                          <span className="font-medium text-orange-600">
-                            ${selectedDivision?.divisionFee || event.perDivisionFee || event.registrationFee}
+                          <span className="text-gray-600">
+                            {getSelectedFee() ? getSelectedFee().name : 'Fee'}
                           </span>
+                          <span className="font-medium text-orange-600">
+                            ${getEffectiveFeeAmount()}
                         </div>
                       )}
                     </div>
@@ -838,6 +961,7 @@ export default function EventRegistration() {
                       onClick={() => {
                         setCurrentStep(1);
                         setSelectedDivision(null);
+                        setSelectedFeeId(null);
                       }}
                       className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
                     >

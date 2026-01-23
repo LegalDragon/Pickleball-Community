@@ -14,6 +14,7 @@ import MemberPaymentModal from '../components/MemberPaymentModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import HelpIcon from '../components/ui/HelpIcon';
 import WatchDrawingModal from '../components/WatchDrawingModal';
+import DivisionFeesEditor from '../components/DivisionFeesEditor';
 
 export default function Events() {
   const { user, isAuthenticated } = useAuth();
@@ -6542,8 +6543,18 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                     onChange={(e) => setEditingDivision({ ...editingDivision, divisionFee: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg p-2"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Single fee for all registrations. Use "Fee Options" below for multiple fee tiers.
+                  </p>
                 </div>
               </div>
+
+              {/* Division Fee Options */}
+              <DivisionFeesEditor
+                divisionId={editingDivision.id}
+                divisionFee={editingDivision.divisionFee || 0}
+                onFeesChange={() => loadEventDetails(event.id)}
+              />
 
               {/* Schedule Configuration Link */}
               <div className="border-t pt-4 mt-4">

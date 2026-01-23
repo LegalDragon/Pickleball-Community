@@ -321,6 +321,7 @@ public class EventDivision
     public ICollection<EncounterMatchFormat> EncounterMatchFormats { get; set; } = new List<EncounterMatchFormat>();
     public ICollection<DivisionCourtBlock> CourtBlocks { get; set; } = new List<DivisionCourtBlock>();
     public ICollection<DivisionPhase> Phases { get; set; } = new List<DivisionPhase>();
+    public ICollection<DivisionFee> Fees { get; set; } = new List<DivisionFee>();
 }
 
 public class EventRegistration
@@ -349,6 +350,11 @@ public class EventRegistration
     [MaxLength(100)]
     public string? PaymentReference { get; set; }
 
+    /// <summary>
+    /// The fee option selected by the user during registration
+    /// </summary>
+    public int? SelectedFeeId { get; set; }
+
     // Status
     [MaxLength(20)]
     public string Status { get; set; } = "Registered"; // Registered, Confirmed, Waitlisted, Cancelled, CheckedIn
@@ -365,6 +371,9 @@ public class EventRegistration
 
     [ForeignKey("UserId")]
     public User? User { get; set; }
+
+    [ForeignKey("SelectedFeeId")]
+    public DivisionFee? SelectedFee { get; set; }
 }
 
 public class EventPartnerRequest

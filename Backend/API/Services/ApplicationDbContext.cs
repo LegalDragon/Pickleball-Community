@@ -73,6 +73,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<AgeGroup> AgeGroups { get; set; }
     public DbSet<SkillLevel> SkillLevels { get; set; }
     public DbSet<DivisionReward> DivisionRewards { get; set; }
+    public DbSet<DivisionFee> DivisionFees { get; set; }
 
     // Tournament Management
     public DbSet<ScoreMethod> ScoreMethods { get; set; }

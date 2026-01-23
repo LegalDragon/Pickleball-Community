@@ -156,6 +156,8 @@ public class TournamentController : EventControllerBase
                 .ThenInclude(d => d.SkillLevel)
             .Include(e => e.Divisions)
                 .ThenInclude(d => d.AgeGroupEntity)
+            .Include(e => e.Divisions)
+                .ThenInclude(d => d.Fees)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
         if (evt == null)
@@ -264,7 +266,22 @@ public class TournamentController : EventControllerBase
                     IsFull = d.MaxUnits.HasValue && completedCount >= d.MaxUnits.Value,
                     LookingForPartner = incompleteUnits.ContainsKey(d.Id)
                         ? incompleteUnits[d.Id].Select(u => MapToUnitDto(u)).ToList()
-                        : new List<EventUnitDto>()
+                        : new List<EventUnitDto>(),
+                    Fees = d.Fees.Where(f => f.IsActive).OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+                    {
+                        Id = f.Id,
+                        DivisionId = f.DivisionId,
+                        Name = f.Name,
+                        Description = f.Description,
+                        Amount = f.Amount,
+                        IsDefault = f.IsDefault,
+                        AvailableFrom = f.AvailableFrom,
+                        AvailableUntil = f.AvailableUntil,
+                        IsActive = f.IsActive,
+                        SortOrder = f.SortOrder,
+                        IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
+                                               (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+                    }).ToList()
                 };
             }).ToList()
         };
@@ -440,7 +457,8 @@ public class TournamentController : EventControllerBase
                 Role = "Captain",
                 InviteStatus = "Accepted",
                 CreatedAt = DateTime.Now,
-                ReferenceId = $"E{eventId}-U{unit.Id}-P{userId.Value}"
+                ReferenceId = $"E{eventId}-U{unit.Id}-P{userId.Value}",
+                SelectedFeeId = request.SelectedFeeId
             };
             _context.EventUnitMembers.Add(member);
 
@@ -7690,6 +7708,270 @@ public class TournamentController : EventControllerBase
         }).ToList();
 
         return Ok(new ApiResponse<List<JoinableUnitDto>> { Success = true, Data = result });
+    }
+
+    #endregion
+
+    // ============================================
+    // Division Fee Management
+    // ============================================
+    #region Division Fees
+
+    /// <summary>
+    /// Get all fees for a division
+    /// </summary>
+    [HttpGet("divisions/{divisionId}/fees")]
+    public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> GetDivisionFees(int divisionId)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Fees)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Division not found" });
+
+        var fees = division.Fees.OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+        {
+            Id = f.Id,
+            DivisionId = f.DivisionId,
+            Name = f.Name,
+            Description = f.Description,
+            Amount = f.Amount,
+            IsDefault = f.IsDefault,
+            AvailableFrom = f.AvailableFrom,
+            AvailableUntil = f.AvailableUntil,
+            IsActive = f.IsActive,
+            SortOrder = f.SortOrder,
+            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
+                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+        }).ToList();
+
+        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = fees });
+    }
+
+    /// <summary>
+    /// Create a new fee for a division
+    /// </summary>
+    [HttpPost("divisions/{divisionId}/fees")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> CreateDivisionFee(int divisionId, [FromBody] DivisionFeeRequest request)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Division not found" });
+
+        // Check authorization
+        if (!await CanManageEventAsync(division.EventId))
+            return Forbid();
+
+        // If this is set as default, clear other defaults
+        if (request.IsDefault)
+        {
+            var existingFees = await _context.DivisionFees.Where(f => f.DivisionId == divisionId && f.IsDefault).ToListAsync();
+            foreach (var existingFee in existingFees)
+            {
+                existingFee.IsDefault = false;
+            }
+        }
+
+        var fee = new DivisionFee
+        {
+            DivisionId = divisionId,
+            Name = request.Name,
+            Description = request.Description,
+            Amount = request.Amount,
+            IsDefault = request.IsDefault,
+            AvailableFrom = request.AvailableFrom,
+            AvailableUntil = request.AvailableUntil,
+            IsActive = request.IsActive,
+            SortOrder = request.SortOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.DivisionFees.Add(fee);
+        await _context.SaveChangesAsync();
+
+        var dto = new DivisionFeeDto
+        {
+            Id = fee.Id,
+            DivisionId = fee.DivisionId,
+            Name = fee.Name,
+            Description = fee.Description,
+            Amount = fee.Amount,
+            IsDefault = fee.IsDefault,
+            AvailableFrom = fee.AvailableFrom,
+            AvailableUntil = fee.AvailableUntil,
+            IsActive = fee.IsActive,
+            SortOrder = fee.SortOrder,
+            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
+                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+        };
+
+        return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
+    }
+
+    /// <summary>
+    /// Update a division fee
+    /// </summary>
+    [HttpPut("divisions/{divisionId}/fees/{feeId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<DivisionFeeDto>>> UpdateDivisionFee(int divisionId, int feeId, [FromBody] DivisionFeeRequest request)
+    {
+        var fee = await _context.DivisionFees
+            .Include(f => f.Division)
+            .FirstOrDefaultAsync(f => f.Id == feeId && f.DivisionId == divisionId);
+
+        if (fee == null)
+            return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee not found" });
+
+        // Check authorization
+        if (!await CanManageEventAsync(fee.Division!.EventId))
+            return Forbid();
+
+        // If this is set as default, clear other defaults
+        if (request.IsDefault && !fee.IsDefault)
+        {
+            var existingFees = await _context.DivisionFees.Where(f => f.DivisionId == divisionId && f.IsDefault && f.Id != feeId).ToListAsync();
+            foreach (var existingFee in existingFees)
+            {
+                existingFee.IsDefault = false;
+            }
+        }
+
+        fee.Name = request.Name;
+        fee.Description = request.Description;
+        fee.Amount = request.Amount;
+        fee.IsDefault = request.IsDefault;
+        fee.AvailableFrom = request.AvailableFrom;
+        fee.AvailableUntil = request.AvailableUntil;
+        fee.IsActive = request.IsActive;
+        fee.SortOrder = request.SortOrder;
+        fee.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        var dto = new DivisionFeeDto
+        {
+            Id = fee.Id,
+            DivisionId = fee.DivisionId,
+            Name = fee.Name,
+            Description = fee.Description,
+            Amount = fee.Amount,
+            IsDefault = fee.IsDefault,
+            AvailableFrom = fee.AvailableFrom,
+            AvailableUntil = fee.AvailableUntil,
+            IsActive = fee.IsActive,
+            SortOrder = fee.SortOrder,
+            IsCurrentlyAvailable = (!fee.AvailableFrom.HasValue || fee.AvailableFrom <= DateTime.UtcNow) &&
+                                   (!fee.AvailableUntil.HasValue || fee.AvailableUntil > DateTime.UtcNow)
+        };
+
+        return Ok(new ApiResponse<DivisionFeeDto> { Success = true, Data = dto });
+    }
+
+    /// <summary>
+    /// Delete a division fee
+    /// </summary>
+    [HttpDelete("divisions/{divisionId}/fees/{feeId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteDivisionFee(int divisionId, int feeId)
+    {
+        var fee = await _context.DivisionFees
+            .Include(f => f.Division)
+            .FirstOrDefaultAsync(f => f.Id == feeId && f.DivisionId == divisionId);
+
+        if (fee == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee not found" });
+
+        // Check authorization
+        if (!await CanManageEventAsync(fee.Division!.EventId))
+            return Forbid();
+
+        // Check if any registrations are using this fee
+        var usedByRegistrations = await _context.EventRegistrations.AnyAsync(r => r.SelectedFeeId == feeId);
+        var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId == feeId);
+
+        if (usedByRegistrations || usedByMembers)
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "Cannot delete fee that is in use by existing registrations" });
+
+        _context.DivisionFees.Remove(fee);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    /// <summary>
+    /// Bulk update division fees (replaces all fees for a division)
+    /// </summary>
+    [HttpPut("divisions/{divisionId}/fees")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<DivisionFeeDto>>>> BulkUpdateDivisionFees(int divisionId, [FromBody] List<DivisionFeeRequest> fees)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Fees)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Division not found" });
+
+        // Check authorization
+        if (!await CanManageEventAsync(division.EventId))
+            return Forbid();
+
+        // Check if any existing fees are in use
+        var existingFeeIds = division.Fees.Select(f => f.Id).ToList();
+        var usedByRegistrations = await _context.EventRegistrations.AnyAsync(r => r.SelectedFeeId != null && existingFeeIds.Contains(r.SelectedFeeId.Value));
+        var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId != null && existingFeeIds.Contains(m.SelectedFeeId.Value));
+
+        if (usedByRegistrations || usedByMembers)
+            return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Cannot replace fees that are in use by existing registrations. Please update individual fees instead." });
+
+        // Remove existing fees
+        _context.DivisionFees.RemoveRange(division.Fees);
+
+        // Ensure only one default
+        var hasDefault = false;
+        var newFees = fees.Select((f, index) => {
+            var isDefault = f.IsDefault && !hasDefault;
+            if (isDefault) hasDefault = true;
+            return new DivisionFee
+            {
+                DivisionId = divisionId,
+                Name = f.Name,
+                Description = f.Description,
+                Amount = f.Amount,
+                IsDefault = isDefault,
+                AvailableFrom = f.AvailableFrom,
+                AvailableUntil = f.AvailableUntil,
+                IsActive = f.IsActive,
+                SortOrder = f.SortOrder > 0 ? f.SortOrder : index,
+                CreatedAt = DateTime.UtcNow
+            };
+        }).ToList();
+
+        _context.DivisionFees.AddRange(newFees);
+        await _context.SaveChangesAsync();
+
+        var result = newFees.OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+        {
+            Id = f.Id,
+            DivisionId = f.DivisionId,
+            Name = f.Name,
+            Description = f.Description,
+            Amount = f.Amount,
+            IsDefault = f.IsDefault,
+            AvailableFrom = f.AvailableFrom,
+            AvailableUntil = f.AvailableUntil,
+            IsActive = f.IsActive,
+            SortOrder = f.SortOrder,
+            IsCurrentlyAvailable = (!f.AvailableFrom.HasValue || f.AvailableFrom <= DateTime.UtcNow) &&
+                                   (!f.AvailableUntil.HasValue || f.AvailableUntil > DateTime.UtcNow)
+        }).ToList();
+
+        return Ok(new ApiResponse<List<DivisionFeeDto>> { Success = true, Data = result });
     }
 
     #endregion

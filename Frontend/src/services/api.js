@@ -1605,7 +1605,17 @@ export const tournamentApi = {
   autoAssignDivisionCourts: (divisionId, options = null) =>
     api.post(`/tournament/court-planning/auto-assign/${divisionId}`, options),
   clearDivisionCourtAssignments: (divisionId) =>
-    api.post(`/tournament/court-planning/clear/${divisionId}`)
+    api.post(`/tournament/court-planning/clear/${divisionId}`),
+
+  // =====================================================
+  // Division Fees
+  // =====================================================
+
+  getDivisionFees: (divisionId) => api.get(`/tournament/divisions/${divisionId}/fees`),
+  createDivisionFee: (divisionId, data) => api.post(`/tournament/divisions/${divisionId}/fees`, data),
+  updateDivisionFee: (divisionId, feeId, data) => api.put(`/tournament/divisions/${divisionId}/fees/${feeId}`, data),
+  deleteDivisionFee: (divisionId, feeId) => api.delete(`/tournament/divisions/${divisionId}/fees/${feeId}`),
+  bulkUpdateDivisionFees: (divisionId, fees) => api.put(`/tournament/divisions/${divisionId}/fees`, fees)
 }
 
 // Messaging API

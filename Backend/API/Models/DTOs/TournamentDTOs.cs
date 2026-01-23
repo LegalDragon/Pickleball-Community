@@ -723,6 +723,10 @@ public class EventRegistrationRequest
     /// How partners can join: "Approval" (default) or "Code"
     /// </summary>
     public string JoinMethod { get; set; } = "Approval";
+    /// <summary>
+    /// The selected fee option ID (if division has multiple fee options)
+    /// </summary>
+    public int? SelectedFeeId { get; set; }
 }
 
 public class EventDetailWithDivisionsDto
@@ -769,6 +773,10 @@ public class EventDivisionDetailDto
     public bool IsFull { get; set; }
     public bool HasWaitlist => WaitlistedCount > 0;
     public List<EventUnitDto> LookingForPartner { get; set; } = new(); // Units needing partners
+    /// <summary>
+    /// Available fee options for this division. If empty, use DivisionFee.
+    /// </summary>
+    public List<DivisionFeeDto> Fees { get; set; } = new();
 }
 
 // Payment DTOs
@@ -1093,4 +1101,53 @@ public class AutoAssignRequest
     public DateTime? StartTime { get; set; }
     public int? MatchDurationMinutes { get; set; }
     public bool ClearExisting { get; set; } = true;
+}
+
+// =====================================================
+// Division Fee DTOs
+// =====================================================
+
+/// <summary>
+/// Fee option for a division, shown during registration
+/// </summary>
+public class DivisionFeeDto
+{
+    public int Id { get; set; }
+    public int DivisionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal Amount { get; set; }
+    public bool IsDefault { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableUntil { get; set; }
+    public bool IsActive { get; set; }
+    public int SortOrder { get; set; }
+    /// <summary>
+    /// Whether this fee is currently available based on AvailableFrom/AvailableUntil dates
+    /// </summary>
+    public bool IsCurrentlyAvailable { get; set; }
+}
+
+/// <summary>
+/// Request to create or update a division fee
+/// </summary>
+public class DivisionFeeRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal Amount { get; set; }
+    public bool IsDefault { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableUntil { get; set; }
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; } = 0;
+}
+
+/// <summary>
+/// Bulk update request for managing multiple division fees at once
+/// </summary>
+public class BulkDivisionFeesRequest
+{
+    public int DivisionId { get; set; }
+    public List<DivisionFeeRequest> Fees { get; set; } = new();
 }
