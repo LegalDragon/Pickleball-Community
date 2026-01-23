@@ -3,10 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Calendar, MapPin, Clock, Users, DollarSign, ChevronLeft,
   UserPlus, Building2, Phone, Mail, User, Image, ExternalLink,
-  Loader2, AlertCircle, FileText, Radio, Settings, Trophy, Medal
+  Loader2, AlertCircle, FileText, Radio, Settings, Trophy, Medal,
+  Edit3, Check
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { eventsApi, objectAssetsApi, scoreboardApi, getSharedAssetUrl } from '../services/api';
+import { eventsApi, objectAssetsApi, scoreboardApi, tournamentApi, getSharedAssetUrl } from '../services/api';
 import { getIconByName } from '../utils/iconMap';
 import { getColorValues } from '../utils/colorMap';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
@@ -23,6 +24,7 @@ export default function EventView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null);
+  const [userRegistrations, setUserRegistrations] = useState([]);
 
   // Load event data
   useEffect(() => {
@@ -84,6 +86,31 @@ export default function EventView() {
 
     loadResults();
   }, [event, eventId]);
+
+  // Load user's registrations for this event
+  useEffect(() => {
+    const loadUserRegistrations = async () => {
+      if (!isAuthenticated || !user?.id || !eventId) {
+        setUserRegistrations([]);
+        return;
+      }
+
+      try {
+        const response = await tournamentApi.getEventUnits(eventId);
+        if (response.success && response.data) {
+          // Filter for units where the current user is an accepted member
+          const myUnits = response.data.filter(u =>
+            u.members?.some(m => m.userId === user.id && m.inviteStatus === 'Accepted')
+          );
+          setUserRegistrations(myUnits);
+        }
+      } catch (err) {
+        console.log('Could not load user registrations:', err);
+      }
+    };
+
+    loadUserRegistrations();
+  }, [isAuthenticated, user?.id, eventId]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -202,6 +229,20 @@ export default function EventView() {
             ) : !isRegistrationOpen ? (
               <div className="text-center text-gray-600">
                 <p className="font-medium">Registration opens {formatDate(event.registrationOpenDate)}</p>
+              </div>
+            ) : isAuthenticated && userRegistrations.length > 0 ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-center gap-2 text-green-700 bg-green-100 py-2 px-4 rounded-lg">
+                  <Check className="w-5 h-5" />
+                  <span className="font-medium">You're registered!</span>
+                </div>
+                <button
+                  onClick={handleRegister}
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit3 className="w-5 h-5" />
+                  View/Edit my Registration
+                </button>
               </div>
             ) : (
               <button
@@ -623,13 +664,23 @@ export default function EventView() {
           {/* Bottom Register Button (mobile) */}
           <div className="p-4 bg-gray-50 border-t border-gray-100 sm:hidden">
             {!isEventPast && isRegistrationOpen && !isRegistrationClosed && (
-              <button
-                onClick={handleRegister}
-                className="w-full py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
-              >
-                <UserPlus className="w-5 h-5" />
-                {isAuthenticated ? 'Register for Event' : 'Login to Register'}
-              </button>
+              isAuthenticated && userRegistrations.length > 0 ? (
+                <button
+                  onClick={handleRegister}
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit3 className="w-5 h-5" />
+                  View/Edit my Registration
+                </button>
+              ) : (
+                <button
+                  onClick={handleRegister}
+                  className="w-full py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  {isAuthenticated ? 'Register for Event' : 'Login to Register'}
+                </button>
+              )
             )}
           </div>
         </div>
