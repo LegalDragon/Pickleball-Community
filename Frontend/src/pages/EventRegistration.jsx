@@ -6,8 +6,8 @@ import {
   Copy, X
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { eventsApi, tournamentApi, getSharedAssetUrl } from '../services/api';
-import toast from 'react-hot-toast';
 
 const STEPS = [
   { id: 1, name: 'Select Division', description: 'Choose your division' },
@@ -19,6 +19,7 @@ export default function EventRegistration() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+  const toast = useToast();
 
   // Data state
   const [event, setEvent] = useState(null);
