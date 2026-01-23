@@ -736,13 +736,35 @@ export default function TournamentManage() {
     setShowEditDivision(true);
   };
 
-  // Save division changes
+  // Open add division modal with empty form
+  const handleOpenAddDivision = () => {
+    setEditingDivision({
+      id: null,
+      name: '',
+      description: '',
+      teamUnitId: null,
+      skillLevelId: null,
+      ageGroupId: null,
+      maxUnits: '',
+      maxPlayers: '',
+      divisionFee: '',
+      scheduleStatus: 'NotGenerated'
+    });
+    setShowEditDivision(true);
+  };
+
+  // Save division changes (both add and edit)
   const handleSaveDivision = async () => {
     if (!editingDivision) return;
 
+    if (!editingDivision.name?.trim()) {
+      toast.error('Division name is required');
+      return;
+    }
+
     setSavingDivision(true);
     try {
-      const updateData = {
+      const divisionData = {
         name: editingDivision.name,
         description: editingDivision.description,
         teamUnitId: editingDivision.teamUnitId || null,
@@ -753,19 +775,27 @@ export default function TournamentManage() {
         divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null
       };
 
-      const response = await eventsApi.updateDivision(eventId, editingDivision.id, updateData);
+      let response;
+      if (editingDivision.id) {
+        // Update existing division
+        response = await eventsApi.updateDivision(eventId, editingDivision.id, divisionData);
+      } else {
+        // Create new division
+        response = await eventsApi.addDivision(eventId, divisionData);
+      }
+
       if (response.success) {
-        toast.success('Division updated successfully');
+        toast.success(editingDivision.id ? 'Division updated successfully' : 'Division created successfully');
         setShowEditDivision(false);
         setEditingDivision(null);
         loadDashboard();
         loadEvent();
       } else {
-        toast.error(response.message || 'Failed to update division');
+        toast.error(response.message || `Failed to ${editingDivision.id ? 'update' : 'create'} division`);
       }
     } catch (err) {
-      console.error('Error updating division:', err);
-      toast.error('Failed to update division');
+      console.error('Error saving division:', err);
+      toast.error(`Failed to ${editingDivision.id ? 'update' : 'create'} division`);
     } finally {
       setSavingDivision(false);
     }
@@ -2317,6 +2347,20 @@ export default function TournamentManage() {
               </div>
             )}
 
+            {/* Add Division Button */}
+            {isOrganizer && (
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Tournament Divisions</h2>
+                <button
+                  onClick={handleOpenAddDivision}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Division
+                </button>
+              </div>
+            )}
+
             {/* Show message if no divisions exist */}
             {(!dashboard?.divisions || dashboard.divisions.length === 0) && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
@@ -2325,13 +2369,15 @@ export default function TournamentManage() {
                 <p className="text-sm text-gray-500 mb-4">
                   Create divisions to organize your tournament by skill level, age group, or format.
                 </p>
-                <Link
-                  to={`/event/${eventId}/edit`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Divisions
-                </Link>
+                {isOrganizer && (
+                  <button
+                    onClick={handleOpenAddDivision}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Division
+                  </button>
+                )}
               </div>
             )}
 
@@ -5844,7 +5890,7 @@ export default function TournamentManage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Edit Division</h3>
+              <h3 className="font-semibold text-gray-900">{editingDivision.id ? 'Edit Division' : 'Add Division'}</h3>
               <button
                 onClick={() => {
                   setShowEditDivision(false);
@@ -5961,18 +6007,20 @@ export default function TournamentManage() {
                     className="w-full border border-gray-300 rounded-lg p-2"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Single fee for all registrations. Use "Fee Options" below for multiple fee tiers.
+                    {editingDivision.id ? 'Single fee for all registrations. Use "Fee Options" below for multiple fee tiers.' : 'Base fee for registrations. You can add fee options after creating the division.'}
                   </p>
                 </div>
               </div>
 
-              {/* Division Fee Options */}
-              <DivisionFeesEditor
-                divisionId={editingDivision.id}
-                eventId={parseInt(eventId)}
-                divisionFee={editingDivision.divisionFee || 0}
-                onFeesChange={() => loadEvent()}
-              />
+              {/* Division Fee Options - only show when editing existing division */}
+              {editingDivision.id && (
+                <DivisionFeesEditor
+                  divisionId={editingDivision.id}
+                  eventId={parseInt(eventId)}
+                  divisionFee={editingDivision.divisionFee || 0}
+                  onFeesChange={() => loadEvent()}
+                />
+              )}
 
               {/* Schedule Status Display */}
               {editingDivision.scheduleStatus && editingDivision.scheduleStatus !== 'NotGenerated' && (
@@ -6002,7 +6050,7 @@ export default function TournamentManage() {
                 className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {savingDivision && <Loader2 className="w-4 h-4 animate-spin" />}
-                Save Changes
+                {editingDivision.id ? 'Save Changes' : 'Create Division'}
               </button>
             </div>
           </div>
