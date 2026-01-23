@@ -1385,15 +1385,16 @@ export default function EventRegistration() {
                       <div className="flex gap-2">
                         <input
                           type="text"
+                          inputMode="numeric"
                           value={joinCodeInput}
-                          onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                          placeholder="Enter 6-digit code"
-                          maxLength={6}
+                          onChange={(e) => setJoinCodeInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Enter 4-digit code"
+                          maxLength={4}
                           className="flex-1 px-3 py-2 border border-purple-300 rounded-lg font-mono text-center text-lg tracking-widest"
                         />
                         <button
                           onClick={handleJoinByCode}
-                          disabled={joiningByCode || joinCodeInput.length < 6}
+                          disabled={joiningByCode || joinCodeInput.length < 4}
                           className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
                         >
                           {joiningByCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Join'}

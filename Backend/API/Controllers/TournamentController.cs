@@ -8092,18 +8092,12 @@ public class TournamentController : EventControllerBase
     #region Join Code Methods
 
     /// <summary>
-    /// Generate a unique 6-character alphanumeric join code
+    /// Generate a unique 4-digit numeric join code
     /// </summary>
     private string GenerateJoinCode()
     {
-        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Exclude confusing chars like 0/O, 1/I/L
         var random = new Random();
-        var code = new char[6];
-        for (int i = 0; i < 6; i++)
-        {
-            code[i] = chars[random.Next(chars.Length)];
-        }
-        return new string(code);
+        return random.Next(1000, 10000).ToString(); // 1000-9999
     }
 
     /// <summary>
