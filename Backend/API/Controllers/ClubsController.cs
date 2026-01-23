@@ -17,17 +17,20 @@ public class ClubsController : ControllerBase
     private readonly ILogger<ClubsController> _logger;
     private readonly INotificationService _notificationService;
     private readonly IActivityAwardService _activityAwardService;
+    private readonly IEmailNotificationService _emailService;
 
     public ClubsController(
         ApplicationDbContext context,
         ILogger<ClubsController> logger,
         INotificationService notificationService,
-        IActivityAwardService activityAwardService)
+        IActivityAwardService activityAwardService,
+        IEmailNotificationService emailService)
     {
         _context = context;
         _logger = logger;
         _notificationService = notificationService;
         _activityAwardService = activityAwardService;
+        _emailService = emailService;
     }
 
     private int? GetCurrentUserId()
@@ -680,10 +683,12 @@ public class ClubsController : ControllerBase
             var requester = await _context.Users.FindAsync(userId.Value);
             var requesterName = requester != null ? Utility.FormatName(requester.LastName, requester.FirstName) : "Someone";
 
-            var clubAdmins = await _context.ClubMembers
+            var clubAdminUsers = await _context.ClubMembers
                 .Where(m => m.ClubId == id && m.Role == "Admin" && m.IsActive)
-                .Select(m => m.UserId)
+                .Select(m => new { m.UserId, m.User!.Email })
                 .ToListAsync();
+
+            var clubAdmins = clubAdminUsers.Select(a => a.UserId).ToList();
 
             if (clubAdmins.Count > 0)
             {
@@ -696,6 +701,42 @@ public class ClubsController : ControllerBase
                     "ClubJoinRequest",
                     request.Id
                 );
+
+                // Send email notification to club admins
+                var messageSection = !string.IsNullOrEmpty(dto?.Message)
+                    ? $"<p><strong>Message from requester:</strong> {System.Net.WebUtility.HtmlEncode(dto.Message)}</p>"
+                    : "";
+
+                var emailBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <h2 style='color: #3b82f6;'>New Club Join Request</h2>
+    <p><strong>{System.Net.WebUtility.HtmlEncode(requesterName)}</strong> wants to join <strong>{System.Net.WebUtility.HtmlEncode(club.Name)}</strong>.</p>
+    {messageSection}
+    <p style='margin-top: 20px;'>
+        <a href='https://pickleball.community/clubs?id={id}&tab=manage' style='background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;'>Review Request</a>
+    </p>
+    <p style='margin-top: 20px; color: #666; font-size: 14px;'>
+        You can approve or reject this request from the club management page.
+    </p>
+</div>";
+
+                foreach (var admin in clubAdminUsers.Where(a => !string.IsNullOrEmpty(a.Email)))
+                {
+                    try
+                    {
+                        await _emailService.SendSimpleAsync(
+                            admin.UserId,
+                            admin.Email!,
+                            $"New join request for {club.Name}",
+                            emailBody
+                        );
+                    }
+                    catch (Exception emailEx)
+                    {
+                        // Log but don't fail the request if email fails
+                        _logger.LogWarning(emailEx, "Failed to send club join request email to admin {UserId}", admin.UserId);
+                    }
+                }
             }
 
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Join request submitted" });

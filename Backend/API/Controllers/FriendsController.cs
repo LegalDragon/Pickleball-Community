@@ -20,17 +20,20 @@ public class FriendsController : ControllerBase
     private readonly ILogger<FriendsController> _logger;
     private readonly INotificationService _notificationService;
     private readonly IActivityAwardService _activityAwardService;
+    private readonly IEmailNotificationService _emailService;
 
     public FriendsController(
         ApplicationDbContext context,
         ILogger<FriendsController> logger,
         INotificationService notificationService,
-        IActivityAwardService activityAwardService)
+        IActivityAwardService activityAwardService,
+        IEmailNotificationService emailService)
     {
         _context = context;
         _logger = logger;
         _notificationService = notificationService;
         _activityAwardService = activityAwardService;
+        _emailService = emailService;
     }
 
     private int? GetCurrentUserId()
@@ -496,6 +499,42 @@ public class FriendsController : ControllerBase
                 "FriendRequest",
                 request.Id
             );
+
+            // Send email notification to recipient
+            if (!string.IsNullOrEmpty(recipient.Email))
+            {
+                try
+                {
+                    var messageSection = !string.IsNullOrEmpty(dto.Message)
+                        ? $"<p><strong>Message:</strong> {System.Net.WebUtility.HtmlEncode(dto.Message)}</p>"
+                        : "";
+
+                    var emailBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <h2 style='color: #3b82f6;'>New Friend Request</h2>
+    <p><strong>{System.Net.WebUtility.HtmlEncode(senderName)}</strong> wants to be your friend on Pickleball Community!</p>
+    {messageSection}
+    <p style='margin-top: 20px;'>
+        <a href='https://pickleball.community/friends' style='background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;'>View Request</a>
+    </p>
+    <p style='margin-top: 20px; color: #666; font-size: 14px;'>
+        You can accept or decline this request from your Friends page.
+    </p>
+</div>";
+
+                    await _emailService.SendSimpleAsync(
+                        recipient.Id,
+                        recipient.Email,
+                        $"{senderName} wants to be your friend",
+                        emailBody
+                    );
+                }
+                catch (Exception emailEx)
+                {
+                    // Log but don't fail the request if email fails
+                    _logger.LogWarning(emailEx, "Failed to send friend request email to user {UserId}", dto.RecipientId);
+                }
+            }
 
             return Ok(new ApiResponse<FriendRequestDto>
             {
