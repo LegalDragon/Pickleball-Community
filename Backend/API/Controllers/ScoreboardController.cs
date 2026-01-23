@@ -542,7 +542,8 @@ public class ScoreboardController : ControllerBase
             .Include(m => m.Unit1)
             .Include(m => m.Unit2)
             .Include(m => m.TournamentCourt)
-                .ThenInclude(c => c!.CourtGroup)
+                .ThenInclude(c => c!.CourtGroupCourts)
+                    .ThenInclude(cgc => cgc.CourtGroup)
             .Include(m => m.Phase)
             .OrderBy(m => m.ScheduledTime ?? m.EstimatedStartTime ?? DateTime.MaxValue)
             .ThenBy(m => m.TournamentCourt != null ? m.TournamentCourt.SortOrder : 999)
@@ -588,14 +589,15 @@ public class ScoreboardController : ControllerBase
         // Get courts for the event
         var courts = await _context.TournamentCourts
             .Where(c => c.EventId == eventId && c.IsActive)
-            .Include(c => c.CourtGroup)
+            .Include(c => c.CourtGroupCourts)
+                .ThenInclude(cgc => cgc.CourtGroup)
             .OrderBy(c => c.SortOrder)
             .Select(c => new ScheduleCourtDto
             {
                 CourtId = c.Id,
                 CourtName = c.CourtLabel,
                 CourtNumber = c.SortOrder,
-                GroupName = c.CourtGroup != null ? c.CourtGroup.GroupName : null,
+                GroupName = c.CourtGroupCourts.FirstOrDefault() != null ? c.CourtGroupCourts.First().CourtGroup!.GroupName : null,
                 Location = c.LocationDescription
             })
             .ToListAsync();

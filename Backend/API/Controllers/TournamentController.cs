@@ -4363,7 +4363,7 @@ public class TournamentController : EventControllerBase
                 Status = e.Status,
                 CourtId = e.TournamentCourtId,
                 CourtLabel = e.TournamentCourt != null ? e.TournamentCourt.CourtLabel : null,
-                CourtGroupId = e.TournamentCourt != null ? e.TournamentCourt.CourtGroupCourts.FirstOrDefault()?.CourtGroupId : null,
+                CourtGroupId = e.TournamentCourt != null && e.TournamentCourt.CourtGroupCourts.Any() ? e.TournamentCourt.CourtGroupCourts.First().CourtGroupId : (int?)null,
                 ScheduledTime = e.ScheduledTime,
                 EstimatedStartTime = e.EstimatedStartTime,
                 EstimatedEndTime = e.EstimatedEndTime,
@@ -4747,9 +4747,9 @@ public class TournamentController : EventControllerBase
             {
                 Id = c.Id,
                 CourtLabel = c.CourtLabel,
-                CourtGroupId = c.CourtGroupCourts.FirstOrDefault() != null ? c.CourtGroupCourts.FirstOrDefault()!.CourtGroupId : null,
-                CourtGroupName = c.CourtGroupCourts.FirstOrDefault() != null ? c.CourtGroupCourts.FirstOrDefault()!.CourtGroup!.GroupName : null,
-                LocationArea = c.CourtGroupCourts.FirstOrDefault() != null ? c.CourtGroupCourts.FirstOrDefault()!.CourtGroup!.LocationArea : null,
+                CourtGroupId = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroupId : (int?)null,
+                CourtGroupName = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroup!.GroupName : null,
+                LocationArea = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroup!.LocationArea : null,
                 SortOrder = c.SortOrder,
                 Blocks = new List<TimelineBlockDto>()
             })
