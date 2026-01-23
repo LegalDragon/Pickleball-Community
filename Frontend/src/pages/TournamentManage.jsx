@@ -1366,7 +1366,7 @@ export default function TournamentManage() {
               </h3>
               <div className="space-y-4">
                 <VenuePicker
-                  value={editForm.venueId}
+                  value={editForm.venueId ? { id: editForm.venueId, name: editForm.venueName, city: editForm.city, state: editForm.state } : null}
                   onChange={(venue) => {
                     if (venue) {
                       handleFormChange('venueId', venue.id);
