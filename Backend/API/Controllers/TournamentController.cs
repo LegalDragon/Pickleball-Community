@@ -159,12 +159,18 @@ public class TournamentController : EventControllerBase
                 .ThenInclude(d => d.SkillLevel)
             .Include(e => e.Divisions)
                 .ThenInclude(d => d.AgeGroupEntity)
-            .Include(e => e.Divisions)
-                .ThenInclude(d => d.Fees)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
         if (evt == null)
             return NotFound(new ApiResponse<EventDetailWithDivisionsDto> { Success = false, Message = "Event not found" });
+
+        // Load division fees separately (DivisionId > 0 means division-specific fees)
+        var divisionIds = evt.Divisions.Select(d => d.Id).ToList();
+        var divisionFees = await _context.DivisionFees
+            .Include(f => f.FeeType)
+            .Where(f => divisionIds.Contains(f.DivisionId))
+            .ToListAsync();
+        var feesByDivision = divisionFees.GroupBy(f => f.DivisionId).ToDictionary(g => g.Key, g => g.ToList());
 
         // Get registration counts per division
         var registrationCounts = await _context.EventUnits
@@ -270,12 +276,13 @@ public class TournamentController : EventControllerBase
                     LookingForPartner = incompleteUnits.ContainsKey(d.Id)
                         ? incompleteUnits[d.Id].Select(u => MapToUnitDto(u)).ToList()
                         : new List<EventUnitDto>(),
-                    Fees = d.Fees.Where(f => f.IsActive).OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
+                    Fees = feesByDivision.GetValueOrDefault(d.Id, new List<DivisionFee>())
+                        .Where(f => f.IsActive).OrderBy(f => f.SortOrder).Select(f => new DivisionFeeDto
                     {
                         Id = f.Id,
                         DivisionId = f.DivisionId,
-                        Name = f.Name,
-                        Description = f.Description,
+                        Name = f.FeeType?.Name ?? f.Name,
+                        Description = f.FeeType?.Description ?? f.Description,
                         Amount = f.Amount,
                         IsDefault = f.IsDefault,
                         AvailableFrom = f.AvailableFrom,
