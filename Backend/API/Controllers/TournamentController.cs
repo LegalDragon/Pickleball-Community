@@ -8813,6 +8813,230 @@ public class TournamentController : EventControllerBase
     }
 
     #endregion
+
+    #region Event Fee Types
+
+    /// <summary>
+    /// Get all fee types for an event
+    /// </summary>
+    [HttpGet("events/{eventId}/fee-types")]
+    public async Task<ActionResult<ApiResponse<List<EventFeeTypeDto>>>> GetEventFeeTypes(int eventId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<List<EventFeeTypeDto>> { Success = false, Message = "Event not found" });
+
+        var feeTypes = await _context.EventFeeTypes
+            .Where(ft => ft.EventId == eventId)
+            .OrderBy(ft => ft.SortOrder)
+            .Select(ft => new EventFeeTypeDto
+            {
+                Id = ft.Id,
+                EventId = ft.EventId,
+                Name = ft.Name,
+                Description = ft.Description,
+                DefaultAmount = ft.DefaultAmount,
+                AvailableFrom = ft.AvailableFrom,
+                AvailableUntil = ft.AvailableUntil,
+                IsActive = ft.IsActive,
+                SortOrder = ft.SortOrder,
+                CreatedAt = ft.CreatedAt,
+                IsCurrentlyAvailable = ft.IsActive &&
+                    (!ft.AvailableFrom.HasValue || ft.AvailableFrom <= DateTime.UtcNow) &&
+                    (!ft.AvailableUntil.HasValue || ft.AvailableUntil > DateTime.UtcNow)
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<EventFeeTypeDto>> { Success = true, Data = feeTypes });
+    }
+
+    /// <summary>
+    /// Create a new fee type for an event
+    /// </summary>
+    [HttpPost("events/{eventId}/fee-types")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventFeeTypeDto>>> CreateEventFeeType(int eventId, [FromBody] EventFeeTypeRequest request)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<EventFeeTypeDto> { Success = false, Message = "Event not found" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var feeType = new EventFeeType
+        {
+            EventId = eventId,
+            Name = request.Name,
+            Description = request.Description,
+            DefaultAmount = request.DefaultAmount,
+            AvailableFrom = request.AvailableFrom,
+            AvailableUntil = request.AvailableUntil,
+            IsActive = request.IsActive,
+            SortOrder = request.SortOrder,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.EventFeeTypes.Add(feeType);
+        await _context.SaveChangesAsync();
+
+        var result = new EventFeeTypeDto
+        {
+            Id = feeType.Id,
+            EventId = feeType.EventId,
+            Name = feeType.Name,
+            Description = feeType.Description,
+            DefaultAmount = feeType.DefaultAmount,
+            AvailableFrom = feeType.AvailableFrom,
+            AvailableUntil = feeType.AvailableUntil,
+            IsActive = feeType.IsActive,
+            SortOrder = feeType.SortOrder,
+            CreatedAt = feeType.CreatedAt,
+            IsCurrentlyAvailable = feeType.IsCurrentlyAvailable
+        };
+
+        return Ok(new ApiResponse<EventFeeTypeDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Update a fee type
+    /// </summary>
+    [HttpPut("events/{eventId}/fee-types/{feeTypeId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventFeeTypeDto>>> UpdateEventFeeType(int eventId, int feeTypeId, [FromBody] EventFeeTypeRequest request)
+    {
+        var feeType = await _context.EventFeeTypes.FirstOrDefaultAsync(ft => ft.Id == feeTypeId && ft.EventId == eventId);
+        if (feeType == null)
+            return NotFound(new ApiResponse<EventFeeTypeDto> { Success = false, Message = "Fee type not found" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        feeType.Name = request.Name;
+        feeType.Description = request.Description;
+        feeType.DefaultAmount = request.DefaultAmount;
+        feeType.AvailableFrom = request.AvailableFrom;
+        feeType.AvailableUntil = request.AvailableUntil;
+        feeType.IsActive = request.IsActive;
+        feeType.SortOrder = request.SortOrder;
+        feeType.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        var result = new EventFeeTypeDto
+        {
+            Id = feeType.Id,
+            EventId = feeType.EventId,
+            Name = feeType.Name,
+            Description = feeType.Description,
+            DefaultAmount = feeType.DefaultAmount,
+            AvailableFrom = feeType.AvailableFrom,
+            AvailableUntil = feeType.AvailableUntil,
+            IsActive = feeType.IsActive,
+            SortOrder = feeType.SortOrder,
+            CreatedAt = feeType.CreatedAt,
+            IsCurrentlyAvailable = feeType.IsCurrentlyAvailable
+        };
+
+        return Ok(new ApiResponse<EventFeeTypeDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Delete a fee type
+    /// </summary>
+    [HttpDelete("events/{eventId}/fee-types/{feeTypeId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteEventFeeType(int eventId, int feeTypeId)
+    {
+        var feeType = await _context.EventFeeTypes.FirstOrDefaultAsync(ft => ft.Id == feeTypeId && ft.EventId == eventId);
+        if (feeType == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee type not found" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        // Check if any fees are using this fee type
+        var usageCount = await _context.DivisionFees.CountAsync(f => f.FeeTypeId == feeTypeId);
+        if (usageCount > 0)
+        {
+            return BadRequest(new ApiResponse<bool>
+            {
+                Success = false,
+                Message = $"Cannot delete fee type - it is used by {usageCount} fee(s). Remove the fees first or update them to use a different fee type."
+            });
+        }
+
+        _context.EventFeeTypes.Remove(feeType);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    /// <summary>
+    /// Bulk update fee types for an event (replaces all fee types)
+    /// </summary>
+    [HttpPut("events/{eventId}/fee-types")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<EventFeeTypeDto>>>> BulkUpdateEventFeeTypes(int eventId, [FromBody] BulkEventFeeTypesRequest request)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<List<EventFeeTypeDto>> { Success = false, Message = "Event not found" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        // Get existing fee types
+        var existingFeeTypes = await _context.EventFeeTypes.Where(ft => ft.EventId == eventId).ToListAsync();
+
+        // Check if any are in use before deleting
+        var existingIds = existingFeeTypes.Select(ft => ft.Id).ToList();
+        var usedFeeTypeIds = await _context.DivisionFees
+            .Where(f => f.FeeTypeId.HasValue && existingIds.Contains(f.FeeTypeId.Value))
+            .Select(f => f.FeeTypeId.Value)
+            .Distinct()
+            .ToListAsync();
+
+        // Only delete fee types that are not in use
+        var feeTypesToDelete = existingFeeTypes.Where(ft => !usedFeeTypeIds.Contains(ft.Id)).ToList();
+        _context.EventFeeTypes.RemoveRange(feeTypesToDelete);
+
+        // Add new fee types
+        var newFeeTypes = request.FeeTypes.Select((ft, index) => new EventFeeType
+        {
+            EventId = eventId,
+            Name = ft.Name,
+            Description = ft.Description,
+            DefaultAmount = ft.DefaultAmount,
+            AvailableFrom = ft.AvailableFrom,
+            AvailableUntil = ft.AvailableUntil,
+            IsActive = ft.IsActive,
+            SortOrder = ft.SortOrder > 0 ? ft.SortOrder : index,
+            CreatedAt = DateTime.UtcNow
+        }).ToList();
+
+        _context.EventFeeTypes.AddRange(newFeeTypes);
+        await _context.SaveChangesAsync();
+
+        var result = newFeeTypes.OrderBy(ft => ft.SortOrder).Select(ft => new EventFeeTypeDto
+        {
+            Id = ft.Id,
+            EventId = ft.EventId,
+            Name = ft.Name,
+            Description = ft.Description,
+            DefaultAmount = ft.DefaultAmount,
+            AvailableFrom = ft.AvailableFrom,
+            AvailableUntil = ft.AvailableUntil,
+            IsActive = ft.IsActive,
+            SortOrder = ft.SortOrder,
+            CreatedAt = ft.CreatedAt,
+            IsCurrentlyAvailable = ft.IsCurrentlyAvailable
+        }).ToList();
+
+        return Ok(new ApiResponse<List<EventFeeTypeDto>> { Success = true, Data = result });
+    }
+
+    #endregion
 }
 
 // DTOs for join code feature

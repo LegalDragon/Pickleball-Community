@@ -171,6 +171,7 @@ public class Event
     public ICollection<EventStaff> Staff { get; set; } = new List<EventStaff>();
     public ICollection<EventStaffRole> StaffRoles { get; set; } = new List<EventStaffRole>();
     public ICollection<DivisionFee> Fees { get; set; } = new List<DivisionFee>(); // Event-level fees (DivisionId = null)
+    public ICollection<EventFeeType> FeeTypes { get; set; } = new List<EventFeeType>(); // Fee type templates for this event
 }
 
 public class EventDivision

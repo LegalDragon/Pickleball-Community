@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, Edit3, Check, X, Loader2, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Edit3, Loader2, ChevronDown, ChevronUp, Star, Tag } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
@@ -7,15 +7,17 @@ import { useToast } from '../contexts/ToastContext';
  * Component for managing multiple fee options for a division
  * Used in the Edit Division modal in Events.jsx
  */
-export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChange }) {
+export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, onFeesChange }) {
   const toast = useToast();
   const [fees, setFees] = useState([]);
+  const [feeTypes, setFeeTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingFee, setEditingFee] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newFee, setNewFee] = useState({
+    feeTypeId: '',
     name: '',
     description: '',
     amount: 0,
@@ -25,29 +27,59 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
     isActive: true
   });
 
-  // Load fees when divisionId changes
+  // Load fees and fee types when divisionId changes
   useEffect(() => {
     if (divisionId) {
-      loadFees();
+      loadData();
     } else {
       setFees([]);
+      setFeeTypes([]);
       setLoading(false);
     }
-  }, [divisionId]);
+  }, [divisionId, eventId]);
 
-  const loadFees = async () => {
+  const loadData = async () => {
     if (!divisionId) return;
     setLoading(true);
     try {
-      const response = await tournamentApi.getDivisionFees(divisionId);
-      if (response.success) {
-        setFees(response.data || []);
+      const requests = [tournamentApi.getDivisionFees(divisionId)];
+      // Load fee types if eventId is provided
+      if (eventId) {
+        requests.push(tournamentApi.getEventFeeTypes(eventId));
+      }
+
+      const results = await Promise.all(requests);
+
+      if (results[0].success) {
+        setFees(results[0].data || []);
+      }
+      if (results.length > 1 && results[1].success) {
+        setFeeTypes(results[1].data || []);
       }
     } catch (error) {
       console.error('Failed to load fees:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFeeTypeChange = (feeTypeId) => {
+    if (feeTypeId) {
+      const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
+      if (feeType) {
+        setNewFee({
+          ...newFee,
+          feeTypeId: feeType.id,
+          name: feeType.name,
+          description: feeType.description || '',
+          amount: feeType.defaultAmount,
+          availableFrom: feeType.availableFrom ? new Date(feeType.availableFrom).toISOString().slice(0, 16) : '',
+          availableUntil: feeType.availableUntil ? new Date(feeType.availableUntil).toISOString().slice(0, 16) : ''
+        });
+        return;
+      }
+    }
+    setNewFee({ ...newFee, feeTypeId: '' });
   };
 
   const handleAddFee = async () => {
@@ -59,6 +91,7 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
     setSaving(true);
     try {
       const response = await tournamentApi.createDivisionFee(divisionId, {
+        feeTypeId: newFee.feeTypeId || null,
         name: newFee.name,
         description: newFee.description,
         amount: parseFloat(newFee.amount) || 0,
@@ -71,7 +104,7 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
 
       if (response.success) {
         setFees([...fees, response.data]);
-        setNewFee({ name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
+        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
         setShowAddForm(false);
         toast.success('Fee added');
         onFeesChange?.();
@@ -89,6 +122,7 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
     setSaving(true);
     try {
       const response = await tournamentApi.updateDivisionFee(divisionId, fee.id, {
+        feeTypeId: fee.feeTypeId || null,
         name: fee.name,
         description: fee.description,
         amount: parseFloat(fee.amount) || 0,
@@ -142,7 +176,6 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
 
   // Show summary when collapsed
   const hasFees = fees.length > 0;
-  const defaultFee = fees.find(f => f.isDefault);
   const activeFees = fees.filter(f => f.isActive && f.isCurrentlyAvailable);
 
   if (!divisionId) {
@@ -197,7 +230,8 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
               {/* Help text */}
               <p className="text-sm text-gray-500">
                 Add multiple fee options (e.g., Early Bird, Regular, Late Registration).
-                If no fee options are defined, the single division fee above will be used.
+                {feeTypes.length > 0 && ' Select from defined fee types or create custom fees.'}
+                {!hasFees && ' If no fee options are defined, the single division fee above will be used.'}
               </p>
 
               {/* Fee list */}
@@ -208,6 +242,38 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
                       {editingFee?.id === fee.id ? (
                         // Edit mode
                         <div className="space-y-3">
+                          {feeTypes.length > 0 && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
+                              <select
+                                value={editingFee.feeTypeId || ''}
+                                onChange={(e) => {
+                                  const feeTypeId = e.target.value;
+                                  if (feeTypeId) {
+                                    const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
+                                    if (feeType) {
+                                      setEditingFee({
+                                        ...editingFee,
+                                        feeTypeId: feeType.id,
+                                        name: feeType.name,
+                                        description: feeType.description || '',
+                                        availableFrom: feeType.availableFrom,
+                                        availableUntil: feeType.availableUntil
+                                      });
+                                      return;
+                                    }
+                                  }
+                                  setEditingFee({ ...editingFee, feeTypeId: '' });
+                                }}
+                                className="w-full border border-gray-300 rounded p-2 text-sm"
+                              >
+                                <option value="">Custom (no fee type)</option>
+                                {feeTypes.map(ft => (
+                                  <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
@@ -306,6 +372,11 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-gray-900">{fee.name}</span>
                               <span className="text-green-600 font-medium">${fee.amount}</span>
+                              {fee.feeTypeId && (
+                                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  <Tag className="w-3 h-3" /> Type
+                                </span>
+                              )}
                               {fee.isDefault && (
                                 <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                   <Star className="w-3 h-3" /> Default
@@ -355,6 +426,21 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
               {/* Add new fee form */}
               {showAddForm ? (
                 <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg space-y-3">
+                  {feeTypes.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
+                      <select
+                        value={newFee.feeTypeId || ''}
+                        onChange={(e) => handleFeeTypeChange(e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                      >
+                        <option value="">Custom (no fee type)</option>
+                        {feeTypes.map(ft => (
+                          <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
@@ -424,7 +510,7 @@ export default function DivisionFeesEditor({ divisionId, divisionFee, onFeesChan
                       type="button"
                       onClick={() => {
                         setShowAddForm(false);
-                        setNewFee({ name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
+                        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
                       }}
                       className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
                     >

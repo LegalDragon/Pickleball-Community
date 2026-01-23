@@ -23,6 +23,11 @@ public class DivisionFee
     /// </summary>
     public int? EventId { get; set; }
 
+    /// <summary>
+    /// Reference to the fee type template (optional - if set, Name/Description/dates come from fee type)
+    /// </summary>
+    public int? FeeTypeId { get; set; }
+
     [Required]
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty; // e.g., "Early Bird", "Regular Registration", "Late Registration"
@@ -65,6 +70,9 @@ public class DivisionFee
 
     [ForeignKey("EventId")]
     public Event? Event { get; set; }
+
+    [ForeignKey("FeeTypeId")]
+    public EventFeeType? FeeType { get; set; }
 
     /// <summary>
     /// Helper to check if this is an event-level fee (not division-specific)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, Edit3, Loader2, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Edit3, Loader2, ChevronDown, ChevronUp, Star, Tag } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
@@ -11,12 +11,14 @@ import { useToast } from '../contexts/ToastContext';
 export default function EventFeesEditor({ eventId, onFeesChange }) {
   const toast = useToast();
   const [fees, setFees] = useState([]);
+  const [feeTypes, setFeeTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingFee, setEditingFee] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newFee, setNewFee] = useState({
+    feeTypeId: '',
     name: '',
     description: '',
     amount: 0,
@@ -26,29 +28,59 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
     isActive: true
   });
 
-  // Load fees when eventId changes
+  // Load fees and fee types when eventId changes
   useEffect(() => {
     if (eventId) {
-      loadFees();
+      loadData();
     } else {
       setFees([]);
+      setFeeTypes([]);
       setLoading(false);
     }
   }, [eventId]);
 
-  const loadFees = async () => {
+  const loadData = async () => {
     if (!eventId) return;
     setLoading(true);
     try {
-      const response = await tournamentApi.getEventFees(eventId);
-      if (response.success) {
-        setFees(response.data || []);
+      const [feesResponse, feeTypesResponse] = await Promise.all([
+        tournamentApi.getEventFees(eventId),
+        tournamentApi.getEventFeeTypes(eventId)
+      ]);
+      if (feesResponse.success) {
+        setFees(feesResponse.data || []);
+      }
+      if (feeTypesResponse.success) {
+        setFeeTypes(feeTypesResponse.data || []);
       }
     } catch (error) {
       console.error('Failed to load event fees:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFeeTypeChange = (feeTypeId) => {
+    if (feeTypeId) {
+      const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
+      if (feeType) {
+        setNewFee({
+          ...newFee,
+          feeTypeId: feeType.id,
+          name: feeType.name,
+          description: feeType.description || '',
+          amount: feeType.defaultAmount,
+          availableFrom: feeType.availableFrom ? new Date(feeType.availableFrom).toISOString().slice(0, 16) : '',
+          availableUntil: feeType.availableUntil ? new Date(feeType.availableUntil).toISOString().slice(0, 16) : ''
+        });
+        return;
+      }
+    }
+    // Clear fee type selection
+    setNewFee({
+      ...newFee,
+      feeTypeId: ''
+    });
   };
 
   const handleAddFee = async () => {
@@ -60,6 +92,7 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
     setSaving(true);
     try {
       const response = await tournamentApi.createEventFee(eventId, {
+        feeTypeId: newFee.feeTypeId || null,
         name: newFee.name,
         description: newFee.description,
         amount: parseFloat(newFee.amount) || 0,
@@ -72,7 +105,7 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
 
       if (response.success) {
         setFees([...fees, response.data]);
-        setNewFee({ name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
+        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
         setShowAddForm(false);
         toast.success('Event fee added');
         onFeesChange?.();
@@ -90,6 +123,7 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
     setSaving(true);
     try {
       const response = await tournamentApi.updateEventFee(eventId, fee.id, {
+        feeTypeId: fee.feeTypeId || null,
         name: fee.name,
         description: fee.description,
         amount: parseFloat(fee.amount) || 0,
@@ -179,7 +213,7 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
           )}
           {!isExpanded && !hasFees && (
             <p className="text-sm text-gray-500 mt-1">
-              No event-level fees configured. Click to add fee options like Early Bird, Regular, etc.
+              No event-level fees configured. Click to add fee options.
             </p>
           )}
         </div>
@@ -196,8 +230,8 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
             <>
               {/* Help text */}
               <p className="text-sm text-gray-500">
-                Add event-wide fee options that apply to all registrations (e.g., Early Bird, Regular, Late Registration).
-                These are separate from division-specific fees.
+                Add event-wide fee options that apply to all registrations.
+                {feeTypes.length > 0 && ' Select from defined fee types or create custom fees.'}
               </p>
 
               {/* Fee list */}
@@ -208,6 +242,38 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
                       {editingFee?.id === fee.id ? (
                         // Edit mode
                         <div className="space-y-3">
+                          {feeTypes.length > 0 && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
+                              <select
+                                value={editingFee.feeTypeId || ''}
+                                onChange={(e) => {
+                                  const feeTypeId = e.target.value;
+                                  if (feeTypeId) {
+                                    const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
+                                    if (feeType) {
+                                      setEditingFee({
+                                        ...editingFee,
+                                        feeTypeId: feeType.id,
+                                        name: feeType.name,
+                                        description: feeType.description || '',
+                                        availableFrom: feeType.availableFrom,
+                                        availableUntil: feeType.availableUntil
+                                      });
+                                      return;
+                                    }
+                                  }
+                                  setEditingFee({ ...editingFee, feeTypeId: '' });
+                                }}
+                                className="w-full border border-gray-300 rounded p-2 text-sm"
+                              >
+                                <option value="">Custom (no fee type)</option>
+                                {feeTypes.map(ft => (
+                                  <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
@@ -306,6 +372,11 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-gray-900">{fee.name}</span>
                               <span className="text-green-600 font-medium">${fee.amount}</span>
+                              {fee.feeTypeId && (
+                                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  <Tag className="w-3 h-3" /> Type
+                                </span>
+                              )}
                               {fee.isDefault && (
                                 <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                   <Star className="w-3 h-3" /> Default
@@ -355,6 +426,21 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
               {/* Add new fee form */}
               {showAddForm ? (
                 <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg space-y-3">
+                  {feeTypes.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
+                      <select
+                        value={newFee.feeTypeId || ''}
+                        onChange={(e) => handleFeeTypeChange(e.target.value)}
+                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                      >
+                        <option value="">Custom (no fee type)</option>
+                        {feeTypes.map(ft => (
+                          <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
@@ -424,7 +510,7 @@ export default function EventFeesEditor({ eventId, onFeesChange }) {
                       type="button"
                       onClick={() => {
                         setShowAddForm(false);
-                        setNewFee({ name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
+                        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
                       }}
                       className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
                     >

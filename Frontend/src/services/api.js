@@ -1666,7 +1666,16 @@ export const tournamentApi = {
   createEventFee: (eventId, data) => api.post(`/tournament/events/${eventId}/fees`, data),
   updateEventFee: (eventId, feeId, data) => api.put(`/tournament/events/${eventId}/fees/${feeId}`, data),
   deleteEventFee: (eventId, feeId) => api.delete(`/tournament/events/${eventId}/fees/${feeId}`),
-  bulkUpdateEventFees: (eventId, fees) => api.put(`/tournament/events/${eventId}/fees`, fees)
+  bulkUpdateEventFees: (eventId, fees) => api.put(`/tournament/events/${eventId}/fees`, fees),
+
+  // =====================================================
+  // Event Fee Types (fee type templates at event level)
+  // =====================================================
+  getEventFeeTypes: (eventId) => api.get(`/tournament/events/${eventId}/fee-types`),
+  createEventFeeType: (eventId, data) => api.post(`/tournament/events/${eventId}/fee-types`, data),
+  updateEventFeeType: (eventId, feeTypeId, data) => api.put(`/tournament/events/${eventId}/fee-types/${feeTypeId}`, data),
+  deleteEventFeeType: (eventId, feeTypeId) => api.delete(`/tournament/events/${eventId}/fee-types/${feeTypeId}`),
+  bulkUpdateEventFeeTypes: (eventId, feeTypes) => api.put(`/tournament/events/${eventId}/fee-types`, feeTypes)
 }
 
 // Messaging API

@@ -1246,6 +1246,14 @@ public class DivisionFeeDto
     public int Id { get; set; }
     public int? DivisionId { get; set; }
     public int? EventId { get; set; }
+    /// <summary>
+    /// Reference to the fee type template (if using fee types)
+    /// </summary>
+    public int? FeeTypeId { get; set; }
+    /// <summary>
+    /// Name of the fee type (if FeeTypeId is set)
+    /// </summary>
+    public string? FeeTypeName { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal Amount { get; set; }
@@ -1269,6 +1277,10 @@ public class DivisionFeeDto
 /// </summary>
 public class DivisionFeeRequest
 {
+    /// <summary>
+    /// Optional: Reference to a fee type template. If set, Name/Description/dates can be inherited from the fee type.
+    /// </summary>
+    public int? FeeTypeId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal Amount { get; set; }
@@ -1286,4 +1298,51 @@ public class BulkDivisionFeesRequest
 {
     public int DivisionId { get; set; }
     public List<DivisionFeeRequest> Fees { get; set; } = new();
+}
+
+// ============================================
+// Event Fee Type DTOs
+// ============================================
+
+/// <summary>
+/// Fee type template defined at event level, used by both event fees and division fees
+/// </summary>
+public class EventFeeTypeDto
+{
+    public int Id { get; set; }
+    public int EventId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal DefaultAmount { get; set; }
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableUntil { get; set; }
+    public bool IsActive { get; set; }
+    public int SortOrder { get; set; }
+    public DateTime CreatedAt { get; set; }
+    /// <summary>
+    /// Whether this fee type is currently available based on AvailableFrom/AvailableUntil dates
+    /// </summary>
+    public bool IsCurrentlyAvailable { get; set; }
+}
+
+/// <summary>
+/// Request to create or update an event fee type
+/// </summary>
+public class EventFeeTypeRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal DefaultAmount { get; set; } = 0;
+    public DateTime? AvailableFrom { get; set; }
+    public DateTime? AvailableUntil { get; set; }
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; } = 0;
+}
+
+/// <summary>
+/// Bulk update request for managing all fee types for an event
+/// </summary>
+public class BulkEventFeeTypesRequest
+{
+    public List<EventFeeTypeRequest> FeeTypes { get; set; } = new();
 }
