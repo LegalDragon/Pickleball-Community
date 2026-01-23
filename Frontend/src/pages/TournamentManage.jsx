@@ -6,15 +6,16 @@ import {
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
   CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
-  Download, Lightbulb
+  Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
+import VenuePicker from '../components/ui/VenuePicker';
 
 export default function TournamentManage() {
   const { eventId } = useParams();
@@ -36,7 +37,7 @@ export default function TournamentManage() {
   const [standingsViewMode, setStandingsViewMode] = useState('grouped'); // 'grouped' or 'flat'
   const [standingsSortBy, setStandingsSortBy] = useState('pool'); // 'pool', 'rank', 'matchesWon', 'gameDiff', 'pointDiff'
   const [event, setEvent] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('eventinfo');
   const [selectedDivision, setSelectedDivision] = useState(null);
   const selectedDivisionRef = useRef(null); // Ref to track selectedDivision for SignalR listener
   const [error, setError] = useState(null);
@@ -84,6 +85,25 @@ export default function TournamentManage() {
   const [savingPayment, setSavingPayment] = useState(false);
   const [uploadingPaymentProof, setUploadingPaymentProof] = useState(false);
   const [sendingWaiverRequest, setSendingWaiverRequest] = useState(null); // userId
+
+  // Event Info editing state
+  const [eventTypes, setEventTypes] = useState([]);
+  const [editForm, setEditForm] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [savingEvent, setSavingEvent] = useState(false);
+
+  // Staff management state
+  const [staffList, setStaffList] = useState([]);
+  const [staffRoles, setStaffRoles] = useState([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [addStaffForm, setAddStaffForm] = useState({ email: '', roleId: '' });
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [pendingStaff, setPendingStaff] = useState([]);
+
+  // Court groups state
+  const [courtGroups, setCourtGroups] = useState([]);
+  const [loadingCourtGroups, setLoadingCourtGroups] = useState(false);
 
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
@@ -193,18 +213,246 @@ export default function TournamentManage() {
 
   const loadEvent = async () => {
     try {
-      const response = await eventsApi.getEvent(eventId);
-      if (response.success) {
-        setEvent(response.data);
+      const [eventRes, typesRes, assetsRes] = await Promise.all([
+        eventsApi.getEvent(eventId),
+        eventTypesApi.list(),
+        objectAssetsApi.getAssets('Event', eventId)
+      ]);
+
+      if (eventRes.success) {
+        setEvent(eventRes.data);
+        populateEventForm(eventRes.data);
       }
-      // Load map asset for the event (TypeName is lowercase 'map' in database)
-      const assetsResponse = await objectAssetsApi.getAssets('Event', eventId);
-      if (assetsResponse.success && assetsResponse.data) {
-        const map = assetsResponse.data.find(a => a.assetTypeName?.toLowerCase() === 'map');
+
+      if (typesRes.success) {
+        setEventTypes(typesRes.data || []);
+      }
+
+      if (assetsRes.success && assetsRes.data) {
+        const map = assetsRes.data.find(a => a.assetTypeName?.toLowerCase() === 'map');
         setMapAsset(map || null);
       }
     } catch (err) {
       console.error('Error loading event:', err);
+    }
+  };
+
+  // Helper to extract date and time from ISO date string
+  const extractDateTime = (isoString) => {
+    if (!isoString) return { date: '', time: '' };
+    try {
+      const dt = new Date(isoString);
+      const date = dt.toISOString().split('T')[0];
+      const time = dt.toTimeString().slice(0, 5);
+      return { date, time };
+    } catch {
+      return { date: '', time: '' };
+    }
+  };
+
+  const populateEventForm = (eventData) => {
+    const regOpen = extractDateTime(eventData.registrationOpenDate);
+    const regClose = extractDateTime(eventData.registrationCloseDate);
+    const startDate = extractDateTime(eventData.startDate);
+    const endDate = extractDateTime(eventData.endDate);
+
+    setEditForm({
+      name: eventData.name || '',
+      description: eventData.description || '',
+      eventTypeId: eventData.eventTypeId || '',
+      isPublished: eventData.isPublished || false,
+      isPrivate: eventData.isPrivate || false,
+      venueId: eventData.venueId || '',
+      venueName: eventData.venueName || '',
+      address: eventData.address || '',
+      city: eventData.city || '',
+      state: eventData.state || '',
+      country: eventData.country || '',
+      registrationFee: eventData.registrationFee || 0,
+      perDivisionFee: eventData.perDivisionFee || 0,
+      registrationOpenDate: regOpen.date,
+      registrationOpenTime: regOpen.time || '00:00',
+      registrationCloseDate: regClose.date,
+      registrationCloseTime: regClose.time || '23:59',
+      startDate: startDate.date,
+      startTime: startDate.time || '08:00',
+      endDate: endDate.date,
+      endTime: endDate.time || '18:00',
+    });
+    setHasUnsavedChanges(false);
+  };
+
+  const handleFormChange = (field, value) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveEvent = async () => {
+    setSavingEvent(true);
+    try {
+      const registrationOpenDate = editForm.registrationOpenDate
+        ? `${editForm.registrationOpenDate}T${editForm.registrationOpenTime || '00:00'}:00`
+        : null;
+      const registrationCloseDate = editForm.registrationCloseDate
+        ? `${editForm.registrationCloseDate}T${editForm.registrationCloseTime || '23:59'}:00`
+        : null;
+      const startDate = editForm.startDate
+        ? `${editForm.startDate}T${editForm.startTime || '08:00'}:00`
+        : event.startDate;
+      const endDate = editForm.endDate
+        ? `${editForm.endDate}T${editForm.endTime || '18:00'}:00`
+        : event.endDate;
+
+      const updateData = {
+        name: editForm.name,
+        description: editForm.description,
+        eventTypeId: editForm.eventTypeId ? parseInt(editForm.eventTypeId) : event.eventTypeId,
+        startDate,
+        endDate,
+        registrationOpenDate,
+        registrationCloseDate,
+        isPublished: editForm.isPublished,
+        isPrivate: editForm.isPrivate,
+        allowMultipleDivisions: event.allowMultipleDivisions ?? true,
+        courtId: editForm.venueId ? parseInt(editForm.venueId) : null,
+        venueName: editForm.venueName || null,
+        address: editForm.address || null,
+        city: editForm.city || null,
+        state: editForm.state || null,
+        country: editForm.country || null,
+        registrationFee: editForm.registrationFee ? parseFloat(editForm.registrationFee) : 0,
+        perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0,
+      };
+
+      const response = await eventsApi.update(eventId, updateData);
+      if (!response.success) {
+        toast.error(response.message || 'Failed to save event');
+        return;
+      }
+
+      toast.success('Event saved successfully');
+      setHasUnsavedChanges(false);
+      loadEvent();
+    } catch (err) {
+      console.error('Error saving event:', err);
+      toast.error('Failed to save event');
+    } finally {
+      setSavingEvent(false);
+    }
+  };
+
+  // Staff management functions
+  const loadStaff = async () => {
+    setLoadingStaff(true);
+    try {
+      const [staffRes, rolesRes, pendingRes] = await Promise.all([
+        eventStaffApi.getEventStaff(eventId),
+        eventStaffApi.getEventRoles(eventId),
+        eventStaffApi.getPendingStaff(eventId).catch(() => ({ success: false }))
+      ]);
+
+      if (staffRes.success) {
+        setStaffList(staffRes.data || []);
+      }
+      if (rolesRes.success) {
+        setStaffRoles(rolesRes.data || []);
+      }
+      if (pendingRes.success) {
+        setPendingStaff(pendingRes.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading staff:', err);
+      toast.error('Failed to load staff');
+    } finally {
+      setLoadingStaff(false);
+    }
+  };
+
+  const handleAddStaff = async () => {
+    if (!addStaffForm.email || !addStaffForm.roleId) {
+      toast.error('Please enter email and select a role');
+      return;
+    }
+
+    setAddingStaff(true);
+    try {
+      const response = await eventStaffApi.assignStaff(eventId, {
+        email: addStaffForm.email,
+        roleId: parseInt(addStaffForm.roleId)
+      });
+      if (response.success) {
+        toast.success('Staff member added');
+        setShowAddStaffModal(false);
+        setAddStaffForm({ email: '', roleId: '' });
+        loadStaff();
+      } else {
+        toast.error(response.message || 'Failed to add staff');
+      }
+    } catch (err) {
+      console.error('Error adding staff:', err);
+      toast.error('Failed to add staff');
+    } finally {
+      setAddingStaff(false);
+    }
+  };
+
+  const handleRemoveStaff = async (staffId) => {
+    if (!confirm('Remove this staff member?')) return;
+
+    try {
+      const response = await eventStaffApi.removeStaff(eventId, staffId);
+      if (response.success) {
+        toast.success('Staff member removed');
+        loadStaff();
+      } else {
+        toast.error(response.message || 'Failed to remove staff');
+      }
+    } catch (err) {
+      console.error('Error removing staff:', err);
+      toast.error('Failed to remove staff');
+    }
+  };
+
+  const handleApproveStaff = async (staffId) => {
+    try {
+      const response = await eventStaffApi.approveStaff(eventId, staffId, {});
+      if (response.success) {
+        toast.success('Staff approved');
+        loadStaff();
+      } else {
+        toast.error(response.message || 'Failed to approve staff');
+      }
+    } catch (err) {
+      toast.error('Failed to approve staff');
+    }
+  };
+
+  const handleDeclineStaff = async (staffId) => {
+    try {
+      const response = await eventStaffApi.declineStaff(eventId, staffId, 'Declined by organizer');
+      if (response.success) {
+        toast.success('Staff declined');
+        loadStaff();
+      } else {
+        toast.error(response.message || 'Failed to decline staff');
+      }
+    } catch (err) {
+      toast.error('Failed to decline staff');
+    }
+  };
+
+  // Court groups management
+  const loadCourtGroups = async () => {
+    setLoadingCourtGroups(true);
+    try {
+      const response = await tournamentApi.getCourtPlanningData(eventId);
+      if (response.success) {
+        setCourtGroups(response.data?.courtGroups || []);
+      }
+    } catch (err) {
+      console.error('Error loading court groups:', err);
+    } finally {
+      setLoadingCourtGroups(false);
     }
   };
 
@@ -925,18 +1173,6 @@ export default function TournamentManage() {
                 </Link>
               )}
 
-              {/* Court Planning link - organizers only */}
-              {isOrganizer && (
-                <Link
-                  to={`/event/${eventId}/court-planning`}
-                  className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm flex items-center gap-2"
-                  title="Court Planning"
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span className="hidden sm:inline">Court Planning</span>
-                </Link>
-              )}
-
               {/* Send Notification link - organizers only */}
               {isOrganizer && (
                 <Link
@@ -971,39 +1207,40 @@ export default function TournamentManage() {
         </div>
       </div>
 
-      {/* Tabs - Left (operational) and Right (secondary) groups */}
+      {/* Tabs - organized by workflow */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between overflow-x-auto">
-            {/* Left group: operational tabs */}
+          <div className="flex overflow-x-auto">
+            {/* Tab navigation */}
             <div className="flex">
-              {['checkin', 'courts', 'divisions', 'schedule'].map(tab => (
+              {[
+                { key: 'eventinfo', label: 'Event Info' },
+                { key: 'divisions', label: 'Divisions' },
+                { key: 'courts', label: 'Courts' },
+                { key: 'registrations', label: 'Registrations' },
+                { key: 'staff', label: 'Staff' },
+                { key: 'schedule', label: 'Schedule' },
+                { key: 'overview', label: 'Overview' },
+                { key: 'gameday', label: 'Game Day' }
+              ].map(tab => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  key={tab.key}
+                  onClick={() => {
+                    setActiveTab(tab.key);
+                    if (tab.key === 'staff' && staffList.length === 0) {
+                      loadStaff();
+                    }
+                    if (tab.key === 'courts' && courtGroups.length === 0) {
+                      loadCourtGroups();
+                    }
+                  }}
                   className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab
+                    activeTab === tab.key
                       ? 'border-orange-600 text-orange-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  {tab === 'checkin' ? 'Check-in' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </div>
-            {/* Right group: secondary/overview tabs */}
-            <div className="flex">
-              {['overview', 'scoring', 'gameday'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab
-                      ? 'border-orange-600 text-orange-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab === 'gameday' ? 'Game Day' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -1012,6 +1249,276 @@ export default function TournamentManage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Event Info Tab */}
+        {activeTab === 'eventinfo' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Event Information</h2>
+              <div className="flex items-center gap-3">
+                {hasUnsavedChanges && (
+                  <span className="text-sm text-orange-600">Unsaved changes</span>
+                )}
+                <button
+                  onClick={handleSaveEvent}
+                  disabled={savingEvent || !hasUnsavedChanges}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingEvent ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+
+            {/* Basic Details */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-gray-500" />
+                Basic Details
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name || ''}
+                    onChange={(e) => handleFormChange('name', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={editForm.description || ''}
+                    onChange={(e) => handleFormChange('description', e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+                    <select
+                      value={editForm.eventTypeId || ''}
+                      onChange={(e) => handleFormChange('eventTypeId', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="">Select type...</option>
+                      {eventTypes.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-6 pt-6">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editForm.isPublished || false}
+                        onChange={(e) => handleFormChange('isPublished', e.target.checked)}
+                        className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      />
+                      <span className="text-sm text-gray-700">Published</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editForm.isPrivate || false}
+                        onChange={(e) => handleFormChange('isPrivate', e.target.checked)}
+                        className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      />
+                      <span className="text-sm text-gray-700">Private</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Venue & Location */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-gray-500" />
+                Venue & Location
+              </h3>
+              <div className="space-y-4">
+                <VenuePicker
+                  value={editForm.venueId}
+                  onChange={(venue) => {
+                    if (venue) {
+                      handleFormChange('venueId', venue.id);
+                      handleFormChange('venueName', venue.name);
+                      handleFormChange('address', venue.address);
+                      handleFormChange('city', venue.city);
+                      handleFormChange('state', venue.state);
+                      handleFormChange('country', venue.country);
+                    } else {
+                      handleFormChange('venueId', '');
+                    }
+                  }}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Venue Name (if not listed)</label>
+                    <input
+                      type="text"
+                      value={editForm.venueName || ''}
+                      onChange={(e) => handleFormChange('venueName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                      placeholder="Custom venue name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <input
+                      type="text"
+                      value={editForm.address || ''}
+                      onChange={(e) => handleFormChange('address', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editForm.city || ''}
+                      onChange={(e) => handleFormChange('city', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                    <input
+                      type="text"
+                      value={editForm.state || ''}
+                      onChange={(e) => handleFormChange('state', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={editForm.country || ''}
+                      onChange={(e) => handleFormChange('country', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dates & Times */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-gray-500" />
+                Dates & Times
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event Start</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={editForm.startDate || ''}
+                      onChange={(e) => handleFormChange('startDate', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <input
+                      type="time"
+                      value={editForm.startTime || ''}
+                      onChange={(e) => handleFormChange('startTime', e.target.value)}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Event End</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={editForm.endDate || ''}
+                      onChange={(e) => handleFormChange('endDate', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <input
+                      type="time"
+                      value={editForm.endTime || ''}
+                      onChange={(e) => handleFormChange('endTime', e.target.value)}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Registration Opens</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={editForm.registrationOpenDate || ''}
+                      onChange={(e) => handleFormChange('registrationOpenDate', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <input
+                      type="time"
+                      value={editForm.registrationOpenTime || ''}
+                      onChange={(e) => handleFormChange('registrationOpenTime', e.target.value)}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Registration Closes</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={editForm.registrationCloseDate || ''}
+                      onChange={(e) => handleFormChange('registrationCloseDate', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    <input
+                      type="time"
+                      value={editForm.registrationCloseTime || ''}
+                      onChange={(e) => handleFormChange('registrationCloseTime', e.target.value)}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fees */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-gray-500" />
+                Registration Fees
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Base Registration Fee ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.registrationFee || 0}
+                    onChange={(e) => handleFormChange('registrationFee', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Per Division Fee ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.perDivisionFee || 0}
+                    onChange={(e) => handleFormChange('perDivisionFee', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -1324,6 +1831,36 @@ export default function TournamentManage() {
         {/* Courts Tab */}
         {activeTab === 'courts' && (
           <div className="space-y-6">
+            {/* Court Groups Summary */}
+            {courtGroups.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-blue-600" />
+                    Court Groups ({courtGroups.length})
+                  </h3>
+                  <Link
+                    to={`/event/${eventId}/court-planning`}
+                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Manage Groups
+                  </Link>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {courtGroups.map(group => (
+                    <div
+                      key={group.id}
+                      className="px-3 py-2 bg-gray-100 rounded-lg text-sm"
+                    >
+                      <span className="font-medium">{group.groupName}</span>
+                      <span className="text-gray-500 ml-2">({group.courts?.length || 0} courts)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-semibold text-gray-900">Tournament Courts</h2>
@@ -2593,11 +3130,11 @@ export default function TournamentManage() {
           </div>
         )}
 
-        {/* Check-in Tab */}
-        {activeTab === 'checkin' && (
+        {/* Registrations Tab */}
+        {activeTab === 'registrations' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Player Check-in</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Player Registrations & Check-in</h2>
               <button
                 onClick={() => { loadCheckIns(); loadDashboard(); }}
                 disabled={loadingCheckIns}
@@ -3116,7 +3653,194 @@ export default function TournamentManage() {
           </div>
         )}
 
-        {/* Scoring Tab */}
+        {/* Staff Tab */}
+        {activeTab === 'staff' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Staff Management</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadStaff}
+                  disabled={loadingStaff}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loadingStaff ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Staff
+                </button>
+              </div>
+            </div>
+
+            {/* Pending Staff Approvals */}
+            {pendingStaff.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <h3 className="font-medium text-yellow-900 mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  Pending Approvals ({pendingStaff.length})
+                </h3>
+                <div className="space-y-2">
+                  {pendingStaff.map(staff => (
+                    <div key={staff.id} className="flex items-center justify-between bg-white rounded-lg p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-500" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{staff.userName || staff.userEmail}</div>
+                          <div className="text-sm text-gray-500">{staff.roleName}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleApproveStaff(staff.id)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                          title="Approve"
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeclineStaff(staff.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                          title="Decline"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Staff List */}
+            <div className="bg-white rounded-xl shadow-sm">
+              <div className="p-4 border-b">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-blue-600" />
+                  Event Staff ({staffList.length})
+                </h3>
+              </div>
+              {loadingStaff ? (
+                <div className="p-8 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" />
+                  <p className="text-gray-500 mt-2">Loading staff...</p>
+                </div>
+              ) : staffList.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No staff assigned to this event</p>
+                  <p className="text-sm text-gray-400 mt-1">Click "Add Staff" to invite team members</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {staffList.map(staff => (
+                    <div key={staff.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <User className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{staff.userName || staff.userEmail}</div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
+                              {staff.roleName}
+                            </span>
+                            {staff.status && staff.status !== 'Active' && (
+                              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                staff.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {staff.status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveStaff(staff.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                        title="Remove staff"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Staff Roles Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-700">
+              <div className="flex items-center gap-2 mb-2">
+                <Info className="w-5 h-5" />
+                <span className="font-medium">Staff Roles</span>
+              </div>
+              <p className="text-sm">
+                Staff roles define what permissions team members have during the event.
+                Roles can be configured in the Admin Settings.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Add Staff Modal */}
+        {showAddStaffModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Staff Member</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={addStaffForm.email}
+                    onChange={(e) => setAddStaffForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="staff@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={addStaffForm.roleId}
+                    onChange={(e) => setAddStaffForm(prev => ({ ...prev, roleId: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select role...</option>
+                    {staffRoles.map(role => (
+                      <option key={role.id} value={role.id}>{role.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowAddStaffModal(false);
+                    setAddStaffForm({ email: '', roleId: '' });
+                  }}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddStaff}
+                  disabled={addingStaff || !addStaffForm.email || !addStaffForm.roleId}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {addingStaff ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add Staff
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Scoring Tab - merged into Overview, keeping for backwards compatibility */}
         {activeTab === 'scoring' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
