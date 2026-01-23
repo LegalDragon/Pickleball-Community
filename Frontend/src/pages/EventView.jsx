@@ -228,7 +228,9 @@ export default function EventView() {
         {/* Admin Manage Button - Show for admins and organizers */}
         {isAuthenticated && (isAdmin || user?.id === event.organizedByUserId) && (
           <Link
-            to={`/event/${eventId}/admin-manage`}
+            to={event.eventTypeName?.toLowerCase() === 'tournament'
+              ? `/tournament/${eventId}/manage`
+              : `/event/${eventId}/manage`}
             className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
           >
             <Settings className="w-5 h-5" />
