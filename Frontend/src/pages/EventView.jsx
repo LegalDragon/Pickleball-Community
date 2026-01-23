@@ -102,13 +102,9 @@ export default function EventView() {
   };
 
   const handleRegister = () => {
-    if (isAuthenticated) {
-      // Go to events page and open the event modal
-      navigate('/events', { state: { openEventId: event.id } });
-    } else {
-      // Redirect to login with return path
-      navigate('/login', { state: { from: `/events/${eventId}` } });
-    }
+    // Navigate to standalone registration page
+    // The registration page handles auth check internally
+    navigate(`/event/${eventId}/register`);
   };
 
   const getEventTypeStyle = () => {
