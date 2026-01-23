@@ -286,7 +286,7 @@ public class EventsController : EventControllerBase
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Units)
                         .ThenInclude(u => u.JoinRequests)
-                .Where(e => e.IsActive && e.IsPublished && e.TournamentStatus != "Draft" && e.StartDate >= now)
+                .Where(e => e.IsActive && e.IsPublished && !e.IsPrivate && e.TournamentStatus != "Draft" && e.StartDate >= now)
                 .OrderBy(e => e.StartDate)
                 .Take(limit)
                 .ToListAsync();
@@ -302,7 +302,7 @@ public class EventsController : EventControllerBase
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Units)
                         .ThenInclude(u => u.JoinRequests)
-                .Where(e => e.IsActive && e.IsPublished && e.TournamentStatus != "Draft" && e.StartDate >= now)
+                .Where(e => e.IsActive && e.IsPublished && !e.IsPrivate && e.TournamentStatus != "Draft" && e.StartDate >= now)
                 .OrderByDescending(e => e.Divisions.SelectMany(d => d.Units).Count(u => u.Status != "Cancelled"))
                 .Take(limit)
                 .ToListAsync();
@@ -318,7 +318,7 @@ public class EventsController : EventControllerBase
                 .Include(e => e.Divisions)
                     .ThenInclude(d => d.Units)
                         .ThenInclude(u => u.JoinRequests)
-                .Where(e => e.IsActive && e.IsPublished && e.TournamentStatus != "Draft" && e.StartDate < now && e.StartDate >= pastCutoff)
+                .Where(e => e.IsActive && e.IsPublished && !e.IsPrivate && e.TournamentStatus != "Draft" && e.StartDate < now && e.StartDate >= pastCutoff)
                 .OrderByDescending(e => e.StartDate)
                 .Take(limit)
                 .ToListAsync();
