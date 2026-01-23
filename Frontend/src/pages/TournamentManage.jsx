@@ -530,6 +530,30 @@ export default function TournamentManage() {
     }
   };
 
+  const handleToggleDivisionActive = async (division) => {
+    const newStatus = !division.isActive;
+    const action = newStatus ? 'activate' : 'deactivate';
+
+    if (!newStatus && division.registeredUnits > 0) {
+      if (!confirm(`This division has ${division.registeredUnits} registered teams. Deactivating will hide it from public view. Continue?`)) {
+        return;
+      }
+    }
+
+    try {
+      const response = await eventsApi.updateDivision(eventId, division.id, { isActive: newStatus });
+      if (response.success) {
+        toast.success(`Division ${newStatus ? 'activated' : 'deactivated'}`);
+        loadDashboard();
+      } else {
+        toast.error(response.message || `Failed to ${action} division`);
+      }
+    } catch (err) {
+      console.error(`Error ${action}ing division:`, err);
+      toast.error(`Failed to ${action} division`);
+    }
+  };
+
   const loadSchedule = async (divisionId, silent = false) => {
     if (!silent) setLoadingSchedule(true);
     try {
@@ -1749,10 +1773,17 @@ export default function TournamentManage() {
             )}
 
             {dashboard?.divisions?.map(div => (
-              <div key={div.id} className="bg-white rounded-xl shadow-sm p-6">
+              <div key={div.id} className={`bg-white rounded-xl shadow-sm p-6 ${!div.isActive ? 'opacity-60 border-2 border-dashed border-gray-300' : ''}`}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">{div.name}</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-semibold text-gray-900">{div.name}</h2>
+                      {!div.isActive && (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">
                       {div.registeredUnits} teams registered
                       {div.scheduleReady && div.totalMatches > 0 && (
@@ -1762,8 +1793,22 @@ export default function TournamentManage() {
                   </div>
                   {isOrganizer && (
                     <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {/* Toggle Active Status */}
+                      <button
+                        onClick={() => handleToggleDivisionActive(div)}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 ${
+                          div.isActive
+                            ? 'text-gray-600 border border-gray-300 hover:bg-gray-50'
+                            : 'text-green-700 border border-green-300 bg-green-50 hover:bg-green-100'
+                        }`}
+                        title={div.isActive ? 'Deactivate division' : 'Activate division'}
+                      >
+                        {div.isActive ? <Eye className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {div.isActive ? 'Active' : 'Activate'}
+                      </button>
+
                       {/* Generate/Re-generate Schedule - disabled after event starts */}
-                      {!['Running', 'Started'].includes(dashboard?.tournamentStatus) && (
+                      {div.isActive && !['Running', 'Started'].includes(dashboard?.tournamentStatus) && (
                         <button
                           onClick={() => handleOpenScheduleConfig(div)}
                           disabled={generatingSchedule}
@@ -1783,7 +1828,7 @@ export default function TournamentManage() {
                       )}
 
                       {/* View Schedule - links to printable schedule page */}
-                      {div.scheduleReady && (
+                      {div.isActive && div.scheduleReady && (
                         <Link
                           to={`/event/${eventId}/division/${div.id}/schedule`}
                           className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"

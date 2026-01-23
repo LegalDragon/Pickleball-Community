@@ -583,6 +583,7 @@ public class DivisionStatusDto
     public int? TeamUnitId { get; set; }
     public string? TeamUnitName { get; set; }
     public int MaxUnits { get; set; }
+    public bool IsActive { get; set; } = true;
     public int RegisteredUnits { get; set; }
     public int WaitlistedUnits { get; set; }
     public int CheckedInUnits { get; set; }

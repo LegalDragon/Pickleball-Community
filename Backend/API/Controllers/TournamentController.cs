@@ -5649,12 +5649,13 @@ public class TournamentController : EventControllerBase
                 TotalAmountDue = activeUnits.Sum(u => evt.RegistrationFee + (evt.Divisions.FirstOrDefault(d => d.Id == u.DivisionId)?.DivisionFee ?? 0m)),
                 TotalAmountPaid = activeUnits.Sum(u => u.AmountPaid)
             },
-            Divisions = evt.Divisions.Where(d => d.IsActive).Select(d => new DivisionStatusDto
+            Divisions = evt.Divisions.OrderBy(d => d.SortOrder).Select(d => new DivisionStatusDto
             {
                 Id = d.Id,
                 Name = d.Name,
                 TeamUnitId = d.TeamUnitId,
                 MaxUnits = d.MaxUnits ?? 0,
+                IsActive = d.IsActive,
                 RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled"),
                 WaitlistedUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "Waitlisted"),
                 CheckedInUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "CheckedIn"),

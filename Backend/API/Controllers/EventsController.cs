@@ -1618,12 +1618,13 @@ public class EventsController : EventControllerBase
                 .Include(d => d.TeamUnit)
                 .Include(d => d.SkillLevel)
                 .Include(d => d.AgeGroupEntity)
-                .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == id && d.IsActive);
+                .FirstOrDefaultAsync(d => d.Id == divisionId && d.EventId == id);
 
             if (division == null)
                 return NotFound(new ApiResponse<EventDivisionDto> { Success = false, Message = "Division not found" });
 
             // Update fields if provided
+            if (dto.IsActive.HasValue) division.IsActive = dto.IsActive.Value;
             if (dto.Name != null) division.Name = dto.Name;
             if (dto.Description != null) division.Description = dto.Description;
             if (dto.TeamUnitId.HasValue) division.TeamUnitId = dto.TeamUnitId;

@@ -306,6 +306,9 @@ public class UpdateDivisionDto
     // Scheduling constraints
     public int? MinRestTimeMinutes { get; set; }
     public int? EstimatedMatchDurationMinutes { get; set; }
+
+    // Status
+    public bool? IsActive { get; set; }
 }
 
 // Division with registrations
