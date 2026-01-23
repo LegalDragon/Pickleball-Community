@@ -43,6 +43,7 @@ public class EventPublicViewDto
     public string? ContactPhone { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? TournamentStatus { get; set; }
+    public bool AllowMultipleDivisions { get; set; } = true;
 
     // Divisions (public info only)
     public List<EventDivisionPublicDto> Divisions { get; set; } = new();
@@ -57,6 +58,7 @@ public class EventDivisionPublicDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int? TeamUnitId { get; set; }
     public string? TeamUnitName { get; set; }
     public string? AgeGroupName { get; set; }
     public string? SkillLevelName { get; set; }

@@ -445,11 +445,13 @@ public class EventsController : EventControllerBase
                 ContactPhone = evt.ContactPhone,
                 CreatedAt = evt.CreatedAt,
                 TournamentStatus = evt.TournamentStatus,
+                AllowMultipleDivisions = evt.AllowMultipleDivisions,
                 Divisions = evt.Divisions.OrderBy(d => d.SortOrder).Select(d => new EventDivisionPublicDto
                 {
                     Id = d.Id,
                     Name = d.Name,
                     Description = d.Description,
+                    TeamUnitId = d.TeamUnitId,
                     TeamUnitName = d.TeamUnit?.Name,
                     AgeGroupName = d.AgeGroupEntity?.Name,
                     SkillLevelName = d.SkillLevel?.Name,
