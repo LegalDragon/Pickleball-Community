@@ -4250,7 +4250,7 @@ public class TournamentController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<CourtPlanningDto> { Success = false, Message = "Event not found" });
 
-        // Get court groups with their courts
+        // Get court groups with their courts (via junction table)
         var courtGroups = await _context.CourtGroups
             .Where(g => g.EventId == eventId && g.IsActive)
             .OrderBy(g => g.SortOrder)
@@ -4263,20 +4263,23 @@ public class TournamentController : EventControllerBase
                 CourtCount = g.CourtCount,
                 Priority = g.Priority,
                 SortOrder = g.SortOrder,
-                Courts = g.Courts.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(c => new CourtPlanningItemDto
-                {
-                    Id = c.Id,
-                    CourtLabel = c.CourtLabel,
-                    Status = c.Status,
-                    LocationDescription = c.LocationDescription,
-                    SortOrder = c.SortOrder
-                }).ToList()
+                Courts = g.CourtGroupCourts
+                    .Where(cgc => cgc.Court != null && cgc.Court.IsActive)
+                    .OrderBy(cgc => cgc.SortOrder)
+                    .Select(cgc => new CourtPlanningItemDto
+                    {
+                        Id = cgc.Court!.Id,
+                        CourtLabel = cgc.Court.CourtLabel,
+                        Status = cgc.Court.Status,
+                        LocationDescription = cgc.Court.LocationDescription,
+                        SortOrder = cgc.Court.SortOrder
+                    }).ToList()
             })
             .ToListAsync();
 
-        // Get unassigned courts
+        // Get unassigned courts (not in any court group via junction table)
         var unassignedCourts = await _context.TournamentCourts
-            .Where(c => c.EventId == eventId && c.IsActive && c.CourtGroupId == null)
+            .Where(c => c.EventId == eventId && c.IsActive && !c.CourtGroupCourts.Any())
             .OrderBy(c => c.SortOrder)
             .Select(c => new CourtPlanningItemDto
             {
@@ -4360,7 +4363,7 @@ public class TournamentController : EventControllerBase
                 Status = e.Status,
                 CourtId = e.TournamentCourtId,
                 CourtLabel = e.TournamentCourt != null ? e.TournamentCourt.CourtLabel : null,
-                CourtGroupId = e.TournamentCourt != null ? e.TournamentCourt.CourtGroupId : null,
+                CourtGroupId = e.TournamentCourt != null && e.TournamentCourt.CourtGroupCourts.Any() ? e.TournamentCourt.CourtGroupCourts.First().CourtGroupId : (int?)null,
                 ScheduledTime = e.ScheduledTime,
                 EstimatedStartTime = e.EstimatedStartTime,
                 EstimatedEndTime = e.EstimatedEndTime,
@@ -4744,9 +4747,9 @@ public class TournamentController : EventControllerBase
             {
                 Id = c.Id,
                 CourtLabel = c.CourtLabel,
-                CourtGroupId = c.CourtGroupId,
-                CourtGroupName = c.CourtGroup != null ? c.CourtGroup.GroupName : null,
-                LocationArea = c.CourtGroup != null ? c.CourtGroup.LocationArea : null,
+                CourtGroupId = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroupId : (int?)null,
+                CourtGroupName = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroup!.GroupName : null,
+                LocationArea = c.CourtGroupCourts.Any() ? c.CourtGroupCourts.First().CourtGroup!.LocationArea : null,
                 SortOrder = c.SortOrder,
                 Blocks = new List<TimelineBlockDto>()
             })

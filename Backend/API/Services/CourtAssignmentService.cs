@@ -316,7 +316,8 @@ public class CourtAssignmentService : ICourtAssignmentService
                        (phaseId == null || a.PhaseId == phaseId || a.PhaseId == null))
             .OrderBy(a => a.Priority)
             .Include(a => a.CourtGroup)
-                .ThenInclude(g => g!.Courts)
+                .ThenInclude(g => g!.CourtGroupCourts)
+                    .ThenInclude(cgc => cgc.Court)
             .ToListAsync();
 
         if (!courtAssignments.Any())
@@ -325,7 +326,7 @@ public class CourtAssignmentService : ICourtAssignmentService
         }
 
         return courtAssignments
-            .SelectMany(a => a.CourtGroup?.Courts ?? new List<TournamentCourt>())
+            .SelectMany(a => a.CourtGroup?.CourtGroupCourts?.Select(cgc => cgc.Court!).Where(c => c != null) ?? Enumerable.Empty<TournamentCourt>())
             .Where(c => c.IsActive)
             .OrderBy(c => c.SortOrder)
             .Distinct()

@@ -6,13 +6,15 @@ import {
   AlertCircle, Loader2, Plus, Edit2, DollarSign, Eye, Share2, LayoutGrid,
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
   CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
-  Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3
+  Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3,
+  Hammer, BookOpen, Phone, EyeOff, Edit3, Map as MapIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, objectAssetTypesApi } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
+import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -106,6 +108,10 @@ export default function TournamentManage() {
   // Court groups state
   const [courtGroups, setCourtGroups] = useState([]);
   const [loadingCourtGroups, setLoadingCourtGroups] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [expandedGroupId, setExpandedGroupId] = useState(null);
+  const [deletingGroupId, setDeletingGroupId] = useState(null);
 
   // Unit management state
   const [unitsData, setUnitsData] = useState(null); // All units grouped by division
@@ -121,6 +127,33 @@ export default function TournamentManage() {
   const [expandedPayment, setExpandedPayment] = useState(null);
   const [verifyingPayment, setVerifyingPayment] = useState(null);
   const [viewingProofUrl, setViewingProofUrl] = useState(null); // URL to display in modal
+
+  // Division editing state
+  const [editingDivision, setEditingDivision] = useState(null);
+  const [showEditDivision, setShowEditDivision] = useState(false);
+  const [savingDivision, setSavingDivision] = useState(false);
+  const [teamUnits, setTeamUnits] = useState([]);
+  const [skillLevels, setSkillLevels] = useState([]);
+  const [ageGroups, setAgeGroups] = useState([]);
+
+  // Documents management state
+  const [documents, setDocuments] = useState([]);
+  const [assetTypes, setAssetTypes] = useState([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [showAddDocument, setShowAddDocument] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [newDocument, setNewDocument] = useState({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
+  const [editingDocument, setEditingDocument] = useState(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
+
+  // Add Player registration state
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [playerSearchResults, setPlayerSearchResults] = useState([]);
+  const [searchingPlayers, setSearchingPlayers] = useState(false);
+  const [selectedPlayerForReg, setSelectedPlayerForReg] = useState(null);
+  const [selectedDivisionForReg, setSelectedDivisionForReg] = useState('');
+  const [registeringPlayer, setRegisteringPlayer] = useState(false);
 
   // Payment methods for dropdown
   const PAYMENT_METHODS = [
@@ -140,6 +173,43 @@ export default function TournamentManage() {
       loadEvent();
     }
   }, [eventId]);
+
+  // Load reference data for division editing
+  useEffect(() => {
+    const loadTeamUnits = async () => {
+      try {
+        const response = await teamUnitsApi.getAll();
+        if (response.success) {
+          setTeamUnits(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading team units:', err);
+      }
+    };
+    const loadSkillLevels = async () => {
+      try {
+        const response = await skillLevelsApi.getAll();
+        if (response.success) {
+          setSkillLevels(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading skill levels:', err);
+      }
+    };
+    const loadAgeGroups = async () => {
+      try {
+        const response = await ageGroupsApi.getAll();
+        if (response.success) {
+          setAgeGroups(response.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading age groups:', err);
+      }
+    };
+    loadTeamUnits();
+    loadSkillLevels();
+    loadAgeGroups();
+  }, []);
 
   // Keep ref in sync with selectedDivision for SignalR listener
   useEffect(() => {
@@ -462,15 +532,102 @@ export default function TournamentManage() {
   const loadCourtGroups = async () => {
     setLoadingCourtGroups(true);
     try {
-      const response = await tournamentApi.getCourtPlanningData(eventId);
+      const response = await tournamentApi.getCourtGroups(eventId);
       if (response.success) {
-        setCourtGroups(response.data?.courtGroups || []);
+        setCourtGroups(response.data || []);
       }
     } catch (err) {
       console.error('Error loading court groups:', err);
     } finally {
       setLoadingCourtGroups(false);
     }
+  };
+
+  const handleCreateCourtGroup = async () => {
+    if (!newGroupName.trim()) {
+      toast.error('Please enter a group name');
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const response = await tournamentApi.createCourtGroup({
+        eventId: parseInt(eventId),
+        groupName: newGroupName.trim()
+      });
+      if (response.success) {
+        toast.success('Court group created');
+        setNewGroupName('');
+        loadCourtGroups();
+      } else {
+        toast.error(response.message || 'Failed to create group');
+      }
+    } catch (err) {
+      console.error('Error creating court group:', err);
+      toast.error('Failed to create court group');
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
+  const handleDeleteCourtGroup = async (groupId) => {
+    if (!confirm('Delete this court group? Courts will be unassigned.')) return;
+    setDeletingGroupId(groupId);
+    try {
+      const response = await tournamentApi.deleteCourtGroup(groupId);
+      if (response.success) {
+        toast.success('Court group deleted');
+        loadCourtGroups();
+      } else {
+        toast.error(response.message || 'Failed to delete group');
+      }
+    } catch (err) {
+      console.error('Error deleting court group:', err);
+      toast.error('Failed to delete court group');
+    } finally {
+      setDeletingGroupId(null);
+    }
+  };
+
+  const handleAddCourtToGroup = async (groupId, courtId) => {
+    try {
+      const response = await tournamentApi.addCourtToGroup(groupId, courtId);
+      if (response.success) {
+        toast.success('Court added to group');
+        loadCourtGroups();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to add court');
+      }
+    } catch (err) {
+      console.error('Error adding court to group:', err);
+      toast.error('Failed to add court');
+    }
+  };
+
+  const handleRemoveCourtFromGroup = async (groupId, courtId) => {
+    try {
+      const response = await tournamentApi.removeCourtFromGroup(groupId, courtId);
+      if (response.success) {
+        toast.success('Court removed from group');
+        loadCourtGroups();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to remove court');
+      }
+    } catch (err) {
+      console.error('Error removing court from group:', err);
+      toast.error('Failed to remove court');
+    }
+  };
+
+  // Get courts not in any group
+  const getUnassignedCourts = () => {
+    if (!dashboard?.courts || courtGroups.length === 0) return dashboard?.courts || [];
+    const assignedCourtIds = new Set();
+    courtGroups.forEach(group => {
+      (group.courts || []).forEach(court => assignedCourtIds.add(court.id));
+    });
+    return dashboard.courts.filter(court => !assignedCourtIds.has(court.id));
   };
 
   const handleAddCourts = async () => {
@@ -568,6 +725,285 @@ export default function TournamentManage() {
     } catch (err) {
       console.error(`Error ${action}ing division:`, err);
       toast.error(`Failed to ${action} division`);
+    }
+  };
+
+  // Open edit division modal
+  const handleOpenEditDivision = (division) => {
+    setEditingDivision({
+      id: division.id,
+      name: division.name || '',
+      description: division.description || '',
+      teamUnitId: division.teamUnitId || null,
+      skillLevelId: division.skillLevelId || null,
+      ageGroupId: division.ageGroupId || null,
+      maxUnits: division.maxUnits || '',
+      maxPlayers: division.maxPlayers || '',
+      divisionFee: division.divisionFee || '',
+      scheduleStatus: division.scheduleReady ? 'Generated' : 'NotGenerated'
+    });
+    setShowEditDivision(true);
+  };
+
+  // Open add division modal with empty form
+  const handleOpenAddDivision = () => {
+    setEditingDivision({
+      id: null,
+      name: '',
+      description: '',
+      teamUnitId: null,
+      skillLevelId: null,
+      ageGroupId: null,
+      maxUnits: '',
+      maxPlayers: '',
+      divisionFee: '',
+      scheduleStatus: 'NotGenerated'
+    });
+    setShowEditDivision(true);
+  };
+
+  // Save division changes (both add and edit)
+  const handleSaveDivision = async () => {
+    if (!editingDivision) return;
+
+    if (!editingDivision.name?.trim()) {
+      toast.error('Division name is required');
+      return;
+    }
+
+    setSavingDivision(true);
+    try {
+      const divisionData = {
+        name: editingDivision.name,
+        description: editingDivision.description,
+        teamUnitId: editingDivision.teamUnitId || null,
+        skillLevelId: editingDivision.skillLevelId || null,
+        ageGroupId: editingDivision.ageGroupId || null,
+        maxUnits: editingDivision.maxUnits ? parseInt(editingDivision.maxUnits) : null,
+        maxPlayers: editingDivision.maxPlayers ? parseInt(editingDivision.maxPlayers) : null,
+        divisionFee: editingDivision.divisionFee ? parseFloat(editingDivision.divisionFee) : null
+      };
+
+      let response;
+      if (editingDivision.id) {
+        // Update existing division
+        response = await eventsApi.updateDivision(eventId, editingDivision.id, divisionData);
+      } else {
+        // Create new division
+        response = await eventsApi.addDivision(eventId, divisionData);
+      }
+
+      if (response.success) {
+        toast.success(editingDivision.id ? 'Division updated successfully' : 'Division created successfully');
+        setShowEditDivision(false);
+        setEditingDivision(null);
+        loadDashboard();
+        loadEvent();
+      } else {
+        toast.error(response.message || `Failed to ${editingDivision.id ? 'update' : 'create'} division`);
+      }
+    } catch (err) {
+      console.error('Error saving division:', err);
+      toast.error(`Failed to ${editingDivision.id ? 'update' : 'create'} division`);
+    } finally {
+      setSavingDivision(false);
+    }
+  };
+
+  // Search for users to add as players
+  const handleSearchPlayers = async (query) => {
+    if (!query || query.length < 2) {
+      setPlayerSearchResults([]);
+      return;
+    }
+    setSearchingPlayers(true);
+    try {
+      const response = await tournamentApi.searchUsersForRegistration(eventId, query);
+      if (response.success) {
+        setPlayerSearchResults(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error searching players:', err);
+    } finally {
+      setSearchingPlayers(false);
+    }
+  };
+
+  // Admin register a player
+  const handleAdminRegisterPlayer = async () => {
+    if (!selectedPlayerForReg || !selectedDivisionForReg) {
+      toast.error('Please select a player and division');
+      return;
+    }
+    setRegisteringPlayer(true);
+    try {
+      const response = await tournamentApi.adminRegisterUser(eventId, {
+        userId: selectedPlayerForReg.id,
+        divisionId: parseInt(selectedDivisionForReg)
+      });
+      if (response.success) {
+        toast.success(`${selectedPlayerForReg.displayName || selectedPlayerForReg.email} registered successfully`);
+        setShowAddPlayer(false);
+        setPlayerSearchQuery('');
+        setPlayerSearchResults([]);
+        setSelectedPlayerForReg(null);
+        setSelectedDivisionForReg('');
+        loadCheckIns();
+        loadDashboard();
+      } else {
+        toast.error(response.message || 'Failed to register player');
+      }
+    } catch (err) {
+      console.error('Error registering player:', err);
+      toast.error('Failed to register player');
+    } finally {
+      setRegisteringPlayer(false);
+    }
+  };
+
+  // Load event documents using ObjectAssets API
+  const loadDocuments = async () => {
+    setLoadingDocuments(true);
+    try {
+      const response = await objectAssetsApi.getAssets('Event', eventId);
+      if (response.success) {
+        setDocuments(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading documents:', err);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  // Load asset types for Event
+  const loadAssetTypes = async () => {
+    try {
+      const response = await objectAssetTypesApi.getAll({ objectTypeName: 'Event' });
+      if (response.success) {
+        setAssetTypes(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading asset types:', err);
+    }
+  };
+
+  // Get icon for asset type
+  const getIconForAssetType = (typeName) => {
+    switch (typeName?.toLowerCase()) {
+      case 'waiver': return Shield;
+      case 'map': return MapIcon;
+      case 'rules': return BookOpen;
+      case 'contacts': return Phone;
+      default: return FileText;
+    }
+  };
+
+  // Get color for asset type
+  const getColorForAssetType = (colorClass) => {
+    switch (colorClass) {
+      case 'red': return { bg: 'bg-red-100', text: 'text-red-600' };
+      case 'green': return { bg: 'bg-green-100', text: 'text-green-600' };
+      case 'purple': return { bg: 'bg-purple-100', text: 'text-purple-600' };
+      case 'blue': return { bg: 'bg-blue-100', text: 'text-blue-600' };
+      default: return { bg: 'bg-gray-100', text: 'text-gray-600' };
+    }
+  };
+
+  // Handle document file upload
+  const handleDocumentUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File must be less than 10MB');
+      return;
+    }
+
+    if (!newDocument.title.trim()) {
+      toast.error('Please enter a document title first');
+      return;
+    }
+
+    if (!newDocument.objectAssetTypeId) {
+      toast.error('Please select a document type');
+      return;
+    }
+
+    setUploadingDocument(true);
+    try {
+      // Upload file to shared assets
+      const uploadResponse = await sharedAssetApi.upload(file, 'document', 'event', true);
+      const fileUrl = uploadResponse?.data?.url || uploadResponse?.url;
+
+      if (!fileUrl) {
+        toast.error('Failed to upload file');
+        return;
+      }
+
+      // Create document record using ObjectAssets API
+      const response = await objectAssetsApi.addAsset('Event', eventId, {
+        objectAssetTypeId: newDocument.objectAssetTypeId,
+        title: newDocument.title.substring(0, 200),
+        fileUrl: fileUrl,
+        fileName: file.name.substring(0, 200),
+        fileType: file.type?.substring(0, 50),
+        fileSize: file.size,
+        isPublic: newDocument.isPublic,
+        sortOrder: newDocument.sortOrder
+      });
+
+      if (response.success) {
+        toast.success('Document added successfully');
+        setDocuments([...documents, response.data]);
+        setShowAddDocument(false);
+        setNewDocument({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
+      } else {
+        toast.error(response.message || 'Failed to add document');
+      }
+    } catch (err) {
+      console.error('Error adding document:', err);
+      toast.error('Failed to add document');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  // Update document
+  const handleUpdateDocument = async (docId, updates) => {
+    try {
+      const response = await objectAssetsApi.updateAsset('Event', eventId, docId, updates);
+      if (response.success) {
+        setDocuments(documents.map(d => d.id === docId ? response.data : d));
+        setEditingDocument(null);
+        toast.success('Document updated');
+      } else {
+        toast.error(response.message || 'Failed to update document');
+      }
+    } catch (err) {
+      console.error('Error updating document:', err);
+      toast.error('Failed to update document');
+    }
+  };
+
+  // Delete document
+  const handleDeleteDocument = async (docId) => {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+
+    setDeletingDocumentId(docId);
+    try {
+      const response = await objectAssetsApi.deleteAsset('Event', eventId, docId);
+      if (response.success) {
+        setDocuments(documents.filter(d => d.id !== docId));
+        toast.success('Document deleted');
+      } else {
+        toast.error(response.message || 'Failed to delete document');
+      }
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      toast.error('Failed to delete document');
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -1459,6 +1895,7 @@ export default function TournamentManage() {
                 { key: 'courts', label: 'Courts' },
                 { key: 'registrations', label: 'Registrations' },
                 { key: 'payments', label: 'Payments' },
+                { key: 'documents', label: 'Documents' },
                 { key: 'staff', label: 'Staff' },
                 { key: 'schedule', label: 'Schedule' },
                 { key: 'overview', label: 'Overview' },
@@ -1476,6 +1913,10 @@ export default function TournamentManage() {
                     }
                     if (tab.key === 'courts' && courtGroups.length === 0) {
                       loadCourtGroups();
+                    }
+                    if (tab.key === 'documents' && documents.length === 0) {
+                      loadDocuments();
+                      loadAssetTypes();
                     }
                   }}
                   className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
@@ -1966,6 +2407,20 @@ export default function TournamentManage() {
               </div>
             )}
 
+            {/* Add Division Button */}
+            {isOrganizer && (
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Tournament Divisions</h2>
+                <button
+                  onClick={handleOpenAddDivision}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Division
+                </button>
+              </div>
+            )}
+
             {/* Show message if no divisions exist */}
             {(!dashboard?.divisions || dashboard.divisions.length === 0) && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
@@ -1974,13 +2429,15 @@ export default function TournamentManage() {
                 <p className="text-sm text-gray-500 mb-4">
                   Create divisions to organize your tournament by skill level, age group, or format.
                 </p>
-                <Link
-                  to={`/event/${eventId}/edit`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Divisions
-                </Link>
+                {isOrganizer && (
+                  <button
+                    onClick={handleOpenAddDivision}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Division
+                  </button>
+                )}
               </div>
             )}
 
@@ -2005,6 +2462,16 @@ export default function TournamentManage() {
                   </div>
                   {isOrganizer && (
                     <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {/* Edit Division */}
+                      <button
+                        onClick={() => handleOpenEditDivision(div)}
+                        className="px-3 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 flex items-center gap-2"
+                        title="Edit division settings"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+
                       {/* Toggle Active Status */}
                       <button
                         onClick={() => handleToggleDivisionActive(div)}
@@ -2116,33 +2583,165 @@ export default function TournamentManage() {
         {/* Courts Tab */}
         {activeTab === 'courts' && (
           <div className="space-y-6">
-            {/* Court Groups Summary */}
-            {courtGroups.length > 0 && (
+            {/* Court Groups Management */}
+            {isOrganizer && (
               <div className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-gray-900 flex items-center gap-2">
                     <Layers className="w-5 h-5 text-blue-600" />
                     Court Groups ({courtGroups.length})
                   </h3>
-                  <Link
-                    to={`/event/${eventId}/court-planning`}
-                    className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                </div>
+
+                {/* Create New Group */}
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="New group name..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateCourtGroup()}
+                  />
+                  <button
+                    onClick={handleCreateCourtGroup}
+                    disabled={creatingGroup || !newGroupName.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <Settings className="w-4 h-4" />
-                    Manage Groups
-                  </Link>
+                    {creatingGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Add Group
+                  </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {courtGroups.map(group => (
-                    <div
-                      key={group.id}
-                      className="px-3 py-2 bg-gray-100 rounded-lg text-sm"
-                    >
-                      <span className="font-medium">{group.groupName}</span>
-                      <span className="text-gray-500 ml-2">({group.courts?.length || 0} courts)</span>
+
+                {/* Court Groups List */}
+                {courtGroups.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-4 bg-gray-50 rounded-lg">
+                    No court groups yet. Create groups to organize courts by location.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {courtGroups.map(group => (
+                      <div key={group.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                          onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {expandedGroupId === group.id ? (
+                              <ChevronUp className="w-4 h-4 text-gray-500" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-gray-500" />
+                            )}
+                            <span className="font-medium text-gray-900">{group.groupName}</span>
+                            <span className="text-sm text-gray-500">({group.courts?.length || 0} courts)</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCourtGroup(group.id);
+                            }}
+                            disabled={deletingGroupId === group.id}
+                            className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                            title="Delete group"
+                          >
+                            {deletingGroupId === group.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        {expandedGroupId === group.id && (
+                          <div className="p-4 bg-white border-t border-gray-200">
+                            {/* Courts in this group */}
+                            {group.courts?.length > 0 ? (
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {group.courts.map(court => (
+                                  <div
+                                    key={court.id}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm"
+                                  >
+                                    <span>{court.courtLabel}</span>
+                                    <button
+                                      onClick={() => handleRemoveCourtFromGroup(group.id, court.id)}
+                                      className="text-blue-500 hover:text-red-600"
+                                      title="Remove from group"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm mb-3">No courts assigned to this group</p>
+                            )}
+
+                            {/* Add court to this group */}
+                            {dashboard?.courts?.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleAddCourtToGroup(group.id, parseInt(e.target.value));
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  defaultValue=""
+                                >
+                                  <option value="">Add court to this group...</option>
+                                  {dashboard.courts
+                                    .filter(c => !(group.courts || []).some(gc => gc.id === c.id))
+                                    .map(court => (
+                                      <option key={court.id} value={court.id}>
+                                        {court.courtLabel}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Unassigned Courts */}
+                {getUnassignedCourts().length > 0 && courtGroups.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Unassigned Courts ({getUnassignedCourts().length})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {getUnassignedCourts().map(court => (
+                        <div
+                          key={court.id}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm"
+                        >
+                          <span>{court.courtLabel}</span>
+                          <select
+                            className="text-xs border-none bg-transparent text-blue-600 cursor-pointer focus:ring-0"
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAddCourtToGroup(parseInt(e.target.value), court.id);
+                              }
+                            }}
+                            defaultValue=""
+                          >
+                            <option value="">→ Add to...</option>
+                            {courtGroups.map(group => (
+                              <option key={group.id} value={group.id}>
+                                {group.groupName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3420,13 +4019,24 @@ export default function TournamentManage() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Player Registrations & Check-in</h2>
-              <button
-                onClick={() => { loadCheckIns(); loadDashboard(); }}
-                disabled={loadingCheckIns}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-5 h-5 ${loadingCheckIns ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                {isOrganizer && (
+                  <button
+                    onClick={() => setShowAddPlayer(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Player
+                  </button>
+                )}
+                <button
+                  onClick={() => { loadCheckIns(); loadDashboard(); }}
+                  disabled={loadingCheckIns}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loadingCheckIns ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Check-in stats */}
@@ -4129,7 +4739,7 @@ export default function TournamentManage() {
                                       {isProcessing && processingUnitAction?.action === 'break' ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
                                       ) : (
-                                        <Shuffle className="w-4 h-4" />
+                                        <Hammer className="w-4 h-4" />
                                       )}
                                     </button>
                                   )}
@@ -4465,6 +5075,301 @@ export default function TournamentManage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Documents Tab */}
+        {activeTab === 'documents' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm">
+              <div className="p-4 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-gray-600" />
+                  <h2 className="font-semibold text-gray-900">Event Documents</h2>
+                  <span className="text-sm text-gray-500">({documents.length})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={loadDocuments}
+                    disabled={loadingDocuments}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${loadingDocuments ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => setShowAddDocument(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Document
+                  </button>
+                </div>
+              </div>
+
+              {loadingDocuments ? (
+                <div className="p-8 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>No documents uploaded yet</p>
+                  <p className="text-sm">Add rules, schedules, waivers, or other event materials</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {documents.map((doc) => {
+                    const IconComponent = getIconForAssetType(doc.assetTypeName);
+                    const colors = getColorForAssetType(doc.assetTypeColorClass);
+                    return (
+                      <div key={doc.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`p-2 rounded-lg ${colors.bg} flex-shrink-0`}>
+                            <IconComponent className={`w-5 h-5 ${colors.text}`} />
+                          </div>
+                          <div className="min-w-0">
+                            {editingDocument?.id === doc.id ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editingDocument.title}
+                                  onChange={(e) => setEditingDocument({ ...editingDocument, title: e.target.value })}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                  autoFocus
+                                />
+                                <div className="flex flex-wrap gap-1">
+                                  {assetTypes.map(type => {
+                                    const TypeIcon = getIconForAssetType(type.typeName);
+                                    return (
+                                      <button
+                                        key={type.id}
+                                        type="button"
+                                        onClick={() => setEditingDocument({ ...editingDocument, objectAssetTypeId: type.id })}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                                          editingDocument.objectAssetTypeId === type.id
+                                            ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                      >
+                                        <TypeIcon className="w-3 h-3" />
+                                        {type.displayName}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-500">Sort:</label>
+                                  <input
+                                    type="number"
+                                    value={editingDocument.sortOrder}
+                                    onChange={(e) => setEditingDocument({ ...editingDocument, sortOrder: parseInt(e.target.value) || 0 })}
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {doc.assetTypeDisplayName && (
+                                  <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded capitalize">{doc.assetTypeDisplayName}</span>
+                                )}
+                                <p className="font-medium text-gray-900 truncate">{doc.title}</p>
+                              </div>
+                            )}
+                            <p className="text-sm text-gray-500 truncate">{doc.fileName}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {doc.isPublic ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                                  <Eye className="w-3 h-3" /> Public
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                                  <EyeOff className="w-3 h-3" /> Registered Only
+                                </span>
+                              )}
+                              {doc.fileSize && (
+                                <span className="text-xs text-gray-400">
+                                  {(doc.fileSize / 1024).toFixed(0)} KB
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          {editingDocument?.id === doc.id ? (
+                            <>
+                              <button
+                                onClick={() => setEditingDocument({ ...editingDocument, isPublic: !editingDocument.isPublic })}
+                                className={`p-2 rounded ${editingDocument.isPublic ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}
+                                title={editingDocument.isPublic ? 'Make Private' : 'Make Public'}
+                              >
+                                {editingDocument.isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleUpdateDocument(doc.id, { title: editingDocument.title, isPublic: editingDocument.isPublic, objectAssetTypeId: editingDocument.objectAssetTypeId, sortOrder: editingDocument.sortOrder })}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setEditingDocument(null)}
+                                className="p-2 text-gray-400 hover:bg-gray-100 rounded"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <a
+                                href={getSharedAssetUrl(doc.fileUrl)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                                title="Open Document"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                              <button
+                                onClick={() => setEditingDocument({ id: doc.id, title: doc.title, isPublic: doc.isPublic, objectAssetTypeId: doc.objectAssetTypeId, sortOrder: doc.sortOrder || 0 })}
+                                className="p-2 text-gray-400 hover:bg-gray-100 rounded"
+                                title="Edit"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                disabled={deletingDocumentId === doc.id}
+                                className="p-2 text-red-400 hover:bg-red-50 rounded disabled:opacity-50"
+                                title="Delete"
+                              >
+                                {deletingDocumentId === doc.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add Document Form */}
+              {showAddDocument && (
+                <div className="p-4 bg-gray-50 border-t border-gray-200">
+                  <div className="space-y-3">
+                    {/* Document Type Selector */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Document Type *</label>
+                      {assetTypes.length === 0 ? (
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                          No document types available. Please run Migration_098_ObjectAssets.sql.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                          {assetTypes.map(type => {
+                            const IconComponent = getIconForAssetType(type.typeName);
+                            const colors = getColorForAssetType(type.colorClass);
+                            return (
+                              <button
+                                key={type.id}
+                                type="button"
+                                onClick={() => setNewDocument({ ...newDocument, objectAssetTypeId: type.id })}
+                                className={`p-2 rounded-lg border-2 text-center transition-all ${
+                                  newDocument.objectAssetTypeId === type.id
+                                    ? 'border-orange-500 bg-orange-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <div className={`mx-auto w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center mb-1`}>
+                                  <IconComponent className={`w-4 h-4 ${colors.text}`} />
+                                </div>
+                                <span className={`text-xs font-medium ${
+                                  newDocument.objectAssetTypeId === type.id ? 'text-orange-700' : 'text-gray-600'
+                                }`}>{type.displayName}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Document Title *</label>
+                      <input
+                        type="text"
+                        value={newDocument.title}
+                        onChange={(e) => setNewDocument({ ...newDocument, title: e.target.value })}
+                        placeholder="e.g., Tournament Rules, Schedule, Waiver Form"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newDocument.isPublic}
+                          onChange={(e) => setNewDocument({ ...newDocument, isPublic: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                        />
+                        <span className="text-sm text-gray-700">Public (visible to everyone)</span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-700">Sort Order:</label>
+                        <input
+                          type="number"
+                          value={newDocument.sortOrder}
+                          onChange={(e) => setNewDocument({ ...newDocument, sortOrder: parseInt(e.target.value) || 0 })}
+                          className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1">
+                        <input
+                          type="file"
+                          onChange={handleDocumentUpload}
+                          disabled={uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId}
+                          className="hidden"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.rtf,.png,.jpg,.jpeg,.md,.html,.htm"
+                        />
+                        <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-colors ${
+                          uploadingDocument || !newDocument.title.trim() || !newDocument.objectAssetTypeId
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-orange-600 text-white hover:bg-orange-700'
+                        }`}>
+                          {uploadingDocument ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              Select & Upload File
+                            </>
+                          )}
+                        </span>
+                      </label>
+                      <button
+                        onClick={() => {
+                          setShowAddDocument(false);
+                          setNewDocument({ title: '', isPublic: true, sortOrder: 0, objectAssetTypeId: null });
+                        }}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Accepted formats: PDF, Word, Excel, text files, images. Max 10MB.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -5046,6 +5951,332 @@ export default function TournamentManage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Player Modal */}
+      {showAddPlayer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Add Player Registration</h3>
+              <button
+                onClick={() => {
+                  setShowAddPlayer(false);
+                  setPlayerSearchQuery('');
+                  setPlayerSearchResults([]);
+                  setSelectedPlayerForReg(null);
+                  setSelectedDivisionForReg('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Division Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Division *</label>
+                <select
+                  value={selectedDivisionForReg}
+                  onChange={(e) => setSelectedDivisionForReg(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                >
+                  <option value="">Select division...</option>
+                  {dashboard?.divisions?.filter(d => d.isActive).map(div => (
+                    <option key={div.id} value={div.id}>{div.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Player Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search Player *</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={playerSearchQuery}
+                    onChange={(e) => {
+                      setPlayerSearchQuery(e.target.value);
+                      handleSearchPlayers(e.target.value);
+                    }}
+                    placeholder="Search by name or email..."
+                    className="w-full border border-gray-300 rounded-lg p-2 pr-10"
+                  />
+                  {searchingPlayers && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                  )}
+                </div>
+              </div>
+
+              {/* Search Results */}
+              {playerSearchResults.length > 0 && !selectedPlayerForReg && (
+                <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {playerSearchResults.map(player => (
+                    <button
+                      key={player.id}
+                      onClick={() => {
+                        setSelectedPlayerForReg(player);
+                        setPlayerSearchQuery(player.displayName || player.email);
+                        setPlayerSearchResults([]);
+                      }}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
+                    >
+                      {player.avatarUrl ? (
+                        <img
+                          src={getSharedAssetUrl(player.avatarUrl)}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-4 h-4 text-gray-500" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium text-gray-900">{player.displayName || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{player.email}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected Player */}
+              {selectedPlayerForReg && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {selectedPlayerForReg.avatarUrl ? (
+                        <img
+                          src={getSharedAssetUrl(selectedPlayerForReg.avatarUrl)}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <User className="w-5 h-5 text-gray-500" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedPlayerForReg.displayName || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{selectedPlayerForReg.email}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedPlayerForReg(null);
+                        setPlayerSearchQuery('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {playerSearchQuery.length > 0 && playerSearchQuery.length < 2 && (
+                <p className="text-sm text-gray-500">Type at least 2 characters to search</p>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddPlayer(false);
+                  setPlayerSearchQuery('');
+                  setPlayerSearchResults([]);
+                  setSelectedPlayerForReg(null);
+                  setSelectedDivisionForReg('');
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdminRegisterPlayer}
+                disabled={registeringPlayer || !selectedPlayerForReg || !selectedDivisionForReg}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {registeringPlayer && <Loader2 className="w-4 h-4 animate-spin" />}
+                Register Player
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Division Modal */}
+      {showEditDivision && editingDivision && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1010]">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">{editingDivision.id ? 'Edit Division' : 'Add Division'}</h3>
+              <button
+                onClick={() => {
+                  setShowEditDivision(false);
+                  setEditingDivision(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Basic Info */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Division Name</label>
+                <input
+                  type="text"
+                  value={editingDivision.name || ''}
+                  onChange={(e) => setEditingDivision({ ...editingDivision, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editingDivision.description || ''}
+                  onChange={(e) => setEditingDivision({ ...editingDivision, description: e.target.value })}
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              {/* Division Classification */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium text-gray-900 mb-3">Division Classification</h4>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Format</label>
+                    <select
+                      value={editingDivision.teamUnitId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, teamUnitId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select format...</option>
+                      {teamUnits.map(unit => (
+                        <option key={unit.id} value={unit.id}>{unit.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Skill Level</label>
+                    <select
+                      value={editingDivision.skillLevelId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, skillLevelId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select skill level...</option>
+                      {skillLevels.map(level => (
+                        <option key={level.id} value={level.id}>{level.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Age Group</label>
+                    <select
+                      value={editingDivision.ageGroupId || ''}
+                      onChange={(e) => setEditingDivision({ ...editingDivision, ageGroupId: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-lg p-2"
+                    >
+                      <option value="">Select age group...</option>
+                      {ageGroups.map(group => (
+                        <option key={group.id} value={group.id}>{group.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Teams</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingDivision.maxUnits || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, maxUnits: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Players</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingDivision.maxPlayers || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, maxPlayers: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                    placeholder="Unlimited"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Division Fee ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingDivision.divisionFee || ''}
+                    onChange={(e) => setEditingDivision({ ...editingDivision, divisionFee: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {editingDivision.id ? 'Single fee for all registrations. Use "Fee Options" below for multiple fee tiers.' : 'Base fee for registrations. You can add fee options after creating the division.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Division Fee Options - only show when editing existing division */}
+              {editingDivision.id && (
+                <DivisionFeesEditor
+                  divisionId={editingDivision.id}
+                  eventId={parseInt(eventId)}
+                  divisionFee={editingDivision.divisionFee || 0}
+                  onFeesChange={() => loadEvent()}
+                />
+              )}
+
+              {/* Schedule Status Display */}
+              {editingDivision.scheduleStatus && editingDivision.scheduleStatus !== 'NotGenerated' && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-sm text-gray-700">
+                      Schedule Status: <strong>{editingDivision.scheduleStatus}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEditDivision(false);
+                  setEditingDivision(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDivision}
+                disabled={savingDivision}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingDivision && <Loader2 className="w-4 h-4 animate-spin" />}
+                {editingDivision.id ? 'Save Changes' : 'Create Division'}
+              </button>
             </div>
           </div>
         </div>

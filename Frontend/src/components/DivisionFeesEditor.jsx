@@ -1,35 +1,27 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, Edit3, Loader2, ChevronDown, ChevronUp, Star, Tag } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, DollarSign, Calendar, Star, ToggleLeft, ToggleRight, RefreshCw, Plus } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
 /**
- * Component for managing multiple fee options for a division
- * Used in the Edit Division modal in Events.jsx
+ * Component for managing fee options for a division.
+ * Matches the same table format as EventFeesEditor.
+ * Shows all event fee types and allows setting amounts + custom fees.
  */
 export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, onFeesChange }) {
   const toast = useToast();
-  const [fees, setFees] = useState([]);
   const [feeTypes, setFeeTypes] = useState([]);
+  const [fees, setFees] = useState([]); // Existing division fees
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState({});
   const [isExpanded, setIsExpanded] = useState(false);
-  const [editingFee, setEditingFee] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newFee, setNewFee] = useState({
-    feeTypeId: '',
-    name: '',
-    description: '',
-    amount: 0,
-    isDefault: false,
-    availableFrom: '',
-    availableUntil: '',
-    isActive: true
-  });
+  const [editingId, setEditingId] = useState(null); // feeTypeId for type-based, or 'custom-{id}' for custom fees
+  const [editValues, setEditValues] = useState({});
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customFee, setCustomFee] = useState({ name: '', amount: 0 });
 
-  // Load fees and fee types when divisionId changes
   useEffect(() => {
-    if (divisionId) {
+    if (divisionId && eventId) {
       loadData();
     } else {
       setFees([]);
@@ -39,22 +31,18 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
   }, [divisionId, eventId]);
 
   const loadData = async () => {
-    if (!divisionId) return;
+    if (!divisionId || !eventId) return;
     setLoading(true);
     try {
-      const requests = [tournamentApi.getDivisionFees(divisionId)];
-      // Load fee types if eventId is provided
-      if (eventId) {
-        requests.push(tournamentApi.getEventFeeTypes(eventId));
+      const [feesResponse, feeTypesResponse] = await Promise.all([
+        tournamentApi.getDivisionFees(divisionId),
+        tournamentApi.getEventFeeTypes(eventId)
+      ]);
+      if (feesResponse.success) {
+        setFees(feesResponse.data || []);
       }
-
-      const results = await Promise.all(requests);
-
-      if (results[0].success) {
-        setFees(results[0].data || []);
-      }
-      if (results.length > 1 && results[1].success) {
-        setFeeTypes(results[1].data || []);
+      if (feeTypesResponse.success) {
+        setFeeTypes(feeTypesResponse.data || []);
       }
     } catch (error) {
       console.error('Failed to load fees:', error);
@@ -63,49 +51,193 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     }
   };
 
-  const handleFeeTypeChange = (feeTypeId) => {
-    if (feeTypeId) {
-      const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
-      if (feeType) {
-        setNewFee({
-          ...newFee,
-          feeTypeId: feeType.id,
-          name: feeType.name,
-          description: feeType.description || '',
-          amount: feeType.defaultAmount,
-          availableFrom: feeType.availableFrom ? new Date(feeType.availableFrom).toISOString().slice(0, 16) : '',
-          availableUntil: feeType.availableUntil ? new Date(feeType.availableUntil).toISOString().slice(0, 16) : ''
-        });
-        return;
-      }
-    }
-    setNewFee({ ...newFee, feeTypeId: '' });
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toISOString().slice(0, 16);
   };
 
-  const handleAddFee = async () => {
-    if (!newFee.name.trim()) {
+  // Get the existing division fee for a fee type (if any)
+  const getFeeForType = (feeTypeId) => {
+    return fees.find(f => f.feeTypeId === feeTypeId);
+  };
+
+  // Get custom fees (fees without a feeTypeId)
+  const getCustomFees = () => {
+    return fees.filter(f => !f.feeTypeId);
+  };
+
+  const handleStartEdit = (feeTypeId, existingFee) => {
+    setEditingId(feeTypeId);
+    setEditValues({
+      amount: existingFee?.amount ?? 0,
+      isDefault: existingFee?.isDefault ?? false,
+      availableFrom: existingFee?.availableFrom ? formatDateForInput(existingFee.availableFrom) : '',
+      availableUntil: existingFee?.availableUntil ? formatDateForInput(existingFee.availableUntil) : '',
+      isActive: existingFee?.isActive ?? true,
+      name: existingFee?.name || ''
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditValues({});
+  };
+
+  const handleSaveFee = async (feeTypeId, feeType = null) => {
+    const existingFee = feeTypeId ? getFeeForType(feeTypeId) : null;
+    const saveKey = feeTypeId || 'custom';
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
+    try {
+      const payload = {
+        feeTypeId: feeTypeId || null,
+        name: feeType?.name || editValues.name || 'Custom Fee',
+        description: feeType?.description || '',
+        amount: parseFloat(editValues.amount) || 0,
+        isDefault: editValues.isDefault,
+        availableFrom: editValues.availableFrom || null,
+        availableUntil: editValues.availableUntil || null,
+        isActive: editValues.isActive,
+        sortOrder: fees.length
+      };
+
+      let response;
+      if (existingFee) {
+        response = await tournamentApi.updateDivisionFee(divisionId, existingFee.id, payload);
+      } else {
+        response = await tournamentApi.createDivisionFee(divisionId, payload);
+      }
+
+      if (response.success) {
+        if (existingFee) {
+          setFees(fees.map(f => f.id === existingFee.id ? response.data : f));
+        } else {
+          setFees([...fees, response.data]);
+        }
+        setEditingId(null);
+        setEditValues({});
+        toast.success(existingFee ? 'Fee updated' : 'Fee created');
+        onFeesChange?.();
+      } else {
+        toast.error(response.message || 'Failed to save fee');
+      }
+    } catch (error) {
+      toast.error('Failed to save fee');
+    } finally {
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
+    }
+  };
+
+  const handleSaveCustomFee = async (customFeeRecord) => {
+    const saveKey = `custom-${customFeeRecord.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
+    try {
+      const payload = {
+        feeTypeId: null,
+        name: editValues.name || customFeeRecord.name,
+        description: '',
+        amount: parseFloat(editValues.amount) || 0,
+        isDefault: editValues.isDefault,
+        availableFrom: editValues.availableFrom || null,
+        availableUntil: editValues.availableUntil || null,
+        isActive: editValues.isActive,
+        sortOrder: customFeeRecord.sortOrder
+      };
+
+      const response = await tournamentApi.updateDivisionFee(divisionId, customFeeRecord.id, payload);
+
+      if (response.success) {
+        setFees(fees.map(f => f.id === customFeeRecord.id ? response.data : f));
+        setEditingId(null);
+        setEditValues({});
+        toast.success('Fee updated');
+        onFeesChange?.();
+      } else {
+        toast.error(response.message || 'Failed to save fee');
+      }
+    } catch (error) {
+      toast.error('Failed to save fee');
+    } finally {
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
+    }
+  };
+
+  const handleToggleActive = async (fee) => {
+    const saveKey = fee.feeTypeId || `custom-${fee.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
+    try {
+      const response = await tournamentApi.updateDivisionFee(divisionId, fee.id, {
+        feeTypeId: fee.feeTypeId || null,
+        name: fee.name,
+        description: fee.description,
+        amount: fee.amount,
+        isDefault: fee.isDefault,
+        availableFrom: fee.availableFrom,
+        availableUntil: fee.availableUntil,
+        isActive: !fee.isActive
+      });
+
+      if (response.success) {
+        setFees(fees.map(f => f.id === fee.id ? response.data : f));
+        toast.success(`Fee ${response.data.isActive ? 'enabled' : 'disabled'}`);
+        onFeesChange?.();
+      } else {
+        toast.error(response.message || 'Failed to update fee');
+      }
+    } catch (error) {
+      toast.error('Failed to update fee');
+    } finally {
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
+    }
+  };
+
+  const handleDeleteFee = async (fee) => {
+    if (!confirm('Remove this fee?')) return;
+
+    const saveKey = fee.feeTypeId || `custom-${fee.id}`;
+    setSaving(prev => ({ ...prev, [saveKey]: true }));
+
+    try {
+      const response = await tournamentApi.deleteDivisionFee(divisionId, fee.id);
+      if (response.success) {
+        setFees(fees.filter(f => f.id !== fee.id));
+        toast.success('Fee removed');
+        onFeesChange?.();
+      } else {
+        toast.error(response.message || 'Failed to remove fee');
+      }
+    } catch (error) {
+      toast.error('Failed to remove fee');
+    } finally {
+      setSaving(prev => ({ ...prev, [saveKey]: false }));
+    }
+  };
+
+  const handleAddCustomFee = async () => {
+    if (!customFee.name.trim()) {
       toast.error('Fee name is required');
       return;
     }
 
-    setSaving(true);
+    setSaving(prev => ({ ...prev, addCustom: true }));
     try {
       const response = await tournamentApi.createDivisionFee(divisionId, {
-        feeTypeId: newFee.feeTypeId || null,
-        name: newFee.name,
-        description: newFee.description,
-        amount: parseFloat(newFee.amount) || 0,
-        isDefault: newFee.isDefault,
-        availableFrom: newFee.availableFrom || null,
-        availableUntil: newFee.availableUntil || null,
+        feeTypeId: null,
+        name: customFee.name,
+        description: '',
+        amount: parseFloat(customFee.amount) || 0,
+        isDefault: false,
         isActive: true,
         sortOrder: fees.length
       });
 
       if (response.success) {
         setFees([...fees, response.data]);
-        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
-        setShowAddForm(false);
+        setAddingCustom(false);
+        setCustomFee({ name: '', amount: 0 });
         toast.success('Fee added');
         onFeesChange?.();
       } else {
@@ -114,428 +246,439 @@ export default function DivisionFeesEditor({ divisionId, eventId, divisionFee, o
     } catch (error) {
       toast.error('Failed to add fee');
     } finally {
-      setSaving(false);
+      setSaving(prev => ({ ...prev, addCustom: false }));
     }
   };
 
-  const handleUpdateFee = async (fee) => {
-    setSaving(true);
-    try {
-      const response = await tournamentApi.updateDivisionFee(divisionId, fee.id, {
-        feeTypeId: fee.feeTypeId || null,
-        name: fee.name,
-        description: fee.description,
-        amount: parseFloat(fee.amount) || 0,
-        isDefault: fee.isDefault,
-        availableFrom: fee.availableFrom || null,
-        availableUntil: fee.availableUntil || null,
-        isActive: fee.isActive,
-        sortOrder: fee.sortOrder
-      });
-
-      if (response.success) {
-        setFees(fees.map(f => f.id === fee.id ? response.data : f));
-        setEditingFee(null);
-        toast.success('Fee updated');
-        onFeesChange?.();
-      } else {
-        toast.error(response.message || 'Failed to update fee');
-      }
-    } catch (error) {
-      toast.error('Failed to update fee');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteFee = async (feeId) => {
-    if (!confirm('Delete this fee option?')) return;
-
-    setSaving(true);
-    try {
-      const response = await tournamentApi.deleteDivisionFee(divisionId, feeId);
-      if (response.success) {
-        setFees(fees.filter(f => f.id !== feeId));
-        toast.success('Fee deleted');
-        onFeesChange?.();
-      } else {
-        toast.error(response.message || 'Failed to delete fee');
-      }
-    } catch (error) {
-      toast.error('Failed to delete fee');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const formatDateForInput = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
-  };
-
-  // Show summary when collapsed
-  const hasFees = fees.length > 0;
-  const activeFees = fees.filter(f => f.isActive && f.isCurrentlyAvailable);
+  const hasFeeTypes = feeTypes.length > 0;
+  const customFees = getCustomFees();
+  const configuredFees = fees.filter(f => f.isActive);
 
   if (!divisionId) {
     return (
-      <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-        <p className="text-sm text-gray-500">Save the division first to add multiple fee options.</p>
+      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <p className="text-sm text-gray-500">Save the division first to configure fees.</p>
       </div>
     );
   }
 
   return (
-    <div className="border-t pt-4 mt-4">
-      <button
-        type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between text-left"
-      >
-        <div>
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Fee Options
-            {hasFees && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                {fees.length} option{fees.length !== 1 ? 's' : ''}
-              </span>
+    <div className="border border-gray-200 rounded-lg">
+      <div className="flex items-center justify-between p-4 hover:bg-gray-50">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex-1 flex items-center justify-between text-left"
+        >
+          <div>
+            <h4 className="font-medium text-gray-900 flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              Division Fee Amounts
+              {configuredFees.length > 0 && (
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                  {configuredFees.length} configured
+                </span>
+              )}
+            </h4>
+            {!isExpanded && configuredFees.length > 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                {configuredFees.map(f => `${f.name}: $${f.amount}`).join(', ')}
+              </p>
             )}
-          </h4>
-          {!isExpanded && hasFees && (
-            <p className="text-sm text-gray-500 mt-1">
-              {activeFees.length > 0
-                ? `${activeFees.length} active: ${activeFees.map(f => `${f.name} ($${f.amount})`).join(', ')}`
-                : 'No currently available fees'}
-            </p>
-          )}
-          {!isExpanded && !hasFees && divisionFee > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Using single fee: ${divisionFee}
-            </p>
-          )}
-        </div>
-        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-      </button>
+            {!isExpanded && !hasFeeTypes && configuredFees.length === 0 && divisionFee > 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                Using single division fee: ${divisionFee}
+              </p>
+            )}
+            {!isExpanded && !hasFeeTypes && configuredFees.length === 0 && !divisionFee && (
+              <p className="text-sm text-gray-500 mt-1">
+                No fees configured. Click to set up fee options.
+              </p>
+            )}
+          </div>
+          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            loadData();
+          }}
+          disabled={loading}
+          className="ml-2 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+          title="Refresh fees"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
 
       {isExpanded && (
-        <div className="mt-4 space-y-4">
+        <div className="p-4 pt-0 space-y-4">
           {loading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
             </div>
           ) : (
             <>
-              {/* Help text */}
               <p className="text-sm text-gray-500">
-                Add multiple fee options (e.g., Early Bird, Regular, Late Registration).
-                {feeTypes.length > 0 && ' Select from defined fee types or create custom fees.'}
-                {!hasFees && ' If no fee options are defined, the single division fee above will be used.'}
+                Set fee options for this division (e.g., Early Bird, Regular, Late Registration).
               </p>
 
-              {/* Fee list */}
-              {fees.length > 0 && (
-                <div className="space-y-2">
-                  {fees.map(fee => (
-                    <div key={fee.id} className={`p-3 border rounded-lg ${fee.isActive ? 'bg-white' : 'bg-gray-50'}`}>
-                      {editingFee?.id === fee.id ? (
-                        // Edit mode
-                        <div className="space-y-3">
-                          {feeTypes.length > 0 && (
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
-                              <select
-                                value={editingFee.feeTypeId || ''}
-                                onChange={(e) => {
-                                  const feeTypeId = e.target.value;
-                                  if (feeTypeId) {
-                                    const feeType = feeTypes.find(ft => ft.id === parseInt(feeTypeId));
-                                    if (feeType) {
-                                      setEditingFee({
-                                        ...editingFee,
-                                        feeTypeId: feeType.id,
-                                        name: feeType.name,
-                                        description: feeType.description || '',
-                                        availableFrom: feeType.availableFrom,
-                                        availableUntil: feeType.availableUntil
-                                      });
-                                      return;
-                                    }
-                                  }
-                                  setEditingFee({ ...editingFee, feeTypeId: '' });
-                                }}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
+              {/* Fee types table */}
+              {(hasFeeTypes || customFees.length > 0 || fees.length > 0) && (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-2">Fee Type</th>
+                        <th className="text-left text-xs font-medium text-gray-500 uppercase px-3 py-2 w-28">Amount</th>
+                        <th className="text-center text-xs font-medium text-gray-500 uppercase px-3 py-2 w-20">Active</th>
+                        <th className="text-center text-xs font-medium text-gray-500 uppercase px-3 py-2 w-20">Default</th>
+                        <th className="text-right text-xs font-medium text-gray-500 uppercase px-3 py-2 w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {/* Fee types from event */}
+                      {feeTypes.map(feeType => {
+                        const divisionFeeRecord = getFeeForType(feeType.id);
+                        const isEditing = editingId === feeType.id;
+                        const isSaving = saving[feeType.id];
+
+                        return (
+                          <tr key={`type-${feeType.id}`} className={`${divisionFeeRecord?.isActive === false ? 'bg-gray-50' : ''}`}>
+                            <td className="px-3 py-2">
+                              <div>
+                                <span className="font-medium text-gray-900">{feeType.name}</span>
+                                {feeType.description && (
+                                  <p className="text-xs text-gray-500">{feeType.description}</p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-gray-500">$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editValues.amount}
+                                    onChange={(e) => setEditValues({ ...editValues, amount: e.target.value })}
+                                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
+                                    autoFocus
+                                  />
+                                </div>
+                              ) : divisionFeeRecord ? (
+                                <span className={`font-medium ${divisionFeeRecord.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                                  ${divisionFeeRecord.amount?.toFixed(2) || '0.00'}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {divisionFeeRecord ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleActive(divisionFeeRecord)}
+                                  disabled={isSaving}
+                                  className="text-gray-500 hover:text-gray-700"
+                                >
+                                  {isSaving ? (
+                                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                                  ) : divisionFeeRecord.isActive ? (
+                                    <ToggleRight className="w-6 h-6 text-green-500" />
+                                  ) : (
+                                    <ToggleLeft className="w-6 h-6 text-gray-300" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {isEditing ? (
+                                <input
+                                  type="checkbox"
+                                  checked={editValues.isDefault}
+                                  onChange={(e) => setEditValues({ ...editValues, isDefault: e.target.checked })}
+                                  className="rounded"
+                                />
+                              ) : divisionFeeRecord?.isDefault ? (
+                                <Star className="w-4 h-4 text-yellow-500 mx-auto" />
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {isEditing ? (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveFee(feeType.id, feeType)}
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    {isSaving ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(feeType.id, divisionFeeRecord)}
+                                    className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    {divisionFeeRecord ? 'Edit' : 'Set Amount'}
+                                  </button>
+                                  {divisionFeeRecord && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFee(divisionFeeRecord)}
+                                      disabled={isSaving}
+                                      className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                                    >
+                                      Remove
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* Custom fees (not based on fee type) */}
+                      {customFees.map(fee => {
+                        const editKey = `custom-${fee.id}`;
+                        const isEditing = editingId === editKey;
+                        const isSaving = saving[editKey];
+
+                        return (
+                          <tr key={editKey} className={`${fee.isActive === false ? 'bg-gray-50' : ''}`}>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editValues.name}
+                                  onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                                  placeholder="Fee name"
+                                />
+                              ) : (
+                                <div>
+                                  <span className="font-medium text-gray-900">{fee.name}</span>
+                                  <span className="ml-2 text-xs text-gray-400">(custom)</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-gray-500">$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editValues.amount}
+                                    onChange={(e) => setEditValues({ ...editValues, amount: e.target.value })}
+                                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
+                                  />
+                                </div>
+                              ) : (
+                                <span className={`font-medium ${fee.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                                  ${fee.amount?.toFixed(2) || '0.00'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleActive(fee)}
+                                disabled={isSaving}
+                                className="text-gray-500 hover:text-gray-700"
                               >
-                                <option value="">Custom (no fee type)</option>
-                                {feeTypes.map(ft => (
-                                  <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-                              <input
-                                type="text"
-                                value={editingFee.name}
-                                onChange={(e) => setEditingFee({ ...editingFee, name: e.target.value })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Amount ($)</label>
+                                {isSaving ? (
+                                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                                ) : fee.isActive ? (
+                                  <ToggleRight className="w-6 h-6 text-green-500" />
+                                ) : (
+                                  <ToggleLeft className="w-6 h-6 text-gray-300" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {isEditing ? (
+                                <input
+                                  type="checkbox"
+                                  checked={editValues.isDefault}
+                                  onChange={(e) => setEditValues({ ...editValues, isDefault: e.target.checked })}
+                                  className="rounded"
+                                />
+                              ) : fee.isDefault ? (
+                                <Star className="w-4 h-4 text-yellow-500 mx-auto" />
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {isEditing ? (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveCustomFee(fee)}
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    {isSaving ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(editKey, fee)}
+                                    className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteFee(fee)}
+                                    disabled={isSaving}
+                                    className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {/* Add custom fee row */}
+                      {addingCustom && (
+                        <tr className="bg-green-50">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={customFee.name}
+                              onChange={(e) => setCustomFee({ ...customFee, name: e.target.value })}
+                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                              placeholder="Fee name"
+                              autoFocus
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500">$</span>
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                value={editingFee.amount}
-                                onChange={(e) => setEditingFee({ ...editingFee, amount: e.target.value })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={customFee.amount}
+                                onChange={(e) => setCustomFee({ ...customFee, amount: e.target.value })}
+                                className="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
                               />
                             </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                            <input
-                              type="text"
-                              value={editingFee.description || ''}
-                              onChange={(e) => setEditingFee({ ...editingFee, description: e.target.value })}
-                              className="w-full border border-gray-300 rounded p-2 text-sm"
-                              placeholder="Optional description"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Available From</label>
-                              <input
-                                type="datetime-local"
-                                value={formatDateForInput(editingFee.availableFrom)}
-                                onChange={(e) => setEditingFee({ ...editingFee, availableFrom: e.target.value || null })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-gray-300">-</span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-gray-300">-</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={handleAddCustomFee}
+                                disabled={saving.addCustom || !customFee.name.trim()}
+                                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {saving.addCustom ? 'Adding...' : 'Add'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddingCustom(false);
+                                  setCustomFee({ name: '', amount: 0 });
+                                }}
+                                className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                              >
+                                Cancel
+                              </button>
                             </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Available Until</label>
-                              <input
-                                type="datetime-local"
-                                value={formatDateForInput(editingFee.availableUntil)}
-                                onChange={(e) => setEditingFee({ ...editingFee, availableUntil: e.target.value || null })}
-                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={editingFee.isDefault}
-                                onChange={(e) => setEditingFee({ ...editingFee, isDefault: e.target.checked })}
-                                className="rounded"
-                              />
-                              Default selection
-                            </label>
-                            <label className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={editingFee.isActive}
-                                onChange={(e) => setEditingFee({ ...editingFee, isActive: e.target.checked })}
-                                className="rounded"
-                              />
-                              Active
-                            </label>
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingFee(null)}
-                              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateFee(editingFee)}
-                              disabled={saving}
-                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                            >
-                              {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        // View mode
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">{fee.name}</span>
-                              <span className="text-green-600 font-medium">${fee.amount}</span>
-                              {fee.feeTypeId && (
-                                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                  <Tag className="w-3 h-3" /> Type
-                                </span>
-                              )}
-                              {fee.isDefault && (
-                                <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                  <Star className="w-3 h-3" /> Default
-                                </span>
-                              )}
-                              {!fee.isActive && (
-                                <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Inactive</span>
-                              )}
-                              {fee.isActive && !fee.isCurrentlyAvailable && (
-                                <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Not in date range</span>
-                              )}
-                            </div>
-                            {fee.description && (
-                              <p className="text-sm text-gray-500 mt-0.5">{fee.description}</p>
-                            )}
-                            {(fee.availableFrom || fee.availableUntil) && (
-                              <p className="text-xs text-gray-400 mt-1">
-                                {fee.availableFrom && `From: ${new Date(fee.availableFrom).toLocaleDateString()}`}
-                                {fee.availableFrom && fee.availableUntil && ' - '}
-                                {fee.availableUntil && `Until: ${new Date(fee.availableUntil).toLocaleDateString()}`}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setEditingFee({ ...fee })}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteFee(fee.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                  ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              {/* Add new fee form */}
-              {showAddForm ? (
-                <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg space-y-3">
-                  {feeTypes.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Fee Type (optional)</label>
-                      <select
-                        value={newFee.feeTypeId || ''}
-                        onChange={(e) => handleFeeTypeChange(e.target.value)}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      >
-                        <option value="">Custom (no fee type)</option>
-                        {feeTypes.map(ft => (
-                          <option key={ft.id} value={ft.id}>{ft.name} (${ft.defaultAmount})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
-                      <input
-                        type="text"
-                        value={newFee.name}
-                        onChange={(e) => setNewFee({ ...newFee, name: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        placeholder="e.g., Early Bird"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Amount ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={newFee.amount}
-                        onChange={(e) => setNewFee({ ...newFee, amount: e.target.value })}
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                    <input
-                      type="text"
-                      value={newFee.description}
-                      onChange={(e) => setNewFee({ ...newFee, description: e.target.value })}
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      placeholder="Optional description"
-                    />
+              {/* Date range editing when in edit mode */}
+              {editingId && (
+                <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">Date Range (optional)</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available From</label>
+                      <label className="block text-xs text-gray-600 mb-1">Available From</label>
                       <input
                         type="datetime-local"
-                        value={newFee.availableFrom}
-                        onChange={(e) => setNewFee({ ...newFee, availableFrom: e.target.value })}
+                        value={editValues.availableFrom || ''}
+                        onChange={(e) => setEditValues({ ...editValues, availableFrom: e.target.value })}
                         className="w-full border border-gray-300 rounded p-2 text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Available Until</label>
+                      <label className="block text-xs text-gray-600 mb-1">Available Until</label>
                       <input
                         type="datetime-local"
-                        value={newFee.availableUntil}
-                        onChange={(e) => setNewFee({ ...newFee, availableUntil: e.target.value })}
+                        value={editValues.availableUntil || ''}
+                        onChange={(e) => setEditValues({ ...editValues, availableUntil: e.target.value })}
                         className="w-full border border-gray-300 rounded p-2 text-sm"
                       />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={newFee.isDefault}
-                        onChange={(e) => setNewFee({ ...newFee, isDefault: e.target.checked })}
-                        className="rounded"
-                      />
-                      Default selection
-                    </label>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddForm(false);
-                        setNewFee({ feeTypeId: '', name: '', description: '', amount: 0, isDefault: false, availableFrom: '', availableUntil: '', isActive: true });
-                      }}
-                      className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddFee}
-                      disabled={saving || !newFee.name.trim()}
-                      className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                      Add Fee
-                    </button>
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {/* Add custom fee button */}
+              {!addingCustom && (
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => setAddingCustom(true)}
                   className="w-full p-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Fee Option
+                  Add Custom Fee
                 </button>
+              )}
+
+              {/* Empty state when no fee types */}
+              {!hasFeeTypes && customFees.length === 0 && fees.length === 0 && !addingCustom && (
+                <div className="text-center py-4 text-gray-500">
+                  <p>No fee types defined for this event. Add custom fees or define fee types at the event level.</p>
+                </div>
               )}
             </>
           )}

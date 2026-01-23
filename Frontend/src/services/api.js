@@ -1639,6 +1639,8 @@ export const tournamentApi = {
   updateCourtGroup: (groupId, data) => api.put(`/courtgroups/${groupId}`, data),
   deleteCourtGroup: (groupId) => api.delete(`/courtgroups/${groupId}`),
   assignCourtsToGroup: (groupId, courtIds) => api.post(`/courtgroups/${groupId}/courts`, { courtIds }),
+  addCourtToGroup: (groupId, courtId) => api.post(`/courtgroups/${groupId}/courts/${courtId}`),
+  removeCourtFromGroup: (groupId, courtId) => api.delete(`/courtgroups/${groupId}/courts/${courtId}`),
   autoCreateCourtGroups: (eventId, groupSize = 4) => api.post(`/courtgroups/event/${eventId}/auto-create?groupSize=${groupSize}`),
 
   // =====================================================
