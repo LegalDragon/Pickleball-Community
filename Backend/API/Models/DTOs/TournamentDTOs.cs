@@ -580,9 +580,16 @@ public class DivisionStatusDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public int? TeamUnitId { get; set; }
     public string? TeamUnitName { get; set; }
+    public int? SkillLevelId { get; set; }
+    public string? SkillLevelName { get; set; }
+    public int? AgeGroupId { get; set; }
+    public string? AgeGroupName { get; set; }
     public int MaxUnits { get; set; }
+    public int? MaxPlayers { get; set; }
+    public decimal? DivisionFee { get; set; }
     public bool IsActive { get; set; } = true;
     public int RegisteredUnits { get; set; }
     public int WaitlistedUnits { get; set; }

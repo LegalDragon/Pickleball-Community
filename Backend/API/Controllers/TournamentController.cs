@@ -5649,7 +5649,9 @@ public class TournamentController : EventControllerBase
     public async Task<ActionResult<ApiResponse<TournamentDashboardDto>>> GetTournamentDashboard(int eventId)
     {
         var evt = await _context.Events
-            .Include(e => e.Divisions)
+            .Include(e => e.Divisions).ThenInclude(d => d.TeamUnit)
+            .Include(e => e.Divisions).ThenInclude(d => d.SkillLevel)
+            .Include(e => e.Divisions).ThenInclude(d => d.AgeGroupEntity)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
         if (evt == null)
@@ -5738,8 +5740,16 @@ public class TournamentController : EventControllerBase
             {
                 Id = d.Id,
                 Name = d.Name,
+                Description = d.Description,
                 TeamUnitId = d.TeamUnitId,
+                TeamUnitName = d.TeamUnit?.Name,
+                SkillLevelId = d.SkillLevelId,
+                SkillLevelName = d.SkillLevel?.Name,
+                AgeGroupId = d.AgeGroupId,
+                AgeGroupName = d.AgeGroupEntity?.Name,
                 MaxUnits = d.MaxUnits ?? 0,
+                MaxPlayers = d.MaxPlayers,
+                DivisionFee = d.DivisionFee,
                 IsActive = d.IsActive,
                 RegisteredUnits = units.Count(u => u.DivisionId == d.Id && u.Status != "Cancelled"),
                 WaitlistedUnits = units.Count(u => u.DivisionId == d.Id && u.Status == "Waitlisted"),
