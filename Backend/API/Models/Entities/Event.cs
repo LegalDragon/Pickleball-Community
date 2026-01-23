@@ -361,7 +361,8 @@ public class EventDivision
     public ICollection<EncounterMatchFormat> EncounterMatchFormats { get; set; } = new List<EncounterMatchFormat>();
     public ICollection<DivisionCourtBlock> CourtBlocks { get; set; } = new List<DivisionCourtBlock>();
     public ICollection<DivisionPhase> Phases { get; set; } = new List<DivisionPhase>();
-    public ICollection<DivisionFee> Fees { get; set; } = new List<DivisionFee>();
+    // Note: DivisionFee uses DivisionId=0 for event-level fees, so navigation removed
+    // to prevent EF Core from creating shadow FK. Query fees via _context.DivisionFees.Where(f => f.DivisionId == divisionId)
 }
 
 // NOTE: EventRegistration entity removed - registration now uses EventUnits + EventUnitMembers
