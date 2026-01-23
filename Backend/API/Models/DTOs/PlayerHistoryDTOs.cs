@@ -277,6 +277,28 @@ public class PlayerPaymentHistoryDto
     public string? VerifiedByName { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Registrations covered by this payment
+    public List<PaymentRegistrationDto> Registrations { get; set; } = new();
+    public decimal TotalRegistrationFees { get; set; }
+    public bool FeesMatch => Math.Abs(Amount - TotalRegistrationFees) < 0.01m;
+}
+
+/// <summary>
+/// Registration covered by a payment
+/// </summary>
+public class PaymentRegistrationDto
+{
+    public int MemberId { get; set; }
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public string PlayerName { get; set; } = string.Empty;
+    public decimal FeeAmount { get; set; }
+    public string? FeeName { get; set; }
 }
 
 public class PaymentHistorySearchRequest

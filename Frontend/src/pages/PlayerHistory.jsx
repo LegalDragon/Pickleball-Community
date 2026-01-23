@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { playerHistoryApi, getSharedAssetUrl } from '../services/api'
+import PublicProfileModal from '../components/ui/PublicProfileModal'
 import {
   Trophy,
   Gamepad2,
@@ -21,7 +22,8 @@ import {
   CheckCircle,
   Clock,
   ExternalLink,
-  Image
+  Image,
+  AlertCircle
 } from 'lucide-react'
 
 export default function PlayerHistory() {
@@ -44,6 +46,7 @@ export default function PlayerHistory() {
   const [showGameFilters, setShowGameFilters] = useState(false)
   const [expandedGames, setExpandedGames] = useState({})
   const [eventTypes, setEventTypes] = useState([])
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState(null)
 
   // Awards State
   const [awards, setAwards] = useState([])
@@ -78,6 +81,8 @@ export default function PlayerHistory() {
   })
   const [showPaymentFilters, setShowPaymentFilters] = useState(false)
   const [paymentStatuses, setPaymentStatuses] = useState([])
+  const [expandedPayments, setExpandedPayments] = useState({})
+  const [selectedProofImage, setSelectedProofImage] = useState(null)
 
   useEffect(() => {
     if (isAuthenticated && user?.id) {
@@ -265,6 +270,13 @@ export default function PlayerHistory() {
       dateFrom: '',
       dateTo: ''
     })
+  }
+
+  const togglePaymentExpand = (paymentId) => {
+    setExpandedPayments(prev => ({
+      ...prev,
+      [paymentId]: !prev[paymentId]
+    }))
   }
 
   const getPaymentStatusColor = (status) => {
@@ -645,7 +657,14 @@ export default function PlayerHistory() {
                               {game.partnerName && (
                                 <div>
                                   <div className="text-sm font-medium text-gray-600 mb-2">Partner</div>
-                                  <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (game.partnerId) setSelectedProfileUserId(game.partnerId)
+                                    }}
+                                    className={`flex items-center gap-3 ${game.partnerId ? 'hover:bg-gray-100 rounded-lg p-1 -m-1 cursor-pointer' : ''}`}
+                                    disabled={!game.partnerId}
+                                  >
                                     {game.partnerProfileImageUrl ? (
                                       <img
                                         src={getSharedAssetUrl(game.partnerProfileImageUrl)}
@@ -657,8 +676,8 @@ export default function PlayerHistory() {
                                         <Users className="w-5 h-5 text-emerald-600" />
                                       </div>
                                     )}
-                                    <span className="font-medium">{game.partnerName}</span>
-                                  </div>
+                                    <span className={`font-medium ${game.partnerId ? 'text-blue-600 hover:underline' : ''}`}>{game.partnerName}</span>
+                                  </button>
                                 </div>
                               )}
 
@@ -667,7 +686,15 @@ export default function PlayerHistory() {
                                 <div className="text-sm font-medium text-gray-600 mb-2">Opponents</div>
                                 <div className="space-y-2">
                                   {game.opponents.map((opp, idx) => (
-                                    <div key={idx} className="flex items-center gap-3">
+                                    <button
+                                      key={idx}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (opp.userId) setSelectedProfileUserId(opp.userId)
+                                      }}
+                                      className={`flex items-center gap-3 ${opp.userId ? 'hover:bg-gray-100 rounded-lg p-1 -m-1 cursor-pointer' : ''}`}
+                                      disabled={!opp.userId}
+                                    >
                                       {opp.profileImageUrl ? (
                                         <img
                                           src={getSharedAssetUrl(opp.profileImageUrl)}
@@ -679,8 +706,8 @@ export default function PlayerHistory() {
                                           <Users className="w-5 h-5 text-gray-600" />
                                         </div>
                                       )}
-                                      <span className="font-medium">{opp.name}</span>
-                                    </div>
+                                      <span className={`font-medium ${opp.userId ? 'text-blue-600 hover:underline' : ''}`}>{opp.name}</span>
+                                    </button>
                                   ))}
                                 </div>
                               </div>
@@ -1110,8 +1137,11 @@ export default function PlayerHistory() {
               ) : (
                 <div className="space-y-3">
                   {payments.map(payment => (
-                    <div key={payment.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-start justify-between">
+                    <div key={payment.id} className="border rounded-lg overflow-hidden">
+                      <div
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
+                        onClick={() => togglePaymentExpand(payment.id)}
+                      >
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-medium text-gray-900">{payment.eventName}</h3>
@@ -1119,6 +1149,12 @@ export default function PlayerHistory() {
                               {getPaymentStatusIcon(payment.status)}
                               {payment.status === 'PendingVerification' ? 'Pending Verification' : payment.status}
                             </span>
+                            {payment.registrations?.length > 0 && !payment.feesMatch && (
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Fee mismatch
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-gray-500 space-y-1">
                             {payment.divisionName && (
@@ -1135,34 +1171,132 @@ export default function PlayerHistory() {
                             )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-gray-900">
-                            ${payment.amount?.toFixed(2) || '0.00'}
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-gray-900">
+                              ${payment.amount?.toFixed(2) || '0.00'}
+                            </div>
+                            <div className="text-sm text-gray-500">{formatDate(payment.createdAt)}</div>
                           </div>
-                          <div className="text-sm text-gray-500">{formatDate(payment.createdAt)}</div>
-                          {payment.paymentProofUrl && (
-                            <a
-                              href={getSharedAssetUrl(payment.paymentProofUrl)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1"
-                            >
-                              <Image className="w-3 h-3" />
-                              View Proof
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                          {expandedPayments[payment.id] ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
                           )}
                         </div>
                       </div>
-                      {payment.verifiedAt && (
-                        <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-                          Verified {formatDate(payment.verifiedAt)}
-                          {payment.verifiedByName && ` by ${payment.verifiedByName}`}
-                        </div>
-                      )}
-                      {payment.notes && (
-                        <div className="mt-2 pt-2 border-t text-xs text-gray-600 italic">
-                          {payment.notes}
+
+                      {/* Expanded Details */}
+                      {expandedPayments[payment.id] && (
+                        <div className="border-t bg-gray-50 p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Payment Proof */}
+                            {payment.paymentProofUrl && (
+                              <div>
+                                <div className="text-sm font-medium text-gray-600 mb-2">Payment Proof</div>
+                                <div className="bg-white rounded-lg border p-2">
+                                  <img
+                                    src={getSharedAssetUrl(payment.paymentProofUrl)}
+                                    alt="Payment proof"
+                                    className="max-w-full max-h-64 object-contain rounded cursor-pointer hover:opacity-90"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedProofImage(getSharedAssetUrl(payment.paymentProofUrl))
+                                    }}
+                                  />
+                                  <a
+                                    href={getSharedAssetUrl(payment.paymentProofUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Open in new tab
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Registrations Applied */}
+                            <div>
+                              <div className="text-sm font-medium text-gray-600 mb-2">
+                                Registrations Applied ({payment.registrations?.length || 0})
+                              </div>
+                              {payment.registrations?.length > 0 ? (
+                                <div className="bg-white rounded-lg border divide-y">
+                                  {payment.registrations.map((reg, idx) => (
+                                    <div key={idx} className="p-3 text-sm">
+                                      <div className="font-medium text-gray-900">{reg.playerName}</div>
+                                      <div className="text-gray-500">
+                                        {reg.eventName} - {reg.divisionName}
+                                      </div>
+                                      <div className="flex justify-between mt-1">
+                                        <span className="text-gray-500">{reg.feeName || 'Registration Fee'}</span>
+                                        <span className="font-medium">${reg.feeAmount?.toFixed(2) || '0.00'}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="p-3 bg-gray-50 flex justify-between font-medium">
+                                    <span>Total Registration Fees</span>
+                                    <span className={payment.feesMatch ? 'text-green-600' : 'text-amber-600'}>
+                                      ${payment.totalRegistrationFees?.toFixed(2) || '0.00'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="bg-white rounded-lg border p-3 text-sm text-gray-500 italic">
+                                  No registrations linked to this payment
+                                </div>
+                              )}
+
+                              {/* Fee Comparison */}
+                              {payment.registrations?.length > 0 && (
+                                <div className={`mt-3 p-3 rounded-lg text-sm ${
+                                  payment.feesMatch
+                                    ? 'bg-green-50 border border-green-200'
+                                    : 'bg-amber-50 border border-amber-200'
+                                }`}>
+                                  <div className="flex justify-between mb-1">
+                                    <span>Payment Amount:</span>
+                                    <span className="font-medium">${payment.amount?.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between mb-1">
+                                    <span>Total Fees:</span>
+                                    <span className="font-medium">${payment.totalRegistrationFees?.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between pt-1 border-t">
+                                    <span>Difference:</span>
+                                    <span className={`font-bold ${payment.feesMatch ? 'text-green-600' : 'text-amber-600'}`}>
+                                      {payment.feesMatch ? (
+                                        <span className="flex items-center gap-1">
+                                          <CheckCircle className="w-4 h-4" />
+                                          Matches
+                                        </span>
+                                      ) : (
+                                        `$${Math.abs(payment.amount - payment.totalRegistrationFees).toFixed(2)} ${
+                                          payment.amount > payment.totalRegistrationFees ? 'overpaid' : 'underpaid'
+                                        }`
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Additional Info */}
+                          <div className="mt-4 pt-4 border-t text-sm text-gray-500 space-y-1">
+                            {payment.verifiedAt && (
+                              <div>
+                                Verified {formatDate(payment.verifiedAt)}
+                                {payment.verifiedByName && ` by ${payment.verifiedByName}`}
+                              </div>
+                            )}
+                            {payment.notes && (
+                              <div className="italic">{payment.notes}</div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1173,6 +1307,37 @@ export default function PlayerHistory() {
           </div>
         )}
       </div>
+
+      {/* Public Profile Modal */}
+      {selectedProfileUserId && (
+        <PublicProfileModal
+          userId={selectedProfileUserId}
+          onClose={() => setSelectedProfileUserId(null)}
+        />
+      )}
+
+      {/* Payment Proof Image Modal */}
+      {selectedProofImage && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[1100]"
+          onClick={() => setSelectedProofImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <button
+              onClick={() => setSelectedProofImage(null)}
+              className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={selectedProofImage}
+              alt="Payment proof"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -883,30 +883,67 @@ public class PlayerHistoryController : ControllerBase
             if (unit != null) units[unitId] = unit;
         }
 
-        // Map to DTOs
-        var payments = paymentRecords.Select(p => new PlayerPaymentHistoryDto
+        // Fetch registrations linked to these payments
+        var paymentIds = paymentRecords.Select(p => p.Id).ToList();
+        var registrationsByPayment = new Dictionary<int, List<PaymentRegistrationDto>>();
+
+        foreach (var paymentId in paymentIds)
         {
-            Id = p.Id,
-            EventId = p.RelatedObjectId,
-            EventName = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt) ? evt.Name : "Unknown Event",
-            EventDate = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt2) ? evt2.StartDate : null,
-            UnitId = p.SecondaryObjectId,
-            UnitName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit) ? unit.Name : null,
-            DivisionName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit2) && unit2.Division != null ? unit2.Division.Name : null,
-            Amount = p.Amount,
-            PaymentMethod = p.PaymentMethod,
-            PaymentReference = p.PaymentReference,
-            PaymentProofUrl = p.PaymentProofUrl,
-            ReferenceId = p.ReferenceId,
-            Status = p.Status,
-            IsApplied = p.IsApplied,
-            AppliedAt = p.AppliedAt,
-            VerifiedAt = p.VerifiedAt,
-            VerifiedByName = p.VerifiedByUser != null
-                ? Utility.FormatName(p.VerifiedByUser.LastName, p.VerifiedByUser.FirstName)
-                : null,
-            Notes = p.Notes,
-            CreatedAt = p.CreatedAt
+            var members = await _context.EventUnitMembers
+                .Include(m => m.Unit)
+                    .ThenInclude(u => u!.Division)
+                .Include(m => m.Unit)
+                    .ThenInclude(u => u!.Event)
+                .Include(m => m.User)
+                .Include(m => m.SelectedFee)
+                .Where(m => m.PaymentId == paymentId)
+                .ToListAsync();
+
+            registrationsByPayment[paymentId] = members.Select(m => new PaymentRegistrationDto
+            {
+                MemberId = m.Id,
+                UnitId = m.UnitId,
+                UnitName = m.Unit?.Name ?? "Unknown Unit",
+                DivisionId = m.Unit?.DivisionId ?? 0,
+                DivisionName = m.Unit?.Division?.Name ?? "Unknown Division",
+                EventId = m.Unit?.EventId ?? 0,
+                EventName = m.Unit?.Event?.Name ?? "Unknown Event",
+                PlayerName = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "Unknown Player",
+                FeeAmount = m.SelectedFee?.Amount ?? m.AmountPaid,
+                FeeName = m.SelectedFee?.Name
+            }).ToList();
+        }
+
+        // Map to DTOs
+        var payments = paymentRecords.Select(p =>
+        {
+            var regs = registrationsByPayment.TryGetValue(p.Id, out var r) ? r : new List<PaymentRegistrationDto>();
+            return new PlayerPaymentHistoryDto
+            {
+                Id = p.Id,
+                EventId = p.RelatedObjectId,
+                EventName = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt) ? evt.Name : "Unknown Event",
+                EventDate = p.RelatedObjectId.HasValue && events.TryGetValue(p.RelatedObjectId.Value, out var evt2) ? evt2.StartDate : null,
+                UnitId = p.SecondaryObjectId,
+                UnitName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit) ? unit.Name : null,
+                DivisionName = p.SecondaryObjectId.HasValue && units.TryGetValue(p.SecondaryObjectId.Value, out var unit2) && unit2.Division != null ? unit2.Division.Name : null,
+                Amount = p.Amount,
+                PaymentMethod = p.PaymentMethod,
+                PaymentReference = p.PaymentReference,
+                PaymentProofUrl = p.PaymentProofUrl,
+                ReferenceId = p.ReferenceId,
+                Status = p.Status,
+                IsApplied = p.IsApplied,
+                AppliedAt = p.AppliedAt,
+                VerifiedAt = p.VerifiedAt,
+                VerifiedByName = p.VerifiedByUser != null
+                    ? Utility.FormatName(p.VerifiedByUser.LastName, p.VerifiedByUser.FirstName)
+                    : null,
+                Notes = p.Notes,
+                CreatedAt = p.CreatedAt,
+                Registrations = regs,
+                TotalRegistrationFees = regs.Sum(reg => reg.FeeAmount)
+            };
         }).ToList();
 
         // Calculate summary stats for all payments (not just current page)
