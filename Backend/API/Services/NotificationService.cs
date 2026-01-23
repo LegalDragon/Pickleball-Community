@@ -384,9 +384,9 @@ public class NotificationService : INotificationService
         {
             try
             {
-                var userIds = await _context.EventRegistrations
-                    .Where(er => er.EventId == eventId)
-                    .Select(er => er.UserId)
+                var userIds = await _context.EventUnitMembers
+                    .Where(m => m.Unit != null && m.Unit.EventId == eventId && m.InviteStatus == "Accepted")
+                    .Select(m => m.UserId)
                     .Distinct()
                     .ToListAsync();
 

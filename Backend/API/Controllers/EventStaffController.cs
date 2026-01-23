@@ -794,39 +794,49 @@ public class EventStaffController : EventControllerBase
 
         if (permissions.CanCheckInPlayers || permissions.CanViewAllData)
         {
-            // Get registrations awaiting check-in
-            var pendingCheckIns = await _context.EventRegistrations
-                .Where(r => r.EventId == eventId &&
-                           r.Status == "Approved" &&
-                           r.CheckedInAt == null)
-                .Include(r => r.User)
-                .Include(r => r.Division)
-                .OrderBy(r => r.Division!.Name)
-                .ThenBy(r => r.User!.LastName)
+            // Get members awaiting check-in (using EventUnitMembers)
+            var pendingCheckIns = await _context.EventUnitMembers
+                .Include(m => m.Unit)
+                    .ThenInclude(u => u!.Division)
+                .Include(m => m.User)
+                .Where(m => m.Unit != null &&
+                           m.Unit.EventId == eventId &&
+                           m.Unit.Status != "Cancelled" &&
+                           m.InviteStatus == "Accepted" &&
+                           !m.IsCheckedIn)
+                .OrderBy(m => m.Unit!.Division!.Name)
+                .ThenBy(m => m.User!.LastName)
                 .Take(50)
-                .Select(r => new CheckInItemDto
+                .Select(m => new CheckInItemDto
                 {
-                    RegistrationId = r.Id,
-                    UserId = r.UserId,
-                    UserName = r.User != null ? $"{r.User.FirstName} {r.User.LastName}" : "Unknown",
-                    DivisionName = r.Division != null ? r.Division.Name : null,
-                    DivisionId = r.DivisionId
+                    RegistrationId = m.Id,
+                    UserId = m.UserId,
+                    UserName = m.User != null ? $"{m.User.FirstName} {m.User.LastName}" : "Unknown",
+                    DivisionName = m.Unit != null && m.Unit.Division != null ? m.Unit.Division.Name : null,
+                    DivisionId = m.Unit != null ? m.Unit.DivisionId : 0
                 })
                 .ToListAsync();
 
             dashboard.PendingCheckIns = pendingCheckIns;
 
-            // Get check-in stats
-            var totalApproved = await _context.EventRegistrations
-                .CountAsync(r => r.EventId == eventId && r.Status == "Approved");
-            var checkedIn = await _context.EventRegistrations
-                .CountAsync(r => r.EventId == eventId && r.Status == "Approved" && r.CheckedInAt != null);
+            // Get check-in stats (using EventUnitMembers)
+            var totalRegistered = await _context.EventUnitMembers
+                .CountAsync(m => m.Unit != null &&
+                                m.Unit.EventId == eventId &&
+                                m.Unit.Status != "Cancelled" &&
+                                m.InviteStatus == "Accepted");
+            var checkedIn = await _context.EventUnitMembers
+                .CountAsync(m => m.Unit != null &&
+                                m.Unit.EventId == eventId &&
+                                m.Unit.Status != "Cancelled" &&
+                                m.InviteStatus == "Accepted" &&
+                                m.IsCheckedIn);
 
             dashboard.CheckInStats = new CheckInStatsDto
             {
-                TotalApproved = totalApproved,
+                TotalApproved = totalRegistered,
                 CheckedIn = checkedIn,
-                Remaining = totalApproved - checkedIn
+                Remaining = totalRegistered - checkedIn
             };
         }
 

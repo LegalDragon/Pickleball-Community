@@ -463,9 +463,9 @@ public class NotificationsController : ControllerBase
                     {
                         return BadRequest(new { success = false, message = "TargetId (EventId) is required for event notifications" });
                     }
-                    var eventUserIds = await _context.EventRegistrations
-                        .Where(r => r.EventId == dto.TargetId.Value)
-                        .Select(r => r.UserId)
+                    var eventUserIds = await _context.EventUnitMembers
+                        .Where(m => m.Unit != null && m.Unit.EventId == dto.TargetId.Value && m.InviteStatus == "Accepted")
+                        .Select(m => m.UserId)
                         .Distinct()
                         .ToListAsync();
                     if (eventUserIds.Count > 0)

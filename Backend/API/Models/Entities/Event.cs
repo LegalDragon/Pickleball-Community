@@ -163,7 +163,7 @@ public class Event
     public ScoreFormat? DefaultScoreFormat { get; set; }
 
     public ICollection<EventDivision> Divisions { get; set; } = new List<EventDivision>();
-    public ICollection<EventRegistration> Registrations { get; set; } = new List<EventRegistration>();
+    // Registrations collection removed - use Units and EventUnitMembers instead
     public ICollection<EventUnit> Units { get; set; } = new List<EventUnit>();
     public ICollection<TournamentCourt> TournamentCourts { get; set; } = new List<TournamentCourt>();
     public ICollection<EventEncounter> Encounters { get; set; } = new List<EventEncounter>();
@@ -351,7 +351,7 @@ public class EventDivision
     [ForeignKey("DefaultScoreFormatId")]
     public ScoreFormat? DefaultScoreFormat { get; set; }
 
-    public ICollection<EventRegistration> Registrations { get; set; } = new List<EventRegistration>();
+    // Registrations collection removed - use Units and EventUnitMembers instead
     public ICollection<EventPartnerRequest> PartnerRequests { get; set; } = new List<EventPartnerRequest>();
     public ICollection<DivisionReward> Rewards { get; set; } = new List<DivisionReward>();
     public ICollection<EventUnit> Units { get; set; } = new List<EventUnit>();
@@ -362,57 +362,7 @@ public class EventDivision
     public ICollection<DivisionFee> Fees { get; set; } = new List<DivisionFee>();
 }
 
-public class EventRegistration
-{
-    public int Id { get; set; }
-
-    public int EventId { get; set; }
-    public int DivisionId { get; set; }
-    public int UserId { get; set; }
-
-    // Team info - null for singles, team ID for doubles/mixed
-    public int? TeamId { get; set; }
-
-    [MaxLength(100)]
-    public string? TeamName { get; set; }
-
-    // Payment
-    [MaxLength(20)]
-    public string PaymentStatus { get; set; } = "Pending"; // Pending, Paid, Refunded
-
-    [Column(TypeName = "decimal(10,2)")]
-    public decimal AmountPaid { get; set; } = 0;
-
-    public DateTime? PaidAt { get; set; }
-
-    [MaxLength(100)]
-    public string? PaymentReference { get; set; }
-
-    /// <summary>
-    /// The fee option selected by the user during registration
-    /// </summary>
-    public int? SelectedFeeId { get; set; }
-
-    // Status
-    [MaxLength(20)]
-    public string Status { get; set; } = "Registered"; // Registered, Confirmed, Waitlisted, Cancelled, CheckedIn
-
-    public DateTime RegisteredAt { get; set; } = DateTime.Now;
-    public DateTime? CheckedInAt { get; set; }
-
-    // Navigation
-    [ForeignKey("EventId")]
-    public Event? Event { get; set; }
-
-    [ForeignKey("DivisionId")]
-    public EventDivision? Division { get; set; }
-
-    [ForeignKey("UserId")]
-    public User? User { get; set; }
-
-    [ForeignKey("SelectedFeeId")]
-    public DivisionFee? SelectedFee { get; set; }
-}
+// NOTE: EventRegistration entity removed - registration now uses EventUnits + EventUnitMembers
 
 public class EventPartnerRequest
 {

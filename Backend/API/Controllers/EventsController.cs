@@ -1118,195 +1118,42 @@ public class EventsController : EventControllerBase
         }
     }
 
-    // POST: /events/{id}/register - Register for an event division
+    // POST: /events/{id}/register - DEPRECATED: Use POST /tournament/events/{id}/register instead
+    [Obsolete("Use TournamentController.RegisterForEvent (POST /tournament/events/{id}/register) instead")]
     [HttpPost("{id}/register")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<EventRegistrationDto>>> RegisterForEvent(int id, [FromBody] RegisterForEventDto dto)
+    public ActionResult<ApiResponse<EventRegistrationDto>> RegisterForEvent(int id, [FromBody] RegisterForEventDto dto)
     {
-        try
+        return BadRequest(new ApiResponse<EventRegistrationDto>
         {
-            var userId = GetUserId();
-            if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<EventRegistrationDto> { Success = false, Message = "User not authenticated" });
-
-            var evt = await _context.Events.FindAsync(id);
-            if (evt == null || !evt.IsActive || !evt.IsPublished || evt.TournamentStatus == "Draft")
-                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Event not found" });
-
-            // Check registration period
-            var now = DateTime.Now;
-            if (evt.RegistrationOpenDate.HasValue && now < evt.RegistrationOpenDate.Value)
-                return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Registration has not opened yet" });
-
-            if (evt.RegistrationCloseDate.HasValue && now > evt.RegistrationCloseDate.Value)
-                return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Registration has closed" });
-
-            var division = await _context.EventDivisions.FindAsync(dto.DivisionId);
-            if (division == null || division.EventId != id || !division.IsActive)
-                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Division not found" });
-
-            // Check MaxPlayers capacity
-            if (division.MaxPlayers.HasValue)
-            {
-                var currentPlayerCount = await _context.EventRegistrations
-                    .CountAsync(r => r.DivisionId == dto.DivisionId && r.Status != "Cancelled");
-
-                if (currentPlayerCount >= division.MaxPlayers.Value)
-                {
-                    return BadRequest(new ApiResponse<EventRegistrationDto>
-                    {
-                        Success = false,
-                        Message = $"Division '{division.Name}' has reached its maximum capacity of {division.MaxPlayers.Value} players."
-                    });
-                }
-            }
-
-            // Check if already registered for this division
-            var existingReg = await _context.EventRegistrations
-                .FirstOrDefaultAsync(r => r.EventId == id && r.DivisionId == dto.DivisionId && r.UserId == userId.Value);
-
-            if (existingReg != null && existingReg.Status != "Cancelled")
-                return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Already registered for this division" });
-
-            // Check if event allows multiple divisions
-            if (!evt.AllowMultipleDivisions)
-            {
-                // Check if user is already registered for any other division in this event
-                var hasOtherRegistration = await _context.EventRegistrations
-                    .AnyAsync(r => r.EventId == id && r.UserId == userId.Value && r.Status != "Cancelled");
-
-                if (hasOtherRegistration)
-                    return BadRequest(new ApiResponse<EventRegistrationDto> { Success = false, Message = "This event only allows registration for one division" });
-            }
-
-            // Calculate fee
-            var fee = evt.RegistrationFee + (division.DivisionFee ?? evt.PerDivisionFee);
-
-            var registration = new EventRegistration
-            {
-                EventId = id,
-                DivisionId = dto.DivisionId,
-                UserId = userId.Value,
-                TeamName = dto.TeamName,
-                AmountPaid = 0,
-                PaymentStatus = fee > 0 ? "Pending" : "Paid",
-                Status = "Registered"
-            };
-
-            _context.EventRegistrations.Add(registration);
-            await _context.SaveChangesAsync();
-
-            var user = await _context.Users.FindAsync(userId.Value);
-            var userName = user != null ? Utility.FormatName(user.LastName, user.FirstName) : "Someone";
-
-            // Notify event organizer about new registration (don't notify self)
-            if (evt.OrganizedByUserId != userId.Value)
-            {
-                await _notificationService.CreateAndSendAsync(
-                    evt.OrganizedByUserId,
-                    "EventRegistration",
-                    "New Event Registration",
-                    $"{userName} registered for {evt.Name} ({division.Name})",
-                    $"/events?id={id}",
-                    "EventRegistration",
-                    registration.Id
-                );
-            }
-
-            // Grant "Event Participant" award
-            await _activityAwardService.GrantJoinedEventAwardAsync(userId.Value, id, evt.Name);
-
-            return Ok(new ApiResponse<EventRegistrationDto>
-            {
-                Success = true,
-                Data = new EventRegistrationDto
-                {
-                    Id = registration.Id,
-                    EventId = registration.EventId,
-                    DivisionId = registration.DivisionId,
-                    UserId = registration.UserId,
-                    UserName = userName,
-                    TeamName = registration.TeamName,
-                    PaymentStatus = registration.PaymentStatus,
-                    AmountPaid = registration.AmountPaid,
-                    Status = registration.Status,
-                    RegisteredAt = registration.RegisteredAt
-                },
-                Message = "Registration successful"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error registering for event");
-            return StatusCode(500, new ApiResponse<EventRegistrationDto> { Success = false, Message = "An error occurred" });
-        }
+            Success = false,
+            Message = "This endpoint is deprecated. Use POST /tournament/events/{id}/register instead."
+        });
     }
 
-    // DELETE: /events/{id}/register/{divisionId} - Cancel registration
+    // DELETE: /events/{id}/register/{divisionId} - DEPRECATED: Use DELETE /tournament/units/{unitId} instead
+    [Obsolete("Use TournamentController endpoints for registration management")]
     [HttpDelete("{id}/register/{divisionId}")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<bool>>> CancelRegistration(int id, int divisionId)
+    public ActionResult<ApiResponse<bool>> CancelRegistration(int id, int divisionId)
     {
-        try
+        return BadRequest(new ApiResponse<bool>
         {
-            var userId = GetUserId();
-            if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<bool> { Success = false, Message = "User not authenticated" });
-
-            var registration = await _context.EventRegistrations
-                .FirstOrDefaultAsync(r => r.EventId == id && r.DivisionId == divisionId && r.UserId == userId.Value);
-
-            if (registration == null)
-                return NotFound(new ApiResponse<bool> { Success = false, Message = "Registration not found" });
-
-            registration.Status = "Cancelled";
-            await _context.SaveChangesAsync();
-
-            return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Registration cancelled" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error cancelling registration");
-            return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred" });
-        }
+            Success = false,
+            Message = "This endpoint is deprecated. Use DELETE /tournament/units/{unitId} to cancel registration."
+        });
     }
 
-    // GET: /events/{id}/divisions/{divisionId}/registrations - Get division registrations
+    // GET: /events/{id}/divisions/{divisionId}/registrations - DEPRECATED: Use GET /tournament/events/{id}/units instead
+    [Obsolete("Use TournamentController endpoints to get registrations")]
     [HttpGet("{id}/divisions/{divisionId}/registrations")]
-    public async Task<ActionResult<ApiResponse<List<EventRegistrationDto>>>> GetDivisionRegistrations(int id, int divisionId)
+    public ActionResult<ApiResponse<List<EventRegistrationDto>>> GetDivisionRegistrations(int id, int divisionId)
     {
-        try
+        return BadRequest(new ApiResponse<List<EventRegistrationDto>>
         {
-            var registrations = await _context.EventRegistrations
-                .Include(r => r.User)
-                .Where(r => r.EventId == id && r.DivisionId == divisionId && r.Status != "Cancelled")
-                .OrderBy(r => r.RegisteredAt)
-                .Select(r => new EventRegistrationDto
-                {
-                    Id = r.Id,
-                    EventId = r.EventId,
-                    DivisionId = r.DivisionId,
-                    UserId = r.UserId,
-                    UserName = r.User != null ? (r.User.FirstName + " " + r.User.LastName).Trim() : "",
-                    UserProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
-                    UserExperienceLevel = r.User != null ? r.User.ExperienceLevel : null,
-                    TeamId = r.TeamId,
-                    TeamName = r.TeamName,
-                    PaymentStatus = r.PaymentStatus,
-                    AmountPaid = r.AmountPaid,
-                    Status = r.Status,
-                    RegisteredAt = r.RegisteredAt,
-                    CheckedInAt = r.CheckedInAt
-                })
-                .ToListAsync();
-
-            return Ok(new ApiResponse<List<EventRegistrationDto>> { Success = true, Data = registrations });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching registrations");
-            return StatusCode(500, new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "An error occurred" });
-        }
+            Success = false,
+            Message = "This endpoint is deprecated. Use GET /tournament/events/{id}/units?divisionId={divisionId} instead."
+        });
     }
 
     // POST: /events/{id}/partner-request - Create looking for partner request
@@ -2112,131 +1959,30 @@ public class EventsController : EventControllerBase
         }
     }
 
-    // GET: /events/{id}/registrations - Get all registrations for an event (organizer only)
+    // GET: /events/{id}/registrations - DEPRECATED: Use GET /tournament/events/{id}/units instead
+    [Obsolete("Use TournamentController endpoints for registration management")]
     [HttpGet("{id}/registrations")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<List<EventRegistrationDto>>>> GetAllEventRegistrations(int id)
+    public ActionResult<ApiResponse<List<EventRegistrationDto>>> GetAllEventRegistrations(int id)
     {
-        try
+        return BadRequest(new ApiResponse<List<EventRegistrationDto>>
         {
-            var userId = GetUserId();
-            if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "User not authenticated" });
-
-            var evt = await _context.Events.FindAsync(id);
-            if (evt == null || !evt.IsActive)
-                return NotFound(new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "Event not found" });
-
-            // Check if user is organizer or site admin
-            var isAdmin = await IsAdminAsync();
-            if (evt.OrganizedByUserId != userId.Value && !isAdmin)
-                return Forbid();
-
-            var registrations = await _context.EventRegistrations
-                .Include(r => r.User)
-                .Include(r => r.Division)
-                .Where(r => r.EventId == id && r.Status != "Cancelled")
-                .OrderBy(r => r.Division!.Name)
-                .ThenBy(r => r.RegisteredAt)
-                .Select(r => new EventRegistrationDto
-                {
-                    Id = r.Id,
-                    EventId = r.EventId,
-                    DivisionId = r.DivisionId,
-                    DivisionName = r.Division != null ? r.Division.Name : "",
-                    UserId = r.UserId,
-                    UserName = r.User != null ? (r.User.FirstName + " " + r.User.LastName).Trim() : "",
-                    UserProfileImageUrl = r.User != null ? r.User.ProfileImageUrl : null,
-                    UserExperienceLevel = r.User != null ? r.User.ExperienceLevel : null,
-                    TeamId = r.TeamId,
-                    TeamName = r.TeamName,
-                    PaymentStatus = r.PaymentStatus,
-                    AmountPaid = r.AmountPaid,
-                    Status = r.Status,
-                    RegisteredAt = r.RegisteredAt,
-                    CheckedInAt = r.CheckedInAt
-                })
-                .ToListAsync();
-
-            return Ok(new ApiResponse<List<EventRegistrationDto>> { Success = true, Data = registrations });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching event registrations");
-            return StatusCode(500, new ApiResponse<List<EventRegistrationDto>> { Success = false, Message = "An error occurred" });
-        }
+            Success = false,
+            Message = "This endpoint is deprecated. Use GET /tournament/events/{id}/units instead."
+        });
     }
 
-    // PUT: /events/{id}/registrations/{registrationId} - Update a registration (organizer only)
+    // PUT: /events/{id}/registrations/{registrationId} - DEPRECATED: Use PUT /tournament/units/{unitId} instead
+    [Obsolete("Use TournamentController endpoints for registration management")]
     [HttpPut("{id}/registrations/{registrationId}")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<EventRegistrationDto>>> UpdateRegistration(int id, int registrationId, [FromBody] UpdateRegistrationDto dto)
+    public ActionResult<ApiResponse<EventRegistrationDto>> UpdateRegistration(int id, int registrationId, [FromBody] UpdateRegistrationDto dto)
     {
-        try
+        return BadRequest(new ApiResponse<EventRegistrationDto>
         {
-            var userId = GetUserId();
-            if (!userId.HasValue)
-                return Unauthorized(new ApiResponse<EventRegistrationDto> { Success = false, Message = "User not authenticated" });
-
-            var evt = await _context.Events.FindAsync(id);
-            if (evt == null || !evt.IsActive)
-                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Event not found" });
-
-            // Check if user is organizer or site admin
-            var isAdmin = await IsAdminAsync();
-            if (evt.OrganizedByUserId != userId.Value && !isAdmin)
-                return Forbid();
-
-            var registration = await _context.EventRegistrations
-                .Include(r => r.User)
-                .FirstOrDefaultAsync(r => r.Id == registrationId && r.EventId == id);
-
-            if (registration == null)
-                return NotFound(new ApiResponse<EventRegistrationDto> { Success = false, Message = "Registration not found" });
-
-            // Update fields
-            if (dto.PaymentStatus != null)
-                registration.PaymentStatus = dto.PaymentStatus;
-            if (dto.AmountPaid.HasValue)
-                registration.AmountPaid = dto.AmountPaid.Value;
-            if (dto.TeamId.HasValue)
-                registration.TeamId = dto.TeamId.Value;
-            if (dto.TeamName != null)
-                registration.TeamName = dto.TeamName;
-            if (dto.Status != null)
-                registration.Status = dto.Status;
-            if (dto.CheckedIn.HasValue && dto.CheckedIn.Value)
-                registration.CheckedInAt = DateTime.Now;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new ApiResponse<EventRegistrationDto>
-            {
-                Success = true,
-                Data = new EventRegistrationDto
-                {
-                    Id = registration.Id,
-                    EventId = registration.EventId,
-                    DivisionId = registration.DivisionId,
-                    UserId = registration.UserId,
-                    UserName = registration.User != null ? Utility.FormatName(registration.User.LastName, registration.User.FirstName) : "",
-                    UserProfileImageUrl = registration.User?.ProfileImageUrl,
-                    TeamId = registration.TeamId,
-                    TeamName = registration.TeamName,
-                    PaymentStatus = registration.PaymentStatus,
-                    AmountPaid = registration.AmountPaid,
-                    Status = registration.Status,
-                    RegisteredAt = registration.RegisteredAt,
-                    CheckedInAt = registration.CheckedInAt
-                },
-                Message = "Registration updated"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating registration");
-            return StatusCode(500, new ApiResponse<EventRegistrationDto> { Success = false, Message = "An error occurred" });
-        }
+            Success = false,
+            Message = "This endpoint is deprecated. Use PUT /tournament/units/{unitId} or /tournament/members/{memberId} instead."
+        });
     }
 
     // Helper methods

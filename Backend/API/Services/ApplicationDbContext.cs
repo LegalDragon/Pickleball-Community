@@ -67,7 +67,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventType> EventTypes { get; set; }
     public DbSet<Event> Events { get; set; }
     public DbSet<EventDivision> EventDivisions { get; set; }
-    public DbSet<EventRegistration> EventRegistrations { get; set; }
+    // EventRegistrations removed - registration now uses EventUnits + EventUnitMembers
     public DbSet<EventPartnerRequest> EventPartnerRequests { get; set; }
     public DbSet<TeamUnit> TeamUnits { get; set; }
     public DbSet<AgeGroup> AgeGroups { get; set; }

@@ -8469,10 +8469,9 @@ public class TournamentController : EventControllerBase
             return Forbid();
 
         // Check if any registrations are using this fee
-        var usedByRegistrations = await _context.EventRegistrations.AnyAsync(r => r.SelectedFeeId == feeId);
         var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId == feeId);
 
-        if (usedByRegistrations || usedByMembers)
+        if (usedByMembers)
             return BadRequest(new ApiResponse<bool> { Success = false, Message = "Cannot delete fee that is in use by existing registrations" });
 
         _context.DivisionFees.Remove(fee);
@@ -8501,10 +8500,9 @@ public class TournamentController : EventControllerBase
 
         // Check if any existing fees are in use
         var existingFeeIds = division.Fees.Select(f => f.Id).ToList();
-        var usedByRegistrations = await _context.EventRegistrations.AnyAsync(r => r.SelectedFeeId != null && existingFeeIds.Contains(r.SelectedFeeId.Value));
         var usedByMembers = await _context.EventUnitMembers.AnyAsync(m => m.SelectedFeeId != null && existingFeeIds.Contains(m.SelectedFeeId.Value));
 
-        if (usedByRegistrations || usedByMembers)
+        if (usedByMembers)
             return BadRequest(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Cannot replace fees that are in use by existing registrations. Please update individual fees instead." });
 
         // Remove existing fees
