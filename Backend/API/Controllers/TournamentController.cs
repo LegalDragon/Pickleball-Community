@@ -523,7 +523,8 @@ public class TournamentController : EventControllerBase
             {
                 var firstUnit = units.First();
                 var division = firstUnit.Division;
-                var feeAmount = division?.DivisionFee ?? evt.PerDivisionFee ?? evt.RegistrationFee ?? 0;
+                var feeAmount = division?.DivisionFee
+                    ?? (evt.PerDivisionFee != 0 ? evt.PerDivisionFee : evt.RegistrationFee);
 
                 var emailBody = EmailTemplates.EventRegistrationConfirmation(
                     $"{user.FirstName} {user.LastName}".Trim(),
