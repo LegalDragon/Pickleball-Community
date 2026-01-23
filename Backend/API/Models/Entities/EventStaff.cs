@@ -114,6 +114,18 @@ public class EventStaff
     public string? AdminNotes { get; set; }
 
     /// <summary>
+    /// JSON array of preferred role IDs the staff member is interested in
+    /// </summary>
+    [MaxLength(500)]
+    public string? PreferredRoles { get; set; }
+
+    /// <summary>
+    /// Contact phone number for the staff member
+    /// </summary>
+    [MaxLength(30)]
+    public string? ContactPhone { get; set; }
+
+    /// <summary>
     /// User who approved/assigned this staff member
     /// </summary>
     public int? AssignedByUserId { get; set; }

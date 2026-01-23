@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, MapPin, Plus, Trash2, Edit2, Check, X, Users, Calendar,
   Clock, Save, RefreshCw, ChevronDown, ChevronRight, Grid3X3, List,
-  Play, AlertCircle, Loader2, Settings, Layers, LayoutGrid
+  Play, AlertCircle, Loader2, Settings, Layers, LayoutGrid, Share2,
+  CheckCircle2, XCircle, Eye, EyeOff
 } from 'lucide-react'
 import { tournamentApi } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
@@ -26,6 +27,11 @@ export default function CourtPlanning() {
   const [editingGroup, setEditingGroup] = useState(null)
   const [newGroupName, setNewGroupName] = useState('')
   const [selectedEncounters, setSelectedEncounters] = useState(new Set())
+
+  // Schedule publishing states
+  const [validationResult, setValidationResult] = useState(null)
+  const [validating, setValidating] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   // Load data
   const loadData = useCallback(async () => {
@@ -212,6 +218,65 @@ export default function CourtPlanning() {
     }
   }
 
+  // Validate schedule
+  const handleValidateSchedule = async () => {
+    try {
+      setValidating(true)
+      const res = await tournamentApi.validateSchedule(eventId)
+      if (res.success) {
+        setValidationResult(res.data)
+        if (res.data.isValid) {
+          toast.success('Schedule is valid!')
+        } else {
+          toast.warn(`Found ${res.data.conflictCount} conflicts`)
+        }
+      }
+    } catch (err) {
+      toast.error('Failed to validate schedule')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  // Publish schedule
+  const handlePublishSchedule = async () => {
+    if (!confirm('Publish the schedule? Players and spectators will be able to see it.')) return
+
+    try {
+      setPublishing(true)
+      const res = await tournamentApi.publishSchedule(eventId)
+      if (res.success) {
+        toast.success('Schedule published!')
+        loadData()
+      }
+    } catch (err) {
+      if (err.response?.data?.data?.conflictCount) {
+        setValidationResult(err.response.data.data)
+        toast.error(`Cannot publish: ${err.response.data.data.conflictCount} conflicts found`)
+      } else {
+        toast.error(err.response?.data?.message || 'Failed to publish schedule')
+      }
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  // Unpublish schedule
+  const handleUnpublishSchedule = async () => {
+    if (!confirm('Unpublish the schedule? Players will no longer see it.')) return
+
+    try {
+      setPublishing(true)
+      await tournamentApi.unpublishSchedule(eventId)
+      toast.success('Schedule unpublished')
+      loadData()
+    } catch (err) {
+      toast.error('Failed to unpublish schedule')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   // Toggle encounter selection
   const toggleEncounterSelection = (encId) => {
     setSelectedEncounters(prev => {
@@ -282,7 +347,8 @@ export default function CourtPlanning() {
               { key: 'schedule', label: 'Schedule', icon: Calendar },
               { key: 'groups', label: 'Court Groups', icon: Layers },
               { key: 'divisions', label: 'Division Assignment', icon: Grid3X3 },
-              { key: 'timeline', label: 'Timeline', icon: Clock }
+              { key: 'timeline', label: 'Timeline', icon: Clock },
+              { key: 'publish', label: 'Publish', icon: Share2 }
             ].map(tab => (
               <button
                 key={tab.key}
@@ -349,6 +415,18 @@ export default function CourtPlanning() {
             allCourts={allCourts}
             selectedDivision={selectedDivision}
             setSelectedDivision={setSelectedDivision}
+          />
+        )}
+
+        {activeTab === 'publish' && (
+          <PublishTab
+            data={data}
+            validationResult={validationResult}
+            validating={validating}
+            publishing={publishing}
+            onValidate={handleValidateSchedule}
+            onPublish={handlePublishSchedule}
+            onUnpublish={handleUnpublishSchedule}
           />
         )}
       </div>
@@ -1057,6 +1135,197 @@ function TimelineTab({ data, allCourts, selectedDivision, setSelectedDivision })
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// =====================================================
+// Publish Tab
+// =====================================================
+function PublishTab({ data, validationResult, validating, publishing, onValidate, onPublish, onUnpublish }) {
+  const isPublished = !!data?.schedulePublishedAt
+  const hasConflicts = validationResult?.conflictCount > 0 || data?.scheduleConflictCount > 0
+
+  // Calculate stats
+  const totalEncounters = data?.encounters?.filter(e => !e.isBye)?.length || 0
+  const assignedEncounters = data?.encounters?.filter(e => !e.isBye && e.courtId && e.estimatedStartTime)?.length || 0
+  const divisionsWithCourts = data?.divisions?.filter(d => d.assignedCourtGroups?.length > 0)?.length || 0
+  const totalDivisions = data?.divisions?.length || 0
+
+  return (
+    <div className="space-y-6">
+      {/* Status Banner */}
+      <div className={`rounded-xl border p-6 ${
+        isPublished
+          ? 'bg-green-50 border-green-200'
+          : 'bg-yellow-50 border-yellow-200'
+      }`}>
+        <div className="flex items-center gap-4">
+          {isPublished ? (
+            <CheckCircle2 className="w-10 h-10 text-green-600" />
+          ) : (
+            <EyeOff className="w-10 h-10 text-yellow-600" />
+          )}
+          <div>
+            <h2 className={`text-xl font-bold ${isPublished ? 'text-green-800' : 'text-yellow-800'}`}>
+              {isPublished ? 'Schedule Published' : 'Schedule Not Published'}
+            </h2>
+            <p className={`text-sm ${isPublished ? 'text-green-700' : 'text-yellow-700'}`}>
+              {isPublished
+                ? `Published on ${new Date(data.schedulePublishedAt).toLocaleString()}`
+                : 'Players and spectators cannot see the schedule yet'
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-sm text-gray-500 mb-1">Matches Assigned</div>
+          <div className="text-2xl font-bold">
+            {assignedEncounters} / {totalEncounters}
+          </div>
+          <div className={`text-sm ${assignedEncounters === totalEncounters ? 'text-green-600' : 'text-yellow-600'}`}>
+            {assignedEncounters === totalEncounters ? 'All matches have courts' : 'Some matches need courts'}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-sm text-gray-500 mb-1">Divisions with Courts</div>
+          <div className="text-2xl font-bold">
+            {divisionsWithCourts} / {totalDivisions}
+          </div>
+          <div className={`text-sm ${divisionsWithCourts === totalDivisions ? 'text-green-600' : 'text-yellow-600'}`}>
+            {divisionsWithCourts === totalDivisions ? 'All divisions assigned' : 'Some divisions need courts'}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-sm text-gray-500 mb-1">Schedule Conflicts</div>
+          <div className={`text-2xl font-bold ${hasConflicts ? 'text-red-600' : 'text-green-600'}`}>
+            {validationResult?.conflictCount ?? data?.scheduleConflictCount ?? '?'}
+          </div>
+          <div className={`text-sm ${hasConflicts ? 'text-red-600' : 'text-green-600'}`}>
+            {hasConflicts ? 'Conflicts need resolution' : 'No conflicts detected'}
+          </div>
+        </div>
+      </div>
+
+      {/* Validation Section */}
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <h3 className="font-medium">Schedule Validation</h3>
+          <button
+            onClick={onValidate}
+            disabled={validating}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {validating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Validate Schedule
+          </button>
+        </div>
+
+        {validationResult && (
+          <div className="p-4 space-y-4">
+            {/* Validation status */}
+            <div className={`flex items-center gap-3 p-3 rounded-lg ${
+              validationResult.isValid
+                ? 'bg-green-50 text-green-800'
+                : 'bg-red-50 text-red-800'
+            }`}>
+              {validationResult.isValid ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span>Schedule is valid and ready to publish!</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-5 h-5" />
+                  <span>Schedule has issues that need to be resolved</span>
+                </>
+              )}
+            </div>
+
+            {/* Warnings */}
+            {validationResult.warnings?.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-gray-700">Warnings</h4>
+                {validationResult.warnings.map((warning, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-yellow-700 text-sm">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{warning}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Conflicts */}
+            {validationResult.conflicts?.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-gray-700">Conflicts ({validationResult.conflicts.length})</h4>
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {validationResult.conflicts.map((conflict, idx) => (
+                    <div key={idx} className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+                      <div className="flex items-center gap-2 text-red-800 font-medium">
+                        <XCircle className="w-4 h-4" />
+                        {conflict.conflictType === 'CourtOverlap' && 'Court Time Overlap'}
+                        {conflict.conflictType === 'UnitOverlap' && 'Team Time Overlap'}
+                      </div>
+                      <p className="text-red-700 mt-1">{conflict.message}</p>
+                      {conflict.courtLabel && (
+                        <p className="text-red-600 text-xs mt-1">Court: {conflict.courtLabel}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!validationResult && (
+          <div className="p-8 text-center text-gray-500">
+            <Check className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <p>Click "Validate Schedule" to check for conflicts</p>
+          </div>
+        )}
+      </div>
+
+      {/* Publish Actions */}
+      <div className="bg-white rounded-xl border p-6">
+        <h3 className="font-medium text-gray-900 mb-4">Publish Actions</h3>
+
+        <div className="flex flex-wrap gap-4">
+          {!isPublished ? (
+            <button
+              onClick={onPublish}
+              disabled={publishing || validating}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 font-medium"
+            >
+              {publishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Eye className="w-5 h-5" />}
+              Publish Schedule
+            </button>
+          ) : (
+            <button
+              onClick={onUnpublish}
+              disabled={publishing}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 font-medium"
+            >
+              {publishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <EyeOff className="w-5 h-5" />}
+              Unpublish Schedule
+            </button>
+          )}
+        </div>
+
+        <p className="text-sm text-gray-500 mt-4">
+          {isPublished
+            ? 'The schedule is currently visible to players and spectators. Unpublish to make changes.'
+            : 'Publishing will make the schedule visible to all players and spectators.'
+          }
+        </p>
+      </div>
     </div>
   )
 }

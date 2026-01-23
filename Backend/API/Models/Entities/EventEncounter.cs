@@ -182,6 +182,16 @@ public class EventEncounter
     /// </summary>
     public DateTime? EstimatedStartTime { get; set; }
 
+    /// <summary>
+    /// Estimated duration in minutes for this encounter
+    /// </summary>
+    public int? EstimatedDurationMinutes { get; set; }
+
+    /// <summary>
+    /// Calculated end time based on start time and duration
+    /// </summary>
+    public DateTime? EstimatedEndTime { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 

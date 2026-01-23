@@ -118,6 +118,30 @@ public class Event
     [MaxLength(20)]
     public string TournamentStatus { get; set; } = "Draft";
 
+    // =====================================================
+    // Schedule Publishing
+    // =====================================================
+
+    /// <summary>
+    /// When the schedule was published for players/spectators to view
+    /// </summary>
+    public DateTime? SchedulePublishedAt { get; set; }
+
+    /// <summary>
+    /// User who published the schedule
+    /// </summary>
+    public int? SchedulePublishedByUserId { get; set; }
+
+    /// <summary>
+    /// When the schedule was last validated for conflicts
+    /// </summary>
+    public DateTime? ScheduleValidatedAt { get; set; }
+
+    /// <summary>
+    /// Number of schedule conflicts detected during last validation
+    /// </summary>
+    public int? ScheduleConflictCount { get; set; } = 0;
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
     public bool IsActive { get; set; } = true;
@@ -273,6 +297,20 @@ public class EventDivision
     /// Used for scheduling calculations and court block planning.
     /// </summary>
     public int? EstimatedMatchDurationMinutes { get; set; } = 20;
+
+    // =====================================================
+    // Schedule Publishing
+    // =====================================================
+
+    /// <summary>
+    /// When the schedule was published for players/spectators to view
+    /// </summary>
+    public DateTime? SchedulePublishedAt { get; set; }
+
+    /// <summary>
+    /// User who published the schedule
+    /// </summary>
+    public int? SchedulePublishedByUserId { get; set; }
 
     public int SortOrder { get; set; } = 0;
     public bool IsActive { get; set; } = true;

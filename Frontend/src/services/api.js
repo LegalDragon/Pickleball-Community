@@ -1609,6 +1609,18 @@ export const tournamentApi = {
     api.post(`/tournament/court-planning/auto-assign/${divisionId}`, options),
   clearDivisionCourtAssignments: (divisionId) =>
     api.post(`/tournament/court-planning/clear/${divisionId}`),
+  validateSchedule: (eventId) =>
+    api.get(`/tournament/court-planning/validate/${eventId}`),
+  publishSchedule: (eventId, validateFirst = true) =>
+    api.post(`/tournament/court-planning/publish/${eventId}`, { eventId, validateFirst }),
+  unpublishSchedule: (eventId) =>
+    api.post(`/tournament/court-planning/unpublish/${eventId}`),
+  getTimelineData: (eventId) =>
+    api.get(`/tournament/court-planning/timeline/${eventId}`),
+  addDivisionCourtAssignment: (data) =>
+    api.post('/tournament/court-planning/division-assignment', data),
+  deleteDivisionCourtAssignment: (assignmentId) =>
+    api.delete(`/tournament/court-planning/division-assignment/${assignmentId}`),
 
   // =====================================================
   // Division Fees
@@ -2389,6 +2401,13 @@ export const eventStaffApi = {
   // Self-registration
   selfRegister: (eventId, data) => api.post(`/eventstaff/event/${eventId}/self-register`, data),
   getMyStatus: (eventId) => api.get(`/eventstaff/event/${eventId}/my-status`),
+  getAvailableRoles: (eventId) => api.get(`/eventstaff/event/${eventId}/available-roles`),
+
+  // Pending staff management (admin)
+  getPendingStaff: (eventId) => api.get(`/eventstaff/event/${eventId}/pending`),
+  approveStaff: (eventId, staffId, data) => api.post(`/eventstaff/event/${eventId}/staff/${staffId}/approve`, data),
+  declineStaff: (eventId, staffId, reason = null) =>
+    api.post(`/eventstaff/event/${eventId}/staff/${staffId}/decline`, { reason }),
 
   // Permission check
   hasPermission: (eventId, permission) => api.get(`/eventstaff/event/${eventId}/has-permission/${permission}`),

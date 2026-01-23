@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi } from '../services/api';
+import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi, eventStaffApi } from '../services/api';
 import SignatureCanvas from '../components/SignatureCanvas';
 
 const STEPS = [
@@ -46,6 +46,15 @@ export default function EventRegistration() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
+
+  // Registration type state (Player or Staff)
+  const [registrationType, setRegistrationType] = useState('Player');
+  const [staffRoles, setStaffRoles] = useState([]);
+  const [selectedStaffRoleId, setSelectedStaffRoleId] = useState(null);
+  const [staffPreferredRoles, setStaffPreferredRoles] = useState([]);
+  const [staffNotes, setStaffNotes] = useState('');
+  const [staffContactPhone, setStaffContactPhone] = useState('');
+  const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
 
   // Registration state
   const [selectedDivision, setSelectedDivision] = useState(null);
@@ -291,6 +300,52 @@ export default function EventRegistration() {
   const hasFeeOptions = (division) => {
     const availableFees = (division?.fees || []).filter(f => f.isActive && f.isCurrentlyAvailable);
     return availableFees.length > 0;
+  };
+
+  // Load staff roles when switching to staff registration
+  useEffect(() => {
+    if (registrationType === 'Staff' && eventId && staffRoles.length === 0) {
+      loadStaffRoles();
+    }
+  }, [registrationType, eventId]);
+
+  const loadStaffRoles = async () => {
+    try {
+      const res = await eventStaffApi.getAvailableRoles(eventId);
+      if (res.success) {
+        setStaffRoles(res.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load staff roles:', err);
+    }
+  };
+
+  // Handle staff registration
+  const handleStaffRegistration = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to register');
+      return;
+    }
+
+    try {
+      setIsSubmittingStaff(true);
+      const res = await eventStaffApi.selfRegister(eventId, {
+        roleId: selectedStaffRoleId || null,
+        preferredRoles: staffPreferredRoles.length > 0 ? JSON.stringify(staffPreferredRoles) : null,
+        notes: staffNotes || null,
+        contactPhone: staffContactPhone || null
+      });
+
+      if (res.success) {
+        toast.success('Staff registration submitted! Awaiting admin approval.');
+        // Navigate to event detail or my-events
+        navigate(`/events/${eventId}`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to register as staff');
+    } finally {
+      setIsSubmittingStaff(false);
+    }
   };
 
   // Handle division selection
@@ -935,6 +990,138 @@ export default function EventRegistration() {
         {/* Step 1: Select Division */}
         {currentStep === 1 && (
           <div className="space-y-4">
+            {/* Registration Type Selection */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Registration Type</h2>
+              <p className="text-gray-600 mb-4">How would you like to participate?</p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setRegistrationType('Player')}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${
+                    registrationType === 'Player'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <User className={`w-8 h-8 ${registrationType === 'Player' ? 'text-orange-600' : 'text-gray-400'}`} />
+                    <div>
+                      <div className="font-semibold text-gray-900">Player</div>
+                      <div className="text-sm text-gray-500">Compete in the tournament</div>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setRegistrationType('Staff')}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${
+                    registrationType === 'Staff'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className={`w-8 h-8 ${registrationType === 'Staff' ? 'text-orange-600' : 'text-gray-400'}`} />
+                    <div>
+                      <div className="font-semibold text-gray-900">Staff/Volunteer</div>
+                      <div className="text-sm text-gray-500">Help run the event</div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Staff Registration Form */}
+            {registrationType === 'Staff' && (
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">Staff Registration</h2>
+                <p className="text-gray-600 mb-6">Register as a volunteer or staff member. No waiver or fees required.</p>
+
+                {!isAuthenticated ? (
+                  <div className="text-center py-8">
+                    <LogIn className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-600 mb-4">Please log in to register as staff</p>
+                    <Link
+                      to={`/login?redirect=/events/${eventId}/register`}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                    >
+                      Log In
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Role Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Role (Optional)
+                      </label>
+                      <select
+                        value={selectedStaffRoleId || ''}
+                        onChange={(e) => setSelectedStaffRoleId(e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="">No preference / General volunteer</option>
+                        {staffRoles.map(role => (
+                          <option key={role.id} value={role.id}>
+                            {role.name} {role.description && `- ${role.description}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Contact Phone */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Contact Phone (Optional)
+                      </label>
+                      <input
+                        type="tel"
+                        value={staffContactPhone}
+                        onChange={(e) => setStaffContactPhone(e.target.value)}
+                        placeholder="Your phone number"
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Notes / Availability (Optional)
+                      </label>
+                      <textarea
+                        value={staffNotes}
+                        onChange={(e) => setStaffNotes(e.target.value)}
+                        placeholder="Let organizers know your availability or any special skills..."
+                        rows={3}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                      <span className="text-blue-800">
+                        Your registration will be pending until approved by an event organizer.
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={handleStaffRegistration}
+                      disabled={isSubmittingStaff}
+                      className="w-full py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSubmittingStaff ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-5 h-5" />
+                      )}
+                      Submit Staff Registration
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Player Registration: Division Selection */}
+            {registrationType === 'Player' && (
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Select a Division</h2>
               <p className="text-gray-600 mb-6">Choose the division you want to register for.</p>
@@ -1023,6 +1210,7 @@ export default function EventRegistration() {
                 })}
               </div>
             </div>
+            )}
           </div>
         )}
 

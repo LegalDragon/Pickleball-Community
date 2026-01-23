@@ -4205,7 +4205,7 @@ public class TournamentController : EventControllerBase
             })
             .ToListAsync();
 
-        // Get divisions with their court assignments
+        // Get divisions with their court assignments and phases
         var divisions = await _context.EventDivisions
             .Where(d => d.EventId == eventId)
             .OrderBy(d => d.SortOrder)
@@ -4217,8 +4217,11 @@ public class TournamentController : EventControllerBase
                 UnitCount = d.Units.Count(u => u.Status != "Cancelled"),
                 EncounterCount = _context.EventEncounters.Count(e => e.DivisionId == d.Id),
                 EstimatedMatchDurationMinutes = d.EstimatedMatchDurationMinutes,
+                MatchesPerEncounter = d.MatchesPerEncounter,
+                SchedulePublishedAt = d.SchedulePublishedAt,
                 AssignedCourtGroups = _context.DivisionCourtAssignments
-                    .Where(a => a.DivisionId == d.Id && a.PhaseId == null && a.IsActive)
+                    .Where(a => a.DivisionId == d.Id && a.IsActive)
+                    .OrderBy(a => a.Priority)
                     .Select(a => new DivisionCourtGroupAssignmentDto
                     {
                         Id = a.Id,
@@ -4226,7 +4229,24 @@ public class TournamentController : EventControllerBase
                         CourtGroupName = a.CourtGroup!.GroupName,
                         Priority = a.Priority,
                         ValidFromTime = a.ValidFromTime,
-                        ValidToTime = a.ValidToTime
+                        ValidToTime = a.ValidToTime,
+                        AssignmentMode = a.AssignmentMode,
+                        PoolName = a.PoolName,
+                        MatchFormatId = a.MatchFormatId,
+                        MatchFormatName = a.MatchFormat != null ? a.MatchFormat.Name : null
+                    }).ToList(),
+                Phases = _context.DivisionPhases
+                    .Where(p => p.DivisionId == d.Id && p.IsActive)
+                    .OrderBy(p => p.SortOrder)
+                    .Select(p => new DivisionPhasePlanningDto
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                        PhaseType = p.PhaseType,
+                        SortOrder = p.SortOrder,
+                        EncounterCount = _context.EventEncounters.Count(e => e.PhaseId == p.Id),
+                        EstimatedStartTime = p.EstimatedStartTime,
+                        EstimatedEndTime = p.EstimatedEndTime
                     }).ToList()
             })
             .ToListAsync();
@@ -4243,6 +4263,8 @@ public class TournamentController : EventControllerBase
                 Id = e.Id,
                 DivisionId = e.DivisionId,
                 DivisionName = e.Division!.Name,
+                PhaseId = e.PhaseId,
+                PhaseName = e.Phase != null ? e.Phase.Name : null,
                 RoundType = e.RoundType,
                 RoundNumber = e.RoundNumber,
                 RoundName = e.RoundName,
@@ -4258,6 +4280,8 @@ public class TournamentController : EventControllerBase
                 CourtGroupId = e.TournamentCourt != null ? e.TournamentCourt.CourtGroupId : null,
                 ScheduledTime = e.ScheduledTime,
                 EstimatedStartTime = e.EstimatedStartTime,
+                EstimatedEndTime = e.EstimatedEndTime,
+                EstimatedDurationMinutes = e.EstimatedDurationMinutes ?? e.Division!.EstimatedMatchDurationMinutes,
                 IsBye = e.Status == "Bye" || (e.Unit1Id == null && e.Unit2Id == null && e.Unit1SeedLabel == "BYE")
             })
             .ToListAsync();
@@ -4271,6 +4295,9 @@ public class TournamentController : EventControllerBase
                 EventName = evt.Name,
                 EventStartDate = evt.StartDate,
                 EventEndDate = evt.EndDate,
+                SchedulePublishedAt = evt.SchedulePublishedAt,
+                ScheduleConflictCount = evt.ScheduleConflictCount,
+                ScheduleValidatedAt = evt.ScheduleValidatedAt,
                 CourtGroups = courtGroups,
                 UnassignedCourts = unassignedCourts,
                 Divisions = divisions,
@@ -4387,7 +4414,10 @@ public class TournamentController : EventControllerBase
                     CourtGroupId = groupId,
                     Priority = priority++,
                     ValidFromTime = request.ValidFromTime,
-                    ValidToTime = request.ValidToTime
+                    ValidToTime = request.ValidToTime,
+                    AssignmentMode = request.AssignmentMode,
+                    PoolName = request.PoolName,
+                    MatchFormatId = request.MatchFormatId
                 });
             }
         }
@@ -4471,6 +4501,515 @@ public class TournamentController : EventControllerBase
             Success = true,
             Message = $"Cleared court/time assignments for {cleared} encounters"
         });
+    }
+
+    /// <summary>
+    /// Validate schedule for conflicts before publishing
+    /// </summary>
+    [Authorize]
+    [HttpGet("court-planning/validate/{eventId}")]
+    public async Task<ActionResult<ApiResponse<ScheduleValidationResult>>> ValidateSchedule(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<ScheduleValidationResult> { Success = false, Message = "Unauthorized" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var result = await ValidateEventScheduleAsync(eventId);
+
+        // Update event with validation results
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt != null)
+        {
+            evt.ScheduleValidatedAt = DateTime.Now;
+            evt.ScheduleConflictCount = result.ConflictCount;
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new ApiResponse<ScheduleValidationResult>
+        {
+            Success = true,
+            Data = result
+        });
+    }
+
+    /// <summary>
+    /// Publish the event schedule for players/spectators to view
+    /// </summary>
+    [Authorize]
+    [HttpPost("court-planning/publish/{eventId}")]
+    public async Task<ActionResult<ApiResponse<object>>> PublishSchedule(int eventId, [FromBody] SchedulePublishRequest? request = null)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
+
+        // Validate first if requested
+        if (request?.ValidateFirst != false)
+        {
+            var validation = await ValidateEventScheduleAsync(eventId);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Cannot publish: {validation.ConflictCount} conflicts found",
+                    Data = validation
+                });
+            }
+        }
+
+        // Mark event as published
+        evt.SchedulePublishedAt = DateTime.Now;
+        evt.SchedulePublishedByUserId = userId.Value;
+        evt.UpdatedAt = DateTime.Now;
+
+        // Also mark all divisions as published
+        var divisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId && d.IsActive)
+            .ToListAsync();
+
+        foreach (var division in divisions)
+        {
+            division.SchedulePublishedAt = DateTime.Now;
+            division.SchedulePublishedByUserId = userId.Value;
+            division.UpdatedAt = DateTime.Now;
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Schedule published for event {EventId} by user {UserId}", eventId, userId.Value);
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = "Schedule published successfully",
+            Data = new { PublishedAt = evt.SchedulePublishedAt }
+        });
+    }
+
+    /// <summary>
+    /// Unpublish the event schedule
+    /// </summary>
+    [Authorize]
+    [HttpPost("court-planning/unpublish/{eventId}")]
+    public async Task<ActionResult<ApiResponse<object>>> UnpublishSchedule(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
+
+        evt.SchedulePublishedAt = null;
+        evt.SchedulePublishedByUserId = null;
+        evt.UpdatedAt = DateTime.Now;
+
+        // Also unpublish all divisions
+        var divisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId && d.IsActive)
+            .ToListAsync();
+
+        foreach (var division in divisions)
+        {
+            division.SchedulePublishedAt = null;
+            division.SchedulePublishedByUserId = null;
+            division.UpdatedAt = DateTime.Now;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = "Schedule unpublished"
+        });
+    }
+
+    /// <summary>
+    /// Get timeline data for visualizing court schedules
+    /// </summary>
+    [HttpGet("court-planning/timeline/{eventId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<TimelineDataDto>>> GetTimelineData(int eventId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<TimelineDataDto> { Success = false, Message = "Event not found" });
+
+        var isPublished = evt.SchedulePublishedAt.HasValue;
+
+        // Get court data with grouped encounters
+        var courts = await _context.TournamentCourts
+            .Where(c => c.EventId == eventId && c.IsActive)
+            .OrderBy(c => c.SortOrder)
+            .Select(c => new TimelineCourtDto
+            {
+                Id = c.Id,
+                CourtLabel = c.CourtLabel,
+                CourtGroupId = c.CourtGroupId,
+                CourtGroupName = c.CourtGroup != null ? c.CourtGroup.GroupName : null,
+                LocationArea = c.CourtGroup != null ? c.CourtGroup.LocationArea : null,
+                SortOrder = c.SortOrder,
+                Blocks = new List<TimelineBlockDto>()
+            })
+            .ToListAsync();
+
+        // Get encounters with time assignments
+        var encounters = await _context.EventEncounters
+            .Where(e => e.EventId == eventId && e.TournamentCourtId != null && e.EstimatedStartTime != null)
+            .Include(e => e.Division)
+            .Include(e => e.Phase)
+            .Include(e => e.Unit1)
+            .Include(e => e.Unit2)
+            .Include(e => e.TournamentCourt)
+            .ToListAsync();
+
+        // Build timeline blocks for each court
+        foreach (var court in courts)
+        {
+            var courtEncounters = encounters
+                .Where(e => e.TournamentCourtId == court.Id)
+                .OrderBy(e => e.EstimatedStartTime)
+                .ToList();
+
+            foreach (var enc in courtEncounters)
+            {
+                var duration = enc.EstimatedDurationMinutes ?? enc.Division?.EstimatedMatchDurationMinutes ?? 20;
+                var endTime = enc.EstimatedEndTime ?? enc.EstimatedStartTime!.Value.AddMinutes(duration);
+
+                court.Blocks.Add(new TimelineBlockDto
+                {
+                    EncounterId = enc.Id,
+                    DivisionId = enc.DivisionId,
+                    DivisionName = enc.Division?.Name ?? "",
+                    DivisionColor = GetDivisionColor(enc.DivisionId),
+                    PhaseId = enc.PhaseId,
+                    PhaseName = enc.Phase?.Name,
+                    RoundName = enc.RoundName,
+                    EncounterLabel = enc.EncounterLabel ?? $"Match {enc.EncounterNumber}",
+                    Unit1Name = enc.Unit1?.Name ?? enc.Unit1SeedLabel,
+                    Unit2Name = enc.Unit2?.Name ?? enc.Unit2SeedLabel,
+                    StartTime = enc.EstimatedStartTime!.Value,
+                    EndTime = endTime,
+                    DurationMinutes = duration,
+                    Status = enc.Status,
+                    HasConflict = false // Will be populated by validation
+                });
+            }
+        }
+
+        // Check for conflicts
+        foreach (var court in courts)
+        {
+            for (int i = 0; i < court.Blocks.Count - 1; i++)
+            {
+                var current = court.Blocks[i];
+                var next = court.Blocks[i + 1];
+                if (current.EndTime > next.StartTime)
+                {
+                    current.HasConflict = true;
+                    next.HasConflict = true;
+                }
+            }
+        }
+
+        // Get division summary
+        var divisionSummary = await _context.EventDivisions
+            .Where(d => d.EventId == eventId && d.IsActive)
+            .Select(d => new TimelineDivisionDto
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Color = null, // Will be assigned
+                EncounterCount = d.Encounters.Count,
+                AssignedCount = d.Encounters.Count(e => e.TournamentCourtId != null && e.EstimatedStartTime != null),
+                FirstEncounterTime = d.Encounters
+                    .Where(e => e.EstimatedStartTime != null)
+                    .Min(e => e.EstimatedStartTime),
+                LastEncounterTime = d.Encounters
+                    .Where(e => e.EstimatedStartTime != null)
+                    .Max(e => e.EstimatedStartTime)
+            })
+            .ToListAsync();
+
+        // Assign colors to divisions
+        for (int i = 0; i < divisionSummary.Count; i++)
+        {
+            divisionSummary[i].Color = GetDivisionColor(divisionSummary[i].Id);
+        }
+
+        return Ok(new ApiResponse<TimelineDataDto>
+        {
+            Success = true,
+            Data = new TimelineDataDto
+            {
+                EventId = eventId,
+                EventStartDate = evt.StartDate,
+                EventEndDate = evt.EndDate,
+                IsSchedulePublished = isPublished,
+                Courts = courts,
+                Divisions = divisionSummary
+            }
+        });
+    }
+
+    /// <summary>
+    /// Add or update a court group assignment for a division
+    /// </summary>
+    [Authorize]
+    [HttpPost("court-planning/division-assignment")]
+    public async Task<ActionResult<ApiResponse<object>>> AddDivisionCourtAssignment([FromBody] DivisionCourtAssignmentRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        var division = await _context.EventDivisions.FindAsync(request.DivisionId);
+        if (division == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Division not found" });
+
+        if (!await CanManageEventAsync(division.EventId))
+            return Forbid();
+
+        var courtGroup = await _context.CourtGroups.FindAsync(request.CourtGroupId);
+        if (courtGroup == null || courtGroup.EventId != division.EventId)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Invalid court group" });
+
+        // Create or update assignment
+        var existing = await _context.DivisionCourtAssignments
+            .FirstOrDefaultAsync(a =>
+                a.DivisionId == request.DivisionId &&
+                a.CourtGroupId == request.CourtGroupId &&
+                a.PhaseId == request.PhaseId &&
+                a.AssignmentMode == request.AssignmentMode &&
+                a.PoolName == request.PoolName &&
+                a.MatchFormatId == request.MatchFormatId);
+
+        if (existing != null)
+        {
+            existing.Priority = request.Priority;
+            existing.ValidFromTime = request.ValidFromTime;
+            existing.ValidToTime = request.ValidToTime;
+        }
+        else
+        {
+            _context.DivisionCourtAssignments.Add(new DivisionCourtAssignment
+            {
+                DivisionId = request.DivisionId,
+                CourtGroupId = request.CourtGroupId,
+                PhaseId = request.PhaseId,
+                AssignmentMode = request.AssignmentMode,
+                PoolName = request.PoolName,
+                MatchFormatId = request.MatchFormatId,
+                Priority = request.Priority,
+                ValidFromTime = request.ValidFromTime,
+                ValidToTime = request.ValidToTime
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = "Court assignment saved"
+        });
+    }
+
+    /// <summary>
+    /// Delete a court group assignment
+    /// </summary>
+    [Authorize]
+    [HttpDelete("court-planning/division-assignment/{assignmentId}")]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteDivisionCourtAssignment(int assignmentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        var assignment = await _context.DivisionCourtAssignments
+            .Include(a => a.Division)
+            .FirstOrDefaultAsync(a => a.Id == assignmentId);
+
+        if (assignment == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Assignment not found" });
+
+        if (!await CanManageEventAsync(assignment.Division!.EventId))
+            return Forbid();
+
+        _context.DivisionCourtAssignments.Remove(assignment);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = "Assignment deleted"
+        });
+    }
+
+    // Helper method to validate event schedule
+    private async Task<ScheduleValidationResult> ValidateEventScheduleAsync(int eventId)
+    {
+        var result = new ScheduleValidationResult { IsValid = true };
+
+        // Get all encounters with court assignments
+        var encounters = await _context.EventEncounters
+            .Where(e => e.EventId == eventId && e.Status != "Cancelled" && e.Status != "Bye")
+            .Include(e => e.Division)
+            .Include(e => e.TournamentCourt)
+            .ToListAsync();
+
+        // Check for unassigned encounters
+        var unassigned = encounters.Where(e => e.TournamentCourtId == null || e.EstimatedStartTime == null).ToList();
+        result.UnassignedEncounters = unassigned.Count;
+        if (unassigned.Count > 0)
+        {
+            result.Warnings.Add($"{unassigned.Count} encounters without court/time assignments");
+        }
+
+        // Get assigned encounters grouped by court
+        var assignedByCourtId = encounters
+            .Where(e => e.TournamentCourtId.HasValue && e.EstimatedStartTime.HasValue)
+            .GroupBy(e => e.TournamentCourtId!.Value)
+            .ToList();
+
+        // Check for time overlaps on each court
+        foreach (var courtGroup in assignedByCourtId)
+        {
+            var courtEncounters = courtGroup
+                .OrderBy(e => e.EstimatedStartTime)
+                .ToList();
+
+            for (int i = 0; i < courtEncounters.Count - 1; i++)
+            {
+                var current = courtEncounters[i];
+                var next = courtEncounters[i + 1];
+
+                var duration = current.EstimatedDurationMinutes ?? current.Division?.EstimatedMatchDurationMinutes ?? 20;
+                var currentEnd = current.EstimatedEndTime ?? current.EstimatedStartTime!.Value.AddMinutes(duration);
+
+                if (currentEnd > next.EstimatedStartTime)
+                {
+                    result.Conflicts.Add(new ScheduleConflictDto
+                    {
+                        ConflictType = "CourtOverlap",
+                        CourtId = courtGroup.Key,
+                        CourtLabel = current.TournamentCourt?.CourtLabel ?? $"Court {courtGroup.Key}",
+                        Encounter1Id = current.Id,
+                        Encounter2Id = next.Id,
+                        Encounter1Label = current.EncounterLabel ?? $"{current.Division?.Name} Match {current.EncounterNumber}",
+                        Encounter2Label = next.EncounterLabel ?? $"{next.Division?.Name} Match {next.EncounterNumber}",
+                        ConflictStartTime = next.EstimatedStartTime,
+                        ConflictEndTime = currentEnd,
+                        Message = $"Overlapping matches on {current.TournamentCourt?.CourtLabel}: {current.Division?.Name} ends at {currentEnd:HH:mm} but {next.Division?.Name} starts at {next.EstimatedStartTime:HH:mm}"
+                    });
+                }
+            }
+        }
+
+        // Check for same unit playing at overlapping times
+        var unitEncounters = encounters
+            .Where(e => e.EstimatedStartTime.HasValue && (e.Unit1Id.HasValue || e.Unit2Id.HasValue))
+            .SelectMany(e => new[]
+            {
+                e.Unit1Id.HasValue ? (UnitId: e.Unit1Id.Value, Encounter: e) : ((int, EventEncounter)?)null,
+                e.Unit2Id.HasValue ? (UnitId: e.Unit2Id.Value, Encounter: e) : ((int, EventEncounter)?)null
+            })
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .GroupBy(x => x.UnitId)
+            .ToList();
+
+        foreach (var unitGroup in unitEncounters)
+        {
+            var unitMatches = unitGroup
+                .OrderBy(x => x.Encounter.EstimatedStartTime)
+                .ToList();
+
+            for (int i = 0; i < unitMatches.Count - 1; i++)
+            {
+                var current = unitMatches[i].Encounter;
+                var next = unitMatches[i + 1].Encounter;
+
+                var duration = current.EstimatedDurationMinutes ?? current.Division?.EstimatedMatchDurationMinutes ?? 20;
+                var currentEnd = current.EstimatedEndTime ?? current.EstimatedStartTime!.Value.AddMinutes(duration);
+
+                if (currentEnd > next.EstimatedStartTime)
+                {
+                    // Only add if not already in conflicts
+                    if (!result.Conflicts.Any(c =>
+                        c.ConflictType == "UnitOverlap" &&
+                        ((c.Encounter1Id == current.Id && c.Encounter2Id == next.Id) ||
+                         (c.Encounter1Id == next.Id && c.Encounter2Id == current.Id))))
+                    {
+                        result.Conflicts.Add(new ScheduleConflictDto
+                        {
+                            ConflictType = "UnitOverlap",
+                            CourtId = current.TournamentCourtId ?? 0,
+                            CourtLabel = current.TournamentCourt?.CourtLabel ?? "",
+                            Encounter1Id = current.Id,
+                            Encounter2Id = next.Id,
+                            Encounter1Label = current.EncounterLabel ?? $"{current.Division?.Name} Match {current.EncounterNumber}",
+                            Encounter2Label = next.EncounterLabel ?? $"{next.Division?.Name} Match {next.EncounterNumber}",
+                            ConflictStartTime = next.EstimatedStartTime,
+                            ConflictEndTime = currentEnd,
+                            Message = $"Team has overlapping matches"
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check divisions without court assignments
+        var divisionsWithoutCourts = await _context.EventDivisions
+            .Where(d => d.EventId == eventId && d.IsActive)
+            .Where(d => !_context.DivisionCourtAssignments.Any(a => a.DivisionId == d.Id))
+            .CountAsync();
+
+        result.DivisionsWithoutCourts = divisionsWithoutCourts;
+        if (divisionsWithoutCourts > 0)
+        {
+            result.Warnings.Add($"{divisionsWithoutCourts} divisions without court group assignments");
+        }
+
+        result.ConflictCount = result.Conflicts.Count;
+        result.IsValid = result.ConflictCount == 0 && result.UnassignedEncounters == 0;
+
+        return result;
+    }
+
+    // Helper to assign colors to divisions for timeline visualization
+    private static string GetDivisionColor(int divisionId)
+    {
+        var colors = new[]
+        {
+            "#3b82f6", // blue
+            "#10b981", // emerald
+            "#f97316", // orange
+            "#8b5cf6", // violet
+            "#ef4444", // red
+            "#06b6d4", // cyan
+            "#f59e0b", // amber
+            "#ec4899", // pink
+            "#6366f1", // indigo
+            "#84cc16"  // lime
+        };
+        return colors[divisionId % colors.Length];
     }
 
     [Authorize]

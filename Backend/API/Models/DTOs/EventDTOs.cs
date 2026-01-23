@@ -708,6 +708,8 @@ public class EventStaffDto
     public DateTime? AvailableTo { get; set; }
     public string? SelfRegistrationNotes { get; set; }
     public string? AdminNotes { get; set; }
+    public string? PreferredRoles { get; set; }
+    public string? ContactPhone { get; set; }
     public int? AssignedByUserId { get; set; }
     public string? AssignedByUserName { get; set; }
     public DateTime? AssignedAt { get; set; }
@@ -733,6 +735,28 @@ public class CreateEventStaffSelfRegistrationDto
     public DateTime? AvailableFrom { get; set; }
     public DateTime? AvailableTo { get; set; }
     public string? Notes { get; set; }
+    /// <summary>
+    /// JSON array of preferred role IDs the user is interested in
+    /// </summary>
+    public string? PreferredRoles { get; set; }
+    public string? ContactPhone { get; set; }
+}
+
+/// <summary>
+/// Admin approves a pending staff registration
+/// </summary>
+public class ApproveStaffRequest
+{
+    public int? RoleId { get; set; }
+    public string? AdminNotes { get; set; }
+}
+
+/// <summary>
+/// Admin declines a pending staff registration
+/// </summary>
+public class DeclineStaffRequest
+{
+    public string? Reason { get; set; }
 }
 
 /// <summary>

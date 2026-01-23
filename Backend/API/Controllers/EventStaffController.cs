@@ -327,6 +327,159 @@ public class EventStaffController : EventControllerBase
     }
 
     /// <summary>
+    /// Get pending staff registrations for admin review
+    /// </summary>
+    [Authorize]
+    [HttpGet("event/{eventId}/pending")]
+    public async Task<ActionResult<ApiResponse<List<EventStaffDto>>>> GetPendingStaff(int eventId)
+    {
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var staff = await _context.EventStaff
+            .Where(s => s.EventId == eventId && s.Status == "Pending")
+            .Include(s => s.User)
+            .Include(s => s.Role)
+            .OrderBy(s => s.CreatedAt)
+            .Select(s => new EventStaffDto
+            {
+                Id = s.Id,
+                EventId = s.EventId,
+                UserId = s.UserId,
+                UserName = s.User != null ? s.User.FirstName + " " + s.User.LastName : null,
+                UserEmail = s.User != null ? s.User.Email : null,
+                UserProfileImageUrl = s.User != null ? s.User.ProfileImageUrl : null,
+                RoleId = s.RoleId,
+                RoleName = s.Role != null ? s.Role.Name : null,
+                IsSelfRegistered = s.IsSelfRegistered,
+                Status = s.Status,
+                Priority = s.Priority,
+                AvailableFrom = s.AvailableFrom,
+                AvailableTo = s.AvailableTo,
+                SelfRegistrationNotes = s.SelfRegistrationNotes,
+                AdminNotes = s.AdminNotes,
+                PreferredRoles = s.PreferredRoles,
+                ContactPhone = s.ContactPhone,
+                CreatedAt = s.CreatedAt,
+                UpdatedAt = s.UpdatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<EventStaffDto>> { Success = true, Data = staff });
+    }
+
+    /// <summary>
+    /// Approve a pending staff registration
+    /// </summary>
+    [Authorize]
+    [HttpPost("event/{eventId}/staff/{staffId}/approve")]
+    public async Task<ActionResult<ApiResponse<EventStaffDto>>> ApproveStaff(
+        int eventId,
+        int staffId,
+        [FromBody] ApproveStaffRequest request)
+    {
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var staff = await _context.EventStaff
+            .Include(s => s.User)
+            .Include(s => s.Role)
+            .FirstOrDefaultAsync(s => s.Id == staffId && s.EventId == eventId);
+
+        if (staff == null)
+            return NotFound(new ApiResponse<EventStaffDto> { Success = false, Message = "Staff assignment not found" });
+
+        var adminUserId = GetUserId()!.Value;
+
+        staff.Status = "Active";
+        staff.RoleId = request.RoleId ?? staff.RoleId;
+        staff.AdminNotes = request.AdminNotes ?? staff.AdminNotes;
+        staff.AssignedByUserId = adminUserId;
+        staff.AssignedAt = DateTime.Now;
+        staff.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Staff {StaffId} approved by user {AdminId} for event {EventId}",
+            staffId, adminUserId, eventId);
+
+        // Reload role if changed
+        await _context.Entry(staff).Reference(s => s.Role).LoadAsync();
+        await _context.Entry(staff).Reference(s => s.AssignedBy).LoadAsync();
+
+        var result = MapToDto(staff);
+        return Ok(new ApiResponse<EventStaffDto> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Decline a pending staff registration
+    /// </summary>
+    [Authorize]
+    [HttpPost("event/{eventId}/staff/{staffId}/decline")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeclineStaff(
+        int eventId,
+        int staffId,
+        [FromBody] DeclineStaffRequest? request = null)
+    {
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        var staff = await _context.EventStaff
+            .FirstOrDefaultAsync(s => s.Id == staffId && s.EventId == eventId);
+
+        if (staff == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Staff assignment not found" });
+
+        var adminUserId = GetUserId()!.Value;
+
+        staff.Status = "Declined";
+        staff.AdminNotes = request?.Reason ?? staff.AdminNotes;
+        staff.AssignedByUserId = adminUserId;
+        staff.AssignedAt = DateTime.Now;
+        staff.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Staff {StaffId} declined by user {AdminId} for event {EventId}",
+            staffId, adminUserId, eventId);
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    /// <summary>
+    /// Get available roles for self-registration (AllowSelfRegistration = true)
+    /// </summary>
+    [HttpGet("event/{eventId}/available-roles")]
+    public async Task<ActionResult<ApiResponse<List<EventStaffRoleDto>>>> GetAvailableRolesForSelfRegistration(int eventId)
+    {
+        var roles = await _context.EventStaffRoles
+            .Where(r => (r.EventId == null || r.EventId == eventId) && r.IsActive && r.AllowSelfRegistration)
+            .OrderBy(r => r.EventId == null ? 0 : 1) // Global first
+            .ThenBy(r => r.SortOrder)
+            .Select(r => new EventStaffRoleDto
+            {
+                Id = r.Id,
+                EventId = r.EventId,
+                Name = r.Name,
+                Description = r.Description,
+                RoleCategory = r.RoleCategory,
+                CanManageSchedule = r.CanManageSchedule,
+                CanManageCourts = r.CanManageCourts,
+                CanRecordScores = r.CanRecordScores,
+                CanCheckInPlayers = r.CanCheckInPlayers,
+                CanManageLineups = r.CanManageLineups,
+                CanViewAllData = r.CanViewAllData,
+                CanFullyManageEvent = r.CanFullyManageEvent,
+                AllowSelfRegistration = r.AllowSelfRegistration,
+                SortOrder = r.SortOrder,
+                IsActive = r.IsActive
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<EventStaffRoleDto>> { Success = true, Data = roles });
+    }
+
+    /// <summary>
     /// Self-register as staff for an event (creates pending request)
     /// </summary>
     [Authorize]
@@ -364,11 +517,15 @@ public class EventStaffController : EventControllerBase
             Priority = 0,
             AvailableFrom = dto.AvailableFrom,
             AvailableTo = dto.AvailableTo,
-            SelfRegistrationNotes = dto.Notes
+            SelfRegistrationNotes = dto.Notes,
+            PreferredRoles = dto.PreferredRoles,
+            ContactPhone = dto.ContactPhone
         };
 
         _context.EventStaff.Add(staff);
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation("User {UserId} self-registered as staff for event {EventId}", userId.Value, eventId);
 
         // Load related data
         await _context.Entry(staff).Reference(s => s.User).LoadAsync();
@@ -802,6 +959,8 @@ public class EventStaffController : EventControllerBase
             AvailableTo = s.AvailableTo,
             SelfRegistrationNotes = s.SelfRegistrationNotes,
             AdminNotes = s.AdminNotes,
+            PreferredRoles = s.PreferredRoles,
+            ContactPhone = s.ContactPhone,
             AssignedByUserId = s.AssignedByUserId,
             AssignedByUserName = s.AssignedBy != null ? s.AssignedBy.FirstName + " " + s.AssignedBy.LastName : null,
             AssignedAt = s.AssignedAt,
