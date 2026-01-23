@@ -1519,12 +1519,13 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     setUploadingAttachment(true);
     try {
       const assetType = sharedAssetApi.getAssetType(file);
-      const uploadRes = await sharedAssetApi.upload(file, assetType, 'finance-attachment');
+      const uploadRes = await sharedAssetApi.uploadViaProxy(file, assetType, 'finance-attachment');
 
-      if (uploadRes.data?.url) {
+      const fileUrl = uploadRes?.url || uploadRes?.data?.url;
+      if (fileUrl) {
         const response = await clubFinanceApi.addAttachment(club.id, transactionId, {
           fileName: file.name,
-          fileUrl: uploadRes.data.url,
+          fileUrl: fileUrl,
           fileType: file.type,
           fileSize: file.size,
           description: attachmentDescription || null
@@ -1584,12 +1585,13 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
       else if (file.type.startsWith('video/')) assetType = 'video';
       else if (file.type.startsWith('audio/')) assetType = 'audio';
 
-      const response = await sharedAssetApi.upload(file, assetType, 'club-document');
-      // Response structure: { data: { success: true, url: "/asset/123", ... } }
-      if (response.data?.url) {
+      const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'club-document');
+      // Response: { success: true, url: "/asset/123", ... }
+      const fileUrl = response?.url || response?.data?.url;
+      if (fileUrl) {
         setNewDocument({
           ...newDocument,
-          fileUrl: response.data.url,
+          fileUrl: fileUrl,
           fileName: file.name,
           mimeType: file.type,
           fileSizeBytes: file.size
@@ -1743,15 +1745,14 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
 
     setUploadingLogo(true);
     try {
-      // Upload to Funtime-Shared
-      const response = await sharedAssetApi.upload(file, 'image', 'club');
-      // Save only relative path to DB - use response.data.url directly
-      // Response: { data: { success: true, url: "/asset/11", ... } }
+      // Upload to Funtime-Shared via local backend proxy (uses API key auth)
+      const response = await sharedAssetApi.uploadViaProxy(file, 'image', 'club');
+      // Response: { success: true, url: "/asset/11", ... }
       let logoUrl;
-      if (response?.data?.url) {
-        logoUrl = response.data.url;
-      } else if (response?.url) {
+      if (response?.url) {
         logoUrl = response.url;
+      } else if (response?.data?.url) {
+        logoUrl = response.data.url;
       }
 
       if (logoUrl) {
@@ -4098,16 +4099,14 @@ function CreateClubModal({ onClose, onCreate }) {
     setUploadingLogo(true);
     setError(null);
     try {
-      // Upload to Funtime-Shared asset service
-      const response = await sharedAssetApi.upload(file, 'image', 'club');
-      // Save only relative path to DB - use response.data.url directly
-      // Response: { data: { success: true, url: "/asset/11", ... } }
-      if (response?.data?.url) {
-        setFormData({ ...formData, logoUrl: response.data.url });
-      } else if (response?.url) {
-        setFormData({ ...formData, logoUrl: response.url });
+      // Upload to Funtime-Shared via local backend proxy (uses API key auth)
+      const response = await sharedAssetApi.uploadViaProxy(file, 'image', 'club');
+      // Response: { success: true, url: "/asset/11", ... }
+      const logoUrl = response?.url || response?.data?.url;
+      if (logoUrl) {
+        setFormData({ ...formData, logoUrl: logoUrl });
       } else {
-        setError(response.message || 'Upload failed');
+        setError(response?.message || 'Upload failed');
       }
     } catch (err) {
       setError(err.message || 'Failed to upload logo');

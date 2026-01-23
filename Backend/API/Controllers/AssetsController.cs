@@ -395,6 +395,111 @@ public class AssetsController : ControllerBase
     }
 
     /// <summary>
+    /// Proxy endpoint for uploading assets to Funtime-Shared.
+    /// Uses server-to-server API key authentication to avoid frontend token issues.
+    /// </summary>
+    /// <param name="file">The file to upload</param>
+    /// <param name="assetType">Asset type: image, video, document, audio</param>
+    /// <param name="category">Category for organization: avatar, club, court, theme, etc.</param>
+    [HttpPost("shared/upload")]
+    public async Task<IActionResult> UploadSharedAsset(
+        IFormFile file,
+        [FromQuery] string assetType = "image",
+        [FromQuery] string category = "general")
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "User not authenticated" });
+            }
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { success = false, message = "No file provided" });
+            }
+
+            // Validate file size (5MB max)
+            if (file.Length > 5 * 1024 * 1024)
+            {
+                return BadRequest(new { success = false, message = "File size exceeds 5MB limit" });
+            }
+
+            // Validate asset type
+            var validTypes = new[] { "image", "video", "document", "audio" };
+            if (!validTypes.Contains(assetType.ToLower()))
+            {
+                return BadRequest(new { success = false, message = "Invalid asset type. Must be: image, video, document, or audio" });
+            }
+
+            var httpClient = _httpClientFactory.CreateClient("SharedAuth");
+            var apiKey = _configuration["SharedAuth:ApiKey"];
+            var siteKey = _configuration["SharedAuth:SiteCode"] ?? "community";
+
+            // Build multipart form content
+            using var content = new MultipartFormDataContent();
+            using var fileStream = file.OpenReadStream();
+            using var streamContent = new StreamContent(fileStream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                file.ContentType ?? "application/octet-stream");
+            content.Add(streamContent, "file", file.FileName);
+
+            // Build request with API key header
+            var queryParams = $"assetType={Uri.EscapeDataString(assetType)}&category={Uri.EscapeDataString(category)}&siteKey={Uri.EscapeDataString(siteKey)}&isPublic=true";
+            var request = new HttpRequestMessage(HttpMethod.Post, $"asset/upload?{queryParams}");
+            request.Content = content;
+
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                request.Headers.Add("X-Api-Key", apiKey);
+            }
+
+            var response = await httpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to upload to shared service: {StatusCode} - {Error}",
+                    response.StatusCode, errorContent);
+                return StatusCode((int)response.StatusCode, new { success = false, message = "Failed to upload to shared service" });
+            }
+
+            // Parse and return the response from Funtime-Shared
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = System.Text.Json.JsonSerializer.Deserialize<SharedAssetUploadResult>(responseBody,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (result?.Success == true)
+            {
+                _logger.LogInformation("User {UserId} uploaded asset to shared service: {Url}", userId, result.Url);
+                return Ok(new { success = true, url = result.Url, assetId = result.AssetId });
+            }
+
+            return BadRequest(new { success = false, message = result?.Message ?? "Upload failed" });
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error uploading to shared asset service");
+            return StatusCode(502, new { success = false, message = "Failed to connect to shared asset service" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading to shared asset service");
+            return StatusCode(500, new { success = false, message = "An error occurred while uploading" });
+        }
+    }
+
+    // DTO for shared asset upload response
+    private class SharedAssetUploadResult
+    {
+        public bool Success { get; set; }
+        public string? Url { get; set; }
+        public int? AssetId { get; set; }
+        public string? Message { get; set; }
+    }
+
+    /// <summary>
     /// Get allowed file types by folder
     /// </summary>
     [AllowAnonymous]

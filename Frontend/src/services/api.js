@@ -213,12 +213,30 @@ const SITE_KEY = 'community' // Site identifier for multi-tenant asset storage
 
 export const sharedAssetApi = {
   /**
-   * Upload a file to Funtime-Shared asset service
+   * Upload a file to Funtime-Shared via local backend proxy (recommended)
+   * Uses server-to-server API key authentication - more reliable than direct upload
+   * @param {File} file - The file to upload
+   * @param {string} assetType - Type: 'image', 'video', 'document', 'audio'
+   * @param {string} category - Category for organization: 'avatar', 'theme', 'club', 'court', 'video', etc.
+   * @returns {Promise} - Response with asset URL { success, url, assetId }
+   */
+  uploadViaProxy: async (file, assetType = 'image', category = 'general') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params = new URLSearchParams({ assetType, category });
+    return api.post(`/assets/shared/upload?${params.toString()}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  /**
+   * Upload a file to Funtime-Shared asset service (direct, requires shared auth token)
    * @param {File} file - The file to upload
    * @param {string} assetType - Type: 'image', 'video', 'document', 'audio'
    * @param {string} category - Category for organization: 'avatar', 'theme', 'club', 'court', 'video', etc.
    * @param {boolean} isPublic - Whether the asset is publicly accessible (default: true)
    * @returns {Promise} - Response with asset ID and URL
+   * @deprecated Use uploadViaProxy for more reliable uploads
    */
   upload: async (file, assetType = 'image', category = 'general', isPublic = true) => {
     const formData = new FormData();
