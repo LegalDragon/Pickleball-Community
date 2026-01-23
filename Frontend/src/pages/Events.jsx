@@ -441,11 +441,16 @@ export default function Events() {
 
   const toast = useToast();
 
-  const handleViewDetails = async (event) => {
-    // Navigate to public event view page for unauthenticated users
-    if (!isAuthenticated) {
-      navigate(`/events/${event.id}`);
-      return;
+  const handleViewDetails = (event) => {
+    // Navigate to the public event view page
+    navigate(`/events/${event.id}`);
+  };
+
+  // Open the detail modal (for comparison/legacy access)
+  const handleOpenDetailModal = async (event, e) => {
+    // Prevent navigation when clicking the button
+    if (e) {
+      e.stopPropagation();
     }
 
     try {
@@ -455,19 +460,13 @@ export default function Events() {
       }
     } catch (err) {
       console.error('Error loading event details:', err);
-      // Check if this is a 401 Unauthorized - redirect to public view
-      if (err?.status === 401 || err?.response?.status === 401) {
-        navigate(`/events/${event.id}`);
-        return;
-      }
       // Check if this is a profile completion requirement (403)
       if (err?.message?.toLowerCase().includes('complete your profile')) {
         toast.warning('Please complete your profile to view event details');
         navigate('/complete-profile');
         return;
       }
-      // For other errors, still show the public view
-      navigate(`/events/${event.id}`);
+      toast.error('Failed to load event details');
     }
   };
 
@@ -899,9 +898,20 @@ export default function Events() {
                                     {index + 1}
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
-                                      {event.name}
-                                    </h4>
+                                    <div className="flex items-start justify-between">
+                                      <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
+                                        {event.name}
+                                      </h4>
+                                      {isAuthenticated && (
+                                        <button
+                                          onClick={(e) => handleOpenDetailModal(event, e)}
+                                          className="flex-shrink-0 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          title="Open detail modal"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
                                     <p className="text-xs text-gray-500 mt-0.5">
                                       {formatDate(event.startDate)}
                                     </p>
@@ -970,6 +980,15 @@ export default function Events() {
                                   <span className="text-sm font-medium text-gray-700">
                                     {formatPrice(event.registrationFee, event.priceUnit, event.paymentModel)}
                                   </span>
+                                )}
+                                {isAuthenticated && (
+                                  <button
+                                    onClick={(e) => handleOpenDetailModal(event, e)}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="Open detail modal"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </button>
                                 )}
                                 <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors" />
                               </div>
@@ -1147,6 +1166,13 @@ export default function Events() {
                                     Published
                                   </span>
                                 )}
+                                <button
+                                  onClick={(e) => handleOpenDetailModal(event, e)}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Open detail modal"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </button>
                                 <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors" />
                               </div>
                             </div>
@@ -1338,7 +1364,16 @@ export default function Events() {
                               <span className="font-medium text-gray-900 group-hover:text-orange-600 transition-colors text-left">
                                 {reg.eventName}
                               </span>
-                              <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors flex-shrink-0" />
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={(e) => handleOpenDetailModal({ id: reg.eventId }, e)}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Open detail modal"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </button>
+                                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-600 transition-colors" />
+                              </div>
                             </div>
                             <p className="text-sm text-gray-500">
                               {formatDate(reg.startDate)} • {reg.venueName || `${reg.city}, ${reg.state}`}
