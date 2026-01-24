@@ -478,7 +478,8 @@ public class CreateEventDivisionDto
 public class UpdateEventDto : CreateEventDto
 {
     public bool IsPublished { get; set; }
-    public new List<UpdateEventDivisionDto> Divisions { get; set; } = new();
+    // Note: null means "don't change divisions", empty list means "delete all divisions"
+    public new List<UpdateEventDivisionDto>? Divisions { get; set; }
 }
 
 // Update division (includes ID for existing divisions)
