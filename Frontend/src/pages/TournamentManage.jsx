@@ -4549,36 +4549,65 @@ export default function TournamentManage() {
                         {courtMatches.length > 0 ? (
                           courtMatches.map((match, idx) => (
                             <div key={idx} className="p-3 hover:bg-gray-50">
-                              {match.scheduledTime && (
-                                <div className="flex items-center gap-1 text-xs text-blue-600 mb-1">
-                                  <Clock className="w-3 h-3" />
-                                  {new Date(match.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              )}
-                              <div className="text-sm">
-                                <span className="text-gray-400 mr-2">#{match.matchNumber}</span>
-                                <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
-                                  {match.unit1Name || match.unit1SeedInfo || `Unit #${match.unit1Number || '?'}`}
-                                </span>
-                                <span className="text-gray-400 mx-2">vs</span>
-                                <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
-                                  {match.unit2Name || match.unit2SeedInfo || `Unit #${match.unit2Number || '?'}`}
-                                </span>
-                              </div>
-                              {match.score && (
-                                <div className="text-xs text-gray-500 mt-1">{match.score}</div>
-                              )}
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                  match.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                  match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
-                                  'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {match.status || 'Scheduled'}
-                                </span>
-                                {match.roundName && (
-                                  <span className="text-xs text-gray-400">{match.roundName}</span>
+                              <div className="flex items-start gap-2">
+                                {/* Edit button - only for organizers/admins */}
+                                {isOrganizer && (
+                                  <button
+                                    onClick={() => setSelectedGameForEdit({
+                                      id: match.games?.[0]?.gameId || match.games?.[0]?.id || match.encounterId,
+                                      encounterId: match.encounterId,
+                                      ...(match.games?.[0] || {}),
+                                      unit1: { id: match.unit1Id, name: match.unit1Name || match.unit1SeedInfo, members: match.unit1Members || [] },
+                                      unit2: { id: match.unit2Id, name: match.unit2Name || match.unit2SeedInfo, members: match.unit2Members || [] },
+                                      unit1Score: match.games?.[0]?.unit1Score ?? match.unit1Score ?? 0,
+                                      unit2Score: match.games?.[0]?.unit2Score ?? match.unit2Score ?? 0,
+                                      bestOf: match.bestOf || 1,
+                                      matchNumber: match.matchNumber,
+                                      status: match.games?.[0]?.status || match.status || 'New',
+                                      games: match.games || [],
+                                      courtLabel: match.courtLabel,
+                                      winnerUnitId: match.winnerUnitId,
+                                      hasGames: match.games?.length > 0
+                                    })}
+                                    className="p-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded transition-colors flex-shrink-0"
+                                    title="Edit match"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
                                 )}
+                                <div className="flex-1 min-w-0">
+                                  {match.scheduledTime && (
+                                    <div className="flex items-center gap-1 text-xs text-blue-600 mb-1">
+                                      <Clock className="w-3 h-3" />
+                                      {new Date(match.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                  )}
+                                  <div className="text-sm">
+                                    <span className="text-gray-400 mr-2">#{match.matchNumber}</span>
+                                    <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
+                                      {match.unit1Name || match.unit1SeedInfo || `Unit #${match.unit1Number || '?'}`}
+                                    </span>
+                                    <span className="text-gray-400 mx-2">vs</span>
+                                    <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
+                                      {match.unit2Name || match.unit2SeedInfo || `Unit #${match.unit2Number || '?'}`}
+                                    </span>
+                                  </div>
+                                  {match.score && (
+                                    <div className="text-xs text-gray-500 mt-1">{match.score}</div>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {match.status || 'Scheduled'}
+                                    </span>
+                                    {match.roundName && (
+                                      <span className="text-xs text-gray-400">{match.roundName}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           ))
