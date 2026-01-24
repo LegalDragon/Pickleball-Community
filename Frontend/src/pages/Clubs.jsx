@@ -71,6 +71,7 @@ export default function Clubs() {
   const [mapBounds, setMapBounds] = useState(null); // Bounds used in last search
   const [pendingBounds, setPendingBounds] = useState(null); // Bounds user has panned to
   const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
+  const mapInitializedRef = useRef(false); // Track if map has finished initial load
 
   // Geocoding cache for clubs without coordinates
   const [geocodeCache, setGeocodeCache] = useState({});
@@ -402,7 +403,13 @@ export default function Clubs() {
   // Handle map bounds change - show "Search this area" button
   const handleMapBoundsChange = useCallback((bounds) => {
     setPendingBounds(bounds);
-    // Show button if bounds have changed from last search
+    // Skip the initial fitBounds event - only show button for user interactions
+    if (!mapInitializedRef.current) {
+      // First bounds change is from fitBounds, mark as initialized
+      mapInitializedRef.current = true;
+      return;
+    }
+    // Show button for subsequent user-initiated map movements
     setShowSearchAreaButton(true);
   }, []);
 
