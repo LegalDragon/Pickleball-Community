@@ -11,6 +11,7 @@ public class ProvinceState
     public int SortOrder { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-    // Navigation property
+    // Navigation properties
     public Country? Country { get; set; }
+    public ICollection<City> Cities { get; set; } = new List<City>();
 }

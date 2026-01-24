@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.Models.Entities;
+using System.Security.Claims;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -240,6 +243,173 @@ public class LocationController : ControllerBase
             {
                 Success = false,
                 Message = "Error fetching state"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Get cities for a state by state ID or code
+    /// </summary>
+    [HttpGet("states/{stateId}/cities")]
+    public async Task<ActionResult<ApiResponse<List<CityDto>>>> GetCitiesByState(string stateId)
+    {
+        try
+        {
+            // Find state by ID or code
+            ProvinceState? state;
+            if (int.TryParse(stateId, out var id))
+            {
+                state = await _context.ProvinceStates.FirstOrDefaultAsync(s => s.Id == id);
+            }
+            else
+            {
+                var code = stateId.ToUpperInvariant();
+                state = await _context.ProvinceStates.FirstOrDefaultAsync(s =>
+                    s.Code.ToUpper() == code || s.Name.ToUpper() == code);
+            }
+
+            if (state == null)
+            {
+                return NotFound(new ApiResponse<List<CityDto>>
+                {
+                    Success = false,
+                    Message = $"State '{stateId}' not found"
+                });
+            }
+
+            var cities = await _context.Cities
+                .Where(c => c.ProvinceStateId == state.Id && c.IsActive)
+                .OrderBy(c => c.Name)
+                .Select(c => new CityDto
+                {
+                    Id = c.Id,
+                    ProvinceStateId = c.ProvinceStateId,
+                    Name = c.Name
+                })
+                .ToListAsync();
+
+            return Ok(new ApiResponse<List<CityDto>>
+            {
+                Success = true,
+                Data = cities
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching cities for state {StateId}", stateId);
+            return StatusCode(500, new ApiResponse<List<CityDto>>
+            {
+                Success = false,
+                Message = "Error fetching cities"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Add a new city to a state (creates if doesn't exist, returns existing if it does)
+    /// </summary>
+    [HttpPost("states/{stateId}/cities")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<CityDto>>> AddCity(string stateId, [FromBody] CreateCityDto dto)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+            {
+                return BadRequest(new ApiResponse<CityDto>
+                {
+                    Success = false,
+                    Message = "City name is required"
+                });
+            }
+
+            // Find state by ID or code
+            ProvinceState? state;
+            if (int.TryParse(stateId, out var id))
+            {
+                state = await _context.ProvinceStates.FirstOrDefaultAsync(s => s.Id == id);
+            }
+            else
+            {
+                var code = stateId.ToUpperInvariant();
+                state = await _context.ProvinceStates.FirstOrDefaultAsync(s =>
+                    s.Code.ToUpper() == code || s.Name.ToUpper() == code);
+            }
+
+            if (state == null)
+            {
+                return NotFound(new ApiResponse<CityDto>
+                {
+                    Success = false,
+                    Message = $"State '{stateId}' not found"
+                });
+            }
+
+            // Check if city already exists (case-insensitive)
+            var cityName = dto.Name.Trim();
+            var existingCity = await _context.Cities
+                .FirstOrDefaultAsync(c =>
+                    c.ProvinceStateId == state.Id &&
+                    c.Name.ToUpper() == cityName.ToUpper() &&
+                    c.IsActive);
+
+            if (existingCity != null)
+            {
+                // Return existing city
+                return Ok(new ApiResponse<CityDto>
+                {
+                    Success = true,
+                    Data = new CityDto
+                    {
+                        Id = existingCity.Id,
+                        ProvinceStateId = existingCity.ProvinceStateId,
+                        Name = existingCity.Name
+                    }
+                });
+            }
+
+            // Get current user ID
+            int? userId = null;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdClaim, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
+
+            // Create new city
+            var city = new City
+            {
+                ProvinceStateId = state.Id,
+                Name = cityName,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = userId
+            };
+
+            _context.Cities.Add(city);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Created new city '{CityName}' in state {StateId} by user {UserId}",
+                cityName, state.Id, userId);
+
+            return Ok(new ApiResponse<CityDto>
+            {
+                Success = true,
+                Data = new CityDto
+                {
+                    Id = city.Id,
+                    ProvinceStateId = city.ProvinceStateId,
+                    Name = city.Name
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding city to state {StateId}", stateId);
+            return StatusCode(500, new ApiResponse<CityDto>
+            {
+                Success = false,
+                Message = "Error adding city"
             });
         }
     }

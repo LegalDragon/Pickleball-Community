@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { locationApi } from '../../services/api';
 
 /**
- * AddressInput - Reusable address input component with country/state autocomplete
+ * AddressInput - Reusable address input component with country/state/city autocomplete
  *
- * Uses the global Countries and ProvinceStates tables for dropdown suggestions.
- * Country and state fields use datalist for autocomplete while still allowing
- * users to type new values not in the list. City is free-form text.
+ * Uses the global Countries, ProvinceStates, and Cities tables for dropdown suggestions.
+ * Country, state, and city fields use datalist for autocomplete while still allowing
+ * users to type new values not in the list. New cities are automatically added to
+ * the database when users enter values not in the list.
  *
  * Props:
  * - value: { country, state, city, address, postalCode } - Current address values
@@ -30,8 +31,11 @@ export default function AddressInput({
 }) {
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
+  const [cities, setCities] = useState([]);
   const [loadingCountries, setLoadingCountries] = useState(false);
   const [loadingStates, setLoadingStates] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [currentStateId, setCurrentStateId] = useState(null);
 
   // Load countries on mount
   useEffect(() => {
@@ -88,6 +92,44 @@ export default function AddressInput({
     loadStates();
   }, [value.country, countries]);
 
+  // Load cities when state changes
+  useEffect(() => {
+    if (!value.state || states.length === 0) {
+      setCities([]);
+      setCurrentStateId(null);
+      return;
+    }
+
+    const loadCities = async () => {
+      setLoadingCities(true);
+      try {
+        // Try to find state by name or code
+        const state = states.find(
+          s => s.name === value.state ||
+               s.code === value.state
+        );
+
+        if (state) {
+          setCurrentStateId(state.id);
+          const response = await locationApi.getCitiesByState(state.id);
+          if (response.success) {
+            setCities(response.data || []);
+          }
+        } else {
+          // State not in our database, clear cities
+          setCities([]);
+          setCurrentStateId(null);
+        }
+      } catch (err) {
+        console.error('Error loading cities:', err);
+        setCities([]);
+      } finally {
+        setLoadingCities(false);
+      }
+    };
+    loadCities();
+  }, [value.state, states]);
+
   const handleChange = (field, fieldValue) => {
     const newValue = { ...value, [field]: fieldValue };
 
@@ -101,6 +143,27 @@ export default function AddressInput({
 
     onChange(newValue);
   };
+
+  // Add new city to database when user enters a value not in the list
+  const handleCityBlur = useCallback(async () => {
+    const cityName = value.city?.trim();
+    if (!cityName || !currentStateId) return;
+
+    // Check if city already exists in the list (case-insensitive)
+    const exists = cities.some(c => c.name.toLowerCase() === cityName.toLowerCase());
+    if (exists) return;
+
+    try {
+      const response = await locationApi.addCity(currentStateId, cityName);
+      if (response.success && response.data) {
+        // Add the new city to the local list
+        setCities(prev => [...prev, response.data].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    } catch (err) {
+      // Silently fail - user can still use the typed value
+      console.error('Error adding city:', err);
+    }
+  }, [value.city, currentStateId, cities]);
 
   const inputClass = "w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500 disabled:bg-gray-100";
 
@@ -139,11 +202,13 @@ export default function AddressInput({
           {showCity && (
             <input
               type="text"
+              list="address-cities-list"
               value={value.city || ''}
               onChange={(e) => handleChange('city', e.target.value)}
+              onBlur={handleCityBlur}
               className={inputClass}
               placeholder={value.state ? 'City' : 'Select state'}
-              disabled={disabled}
+              disabled={disabled || loadingCities}
             />
           )}
         </div>
@@ -165,6 +230,11 @@ export default function AddressInput({
         <datalist id="address-states-list">
           {states.map((s) => (
             <option key={s.id} value={s.name} />
+          ))}
+        </datalist>
+        <datalist id="address-cities-list">
+          {cities.map((c) => (
+            <option key={c.id} value={c.name} />
           ))}
         </datalist>
       </div>
@@ -230,12 +300,19 @@ export default function AddressInput({
             <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
             <input
               type="text"
+              list="address-cities-list-stacked"
               value={value.city || ''}
               onChange={(e) => handleChange('city', e.target.value)}
+              onBlur={handleCityBlur}
               className={inputClass}
-              placeholder={value.state ? 'Enter city' : 'Select state first'}
-              disabled={disabled}
+              placeholder={value.state ? 'Select or type city' : 'Select state first'}
+              disabled={disabled || loadingCities}
             />
+            <datalist id="address-cities-list-stacked">
+              {cities.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
           </div>
         )}
       </div>

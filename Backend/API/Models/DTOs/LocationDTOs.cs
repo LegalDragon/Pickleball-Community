@@ -27,3 +27,15 @@ public class CountryWithStatesDto
     public string? PhoneCode { get; set; }
     public List<ProvinceStateDto> States { get; set; } = new();
 }
+
+public class CityDto
+{
+    public int Id { get; set; }
+    public int ProvinceStateId { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class CreateCityDto
+{
+    public string Name { get; set; } = string.Empty;
+}

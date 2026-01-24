@@ -53,6 +53,7 @@ public class ApplicationDbContext : DbContext
     // Location Reference Data
     public DbSet<Country> Countries { get; set; }
     public DbSet<ProvinceState> ProvinceStates { get; set; }
+    public DbSet<City> Cities { get; set; }
 
     // Venues (places with pickleball courts)
     public DbSet<Venue> Venues { get; set; }

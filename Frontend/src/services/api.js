@@ -2449,7 +2449,13 @@ export const locationApi = {
 
   // Get a specific state by country and state code
   getState: (countryCode, stateCode) =>
-    api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`)
+    api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`),
+
+  // Get cities for a state (by ID or code)
+  getCitiesByState: (stateId) => api.get(`/location/states/${encodeURIComponent(stateId)}/cities`),
+
+  // Add a new city to a state (creates if doesn't exist, returns existing if it does)
+  addCity: (stateId, name) => api.post(`/location/states/${encodeURIComponent(stateId)}/cities`, { name })
 }
 
 // Event Staff API
