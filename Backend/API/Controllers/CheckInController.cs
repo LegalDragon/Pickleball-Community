@@ -288,43 +288,25 @@ public class CheckInController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<object> { Success = false, Message = "Event not found" });
 
-        // First try to find waiver in EventWaivers table (primary source from GET /waivers/{eventId})
-        var eventWaiver = await _context.EventWaivers
-            .FirstOrDefaultAsync(w => w.Id == request.WaiverId && w.EventId == eventId && w.IsActive);
+        // Find waiver in ObjectAssets
+        var objectAsset = await _context.ObjectAssets
+            .Include(a => a.AssetType)
+            .FirstOrDefaultAsync(a => a.Id == request.WaiverId
+                && a.ObjectId == eventId
+                && a.AssetType != null
+                && a.AssetType.TypeName.ToLower() == "waiver");
 
-        string waiverTitle;
-        string waiverContent;
-        int waiverId;
+        if (objectAsset == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
 
-        if (eventWaiver != null)
+        var waiverId = objectAsset.Id;
+        var waiverTitle = objectAsset.Title;
+        var waiverContent = "";
+
+        // Fetch waiver content from file URL if available
+        if (!string.IsNullOrEmpty(objectAsset.FileUrl) && IsRenderableFile(objectAsset.FileName))
         {
-            // Found in EventWaivers table
-            waiverId = eventWaiver.Id;
-            waiverTitle = eventWaiver.Title;
-            waiverContent = eventWaiver.Content;
-        }
-        else
-        {
-            // Fall back to ObjectAssets for backward compatibility
-            var objectAsset = await _context.ObjectAssets
-                .Include(a => a.AssetType)
-                .FirstOrDefaultAsync(a => a.Id == request.WaiverId
-                    && a.ObjectId == eventId
-                    && a.AssetType != null
-                    && a.AssetType.TypeName.ToLower() == "waiver");
-
-            if (objectAsset == null)
-                return NotFound(new ApiResponse<object> { Success = false, Message = "Waiver not found" });
-
-            waiverId = objectAsset.Id;
-            waiverTitle = objectAsset.Title;
-            waiverContent = "";
-
-            // Fetch waiver content from file URL if available
-            if (!string.IsNullOrEmpty(objectAsset.FileUrl) && IsRenderableFile(objectAsset.FileName))
-            {
-                waiverContent = await FetchFileContentAsync(objectAsset.FileUrl);
-            }
+            waiverContent = await FetchFileContentAsync(objectAsset.FileUrl);
         }
 
         // Get user info for legal record
@@ -466,23 +448,14 @@ public class CheckInController : EventControllerBase
         }
 
         // Check if all waivers for this event have been signed
-        // Get waiver IDs from EventWaivers table (primary source)
-        var allEventWaiverIds = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && (w.DocumentType == "waiver" || w.DocumentType == null))
-            .Select(w => w.Id)
-            .ToListAsync();
-
-        // Also check ObjectAssets for backward compatibility
-        var objectAssetWaiverIds = await _context.ObjectAssets
+        // Get waiver IDs from ObjectAssets
+        var allWaiverIds = await _context.ObjectAssets
             .Include(a => a.AssetType)
             .Where(a => a.ObjectId == eventId
                 && a.AssetType != null
                 && a.AssetType.TypeName.ToLower() == "waiver")
             .Select(a => a.Id)
             .ToListAsync();
-
-        // Combine both sources (avoiding duplicates)
-        var allWaiverIds = allEventWaiverIds.Union(objectAssetWaiverIds).ToList();
 
         var signedWaiverCount = await _context.EventUnitMemberWaivers
             .Where(w => w.EventUnitMemberId == firstReg.Id && allWaiverIds.Contains(w.WaiverId))
@@ -520,6 +493,49 @@ public class CheckInController : EventControllerBase
 
         _logger.LogInformation("User {UserId} signed waiver {WaiverId} for event {EventId} with signature '{Signature}'. All waivers signed: {AllSigned}",
             userId, waiverId, eventId, request.Signature, allWaiversSigned);
+
+        // Check if registration is now complete (all waivers signed AND payment complete)
+        // Send registration complete email if so
+        if (allWaiversSigned)
+        {
+            try
+            {
+                // Check if payment is complete or no payment required
+                var unit = await _context.EventUnits
+                    .Include(u => u.Division)
+                    .FirstOrDefaultAsync(u => u.Id == firstReg.UnitId);
+
+                var feeAmount = unit?.Division?.DivisionFee ?? evt.RegistrationFee;
+                var paymentComplete = feeAmount <= 0 || firstReg.HasPaid;
+
+                if (paymentComplete)
+                {
+                    // Both waiver and payment complete - send registration complete email
+                    var emailBody = EmailTemplates.EventRegistrationConfirmation(
+                        playerName,
+                        evt.Name,
+                        unit?.Division?.Name ?? "Division",
+                        evt.StartDate,
+                        evt.VenueName,
+                        unit?.Name,
+                        feeAmount,
+                        waiverSigned: true,
+                        paymentComplete: true
+                    );
+
+                    await _emailService.SendSimpleAsync(
+                        userId.Value,
+                        user.Email!,
+                        $"Registration Complete: {evt.Name}",
+                        emailBody
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send registration complete email to user {UserId}", userId);
+            }
+        }
 
         return Ok(new ApiResponse<object>
         {
@@ -974,25 +990,51 @@ public class CheckInController : EventControllerBase
     }
 
     /// <summary>
-    /// Get waivers for an event (legacy - returns only waiver type documents)
+    /// Get waivers for an event from ObjectAssets
     /// </summary>
     [HttpGet("waivers/{eventId}")]
     public async Task<ActionResult<ApiResponse<List<WaiverDto>>>> GetEventWaivers(int eventId)
     {
-        var waivers = await _context.EventWaivers
-            .Where(w => w.EventId == eventId && w.IsActive && (w.DocumentType == "waiver" || w.DocumentType == null))
-            .Select(w => new WaiverDto
-            {
-                Id = w.Id,
-                DocumentType = w.DocumentType ?? "waiver",
-                Title = w.Title,
-                Content = w.Content,
-                Version = w.Version,
-                IsRequired = w.IsRequired,
-                RequiresMinorWaiver = w.RequiresMinorWaiver,
-                MinorAgeThreshold = w.MinorAgeThreshold
-            })
+        // Get waivers from ObjectAssets where AssetType is "waiver"
+        var waiverAssets = await _context.ObjectAssets
+            .Include(a => a.AssetType)
+            .Where(a => a.ObjectId == eventId
+                && a.AssetType != null
+                && a.AssetType.TypeName.ToLower() == "waiver")
+            .OrderBy(a => a.SortOrder)
             .ToListAsync();
+
+        var waivers = new List<WaiverDto>();
+        foreach (var asset in waiverAssets)
+        {
+            // Try to fetch content from file URL if it's a renderable file
+            string content = "";
+            if (!string.IsNullOrEmpty(asset.FileUrl) && IsRenderableFile(asset.FileName))
+            {
+                try
+                {
+                    content = await FetchFileContentAsync(asset.FileUrl);
+                }
+                catch
+                {
+                    // If content fetch fails, leave empty - frontend will show file link
+                }
+            }
+
+            waivers.Add(new WaiverDto
+            {
+                Id = asset.Id,
+                DocumentType = "waiver",
+                Title = asset.Title,
+                Content = content,
+                FileUrl = asset.FileUrl,
+                FileName = asset.FileName,
+                Version = 1,
+                IsRequired = true, // Waivers are typically required
+                RequiresMinorWaiver = false,
+                MinorAgeThreshold = 18
+            });
+        }
 
         return Ok(new ApiResponse<List<WaiverDto>>
         {

@@ -523,41 +523,9 @@ public class TournamentController : EventControllerBase
             .ToListAsync();
         var units = allUnits.Where(u => unitIdsSet.Contains(u.Id)).ToList();
 
-        // Send registration confirmation email
-        try
-        {
-            if (!string.IsNullOrEmpty(user.Email) && units.Any())
-            {
-                var firstUnit = units.First();
-                var division = firstUnit.Division;
-                var feeAmount = division?.DivisionFee
-                    ?? (evt.PerDivisionFee != 0 ? evt.PerDivisionFee : evt.RegistrationFee);
-
-                var emailBody = EmailTemplates.EventRegistrationConfirmation(
-                    $"{user.FirstName} {user.LastName}".Trim(),
-                    evt.Name,
-                    division?.Name ?? "Unknown Division",
-                    evt.StartDate,
-                    evt.VenueName,
-                    firstUnit.Name,
-                    feeAmount,
-                    waiverSigned: false, // Not yet signed at registration time
-                    paymentComplete: false // Not yet paid at registration time
-                );
-
-                await _emailService.SendSimpleAsync(
-                    userId.Value,
-                    user.Email,
-                    $"Registration Confirmed: {evt.Name}",
-                    emailBody
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to send registration confirmation email to user {UserId}", userId);
-            // Don't fail the registration if email fails
-        }
+        // Note: Registration confirmation email is NOT sent here
+        // It will be sent after both waiver signing and payment are completed
+        // This is handled in CheckInController after waiver signing and payment submission
 
         return Ok(new ApiResponse<List<EventUnitDto>>
         {
@@ -1813,6 +1781,57 @@ public class TournamentController : EventControllerBase
 
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
+
+        // Check if registration is now complete (waiver signed AND payment submitted)
+        // Send registration complete email if so
+        try
+        {
+            var payingMember = membersToPayFor.FirstOrDefault(m => m.UserId == userId.Value) ?? membersToPayFor.First();
+            var payingUser = await _context.Users.FindAsync(payingMember.UserId);
+
+            if (payingUser?.Email != null)
+            {
+                // Check if waiver is signed (check ObjectAssets for waivers)
+                var waiverCount = await _context.ObjectAssets
+                    .Include(a => a.AssetType)
+                    .CountAsync(a => a.ObjectId == eventId
+                        && a.AssetType != null
+                        && a.AssetType.TypeName.ToLower() == "waiver");
+
+                var signedWaiverCount = await _context.EventUnitMemberWaivers
+                    .CountAsync(w => w.EventUnitMemberId == payingMember.Id);
+
+                var allWaiversSigned = waiverCount == 0 || signedWaiverCount >= waiverCount;
+
+                if (allWaiversSigned)
+                {
+                    // Both waiver and payment complete - send registration complete email
+                    var playerName = $"{payingUser.FirstName} {payingUser.LastName}".Trim();
+                    var emailBody = EmailTemplates.EventRegistrationConfirmation(
+                        playerName,
+                        unit.Event?.Name ?? "Event",
+                        unit.Division?.Name ?? "Division",
+                        unit.Event?.StartDate ?? DateTime.Now,
+                        unit.Event?.VenueName,
+                        unit.Name,
+                        amountDue,
+                        waiverSigned: true,
+                        paymentComplete: true
+                    );
+
+                    await _emailService.SendSimpleAsync(
+                        payingMember.UserId,
+                        payingUser.Email,
+                        $"Registration Complete: {unit.Event?.Name}",
+                        emailBody
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send registration complete email after payment for user {UserId}", userId);
+        }
 
         return Ok(new ApiResponse<PaymentInfoDto>
         {
