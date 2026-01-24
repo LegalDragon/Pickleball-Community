@@ -203,6 +203,38 @@ public class ClubsController : ControllerBase
                     .ToList();
             }
 
+            // Apply bounds filter if provided (for map viewport search)
+            if (request.MinLat.HasValue && request.MaxLat.HasValue &&
+                request.MinLng.HasValue && request.MaxLng.HasValue)
+            {
+                clubsWithDistance = clubsWithDistance.Where(x =>
+                {
+                    // Get coordinates from home venue or club
+                    double? lat = null, lng = null;
+                    if (x.homeVenue != null &&
+                        !string.IsNullOrEmpty(x.homeVenue.GpsLat) &&
+                        !string.IsNullOrEmpty(x.homeVenue.GpsLng))
+                    {
+                        double.TryParse(x.homeVenue.GpsLat, out var venueLat);
+                        double.TryParse(x.homeVenue.GpsLng, out var venueLng);
+                        lat = venueLat;
+                        lng = venueLng;
+                    }
+                    if (!lat.HasValue || !lng.HasValue)
+                    {
+                        lat = x.club.Latitude;
+                        lng = x.club.Longitude;
+                    }
+
+                    // Filter by bounds
+                    if (!lat.HasValue || !lng.HasValue) return false;
+                    return lat.Value >= request.MinLat.Value &&
+                           lat.Value <= request.MaxLat.Value &&
+                           lng.Value >= request.MinLng.Value &&
+                           lng.Value <= request.MaxLng.Value;
+                }).ToList();
+            }
+
             var totalCount = clubsWithDistance.Count;
             var pagedClubs = clubsWithDistance
                 .Skip((request.Page - 1) * request.PageSize)

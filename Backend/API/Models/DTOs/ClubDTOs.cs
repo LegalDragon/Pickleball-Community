@@ -158,6 +158,11 @@ public class ClubSearchRequest
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public double? RadiusMiles { get; set; } = 100;
+    // Map bounds for viewport-based search
+    public double? MinLat { get; set; }
+    public double? MaxLat { get; set; }
+    public double? MinLng { get; set; }
+    public double? MaxLng { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }

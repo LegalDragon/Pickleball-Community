@@ -71,6 +71,10 @@ export default function Venues() {
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 20;
 
+  // Map bounds for viewport-based search
+  const [mapBounds, setMapBounds] = useState(null);
+  const boundsTimeoutRef = useRef(null);
+
   // Check if location permission is blocked
   const [locationBlocked, setLocationBlocked] = useState(false);
 
@@ -289,6 +293,13 @@ export default function Venues() {
         courtTypeId: selectedCourtType || undefined,
         sortBy: sortBy || undefined,
         sortOrder: sortOrder || undefined,
+        // Include map bounds when in map mode
+        ...(viewMode === 'map' && mapBounds ? {
+          minLat: mapBounds.minLat,
+          maxLat: mapBounds.maxLat,
+          minLng: mapBounds.minLng,
+          maxLng: mapBounds.maxLng
+        } : {})
       };
 
       if (searchMode === 'distance') {
@@ -331,11 +342,22 @@ export default function Venues() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, debouncedSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder]);
+  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, debouncedSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder, viewMode, mapBounds]);
 
   useEffect(() => {
     loadCourts();
   }, [loadCourts]);
+
+  // Handle map bounds change (debounced)
+  const handleMapBoundsChange = useCallback((bounds) => {
+    if (boundsTimeoutRef.current) {
+      clearTimeout(boundsTimeoutRef.current);
+    }
+    boundsTimeoutRef.current = setTimeout(() => {
+      setMapBounds(bounds);
+      setPage(1); // Reset to first page when bounds change
+    }, 500); // Debounce for 500ms
+  }, []);
 
   // Debounced search for court name - waits for user to stop typing
   const searchTimeoutRef = useRef(null);
@@ -819,6 +841,8 @@ export default function Venues() {
                       onMarkerSelect={(court) => setHoveredCourtId(court.courtId || court.id)}
                       selectedVenueId={hoveredCourtId}
                       showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
                     />
                   </div>
                 </div>
@@ -834,6 +858,8 @@ export default function Venues() {
                       onMarkerSelect={(court) => setHoveredCourtId(court.courtId || court.id)}
                       selectedVenueId={hoveredCourtId}
                       showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
                     />
                   </div>
 

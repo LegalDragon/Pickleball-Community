@@ -53,7 +53,8 @@ export default function VenueMap({
   selectedCourtId, // Backward compatibility
   userLocation,
   fitBounds = true,
-  showNumbers = false
+  showNumbers = false,
+  onBoundsChange = null // Callback when map viewport changes: ({ minLat, maxLat, minLng, maxLng }) => void
 }) {
   // Support both venues and courts props for backward compatibility
   const items = venues || courts || [];
@@ -138,6 +139,20 @@ export default function VenueMap({
     };
     mapRef.current.addEventListener('click', handlePopupClick);
 
+    // Handle map bounds changes (pan/zoom)
+    const handleMoveEnd = () => {
+      if (onBoundsChange) {
+        const bounds = map.getBounds();
+        onBoundsChange({
+          minLat: bounds.getSouth(),
+          maxLat: bounds.getNorth(),
+          minLng: bounds.getWest(),
+          maxLng: bounds.getEast()
+        });
+      }
+    };
+    map.on('moveend', handleMoveEnd);
+
     // Mark map as ready so markers can be added
     setMapReady(true);
 
@@ -146,12 +161,13 @@ export default function VenueMap({
         mapRef.current.removeEventListener('click', handlePopupClick);
       }
       if (mapInstanceRef.current) {
+        mapInstanceRef.current.off('moveend', handleMoveEnd);
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
         setMapReady(false);
       }
     };
-  }, [isClient, inChina, items, onMarkerSelect, handleItemClick]);
+  }, [isClient, inChina, items, onMarkerSelect, handleItemClick, onBoundsChange]);
 
   // Create numbered marker icon
   const createNumberedIcon = (number, isSelected) => {

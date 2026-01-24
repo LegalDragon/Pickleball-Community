@@ -67,6 +67,10 @@ export default function Clubs() {
   // For map view hover
   const [hoveredClubId, setHoveredClubId] = useState(null);
 
+  // Map bounds for viewport-based search
+  const [mapBounds, setMapBounds] = useState(null);
+  const boundsTimeoutRef = useRef(null);
+
   // Geocoding cache for clubs without coordinates
   const [geocodeCache, setGeocodeCache] = useState({});
 
@@ -364,7 +368,14 @@ export default function Clubs() {
         longitude: userLocation?.lng,
         radiusMiles: userLocation ? radiusMiles : undefined,
         sortBy: sortBy,
-        sortOrder: sortOrder
+        sortOrder: sortOrder,
+        // Include map bounds when in map mode
+        ...(viewMode === 'map' && mapBounds ? {
+          minLat: mapBounds.minLat,
+          maxLat: mapBounds.maxLat,
+          minLng: mapBounds.minLng,
+          maxLng: mapBounds.maxLng
+        } : {})
       };
 
       const response = await clubsApi.search(params);
@@ -385,7 +396,18 @@ export default function Clubs() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder]);
+  }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder, viewMode, mapBounds]);
+
+  // Handle map bounds change (debounced)
+  const handleMapBoundsChange = useCallback((bounds) => {
+    if (boundsTimeoutRef.current) {
+      clearTimeout(boundsTimeoutRef.current);
+    }
+    boundsTimeoutRef.current = setTimeout(() => {
+      setMapBounds(bounds);
+      setPage(1); // Reset to first page when bounds change
+    }, 500); // Debounce for 500ms
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'search') {
@@ -804,6 +826,8 @@ export default function Clubs() {
                           onMarkerSelect={(club) => setHoveredClubId(club.id)}
                           selectedVenueId={hoveredClubId}
                           showNumbers={true}
+                          onBoundsChange={handleMapBoundsChange}
+                          fitBounds={!mapBounds}
                         />
                       </div>
                     </div>
@@ -825,6 +849,8 @@ export default function Clubs() {
                           onMarkerSelect={(club) => setHoveredClubId(club.id)}
                           selectedVenueId={hoveredClubId}
                           showNumbers={true}
+                          onBoundsChange={handleMapBoundsChange}
+                          fitBounds={!mapBounds}
                         />
                       </div>
 
