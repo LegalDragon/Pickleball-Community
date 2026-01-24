@@ -457,10 +457,14 @@ public class CheckInController : EventControllerBase
             .Select(a => a.Id)
             .ToListAsync();
 
-        var signedWaiverCount = await _context.EventUnitMemberWaivers
-            .Where(w => w.EventUnitMemberId == firstReg.Id && allWaiverIds.Contains(w.WaiverId))
-            .CountAsync();
+        // Fetch signed waiver IDs for this member and count in memory
+        // (avoids EF Core Contains() SQL generation issues with OPENJSON)
+        var signedWaiverIds = await _context.EventUnitMemberWaivers
+            .Where(w => w.EventUnitMemberId == firstReg.Id)
+            .Select(w => w.WaiverId)
+            .ToListAsync();
 
+        var signedWaiverCount = allWaiverIds.Count(id => signedWaiverIds.Contains(id));
         var allWaiversSigned = signedWaiverCount >= allWaiverIds.Count;
 
         // Send waiver confirmation email with signed PDF attached
