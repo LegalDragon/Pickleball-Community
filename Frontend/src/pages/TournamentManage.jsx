@@ -2247,7 +2247,7 @@ export default function TournamentManage() {
                   if (tabGroup.key === 'preplanning') {
                     setActiveTab('eventinfo');
                   } else if (tabGroup.key === 'gameday') {
-                    setActiveTab('schedule');
+                    setActiveTab('overview');
                   }
                 }}
                 className={`px-6 py-3 font-semibold text-sm transition-colors ${
@@ -2308,30 +2308,51 @@ export default function TournamentManage() {
                   </button>
                 ))
               ) : (
-                [
-                  { key: 'schedule', label: 'Schedule' },
-                  { key: 'overview', label: 'Overview' },
-                  { key: 'checkin', label: 'Check-in' },
-                  { key: 'scoring', label: 'Scoring' },
-                  { key: 'gamedayexec', label: 'Game Day' }
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => {
-                      setActiveTab(tab.key);
-                      if (tab.key === 'checkin' && !checkInData) {
-                        loadCheckIns();
-                      }
-                    }}
-                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                      activeTab === tab.key
-                        ? 'border-orange-600 text-orange-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))
+                <>
+                  {/* Left tabs */}
+                  {[
+                    { key: 'overview', label: 'Overview' },
+                    { key: 'checkin', label: 'Check-in' },
+                    { key: 'schedule', label: 'Schedule' },
+                    { key: 'bycourt', label: 'By Court' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => {
+                        setActiveTab(tab.key);
+                        if (tab.key === 'checkin' && !checkInData) {
+                          loadCheckIns();
+                        }
+                      }}
+                      className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                        activeTab === tab.key
+                          ? 'border-orange-600 text-orange-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                  {/* Spacer */}
+                  <div className="flex-1" />
+                  {/* Right tabs */}
+                  {[
+                    { key: 'scoring', label: 'Scoring' },
+                    { key: 'gamedayexec', label: 'Game Day' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                        activeTab === tab.key
+                          ? 'border-orange-600 text-orange-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </>
               )}
             </div>
           </div>
@@ -4447,6 +4468,136 @@ export default function TournamentManage() {
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No Schedule Yet</h3>
                 <p className="text-gray-500 mb-4">
                   Generate a schedule from the Divisions tab when you have enough registrations
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* By Court Tab - Shows schedule grouped by court */}
+        {activeTab === 'bycourt' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Schedule By Court</h2>
+              <button
+                onClick={() => {
+                  loadDashboard();
+                  dashboard?.divisions?.forEach(div => {
+                    if (div.scheduleReady) loadSchedule(div.id);
+                  });
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+
+            {dashboard?.courts?.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {dashboard.courts.map(court => {
+                  // Get all matches assigned to this court from the schedule
+                  const courtMatches = [];
+
+                  // Collect matches from all divisions' schedules
+                  if (schedule?.rounds) {
+                    schedule.rounds.forEach(round => {
+                      round.matches?.forEach(match => {
+                        if (match.courtId === court.id) {
+                          courtMatches.push({
+                            ...match,
+                            roundName: round.roundName,
+                            roundType: round.roundType
+                          });
+                        }
+                      });
+                    });
+                  }
+
+                  // Sort by scheduled time
+                  courtMatches.sort((a, b) => {
+                    if (!a.scheduledTime) return 1;
+                    if (!b.scheduledTime) return -1;
+                    return new Date(a.scheduledTime) - new Date(b.scheduledTime);
+                  });
+
+                  return (
+                    <div key={court.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className={`px-4 py-3 border-b ${
+                        court.status === 'InUse' ? 'bg-orange-50' :
+                        court.status === 'Available' ? 'bg-green-50' : 'bg-gray-50'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                            <MapPin className="w-4 h-4" />
+                            {court.courtLabel}
+                          </h3>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                            court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
+                            court.status === 'Available' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {court.status || 'Available'}
+                          </span>
+                        </div>
+                        {courtMatches.length > 0 && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            {courtMatches.length} match{courtMatches.length !== 1 ? 'es' : ''} scheduled
+                          </p>
+                        )}
+                      </div>
+                      <div className="divide-y max-h-80 overflow-y-auto">
+                        {courtMatches.length > 0 ? (
+                          courtMatches.map((match, idx) => (
+                            <div key={idx} className="p-3 hover:bg-gray-50">
+                              {match.scheduledTime && (
+                                <div className="flex items-center gap-1 text-xs text-blue-600 mb-1">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(match.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              )}
+                              <div className="text-sm">
+                                <span className="text-gray-400 mr-2">#{match.matchNumber}</span>
+                                <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
+                                  {match.unit1Name || match.unit1SeedInfo || `Unit #${match.unit1Number || '?'}`}
+                                </span>
+                                <span className="text-gray-400 mx-2">vs</span>
+                                <span className={match.status === 'Completed' ? 'text-green-600' : 'text-gray-900'}>
+                                  {match.unit2Name || match.unit2SeedInfo || `Unit #${match.unit2Number || '?'}`}
+                                </span>
+                              </div>
+                              {match.score && (
+                                <div className="text-xs text-gray-500 mt-1">{match.score}</div>
+                              )}
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  match.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                  match.status === 'InProgress' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {match.status || 'Scheduled'}
+                                </span>
+                                {match.roundName && (
+                                  <span className="text-xs text-gray-400">{match.roundName}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 text-center text-gray-400 text-sm">
+                            No matches scheduled
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Courts Configured</h3>
+                <p className="text-gray-500">
+                  Add courts in the Courts section under Pre-Planning to see the schedule by court.
                 </p>
               </div>
             )}
