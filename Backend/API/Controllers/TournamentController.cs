@@ -7938,30 +7938,32 @@ public class TournamentController : EventControllerBase
                 court.Status = "Available";
             }
 
-            // Delete all score history (wrapped in try-catch in case table doesn't exist)
+            // Delete all score history using raw SQL to avoid EF Core query generation issues
             try
             {
-                var scoreHistories = await _context.EventGameScoreHistories
-                    .Where(h => h.Game!.EncounterMatch!.Encounter!.EventId == eventId)
-                    .ToListAsync();
-                if (scoreHistories.Any())
-                {
-                    _context.EventGameScoreHistories.RemoveRange(scoreHistories);
-                }
+                await _context.Database.ExecuteSqlRawAsync(@"
+                    DELETE h FROM EventGameScoreHistories h
+                    INNER JOIN EventGames g ON h.GameId = g.Id
+                    INNER JOIN EncounterMatches m ON g.EncounterMatchId = m.Id
+                    INNER JOIN EventEncounters e ON m.EncounterId = e.Id
+                    WHERE e.EventId = {0}", eventId);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Could not delete score histories for event {EventId} - table may not exist", eventId);
             }
 
-            // Delete game-related notifications for this event
-            var gameIds = games.Select(g => g.Id).ToList();
-            var notifications = await _context.Notifications
-                .Where(n =>
-                    (n.ReferenceType == "Event" && n.ReferenceId == eventId) ||
-                    (n.ReferenceType == "Game" && n.ReferenceId.HasValue && gameIds.Contains(n.ReferenceId.Value)))
-                .ToListAsync();
-            _context.Notifications.RemoveRange(notifications);
+            // Delete game-related notifications for this event using raw SQL
+            // This avoids EF Core SQL generation issues with Contains() on lists
+            await _context.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM Notifications
+                WHERE (ReferenceType = 'Event' AND ReferenceId = {0})
+                OR (ReferenceType = 'Game' AND ReferenceId IN (
+                    SELECT g.Id FROM EventGames g
+                    INNER JOIN EncounterMatches m ON g.EncounterMatchId = m.Id
+                    INNER JOIN EventEncounters e ON m.EncounterId = e.Id
+                    WHERE e.EventId = {0}
+                ))", eventId);
 
             // Reset division drawing state
             var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
