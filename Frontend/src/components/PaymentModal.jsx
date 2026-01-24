@@ -136,7 +136,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
     try {
       // Determine asset type based on file MIME type
       const assetType = file.type === 'application/pdf' ? 'document' : 'image';
-      const response = await sharedAssetApi.upload(file, assetType, 'payment-proof', true);
+      const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       // Response has url directly (not wrapped in data), and it's a relative path
       if (response.success && response.url) {
         // Convert relative URL to absolute URL using shared auth base

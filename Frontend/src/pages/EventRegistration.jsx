@@ -626,7 +626,7 @@ export default function EventRegistration() {
     setIsUploading(true);
     try {
       const assetType = file.type === 'application/pdf' ? 'document' : 'image';
-      const response = await sharedAssetApi.upload(file, assetType, 'payment-proof', true);
+      const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       if (response.success && response.url) {
         const fullUrl = getSharedAssetUrl(response.url);
         setPaymentProofUrl(fullUrl);

@@ -1335,7 +1335,7 @@ export default function TournamentManage() {
     setUploadingPaymentProof(true);
     try {
       const assetType = file.type === 'application/pdf' ? 'document' : 'image';
-      const response = await sharedAssetApi.upload(file, assetType, 'payment-proof', true);
+      const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       if (response.success && response.url) {
         const fullUrl = getSharedAssetUrl(response.url);
         updateEditForm('paymentProofUrl', fullUrl);

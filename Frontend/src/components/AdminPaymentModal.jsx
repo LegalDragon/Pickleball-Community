@@ -262,9 +262,10 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
 
     setIsUploading(true);
     try {
-      const response = await sharedAssetApi.upload(file);
-      if (response.success && response.data?.url) {
-        setEditForm(prev => ({ ...prev, paymentProofUrl: response.data.url }));
+      const assetType = file.type === 'application/pdf' ? 'document' : 'image';
+      const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
+      if (response.success && response.url) {
+        setEditForm(prev => ({ ...prev, paymentProofUrl: response.url }));
         toast.success('File uploaded');
       } else {
         toast.error(response.message || 'Failed to upload file');
