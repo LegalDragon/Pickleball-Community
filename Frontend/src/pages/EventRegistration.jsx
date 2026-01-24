@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi, eventStaffApi } from '../services/api';
+import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi, eventStaffApi, teamUnitsApi } from '../services/api';
 import SignatureCanvas from '../components/SignatureCanvas';
 
 const STEPS = [
@@ -120,7 +120,7 @@ export default function EventRegistration() {
 
         // Load team units for reference
         try {
-          const teamUnitsResponse = await eventsApi.getTeamUnits();
+          const teamUnitsResponse = await teamUnitsApi.getAll();
           if (teamUnitsResponse.success) {
             setTeamUnits(teamUnitsResponse.data || []);
           }
@@ -1306,7 +1306,7 @@ export default function EventRegistration() {
 
                   return (
                     <div key={division.id}>
-                      <button
+                      <div
                         onClick={() => {
                           if (isRegistered || isFull) return;
                           if (event.allowMultipleDivisions) {
@@ -1315,10 +1315,21 @@ export default function EventRegistration() {
                             handleSelectDivision(division);
                           }
                         }}
-                        disabled={isRegistered || isFull}
+                        role={isRegistered || isFull ? undefined : 'button'}
+                        tabIndex={isRegistered || isFull ? undefined : 0}
+                        onKeyDown={(e) => {
+                          if ((e.key === 'Enter' || e.key === ' ') && !isRegistered && !isFull) {
+                            e.preventDefault();
+                            if (event.allowMultipleDivisions) {
+                              toggleDivisionSelection(division);
+                            } else {
+                              handleSelectDivision(division);
+                            }
+                          }
+                        }}
                         className={`
                           w-full p-4 rounded-lg border-2 text-left transition-all
-                          ${isRegistered ? 'border-green-300 bg-green-50 cursor-not-allowed' : ''}
+                          ${isRegistered ? 'border-green-300 bg-green-50' : ''}
                           ${isFull && !isRegistered ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60' : ''}
                           ${isSelected ? 'border-orange-500 bg-orange-50' : ''}
                           ${!isRegistered && !isFull && !isSelected ? 'border-gray-200 hover:border-orange-300 hover:bg-orange-50 cursor-pointer' : ''}
@@ -1460,7 +1471,7 @@ export default function EventRegistration() {
                             ) : null}
                           </div>
                         </div>
-                      </button>
+                      </div>
 
                       {/* Fee selection for this division (shown when selected and has fee options) */}
                       {isSelected && hasFeeOptions(division) && (
