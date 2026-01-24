@@ -32,22 +32,22 @@ BEGIN
         d.Name,
         u.Id,
         u.Name,
-        'Team has ' + CAST(COUNT(m.Id) AS NVARCHAR(10)) + ' of ' + CAST(COALESCE(tu.TotalPlayers, d.TeamSize) AS NVARCHAR(10)) + ' required players'
+        'Team has ' + CAST(COUNT(m.Id) AS NVARCHAR(10)) + ' of ' + CAST(COALESCE(tu.MaleCount + tu.FemaleCount + tu.UnisexCount, d.TeamSize) AS NVARCHAR(10)) + ' required players'
     FROM EventUnits u
     INNER JOIN EventDivisions d ON u.DivisionId = d.Id
     LEFT JOIN TeamUnits tu ON d.TeamUnitId = tu.Id
     LEFT JOIN EventUnitMembers m ON u.Id = m.UnitId AND m.InviteStatus = 'Accepted'
     WHERE u.EventId = @EventId
         AND u.Status NOT IN ('Cancelled')
-        AND COALESCE(tu.TotalPlayers, d.TeamSize) > 1
-    GROUP BY d.Id, d.Name, u.Id, u.Name, tu.TotalPlayers, d.TeamSize
-    HAVING COUNT(m.Id) < COALESCE(tu.TotalPlayers, d.TeamSize);
+        AND COALESCE(tu.MaleCount + tu.FemaleCount + tu.UnisexCount, d.TeamSize) > 1
+    GROUP BY d.Id, d.Name, u.Id, u.Name, tu.MaleCount, tu.FemaleCount, tu.UnisexCount, d.TeamSize
+    HAVING COUNT(m.Id) < COALESCE(tu.MaleCount + tu.FemaleCount + tu.UnisexCount, d.TeamSize);
 
     -- Check for missing waivers
     DECLARE @WaiverCount INT;
     SELECT @WaiverCount = COUNT(*)
     FROM ObjectAssets oa
-    INNER JOIN ObjectAssetTypes oat ON oa.AssetTypeId = oat.Id
+    INNER JOIN ObjectAssetTypes oat ON oa.ObjectAssetTypeId = oat.Id
     WHERE oa.ObjectId = @EventId
         AND LOWER(oat.TypeName) = 'waiver';
 
@@ -168,15 +168,15 @@ BEGIN
         d.Name,
         u.Id,
         u.Name,
-        'Team has ' + CAST(COUNT(m.Id) AS NVARCHAR(10)) + ' players but only ' + CAST(COALESCE(tu.TotalPlayers, d.TeamSize) AS NVARCHAR(10)) + ' allowed'
+        'Team has ' + CAST(COUNT(m.Id) AS NVARCHAR(10)) + ' players but only ' + CAST(COALESCE(tu.MaleCount + tu.FemaleCount + tu.UnisexCount, d.TeamSize) AS NVARCHAR(10)) + ' allowed'
     FROM EventUnits u
     INNER JOIN EventDivisions d ON u.DivisionId = d.Id
     LEFT JOIN TeamUnits tu ON d.TeamUnitId = tu.Id
     LEFT JOIN EventUnitMembers m ON u.Id = m.UnitId AND m.InviteStatus = 'Accepted'
     WHERE u.EventId = @EventId
         AND u.Status NOT IN ('Cancelled')
-    GROUP BY d.Id, d.Name, u.Id, u.Name, tu.TotalPlayers, d.TeamSize
-    HAVING COUNT(m.Id) > COALESCE(tu.TotalPlayers, d.TeamSize);
+    GROUP BY d.Id, d.Name, u.Id, u.Name, tu.MaleCount, tu.FemaleCount, tu.UnisexCount, d.TeamSize
+    HAVING COUNT(m.Id) > COALESCE(tu.MaleCount + tu.FemaleCount + tu.UnisexCount, d.TeamSize);
 
     -- Check for not checked in (event day validation)
     INSERT INTO #ValidationResults (Category, Severity, DivisionId, DivisionName, UnitId, UnitName, UserId, UserName, Message)
