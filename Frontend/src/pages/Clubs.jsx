@@ -2038,6 +2038,25 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
         ...editFormData,
         homeVenueId: selectedVenue?.id || null,
       };
+
+      // Geocode address if we have city/state but no coordinates, or if address changed
+      const addressChanged = editFormData.city !== clubData.city ||
+                            editFormData.state !== clubData.state ||
+                            editFormData.country !== clubData.country ||
+                            editFormData.address !== clubData.address;
+
+      const needsGeocode = (editFormData.city || editFormData.state) &&
+                          (!editFormData.latitude || !editFormData.longitude || addressChanged);
+
+      if (needsGeocode && !selectedVenue?.id) {
+        // Only geocode if no home venue is selected (venue provides coordinates)
+        const coords = await geocodeAddress(editFormData.city, editFormData.state, editFormData.country);
+        if (coords) {
+          dataToSave.latitude = coords.lat;
+          dataToSave.longitude = coords.lng;
+        }
+      }
+
       const response = await clubsApi.update(clubData.id, dataToSave);
       if (response.success) {
         // Refresh club data
