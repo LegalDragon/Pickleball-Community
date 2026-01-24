@@ -72,8 +72,9 @@ export default function Venues() {
   const pageSize = 20;
 
   // Map bounds for viewport-based search
-  const [mapBounds, setMapBounds] = useState(null);
-  const boundsTimeoutRef = useRef(null);
+  const [mapBounds, setMapBounds] = useState(null); // Bounds used in last search
+  const [pendingBounds, setPendingBounds] = useState(null); // Bounds user has panned to
+  const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
 
   // Check if location permission is blocked
   const [locationBlocked, setLocationBlocked] = useState(false);
@@ -348,16 +349,21 @@ export default function Venues() {
     loadCourts();
   }, [loadCourts]);
 
-  // Handle map bounds change (debounced)
+  // Handle map bounds change - show "Search this area" button
   const handleMapBoundsChange = useCallback((bounds) => {
-    if (boundsTimeoutRef.current) {
-      clearTimeout(boundsTimeoutRef.current);
-    }
-    boundsTimeoutRef.current = setTimeout(() => {
-      setMapBounds(bounds);
-      setPage(1); // Reset to first page when bounds change
-    }, 500); // Debounce for 500ms
+    setPendingBounds(bounds);
+    // Show button if bounds have changed from last search
+    setShowSearchAreaButton(true);
   }, []);
+
+  // Search in the current map area
+  const handleSearchInArea = useCallback(() => {
+    if (pendingBounds) {
+      setMapBounds(pendingBounds);
+      setPage(1);
+      setShowSearchAreaButton(false);
+    }
+  }, [pendingBounds]);
 
   // Debounced search for court name - waits for user to stop typing
   const searchTimeoutRef = useRef(null);
@@ -833,7 +839,7 @@ export default function Venues() {
                     </div>
                   </div>
                   {/* Map - Desktop */}
-                  <div className="flex-1">
+                  <div className="flex-1 relative">
                     <VenueMap
                       venues={venues}
                       userLocation={userLocation}
@@ -844,13 +850,22 @@ export default function Venues() {
                       onBoundsChange={handleMapBoundsChange}
                       fitBounds={!mapBounds}
                     />
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* Mobile: Stacked layout with horizontal scrollable list */}
                 <div className="md:hidden flex flex-col">
                   {/* Map - Mobile (takes most of the viewport) */}
-                  <div className="h-[50vh] min-h-[300px]">
+                  <div className="h-[50vh] min-h-[300px] relative">
                     <VenueMap
                       venues={venues}
                       userLocation={userLocation}
@@ -861,6 +876,15 @@ export default function Venues() {
                       onBoundsChange={handleMapBoundsChange}
                       fitBounds={!mapBounds}
                     />
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
                   </div>
 
                   {/* Venue count indicator */}
