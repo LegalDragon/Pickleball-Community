@@ -1419,10 +1419,14 @@ export default function TournamentManage() {
         (response.data || []).forEach(unit => {
           if (unit.status === 'Cancelled') return;
           const divId = unit.divisionId;
+          // Skip units without a valid divisionId
+          if (!divId) return;
           if (!grouped[divId]) {
+            // Try to get division name from event data if not in unit
+            const divisionFromEvent = event?.divisions?.find(d => d.id === divId);
             grouped[divId] = {
               divisionId: divId,
-              divisionName: unit.divisionName || 'Unknown Division',
+              divisionName: unit.divisionName || divisionFromEvent?.name || '',
               units: []
             };
           }
@@ -1573,7 +1577,8 @@ export default function TournamentManage() {
 
   const getUnitsByDivision = () => {
     if (!unitsData) return [];
-    const allDivisions = Object.values(unitsData).filter(d => d.units.length > 0);
+    // Filter out divisions without a valid divisionId or name, and with no units
+    const allDivisions = Object.values(unitsData).filter(d => d.units.length > 0 && d.divisionId && d.divisionName);
     if (registrationDivisionFilter === 'all') return allDivisions;
     return allDivisions.filter(d => d.divisionId === parseInt(registrationDivisionFilter));
   };
