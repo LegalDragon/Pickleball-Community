@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog, FileText, Download, File, Video, Table, Presentation, Eye, EyeOff, Lock, GripVertical, Building2, Building, AlertCircle, Send, Network, ExternalLink, QrCode } from 'lucide-react';
 
@@ -72,6 +72,18 @@ export default function Clubs() {
   const [pendingBounds, setPendingBounds] = useState(null); // Bounds user has panned to
   const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
   const mapInitializedRef = useRef(false); // Track if map has finished initial load
+  const userInteractedWithMapRef = useRef(false); // Track if user has panned/zoomed
+
+  // Memoize venues array for VenueMap to prevent re-renders on every parent state change
+  const mapVenues = useMemo(() => {
+    return clubs.map(c => ({
+      ...c,
+      id: c.id,
+      name: c.name,
+      latitude: c.latitude,
+      longitude: c.longitude
+    }));
+  }, [clubs]);
 
   // Geocoding cache for clubs without coordinates
   const [geocodeCache, setGeocodeCache] = useState({});
@@ -414,13 +426,17 @@ export default function Clubs() {
   }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder, viewMode, mapBounds]);
 
   // Handle map bounds change - show "Search this area" button
-  const handleMapBoundsChange = useCallback((bounds) => {
+  const handleMapBoundsChange = useCallback((bounds, isUserInteraction) => {
     setPendingBounds(bounds);
     // Skip the initial fitBounds event - only show button for user interactions
     if (!mapInitializedRef.current) {
       // First bounds change is from fitBounds, mark as initialized
       mapInitializedRef.current = true;
       return;
+    }
+    // Track that user has interacted with the map
+    if (isUserInteraction !== false) {
+      userInteractedWithMapRef.current = true;
     }
     // Show button for subsequent user-initiated map movements
     setShowSearchAreaButton(true);
@@ -853,13 +869,7 @@ export default function Clubs() {
                       {/* Map - Desktop */}
                       <div className="flex-1 relative">
                         <VenueMap
-                          venues={clubs.map(c => ({
-                            ...c,
-                            id: c.id,
-                            name: c.name,
-                            latitude: c.latitude,
-                            longitude: c.longitude
-                          }))}
+                          venues={mapVenues}
                           userLocation={userLocation}
                           onVenueClick={(club) => handleViewDetails(club)}
                           onMarkerSelect={(club) => setHoveredClubId(club.id)}
@@ -885,13 +895,7 @@ export default function Clubs() {
                       {/* Map - Mobile (takes most of the viewport) */}
                       <div className="h-[50vh] min-h-[300px] relative">
                         <VenueMap
-                          venues={clubs.map(c => ({
-                            ...c,
-                            id: c.id,
-                            name: c.name,
-                            latitude: c.latitude,
-                            longitude: c.longitude
-                          }))}
+                          venues={mapVenues}
                           userLocation={userLocation}
                           onVenueClick={(club) => handleViewDetails(club)}
                           onMarkerSelect={(club) => setHoveredClubId(club.id)}

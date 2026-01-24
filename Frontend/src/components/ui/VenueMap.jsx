@@ -54,7 +54,8 @@ export default function VenueMap({
   userLocation,
   fitBounds = true,
   showNumbers = false,
-  onBoundsChange = null // Callback when map viewport changes: ({ minLat, maxLat, minLng, maxLng }) => void
+  onBoundsChange = null, // Callback when map viewport changes: ({ minLat, maxLat, minLng, maxLng }, isUserInteraction) => void
+  forceRefitBounds = false // Set to a new value to force a re-fit
 }) {
   // Support both venues and courts props for backward compatibility
   const items = venues || courts || [];
@@ -66,6 +67,9 @@ export default function VenueMap({
   const [isClient, setIsClient] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [inChina] = useState(() => isLikelyInChina());
+  const userHasInteractedRef = useRef(false); // Track if user has panned/zoomed
+  const initialFitDoneRef = useRef(false); // Track if initial fitBounds was done
+  const lastForceRefitRef = useRef(forceRefitBounds); // Track forceRefitBounds changes
 
   // Store callbacks and props in refs to avoid unnecessary effect re-runs
   const onBoundsChangeRef = useRef(onBoundsChange);
@@ -155,19 +159,30 @@ export default function VenueMap({
     };
     mapRef.current.addEventListener('click', handlePopupClick);
 
+    // Track programmatic moves to distinguish from user interaction
+    let isProgrammaticMove = false;
+
     // Handle map bounds changes (pan/zoom)
     const handleMoveEnd = () => {
       if (onBoundsChangeRef.current) {
         const bounds = map.getBounds();
+        const isUserInteraction = !isProgrammaticMove;
+        if (isUserInteraction) {
+          userHasInteractedRef.current = true;
+        }
         onBoundsChangeRef.current({
           minLat: bounds.getSouth(),
           maxLat: bounds.getNorth(),
           minLng: bounds.getWest(),
           maxLng: bounds.getEast()
-        });
+        }, isUserInteraction);
       }
+      isProgrammaticMove = false;
     };
     map.on('moveend', handleMoveEnd);
+
+    // Store the programmatic move setter on the map instance for use by fitBounds
+    map._setProgrammaticMove = (value) => { isProgrammaticMove = value; };
 
     // Mark map as ready so markers can be added
     setMapReady(true);
@@ -279,13 +294,22 @@ export default function VenueMap({
       markersRef.current.push(userMarker);
     }
 
-    // Fit bounds if requested (use ref to avoid triggering effect on prop change)
-    if (fitBoundsRef.current && venuesWithCoords.length > 0) {
+    // Fit bounds only on initial load, not when venues change after user interaction
+    // This prevents the map from jumping when the user has already panned/zoomed
+    const shouldFitBounds = fitBoundsRef.current &&
+                            venuesWithCoords.length > 0 &&
+                            !initialFitDoneRef.current &&
+                            !userHasInteractedRef.current;
+
+    if (shouldFitBounds) {
       const bounds = L.latLngBounds(venuesWithCoords.map(c => [c.lat, c.lng]));
       if (userLocation) {
         bounds.extend([userLocation.lat, userLocation.lng]);
       }
+      // Mark as programmatic to avoid triggering user interaction flag
+      if (map._setProgrammaticMove) map._setProgrammaticMove(true);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+      initialFitDoneRef.current = true;
     }
   }, [mapReady, venuesWithCoords, userLocation, selectedCourtId, showNumbers]);
 
