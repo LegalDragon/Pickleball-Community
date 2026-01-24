@@ -844,11 +844,11 @@ export default function TournamentManage() {
     setRegisteringPlayer(true);
     try {
       const response = await tournamentApi.adminRegisterUser(eventId, {
-        userId: selectedPlayerForReg.id,
+        userId: selectedPlayerForReg.userId,
         divisionId: parseInt(selectedDivisionForReg)
       });
       if (response.success) {
-        toast.success(`${selectedPlayerForReg.displayName || selectedPlayerForReg.email} registered successfully`);
+        toast.success(`${selectedPlayerForReg.name || selectedPlayerForReg.email} registered successfully`);
         setShowAddPlayer(false);
         setPlayerSearchQuery('');
         setPlayerSearchResults([]);
@@ -6187,17 +6187,17 @@ export default function TournamentManage() {
                 <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
                   {playerSearchResults.map(player => (
                     <button
-                      key={player.id}
+                      key={player.userId}
                       onClick={() => {
                         setSelectedPlayerForReg(player);
-                        setPlayerSearchQuery(player.displayName || player.email);
+                        setPlayerSearchQuery(player.name || player.email);
                         setPlayerSearchResults([]);
                       }}
                       className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
                     >
-                      {player.avatarUrl ? (
+                      {player.profileImageUrl ? (
                         <img
-                          src={getSharedAssetUrl(player.avatarUrl)}
+                          src={getSharedAssetUrl(player.profileImageUrl)}
                           alt=""
                           className="w-8 h-8 rounded-full object-cover"
                         />
@@ -6207,7 +6207,7 @@ export default function TournamentManage() {
                         </div>
                       )}
                       <div>
-                        <div className="font-medium text-gray-900">{player.displayName || 'Unknown'}</div>
+                        <div className="font-medium text-gray-900">{player.name || 'Unknown'}</div>
                         <div className="text-sm text-gray-500">{player.email}</div>
                       </div>
                     </button>
@@ -6220,9 +6220,9 @@ export default function TournamentManage() {
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {selectedPlayerForReg.avatarUrl ? (
+                      {selectedPlayerForReg.profileImageUrl ? (
                         <img
-                          src={getSharedAssetUrl(selectedPlayerForReg.avatarUrl)}
+                          src={getSharedAssetUrl(selectedPlayerForReg.profileImageUrl)}
                           alt=""
                           className="w-10 h-10 rounded-full object-cover"
                         />
@@ -6232,7 +6232,7 @@ export default function TournamentManage() {
                         </div>
                       )}
                       <div>
-                        <div className="font-medium text-gray-900">{selectedPlayerForReg.displayName || 'Unknown'}</div>
+                        <div className="font-medium text-gray-900">{selectedPlayerForReg.name || 'Unknown'}</div>
                         <div className="text-sm text-gray-500">{selectedPlayerForReg.email}</div>
                       </div>
                     </div>
