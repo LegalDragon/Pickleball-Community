@@ -1222,11 +1222,73 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [searchingVenues, setSearchingVenues] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(null);
 
+  // Edit form location dropdowns (combobox style - show suggestions but allow new entries)
+  const [editCountries, setEditCountries] = useState([]);
+  const [editStates, setEditStates] = useState([]);
+  const [editCities, setEditCities] = useState([]);
+
   // Sync clubData when club prop changes (important for logo/avatar display)
   useEffect(() => {
     setClubData(club);
     setChatEnabled(club.chatEnabled || false);
   }, [club]);
+
+  // Load countries when entering edit mode
+  useEffect(() => {
+    if (isEditingInfo && editCountries.length === 0) {
+      const loadEditCountries = async () => {
+        try {
+          const response = await clubsApi.getCountries();
+          if (response.success) {
+            setEditCountries(response.data || []);
+          }
+        } catch (err) {
+          console.error('Error loading countries for edit:', err);
+        }
+      };
+      loadEditCountries();
+    }
+  }, [isEditingInfo]);
+
+  // Load states when country changes in edit form
+  useEffect(() => {
+    if (!isEditingInfo || !editFormData.country) {
+      setEditStates([]);
+      return;
+    }
+    const loadEditStates = async () => {
+      try {
+        const response = await clubsApi.getStatesByCountry(editFormData.country);
+        if (response.success) {
+          const sorted = (response.data || []).sort((a, b) => a.name.localeCompare(b.name));
+          setEditStates(sorted);
+        }
+      } catch (err) {
+        console.error('Error loading states for edit:', err);
+      }
+    };
+    loadEditStates();
+  }, [isEditingInfo, editFormData.country]);
+
+  // Load cities when state changes in edit form
+  useEffect(() => {
+    if (!isEditingInfo || !editFormData.country || !editFormData.state) {
+      setEditCities([]);
+      return;
+    }
+    const loadEditCities = async () => {
+      try {
+        const response = await clubsApi.getCitiesByState(editFormData.country, editFormData.state);
+        if (response.success) {
+          const sorted = (response.data || []).sort((a, b) => a.name.localeCompare(b.name));
+          setEditCities(sorted);
+        }
+      } catch (err) {
+        console.error('Error loading cities for edit:', err);
+      }
+    };
+    loadEditCities();
+  }, [isEditingInfo, editFormData.country, editFormData.state]);
 
   // Documents state
   const [documents, setDocuments] = useState([]);
@@ -3550,46 +3612,68 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                        <input
-                          type="text"
-                          value={editFormData.city || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                        <input
-                          type="text"
-                          value={editFormData.state || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
+                    {/* Country first - determines state options */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                      <input
+                        type="text"
+                        list="edit-countries-list"
+                        value={editFormData.country || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value, state: '', city: '' })}
+                        className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                        placeholder="Select or type country"
+                      />
+                      <datalist id="edit-countries-list">
+                        {editCountries.map((c) => (
+                          <option key={c.name} value={c.name} />
+                        ))}
+                      </datalist>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">State/Province</label>
                         <input
                           type="text"
-                          value={editFormData.country || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
+                          list="edit-states-list"
+                          value={editFormData.state || ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value, city: '' })}
                           className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder={editFormData.country ? 'Select or type state' : 'Select country first'}
                         />
+                        <datalist id="edit-states-list">
+                          {editStates.map((s) => (
+                            <option key={s.name} value={s.name} />
+                          ))}
+                        </datalist>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                         <input
-                          type="url"
-                          value={editFormData.website || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
+                          type="text"
+                          list="edit-cities-list"
+                          value={editFormData.city || ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
                           className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder={editFormData.state ? 'Select or type city' : 'Select state first'}
                         />
+                        <datalist id="edit-cities-list">
+                          {editCities.map((c) => (
+                            <option key={c.name} value={c.name} />
+                          ))}
+                        </datalist>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                      <input
+                        type="url"
+                        value={editFormData.website || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
+                        placeholder="https://example.com"
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
