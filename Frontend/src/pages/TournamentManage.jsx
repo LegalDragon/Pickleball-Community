@@ -118,6 +118,8 @@ export default function TournamentManage() {
   const [unitsData, setUnitsData] = useState(null); // All units grouped by division
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [registrationDivisionFilter, setRegistrationDivisionFilter] = useState('all'); // Filter for Registration Management
+  const [registrationFeeTypeFilter, setRegistrationFeeTypeFilter] = useState('all'); // Fee type filter
+  const [eventFeeTypes, setEventFeeTypes] = useState([]); // Fee types for the event
   const [selectedUnitsForMerge, setSelectedUnitsForMerge] = useState([]);
   const [processingUnitAction, setProcessingUnitAction] = useState(null); // { unitId, action }
   const [expandedUnit, setExpandedUnit] = useState(null); // unitId for expanded view
@@ -178,6 +180,7 @@ export default function TournamentManage() {
     if (eventId) {
       loadDashboard();
       loadEvent();
+      loadEventFeeTypes();
     }
   }, [eventId]);
 
@@ -1441,6 +1444,17 @@ export default function TournamentManage() {
       toast.error('Failed to load units');
     } finally {
       setLoadingUnits(false);
+    }
+  };
+
+  const loadEventFeeTypes = async () => {
+    try {
+      const response = await tournamentApi.getEventFeeTypes(eventId);
+      if (response.success) {
+        setEventFeeTypes(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading fee types:', err);
     }
   };
 
@@ -4158,6 +4172,21 @@ export default function TournamentManage() {
                     ))}
                   </select>
                 </div>
+                {eventFeeTypes.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type</label>
+                    <select
+                      value={registrationFeeTypeFilter}
+                      onChange={(e) => setRegistrationFeeTypeFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="all">All Fee Types</option>
+                      {eventFeeTypes.map(ft => (
+                        <option key={ft.id} value={ft.id}>{ft.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {!unitsData && (
                   <div className="flex items-end">
                     <button
