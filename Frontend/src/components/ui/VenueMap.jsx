@@ -301,10 +301,9 @@ export default function VenueMap({
       const icon = createNumberedIcon(number, isSelected);
       marker.setIcon(icon);
 
-      // Open popup if selected
+      // Open popup if selected (but don't pan - user controls map position)
       if (isSelected && mapInstanceRef.current) {
         marker.openPopup();
-        mapInstanceRef.current.panTo([court.lat, court.lng]);
       }
     });
   }, [selectedCourtId, showNumbers]);

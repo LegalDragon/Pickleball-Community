@@ -359,26 +359,39 @@ export default function Clubs() {
   const loadClubs = useCallback(async () => {
     setLoading(true);
     try {
+      // Determine which search mode to use:
+      // 1. Map bounds search (highest priority) - when user clicked "Search this area"
+      // 2. Address filter search - when user selected country/state/city/name
+      // 3. Location-based search (default) - use current location + distance
+
+      const hasAddressFilters = searchQuery || country || state || city;
+      const hasMapBounds = viewMode === 'map' && mapBounds;
+
       const params = {
         page,
         pageSize,
-        query: searchQuery || undefined,
-        country: country || undefined,
-        state: state || undefined,
-        city: city || undefined,
-        latitude: userLocation?.lat,
-        longitude: userLocation?.lng,
-        radiusMiles: userLocation ? radiusMiles : undefined,
         sortBy: sortBy,
         sortOrder: sortOrder,
-        // Include map bounds when in map mode
-        ...(viewMode === 'map' && mapBounds ? {
-          minLat: mapBounds.minLat,
-          maxLat: mapBounds.maxLat,
-          minLng: mapBounds.minLng,
-          maxLng: mapBounds.maxLng
-        } : {})
       };
+
+      if (hasMapBounds) {
+        // Map bounds search - ignore distance and address filters
+        params.minLat = mapBounds.minLat;
+        params.maxLat = mapBounds.maxLat;
+        params.minLng = mapBounds.minLng;
+        params.maxLng = mapBounds.maxLng;
+      } else if (hasAddressFilters) {
+        // Address filter search - ignore distance
+        if (searchQuery) params.query = searchQuery;
+        if (country) params.country = country;
+        if (state) params.state = state;
+        if (city) params.city = city;
+      } else if (userLocation) {
+        // Default: Location-based search with distance
+        params.latitude = userLocation.lat;
+        params.longitude = userLocation.lng;
+        params.radiusMiles = radiusMiles;
+      }
 
       const response = await clubsApi.search(params);
       if (response.success && response.data) {
@@ -442,10 +455,23 @@ export default function Clubs() {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const handleSearchChange = (value) => {
     setSearchQuery(value);
+    // Clear map bounds when using text search
+    if (value) {
+      setMapBounds(null);
+      setShowSearchAreaButton(false);
+    }
     if (searchTimeout) clearTimeout(searchTimeout);
     setSearchTimeout(setTimeout(() => {
       setPage(1);
     }, 500));
+  };
+
+  // Clear map bounds when address filters change
+  const handleFilterChange = (setter) => (value) => {
+    setter(value);
+    setMapBounds(null);
+    setShowSearchAreaButton(false);
+    setPage(1);
   };
 
   const handleViewDetails = async (club) => {
@@ -643,7 +669,7 @@ export default function Clubs() {
                 {/* Country Filter */}
                 <select
                   value={country}
-                  onChange={(e) => { setCountry(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setCountry)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                 >
                   <option value="">All Countries</option>
@@ -657,7 +683,7 @@ export default function Clubs() {
                 {/* State Filter */}
                 <select
                   value={state}
-                  onChange={(e) => { setState(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setState)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                   disabled={!country}
                 >
@@ -672,7 +698,7 @@ export default function Clubs() {
                 {/* City Filter */}
                 <select
                   value={city}
-                  onChange={(e) => { setCity(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setCity)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                   disabled={!state}
                 >
@@ -684,8 +710,8 @@ export default function Clubs() {
                   ))}
                 </select>
 
-                {/* Distance Filter (only if location available) */}
-                {userLocation && (
+                {/* Distance Filter (only if location available and no address filters) */}
+                {userLocation && !searchQuery && !country && !state && !city && !mapBounds && (
                   <select
                     value={radiusMiles}
                     onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
