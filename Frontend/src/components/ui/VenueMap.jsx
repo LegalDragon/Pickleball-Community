@@ -254,8 +254,8 @@ export default function VenueMap({
       marker.bindPopup(popupContent, { maxWidth: 300 });
 
       marker.on('click', () => {
-        if (onMarkerSelect) onMarkerSelect(court);
-        if (onCourtClick) onCourtClick(court);
+        if (onMarkerSelectRef.current) onMarkerSelectRef.current(court);
+        if (handleItemClickRef.current) handleItemClickRef.current(court);
       });
 
       // Store court reference for later
@@ -287,7 +287,7 @@ export default function VenueMap({
       }
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
     }
-  }, [mapReady, venuesWithCoords, userLocation, onCourtClick, onMarkerSelect, selectedCourtId, showNumbers]);
+  }, [mapReady, venuesWithCoords, userLocation, selectedCourtId, showNumbers]);
 
   // Update marker styles when selection changes
   useEffect(() => {
