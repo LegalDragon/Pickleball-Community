@@ -42,6 +42,7 @@ export default function TournamentManage() {
   const [standingsSortBy, setStandingsSortBy] = useState('pool'); // 'pool', 'rank', 'matchesWon', 'gameDiff', 'pointDiff'
   const [event, setEvent] = useState(null);
   const [activeTab, setActiveTab] = useState('eventinfo');
+  const [mainTab, setMainTab] = useState('preplanning'); // 'preplanning' or 'gameday'
   const [selectedDivision, setSelectedDivision] = useState(null);
   const selectedDivisionRef = useRef(null); // Ref to track selectedDivision for SignalR listener
   const [error, setError] = useState(null);
@@ -1918,49 +1919,103 @@ export default function TournamentManage() {
       {/* Tabs - organized by workflow */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Main Tab Groups */}
+          <div className="flex border-b border-gray-200 mb-2">
+            {[
+              { key: 'preplanning', label: 'Pre-Planning', icon: '📋' },
+              { key: 'gameday', label: 'Game Day Execution', icon: '🎮' }
+            ].map(tabGroup => (
+              <button
+                key={tabGroup.key}
+                onClick={() => {
+                  setMainTab(tabGroup.key);
+                  // Set default sub-tab when switching main tabs
+                  if (tabGroup.key === 'preplanning') {
+                    setActiveTab('eventinfo');
+                  } else if (tabGroup.key === 'gameday') {
+                    setActiveTab('schedule');
+                  }
+                }}
+                className={`px-6 py-3 font-semibold text-sm transition-colors ${
+                  mainTab === tabGroup.key
+                    ? 'border-b-2 border-orange-600 text-orange-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <span className="mr-2">{tabGroup.icon}</span>
+                {tabGroup.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sub-tabs based on main tab selection */}
           <div className="flex overflow-x-auto">
-            {/* Tab navigation */}
             <div className="flex">
-              {[
-                { key: 'eventinfo', label: 'Event Info' },
-                { key: 'divisions', label: 'Divisions' },
-                { key: 'courts', label: 'Courts' },
-                { key: 'registrations', label: 'Registrations' },
-                { key: 'backup', label: 'Backup' },
-                { key: 'payments', label: 'Payments' },
-                { key: 'documents', label: 'Documents' },
-                { key: 'staff', label: 'Staff' },
-                { key: 'schedule', label: 'Schedule' },
-                { key: 'overview', label: 'Overview' },
-                { key: 'gameday', label: 'Game Day' }
-              ].map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => {
-                    setActiveTab(tab.key);
-                    if (tab.key === 'staff' && staffList.length === 0) {
-                      loadStaff();
-                    }
-                    if (tab.key === 'payments' && !paymentSummary) {
-                      loadPaymentSummary();
-                    }
-                    if (tab.key === 'courts' && courtGroups.length === 0) {
-                      loadCourtGroups();
-                    }
-                    if (tab.key === 'documents' && documents.length === 0) {
-                      loadDocuments();
-                      loadAssetTypes();
-                    }
-                  }}
-                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? 'border-orange-600 text-orange-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              {/* Pre-Planning sub-tabs */}
+              {mainTab === 'preplanning' ? (
+                [
+                  { key: 'eventinfo', label: 'Event Info' },
+                  { key: 'divisions', label: 'Divisions' },
+                  { key: 'courts', label: 'Courts' },
+                  { key: 'registrations', label: 'Registrations' },
+                  { key: 'payments', label: 'Payments' },
+                  { key: 'documents', label: 'Documents' },
+                  { key: 'staff', label: 'Staff' },
+                  { key: 'planning', label: 'Planning' }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      if (tab.key === 'staff' && staffList.length === 0) {
+                        loadStaff();
+                      }
+                      if (tab.key === 'payments' && !paymentSummary) {
+                        loadPaymentSummary();
+                      }
+                      if (tab.key === 'courts' && courtGroups.length === 0) {
+                        loadCourtGroups();
+                      }
+                      if (tab.key === 'documents' && documents.length === 0) {
+                        loadDocuments();
+                        loadAssetTypes();
+                      }
+                      if (tab.key === 'planning' && courtGroups.length === 0) {
+                        loadCourtGroups();
+                      }
+                    }}
+                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tab.key
+                        ? 'border-orange-600 text-orange-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))
+              ) : (
+                [
+                  { key: 'schedule', label: 'Schedule' },
+                  { key: 'overview', label: 'Overview' },
+                  { key: 'backup', label: 'Backup' },
+                  { key: 'scoring', label: 'Scoring' },
+                  { key: 'gamedayexec', label: 'Game Day' }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                    }}
+                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tab.key
+                        ? 'border-orange-600 text-orange-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -5673,6 +5728,163 @@ export default function TournamentManage() {
           </div>
         )}
 
+        {/* Planning Tab - Court/Pool assignments for divisions */}
+        {activeTab === 'planning' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Tournament Planning</h2>
+              <button
+                onClick={() => {
+                  loadCourtGroups();
+                  loadUnits();
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Court Group Assignments */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Grid3X3 className="w-5 h-5 text-orange-500" />
+                  Court Group Assignments
+                </h3>
+              </div>
+              <div className="p-4">
+                {event?.divisions?.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No divisions configured yet. Add divisions first.</p>
+                ) : courtGroups.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">No court groups configured yet. Set up court groups in the Courts tab first.</p>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                      Assign court groups to divisions. Each division can have multiple court groups for parallel play.
+                    </p>
+
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Division</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Court Groups</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teams</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {event?.divisions?.map(division => (
+                            <tr key={division.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-gray-900">{division.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {division.teamUnitName || 'Singles'}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                {division.courtGroupAssignments?.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {division.courtGroupAssignments.map(cga => {
+                                      const group = courtGroups.find(g => g.id === cga.courtGroupId);
+                                      return (
+                                        <span key={cga.id} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                          {group?.name || `Group ${cga.courtGroupId}`}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">No courts assigned</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="text-sm text-gray-600">{division.registeredCount || 0} teams</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => {
+                                    setSelectedDivision(division);
+                                    // TODO: Open court group assignment modal
+                                    toast.info('Court group assignment modal coming soon');
+                                  }}
+                                  className="text-sm text-orange-600 hover:text-orange-800 font-medium"
+                                >
+                                  Manage Courts
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Phase Planning (if divisions have phases) */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-purple-500" />
+                  Phase Planning
+                </h3>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-gray-600 mb-4">
+                  Configure tournament phases (Pool Play, Brackets, etc.) and their court assignments.
+                </p>
+
+                {event?.divisions?.map(division => (
+                  <div key={division.id} className="mb-4 p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">{division.name}</h4>
+                      <button
+                        onClick={() => {
+                          // TODO: Open phase configuration
+                          toast.info('Phase configuration coming soon');
+                        }}
+                        className="text-sm text-purple-600 hover:text-purple-800"
+                      >
+                        Configure Phases
+                      </button>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {division.phases?.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {division.phases.map(phase => (
+                            <span key={phase.id} className="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs">
+                              {phase.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        'No phases configured'
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Schedule Preview */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-green-500" />
+                  Schedule Preview
+                </h3>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Schedule preview will show here after divisions are assigned to court groups and phases are configured.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Scoring Tab - merged into Overview, keeping for backwards compatibility */}
         {activeTab === 'scoring' && (
           <div className="space-y-6">
@@ -5763,7 +5975,7 @@ export default function TournamentManage() {
         )}
 
         {/* Game Day Tab */}
-        {activeTab === 'gameday' && (
+        {activeTab === 'gamedayexec' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Game Day Manager</h2>
