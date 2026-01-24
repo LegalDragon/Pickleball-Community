@@ -594,6 +594,8 @@ export default function TournamentManage() {
             divisionName: e.divisionName,
             unit1Name: e.unit1Name,
             unit2Name: e.unit2Name,
+            encounterLabel: e.encounterLabel,
+            encounterNumber: e.encounterNumber,
             status: e.status,
           }));
         setCourtTimeAllocations(allocations);
@@ -754,6 +756,7 @@ export default function TournamentManage() {
         roundNumber: encounter.roundNumber,
         roundName: encounter.roundName,
         encounterLabel: encounter.encounterLabel,
+        encounterNumber: encounter.encounterNumber,
         isNew: true,
       });
 
@@ -6242,7 +6245,13 @@ export default function TournamentManage() {
                                   {encounter.roundName || `Round ${encounter.roundNumber}`}
                                 </td>
                                 <td className="px-3 py-2 text-sm">
-                                  {encounter.unit1Name || 'TBD'} vs {encounter.unit2Name || 'TBD'}
+                                  {encounter.unit1Name && encounter.unit2Name ? (
+                                    <>{encounter.unit1Name} vs {encounter.unit2Name}</>
+                                  ) : (
+                                    <span className="text-gray-500 italic">
+                                      Match {encounter.encounterLabel || `#${encounter.encounterNumber}`}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -6493,7 +6502,13 @@ export default function TournamentManage() {
                                   <span className="ml-2 text-xs text-gray-500">{slot.divisionName}</span>
                                 </td>
                                 <td className="px-3 py-2 text-sm">
-                                  {slot.unit1Name || 'TBD'} vs {slot.unit2Name || 'TBD'}
+                                  {slot.unit1Name && slot.unit2Name ? (
+                                    <>{slot.unit1Name} vs {slot.unit2Name}</>
+                                  ) : (
+                                    <span className="text-gray-500 italic">
+                                      Match {slot.encounterLabel || `#${slot.encounterId}`}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2">
                                   <button
@@ -6593,15 +6608,22 @@ export default function TournamentManage() {
                                       };
                                       const colorClass = alloc.isNew ? colors.new : colors.saved;
 
+                                      const displayText = alloc.unit1Name && alloc.unit2Name
+                                        ? `${alloc.unit1Name?.split(' ')[0]} vs ${alloc.unit2Name?.split(' ')[0]}`
+                                        : `Match ${alloc.encounterLabel || alloc.encounterId}`;
+                                      const tooltipText = alloc.unit1Name && alloc.unit2Name
+                                        ? `${alloc.unit1Name} vs ${alloc.unit2Name}\n${alloc.scheduledTime.toLocaleTimeString()}`
+                                        : `Match ${alloc.encounterLabel || alloc.encounterId}\n${alloc.scheduledTime.toLocaleTimeString()}`;
+
                                       return (
                                         <div
                                           key={alloc.encounterId}
                                           className={`absolute top-1 bottom-1 rounded border text-xs overflow-hidden ${colorClass}`}
                                           style={{ left: `${left}px`, width: `${width}px` }}
-                                          title={`${alloc.unit1Name || 'TBD'} vs ${alloc.unit2Name || 'TBD'}\n${alloc.scheduledTime.toLocaleTimeString()}`}
+                                          title={tooltipText}
                                         >
                                           <div className="px-1 truncate font-medium">
-                                            {alloc.unit1Name?.split(' ')[0] || 'TBD'} vs {alloc.unit2Name?.split(' ')[0] || 'TBD'}
+                                            {displayText}
                                           </div>
                                         </div>
                                       );
@@ -6664,7 +6686,13 @@ export default function TournamentManage() {
                                 </td>
                                 <td className="px-3 py-2 text-sm text-gray-600">{alloc.divisionName}</td>
                                 <td className="px-3 py-2 text-sm">
-                                  {alloc.unit1Name || 'TBD'} vs {alloc.unit2Name || 'TBD'}
+                                  {alloc.unit1Name && alloc.unit2Name ? (
+                                    <>{alloc.unit1Name} vs {alloc.unit2Name}</>
+                                  ) : (
+                                    <span className="text-gray-500 italic">
+                                      Match {alloc.encounterLabel || `#${alloc.encounterId}`}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-sm">
                                   {alloc.isNew ? (
