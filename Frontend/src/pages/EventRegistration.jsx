@@ -167,7 +167,7 @@ export default function EventRegistration() {
   const loadUnitsLookingForPartners = async (divisionId) => {
     setLoadingUnits(true);
     try {
-      const response = await tournamentApi.getUnitsLookingForPartners(eventId, divisionId);
+      const response = await tournamentApi.getJoinableUnitsV2(eventId, divisionId);
       if (response.success) {
         // Filter out user's own units
         const filtered = (response.data || []).filter(u => u.captainUserId !== user?.id);
