@@ -6327,16 +6327,92 @@ export default function TournamentManage() {
               </div>
             )}
 
-            {/* Staff Roles Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-700">
-              <div className="flex items-center gap-2 mb-2">
-                <Info className="w-5 h-5" />
-                <span className="font-medium">Staff Roles</span>
+            {/* Available Roles Reference */}
+            <div className="bg-white rounded-xl shadow-sm">
+              <div className="p-4 border-b">
+                <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Info className="w-5 h-5 text-blue-600" />
+                  Available Roles & Permissions
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Reference guide for assigning staff to appropriate roles
+                </p>
               </div>
-              <p className="text-sm">
-                Staff roles define what permissions team members have during the event.
-                Roles can be configured in the Admin Settings.
-              </p>
+              <div className="divide-y">
+                {staffRoles.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 text-sm">
+                    No roles configured. Contact an admin to set up staff roles.
+                  </div>
+                ) : (
+                  staffRoles.map(role => (
+                    <div key={role.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{role.name}</span>
+                            {role.canFullyManageEvent && (
+                              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                                Full Admin
+                              </span>
+                            )}
+                            {!role.allowSelfRegistration && (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                Admin Assign
+                              </span>
+                            )}
+                          </div>
+                          {role.description && (
+                            <p className="text-sm text-gray-500 mt-1">{role.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      {/* Permission badges */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {role.canManageSchedule && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                            <Calendar className="w-3 h-3" /> Schedule
+                          </span>
+                        )}
+                        {role.canManageCourts && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded">
+                            <MapPin className="w-3 h-3" /> Courts
+                          </span>
+                        )}
+                        {role.canRecordScores && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded">
+                            <ClipboardList className="w-3 h-3" /> Scores
+                          </span>
+                        )}
+                        {role.canCheckInPlayers && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded">
+                            <UserCheck className="w-3 h-3" /> Check-in
+                          </span>
+                        )}
+                        {role.canManageLineups && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded">
+                            <Users className="w-3 h-3" /> Lineups
+                          </span>
+                        )}
+                        {role.canViewAllData && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+                            <Eye className="w-3 h-3" /> View All
+                          </span>
+                        )}
+                        {role.canManagePayments && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded">
+                            <DollarSign className="w-3 h-3" /> Payments
+                          </span>
+                        )}
+                        {!role.canManageSchedule && !role.canManageCourts && !role.canRecordScores &&
+                         !role.canCheckInPlayers && !role.canManageLineups && !role.canViewAllData &&
+                         !role.canManagePayments && !role.canFullyManageEvent && (
+                          <span className="text-xs text-gray-400 italic">No specific permissions</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}
