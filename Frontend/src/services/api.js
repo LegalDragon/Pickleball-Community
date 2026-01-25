@@ -1481,7 +1481,7 @@ export const tournamentApi = {
     return api.get(`/tournament/events/${eventId}/units${params}`)
   },
   getMyUnits: () => api.get('/tournament/my-units'),
-  requestToJoinUnit: (unitId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message }),
+  requestToJoinUnit: (unitId, selectedFeeId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message, selectedFeeId }),
   cancelJoinRequest: (requestId) => api.delete(`/tournament/join-requests/${requestId}`),
   respondToJoinRequest: (requestId, accept, message = null) =>
     api.post('/tournament/units/join-request/respond', { requestId, accept, message }),

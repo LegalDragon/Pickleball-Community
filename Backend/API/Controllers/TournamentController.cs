@@ -1007,6 +1007,66 @@ public class TournamentController : EventControllerBase
             }
         }
 
+        // Check if this is a FriendsOnly unit and user is a friend - auto-accept
+        var isFriendsOnlyUnit = (unit.JoinMethod ?? "Approval") == "FriendsOnly";
+        bool isFriend = false;
+        if (isFriendsOnlyUnit)
+        {
+            isFriend = await _context.Friendships.AnyAsync(f =>
+                (f.UserId1 == userId.Value && f.UserId2 == unit.CaptainUserId) ||
+                (f.UserId1 == unit.CaptainUserId && f.UserId2 == userId.Value));
+        }
+
+        if (isFriendsOnlyUnit && isFriend)
+        {
+            // Auto-accept: Add user directly as accepted member
+            if (string.IsNullOrEmpty(unit.ReferenceId))
+            {
+                unit.ReferenceId = $"E{unit.EventId}-U{unitId}";
+            }
+
+            var acceptedMember = new EventUnitMember
+            {
+                UnitId = unitId,
+                UserId = userId.Value,
+                Role = "Player",
+                InviteStatus = "Accepted",
+                CreatedAt = DateTime.Now,
+                ReferenceId = $"E{unit.EventId}-U{unitId}-P{userId.Value}",
+                SelectedFeeId = request.SelectedFeeId
+            };
+            _context.EventUnitMembers.Add(acceptedMember);
+
+            await _context.SaveChangesAsync();
+
+            // Update unit display name after member added
+            await UpdateUnitDisplayNameAsync(unit.Id);
+            await _context.SaveChangesAsync();
+
+            var acceptedUser = await _context.Users.FindAsync(userId.Value);
+            var captain = await _context.Users.FindAsync(unit.CaptainUserId);
+
+            return Ok(new ApiResponse<UnitJoinRequestDto>
+            {
+                Success = true,
+                Message = $"You have joined {Utility.FormatName(captain?.LastName, captain?.FirstName)}'s team! (Friend auto-accept)",
+                Data = new UnitJoinRequestDto
+                {
+                    Id = 0, // No join request created - auto-accepted
+                    UnitId = unitId,
+                    UnitName = unit.Name,
+                    UserId = userId.Value,
+                    UserName = Utility.FormatName(acceptedUser?.LastName, acceptedUser?.FirstName),
+                    ProfileImageUrl = acceptedUser?.ProfileImageUrl,
+                    Message = "Auto-accepted (friends)",
+                    Status = "Accepted",
+                    CreatedAt = DateTime.Now
+                },
+                Warnings = waitlistWarning != null ? new List<string> { waitlistWarning } : null
+            });
+        }
+
+        // Standard flow: Create pending join request
         var joinRequest = new EventUnitJoinRequest
         {
             UnitId = unitId,
@@ -8653,7 +8713,7 @@ public class TournamentController : EventControllerBase
 
     /// <summary>
     /// Get joinable units in a division (for "Join Existing Team" list)
-    /// Now includes JoinMethod indicator
+    /// Includes friendship info: Friends with FriendsOnly get auto-accept, others need approval
     /// </summary>
     [Authorize]
     [HttpGet("events/{eventId}/divisions/{divisionId}/joinable-units-v2")]
@@ -8672,6 +8732,13 @@ public class TournamentController : EventControllerBase
 
         var teamSize = division.TeamUnit?.TotalPlayers ?? 2;
 
+        // Get user's friend IDs
+        var friendIds = await _context.Friendships
+            .Where(f => f.UserId1 == userId.Value || f.UserId2 == userId.Value)
+            .Select(f => f.UserId1 == userId.Value ? f.UserId2 : f.UserId1)
+            .ToListAsync();
+        var friendIdSet = friendIds.ToHashSet();
+
         // Find units that are incomplete (fewer accepted members than team size)
         var units = await _context.EventUnits
             .Include(u => u.Members).ThenInclude(m => m.User)
@@ -8684,14 +8751,25 @@ public class TournamentController : EventControllerBase
             .OrderBy(u => u.CreatedAt)
             .ToListAsync();
 
-        var result = units.Select(u => new JoinableUnitDto
+        // Filter: Show units with "Approval" (open to anyone) or "FriendsOnly" if user is a friend
+        var filteredUnits = units.Where(u =>
+        {
+            var method = u.JoinMethod ?? "Approval";
+            if (method == "Approval") return true;
+            if (method == "FriendsOnly") return friendIdSet.Contains(u.CaptainUserId);
+            return false; // Don't show "Code" method units (legacy)
+        }).ToList();
+
+        var result = filteredUnits.Select(u => new JoinableUnitDto
         {
             Id = u.Id,
             Name = u.Name,
             CaptainUserId = u.CaptainUserId,
             CaptainName = u.Captain != null ? FormatName(u.Captain.LastName, u.Captain.FirstName) : null,
             CaptainProfileImageUrl = u.Captain?.ProfileImageUrl,
+            CaptainCity = u.Captain?.City,
             JoinMethod = u.JoinMethod ?? "Approval",
+            IsFriend = friendIdSet.Contains(u.CaptainUserId),
             MemberCount = u.Members.Count(m => m.InviteStatus == "Accepted"),
             RequiredPlayers = teamSize,
             Members = u.Members.Where(m => m.InviteStatus == "Accepted").Select(m => new JoinableUnitMemberDto
@@ -9633,7 +9711,12 @@ public class JoinableUnitDto
     public int CaptainUserId { get; set; }
     public string? CaptainName { get; set; }
     public string? CaptainProfileImageUrl { get; set; }
+    public string? CaptainCity { get; set; }
     public string JoinMethod { get; set; } = "Approval";
+    /// <summary>
+    /// True if the requesting user is a friend of the captain
+    /// </summary>
+    public bool IsFriend { get; set; }
     public int MemberCount { get; set; }
     public int RequiredPlayers { get; set; }
     public List<JoinableUnitMemberDto> Members { get; set; } = new();

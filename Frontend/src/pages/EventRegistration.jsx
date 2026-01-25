@@ -66,15 +66,12 @@ export default function EventRegistration() {
   const [divisionFeeSelections, setDivisionFeeSelections] = useState({}); // { divisionId: feeId }
   const [selectedFeeId, setSelectedFeeId] = useState(null);
   const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
-  const [joinCodeInput, setJoinCodeInput] = useState('');
   const [registering, setRegistering] = useState(false);
-  const [joiningByCode, setJoiningByCode] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [requestingToJoin, setRequestingToJoin] = useState(null);
 
   // Result state
   const [registrationResult, setRegistrationResult] = useState(null);
-  const [newJoinCode, setNewJoinCode] = useState(null);
 
   // Payment state
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -579,11 +576,6 @@ export default function EventRegistration() {
           response.warnings.forEach(w => toast.warning(w));
         }
 
-        // If code-based join, show the code
-        if (selectedJoinMethod === 'Code' && response.data?.[0]?.joinCode) {
-          setNewJoinCode(response.data[0].joinCode);
-        }
-
         // Load unit members for payment step (from ALL registered divisions)
         try {
           const unitsResponse = await tournamentApi.getEventUnits(event.id);
@@ -882,63 +874,37 @@ export default function EventRegistration() {
     }
   };
 
-  // Handle join by code
-  const handleJoinByCode = async () => {
-    if (!joinCodeInput.trim()) {
-      toast.error('Please enter a join code');
-      return;
-    }
-
-    // If division has fee options and no fee selected, require selection
-    if (selectedDivision && hasFeeOptions(selectedDivision) && !selectedFeeId) {
-      toast.error('Please select a fee option before joining');
-      return;
-    }
-
-    setJoiningByCode(true);
+  // Handle request to join existing unit
+  const handleRequestToJoin = async (unitId) => {
+    setRequestingToJoin(unitId);
     try {
-      const response = await tournamentApi.joinByCode(joinCodeInput.trim(), selectedFeeId);
+      const response = await tournamentApi.requestToJoinUnit(unitId, selectedFeeId);
       if (response.success) {
-        setRegistrationResult(response.data);
+        // Check if auto-accepted (FriendsOnly) or pending approval
+        if (response.data?.status === 'Accepted' || response.data?.status === 'Merged') {
+          // Auto-accepted - navigate to confirmation
+          toast.success(response.message || 'You have joined the team!');
+          setRegistrationResult(response.data);
 
-        // Get the division info from the joined team
-        const unitId = response.data?.unitId;
-        if (unitId) {
+          // Load waivers and navigate accordingly
           try {
-            const unitsResponse = await tournamentApi.getEventUnits(event.id);
-            if (unitsResponse.success) {
-              const joinedUnit = unitsResponse.data?.find(u => u.id === unitId);
-              if (joinedUnit) {
-                // Set the division for payment calculation
-                const division = event.divisions?.find(d => d.id === joinedUnit.divisionId);
-                if (division) {
-                  setSelectedDivision(division);
-                  // Auto-select default fee if not already selected
-                  if (!selectedFeeId && hasFeeOptions(division)) {
-                    const availableFees = division.fees.filter(f => f.isActive && f.isCurrentlyAvailable);
-                    const defaultFee = availableFees.find(f => f.isDefault) || availableFees[0];
-                    if (defaultFee) setSelectedFeeId(defaultFee.id);
-                  }
-                }
-                // Set unit members for payment step
-                setUnitMembers(joinedUnit.members?.filter(m => m.inviteStatus === 'Accepted') || []);
+            const waiverResponse = await checkInApi.getWaivers(eventId);
+            if (waiverResponse.success && waiverResponse.data?.length > 0) {
+              setWaivers(waiverResponse.data);
+              setCurrentWaiverIndex(0);
+              resetWaiverState();
+              setCurrentStep(4); // Go to waiver step
+            } else {
+              // No waivers, check for payment
+              const hasFee = getEffectiveFeeAmount() > 0;
+              if (hasFee) {
+                setCurrentStep(5);
+              } else {
+                setCurrentStep(3);
               }
             }
           } catch (e) {
-            console.log('Could not load unit details:', e);
-          }
-        }
-
-        // Load waivers and navigate accordingly
-        try {
-          const waiverResponse = await checkInApi.getWaivers(eventId);
-          if (waiverResponse.success && waiverResponse.data?.length > 0) {
-            setWaivers(waiverResponse.data);
-            setCurrentWaiverIndex(0);
-            resetWaiverState();
-            setCurrentStep(4); // Go to waiver step
-          } else {
-            // No waivers, check for payment
+            console.log('Could not load waivers:', e);
             const hasFee = getEffectiveFeeAmount() > 0;
             if (hasFee) {
               setCurrentStep(5);
@@ -946,35 +912,12 @@ export default function EventRegistration() {
               setCurrentStep(3);
             }
           }
-        } catch (e) {
-          console.log('Could not load waivers:', e);
-          const hasFee = getEffectiveFeeAmount() > 0;
-          if (hasFee) {
-            setCurrentStep(5);
-          } else {
-            setCurrentStep(3);
-          }
+        } else {
+          // Pending approval
+          toast.success('Join request sent! The captain will be notified.');
+          // Remove from list
+          setUnitsLookingForPartners(prev => prev.filter(u => u.id !== unitId));
         }
-        toast.success(response.message || 'Successfully joined the team!');
-      } else {
-        toast.error(response.message || 'Failed to join');
-      }
-    } catch (err) {
-      toast.error(err?.message || 'Invalid join code. Please check and try again.');
-    } finally {
-      setJoiningByCode(false);
-    }
-  };
-
-  // Handle request to join existing unit
-  const handleRequestToJoin = async (unitId) => {
-    setRequestingToJoin(unitId);
-    try {
-      const response = await tournamentApi.requestToJoinUnit(unitId);
-      if (response.success) {
-        toast.success('Join request sent! The captain will be notified.');
-        // Remove from list
-        setUnitsLookingForPartners(prev => prev.filter(u => u.id !== unitId));
       } else {
         toast.error(response.message || 'Failed to send request');
       }
@@ -1432,7 +1375,7 @@ export default function EventRegistration() {
                                             e.stopPropagation();
                                             // Set up state to continue registration
                                             setSelectedDivision(division);
-                                            setRegistrationResult({ unitId: unit.id, joinCode: unit.joinCode });
+                                            setRegistrationResult({ unitId: unit.id });
                                             // Load unit members for payment step
                                             const acceptedMembers = unit.members?.filter(m => m.inviteStatus === 'Accepted') || [];
                                             setUnitMembers(acceptedMembers);
@@ -1672,38 +1615,7 @@ export default function EventRegistration() {
                 </div>
               )}
 
-              {/* Show join code if just registered */}
-              {newJoinCode ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                  <h4 className="font-semibold text-green-800 mb-2">Registration Successful!</h4>
-                  <p className="text-sm text-green-700 mb-4">
-                    Share this code with your partner to join your team:
-                  </p>
-                  <div className="bg-white border-2 border-green-300 rounded-lg p-4 mb-4">
-                    <span className="text-3xl font-mono font-bold tracking-widest text-green-700">
-                      {newJoinCode}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(newJoinCode);
-                      toast.success('Code copied to clipboard!');
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700"
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy Code
-                  </button>
-                  <button
-                    onClick={() => setCurrentStep(3)}
-                    className="block w-full mt-4 px-4 py-2 border border-green-300 text-green-700 rounded-lg font-medium hover:bg-green-50"
-                  >
-                    Continue
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Create New Team Option */}
+              {/* Create New Team Option */}
                   <div className="mb-6">
                     <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <Plus className="w-4 h-4" />
@@ -1717,7 +1629,7 @@ export default function EventRegistration() {
 
                     {/* Join Method Selection */}
                     <div className="space-y-2 mb-4">
-                      <p className="text-sm font-medium text-gray-700">How will your partner join?</p>
+                      <p className="text-sm font-medium text-gray-700">Who can join as your partner?</p>
                       <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
                         <input
                           type="radio"
@@ -1728,7 +1640,7 @@ export default function EventRegistration() {
                           className="w-4 h-4 text-orange-600"
                         />
                         <div>
-                          <div className="font-medium text-gray-900">I will approve join requests</div>
+                          <div className="font-medium text-gray-900">Anyone, I will approve later</div>
                           <div className="text-sm text-gray-500">Others can find you and request to join</div>
                         </div>
                       </label>
@@ -1736,14 +1648,14 @@ export default function EventRegistration() {
                         <input
                           type="radio"
                           name="joinMethod"
-                          value="Code"
-                          checked={selectedJoinMethod === 'Code'}
-                          onChange={() => setSelectedJoinMethod('Code')}
+                          value="FriendsOnly"
+                          checked={selectedJoinMethod === 'FriendsOnly'}
+                          onChange={() => setSelectedJoinMethod('FriendsOnly')}
                           className="w-4 h-4 text-orange-600"
                         />
                         <div>
-                          <div className="font-medium text-gray-900">I will send my partner a join code</div>
-                          <div className="text-sm text-gray-500">Get a code to share directly</div>
+                          <div className="font-medium text-gray-900">Only my friends</div>
+                          <div className="text-sm text-gray-500">Auto accepted when a friend joins</div>
                         </div>
                       </label>
                     </div>
@@ -1768,36 +1680,12 @@ export default function EventRegistration() {
                   </div>
 
                   <div className="border-t pt-6">
-                    {/* Join by Code */}
                     <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <UserPlus className="w-4 h-4" />
                       Join an Existing Team
                     </h3>
 
-                    <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                      <p className="text-sm font-medium text-purple-800 mb-2">Have a join code?</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={joinCodeInput}
-                          onChange={(e) => setJoinCodeInput(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Enter 4-digit code"
-                          maxLength={4}
-                          className="flex-1 px-3 py-2 border border-purple-300 rounded-lg font-mono text-center text-lg tracking-widest"
-                        />
-                        <button
-                          onClick={handleJoinByCode}
-                          disabled={joiningByCode || joinCodeInput.length < 4}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
-                        >
-                          {joiningByCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Join'}
-                        </button>
-                      </div>
-                    </div>
-
                     {/* Units Looking for Partners */}
-                    <p className="text-sm text-gray-600 mb-3">Or browse players looking for partners:</p>
                     {loadingUnits ? (
                       <div className="flex justify-center py-6">
                         <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
@@ -1807,48 +1695,104 @@ export default function EventRegistration() {
                         No one is currently looking for a partner in this division.
                       </p>
                     ) : (
-                      <div className="space-y-3">
-                        {unitsLookingForPartners.map(unit => (
-                          <div key={unit.id} className="border rounded-lg p-3 hover:border-orange-300">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                {unit.captainProfileImageUrl ? (
-                                  <img
-                                    src={getSharedAssetUrl(unit.captainProfileImageUrl)}
-                                    alt=""
-                                    className="w-10 h-10 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-medium">
-                                    {unit.captainName?.charAt(0) || '?'}
+                      <div className="space-y-4">
+                        {/* Friends section - show friends who selected FriendsOnly first */}
+                        {unitsLookingForPartners.filter(u => u.isFriend && u.joinMethod === 'FriendsOnly').length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-green-700 mb-2">Friends (auto-accept):</p>
+                            <div className="space-y-3">
+                              {unitsLookingForPartners.filter(u => u.isFriend && u.joinMethod === 'FriendsOnly').map(unit => (
+                                <div key={unit.id} className="border border-green-200 bg-green-50 rounded-lg p-3 hover:border-green-400">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      {unit.captainProfileImageUrl ? (
+                                        <img
+                                          src={getSharedAssetUrl(unit.captainProfileImageUrl)}
+                                          alt=""
+                                          className="w-10 h-10 rounded-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-medium">
+                                          {unit.captainName?.charAt(0) || '?'}
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="font-medium text-gray-900">{unit.captainName}</p>
+                                        {unit.captainCity && (
+                                          <p className="text-sm text-gray-500">{unit.captainCity}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleRequestToJoin(unit.id)}
+                                      disabled={requestingToJoin === unit.id}
+                                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                      {requestingToJoin === unit.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        'Join'
+                                      )}
+                                    </button>
                                   </div>
-                                )}
-                                <div>
-                                  <p className="font-medium text-gray-900">{unit.captainName}</p>
-                                  {unit.captainCity && (
-                                    <p className="text-sm text-gray-500">{unit.captainCity}</p>
-                                  )}
                                 </div>
-                              </div>
-                              <button
-                                onClick={() => handleRequestToJoin(unit.id)}
-                                disabled={requestingToJoin === unit.id}
-                                className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 disabled:opacity-50"
-                              >
-                                {requestingToJoin === unit.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  'Request to Join'
-                                )}
-                              </button>
+                              ))}
                             </div>
                           </div>
-                        ))}
+                        )}
+
+                        {/* Open teams section - anyone who selected Approval */}
+                        {unitsLookingForPartners.filter(u => u.joinMethod === 'Approval').length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-600 mb-2">Open teams (needs acceptance):</p>
+                            <div className="space-y-3">
+                              {unitsLookingForPartners.filter(u => u.joinMethod === 'Approval').map(unit => (
+                                <div key={unit.id} className="border rounded-lg p-3 hover:border-orange-300">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      {unit.captainProfileImageUrl ? (
+                                        <img
+                                          src={getSharedAssetUrl(unit.captainProfileImageUrl)}
+                                          alt=""
+                                          className="w-10 h-10 rounded-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-medium">
+                                          {unit.captainName?.charAt(0) || '?'}
+                                        </div>
+                                      )}
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-medium text-gray-900">{unit.captainName}</p>
+                                          {unit.isFriend && (
+                                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Friend</span>
+                                          )}
+                                        </div>
+                                        {unit.captainCity && (
+                                          <p className="text-sm text-gray-500">{unit.captainCity}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleRequestToJoin(unit.id)}
+                                      disabled={requestingToJoin === unit.id}
+                                      className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 disabled:opacity-50"
+                                    >
+                                      {requestingToJoin === unit.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        'Request to Join'
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                </>
-              )}
             </div>
           </div>
         )}
@@ -1879,23 +1823,6 @@ export default function EventRegistration() {
                     </div>
                   )}
 
-                  {newJoinCode && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                      <p className="text-sm text-green-700 mb-2">Share this code with your partner:</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-2xl font-mono font-bold text-green-700">{newJoinCode}</span>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(newJoinCode);
-                            toast.success('Copied!');
-                          }}
-                          className="p-2 hover:bg-green-100 rounded"
-                        >
-                          <Copy className="w-4 h-4 text-green-600" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Payment Info */}
                   {(event.registrationFee > 0 || event.perDivisionFee > 0) && (
@@ -2085,23 +2012,6 @@ export default function EventRegistration() {
                 <p className="text-sm text-green-700 mt-1">
                   Please sign the required waiver{waivers.length > 1 ? 's' : ''} to complete your registration.
                 </p>
-                {newJoinCode && (
-                  <div className="mt-3 p-3 bg-white border border-green-300 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Share this code with your partner:</p>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-2xl font-mono font-bold text-green-700">{newJoinCode}</span>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(newJoinCode);
-                          toast.success('Copied!');
-                        }}
-                        className="p-1 hover:bg-green-100 rounded"
-                      >
-                        <Copy className="w-4 h-4 text-green-600" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Waiver header */}
@@ -2335,23 +2245,6 @@ export default function EventRegistration() {
                 <p className="text-sm text-green-700 mt-1">
                   You're registered for {selectedDivision?.name}
                 </p>
-                {newJoinCode && (
-                  <div className="mt-3 p-3 bg-white border border-green-300 rounded-lg">
-                    <p className="text-sm text-gray-600 mb-1">Share this code with your partner:</p>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-2xl font-mono font-bold text-green-700">{newJoinCode}</span>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(newJoinCode);
-                          toast.success('Copied!');
-                        }}
-                        className="p-1 hover:bg-green-100 rounded"
-                      >
-                        <Copy className="w-4 h-4 text-green-600" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">

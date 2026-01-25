@@ -242,6 +242,7 @@ public class JoinUnitRequest
 {
     public int UnitId { get; set; }
     public string? Message { get; set; }
+    public int? SelectedFeeId { get; set; }
 }
 
 public class MoveRegistrationRequest
