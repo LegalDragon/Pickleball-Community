@@ -1640,6 +1640,40 @@ export const tournamentApi = {
   calculatePhaseTimes: (phaseId) => api.post(`/divisionphases/${phaseId}/calculate-times`),
 
   // =====================================================
+  // Phase Templates (pre-built tournament structures)
+  // =====================================================
+
+  // Template CRUD
+  getPhaseTemplates: (category = null) =>
+    api.get(`/phasetemplates${category ? `?category=${category}` : ''}`),
+  getPhaseTemplatesForUnitCount: (unitCount) =>
+    api.get(`/phasetemplates/for-units/${unitCount}`),
+  getPhaseTemplate: (templateId) =>
+    api.get(`/phasetemplates/${templateId}`),
+  getTemplatesByCategory: (category) =>
+    api.get(`/phasetemplates/category/${category}`),
+  createPhaseTemplate: (data) =>
+    api.post('/phasetemplates', data),
+  updatePhaseTemplate: (templateId, data) =>
+    api.put(`/phasetemplates/${templateId}`, data),
+  deletePhaseTemplate: (templateId) =>
+    api.delete(`/phasetemplates/${templateId}`),
+
+  // Template Application
+  previewTemplate: (templateId, divisionId, unitCount = null) =>
+    api.post('/phasetemplates/preview', { templateId, divisionId, unitCount }),
+  applyTemplate: (templateId, divisionId, unitCount = null, clearExisting = true) =>
+    api.post(`/phasetemplates/${templateId}/apply/${divisionId}?unitCount=${unitCount || ''}&clearExisting=${clearExisting}`),
+
+  // Manual Exit Slot Assignment (TD override)
+  manualExitSlotAssignment: (phaseId, slotNumber, unitId, notes = null) =>
+    api.post('/phasetemplates/manual-exit-assignment', { phaseId, slotNumber, unitId, notes }),
+  getExitSlots: (phaseId) =>
+    api.get(`/phasetemplates/${phaseId}/exit-slots`),
+  processByes: (phaseId) =>
+    api.post(`/phasetemplates/${phaseId}/process-byes`),
+
+  // =====================================================
   // Court Groups
   // =====================================================
 

@@ -105,6 +105,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<CourtGroup> CourtGroups { get; set; }
     public DbSet<CourtGroupCourt> CourtGroupCourts { get; set; }
     public DbSet<DivisionCourtAssignment> DivisionCourtAssignments { get; set; }
+    public DbSet<PhaseTemplate> PhaseTemplates { get; set; }
 
     // Clubs
     public DbSet<Club> Clubs { get; set; }

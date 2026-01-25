@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Plus, Edit2, Trash2, ChevronUp, ChevronDown, Play, Eye,
-  Settings, Users, Award, Clock, Grid3X3, GitBranch, Loader2
+  Settings, Users, Award, Clock, Grid3X3, GitBranch, Loader2,
+  FileText, Sparkles
 } from 'lucide-react';
 import { tournamentApi } from '../../services/api';
+import TemplateSelector from './TemplateSelector';
 
 const PHASE_TYPES = [
   { value: 'RoundRobin', label: 'Round Robin', icon: Grid3X3, description: 'All teams play each other' },
@@ -30,13 +32,14 @@ const PHASE_STATUS_COLORS = {
  * PhaseManager - Manages division phases for multi-phase tournaments
  * Provides CRUD operations, schedule generation, and phase configuration
  */
-export default function PhaseManager({ divisionId, eventId, readOnly = false }) {
+export default function PhaseManager({ divisionId, eventId, unitCount = 8, readOnly = false }) {
   const [phases, setPhases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingPhase, setEditingPhase] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [generating, setGenerating] = useState(null);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
   useEffect(() => {
     if (divisionId) {
@@ -140,6 +143,13 @@ export default function PhaseManager({ divisionId, eventId, readOnly = false }) 
     }
   };
 
+  const handleTemplateApplied = async (result) => {
+    setShowTemplateSelector(false);
+    if (result?.success) {
+      await fetchPhases();
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -158,13 +168,22 @@ export default function PhaseManager({ divisionId, eventId, readOnly = false }) 
           <p className="text-sm text-gray-500">Configure multi-phase tournament structure</p>
         </div>
         {!readOnly && (
-          <button
-            onClick={handleCreatePhase}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Phase
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTemplateSelector(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              Use Template
+            </button>
+            <button
+              onClick={handleCreatePhase}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Phase
+            </button>
+          </div>
         )}
       </div>
 
@@ -178,14 +197,27 @@ export default function PhaseManager({ divisionId, eventId, readOnly = false }) 
       {phases.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
           <GitBranch className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600 mb-4">No phases configured yet</p>
+          <p className="text-gray-600 mb-2">No phases configured yet</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Use a template for quick setup, or create phases manually
+          </p>
           {!readOnly && (
-            <button
-              onClick={handleCreatePhase}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Create First Phase
-            </button>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => setShowTemplateSelector(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                <Sparkles className="w-4 h-4" />
+                Use Template
+              </button>
+              <span className="text-gray-400">or</span>
+              <button
+                onClick={handleCreatePhase}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create Manual Phase
+              </button>
+            </div>
           )}
         </div>
       ) : (
@@ -218,6 +250,16 @@ export default function PhaseManager({ divisionId, eventId, readOnly = false }) 
             setIsModalOpen(false);
             setEditingPhase(null);
           }}
+        />
+      )}
+
+      {/* Template Selector Modal */}
+      {showTemplateSelector && (
+        <TemplateSelector
+          divisionId={divisionId}
+          unitCount={unitCount}
+          onApply={handleTemplateApplied}
+          onClose={() => setShowTemplateSelector(false)}
         />
       )}
     </div>
