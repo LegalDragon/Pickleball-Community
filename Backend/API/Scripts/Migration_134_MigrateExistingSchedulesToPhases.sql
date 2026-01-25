@@ -101,26 +101,46 @@ PRINT 'Step 2: Creating PhaseSlots for units in migrated divisions...'
 -- Use Unit1Number or Unit2Number as the seed position if available
 -- Otherwise, use a ROW_NUMBER() based on when they first appear
 
-;WITH UnitsInEncounters AS (
+-- First, get units that need slots (don't already have one)
+;WITH UnitsNeedingSlots AS (
     -- Get all unique units from encounters, with their assigned seed numbers
     SELECT DISTINCT
         e.DivisionId,
+        p.Id AS PhaseId,
         u.Id AS UnitId,
         -- Try to get the seed number from encounters (Unit1Number when this unit is Unit1)
         MIN(CASE WHEN e.Unit1Id = u.Id THEN e.Unit1Number ELSE NULL END) AS SeedNumber1,
         MIN(CASE WHEN e.Unit2Id = u.Id THEN e.Unit2Number ELSE NULL END) AS SeedNumber2
     FROM EventEncounters e
     INNER JOIN EventUnits u ON u.Id = e.Unit1Id OR u.Id = e.Unit2Id
+    INNER JOIN DivisionPhases p ON p.DivisionId = e.DivisionId AND p.PhaseOrder = 1
     WHERE e.PhaseId IS NULL
       AND u.Status NOT IN ('Cancelled', 'Waitlisted')
-    GROUP BY e.DivisionId, u.Id
+      -- Skip units that already have a slot
+      AND NOT EXISTS (
+          SELECT 1 FROM PhaseSlots ps
+          WHERE ps.PhaseId = p.Id AND ps.UnitId = u.Id
+      )
+    GROUP BY e.DivisionId, p.Id, u.Id
+),
+MaxExistingSlots AS (
+    -- Get the max slot number already used per phase
+    SELECT PhaseId, ISNULL(MAX(SlotNumber), 0) AS MaxSlot
+    FROM PhaseSlots
+    WHERE SlotType = 'Incoming'
+    GROUP BY PhaseId
 ),
 UnitsWithSeeds AS (
+    -- Assign new slot numbers starting after any existing slots
     SELECT
-        u.DivisionId,
+        u.PhaseId,
         u.UnitId,
-        COALESCE(u.SeedNumber1, u.SeedNumber2, ROW_NUMBER() OVER (PARTITION BY u.DivisionId ORDER BY u.UnitId)) AS SlotNumber
-    FROM UnitsInEncounters u
+        ISNULL(m.MaxSlot, 0) + ROW_NUMBER() OVER (
+            PARTITION BY u.PhaseId
+            ORDER BY COALESCE(u.SeedNumber1, u.SeedNumber2, 9999), u.UnitId
+        ) AS SlotNumber
+    FROM UnitsNeedingSlots u
+    LEFT JOIN MaxExistingSlots m ON m.PhaseId = u.PhaseId
 )
 INSERT INTO PhaseSlots (
     PhaseId,
@@ -142,7 +162,7 @@ INSERT INTO PhaseSlots (
     UpdatedAt
 )
 SELECT
-    p.Id AS PhaseId,
+    u.PhaseId,
     'Incoming' AS SlotType,
     u.SlotNumber,
     u.UnitId,
@@ -160,12 +180,6 @@ SELECT
     GETUTCDATE() AS CreatedAt,
     GETUTCDATE() AS UpdatedAt
 FROM UnitsWithSeeds u
-INNER JOIN DivisionPhases p ON p.DivisionId = u.DivisionId AND p.PhaseOrder = 1
-WHERE NOT EXISTS (
-    -- Don't create duplicate slots
-    SELECT 1 FROM PhaseSlots ps
-    WHERE ps.PhaseId = p.Id AND ps.UnitId = u.UnitId
-)
 
 DECLARE @SlotsCreated INT = @@ROWCOUNT
 PRINT 'Created ' + CAST(@SlotsCreated AS VARCHAR(10)) + ' PhaseSlots'
