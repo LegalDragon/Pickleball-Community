@@ -4714,10 +4714,19 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                           </span>
                                         );
                                       } else {
+                                        // Show join method: FriendsOnly or Open to anyone
+                                        const isFriendsOnly = unit.joinMethod === 'FriendsOnly';
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-full" title="Looking for Partner">
-                                            <UserPlus className="w-3 h-3" />
-                                            <span className="hidden sm:inline">Looking for Partner</span>
+                                          <span
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                                              isFriendsOnly
+                                                ? 'text-purple-700 bg-purple-100'
+                                                : 'text-amber-700 bg-amber-100'
+                                            }`}
+                                            title={isFriendsOnly ? 'Friends only - auto-accept' : 'Open to anyone'}
+                                          >
+                                            {isFriendsOnly ? <Users className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
+                                            <span className="hidden sm:inline">{isFriendsOnly ? 'Friends Only' : 'Open'}</span>
                                           </span>
                                         );
                                       }
