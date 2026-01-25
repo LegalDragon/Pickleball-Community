@@ -14,6 +14,30 @@ public static class PhaseTypes
     public const string Swiss = "Swiss";
     public const string Pools = "Pools";
     public const string Bracket = "Bracket";
+    /// <summary>
+    /// Fine-grained bracket round (Semifinal, Final, etc.) - generates exactly IncomingSlotCount/2 matches
+    /// Use this for separate phases like "Semifinal" → "Final" instead of one SingleElimination phase
+    /// </summary>
+    public const string BracketRound = "BracketRound";
+}
+
+/// <summary>
+/// Seeding strategies for advancement from pools to bracket phases
+/// </summary>
+public static class SeedingStrategies
+{
+    /// <summary>
+    /// Standard snake draft: 1A, 1B, 2B, 2A, 3A, 3B, 4B, 4A...
+    /// </summary>
+    public const string Snake = "Snake";
+    /// <summary>
+    /// Sequential: 1A, 2A, 3A, 4A, 1B, 2B, 3B, 4B...
+    /// </summary>
+    public const string Sequential = "Sequential";
+    /// <summary>
+    /// Cross-pool: 1A vs 2B, 1B vs 2A format
+    /// </summary>
+    public const string CrossPool = "CrossPool";
 }
 
 /// <summary>
@@ -148,6 +172,19 @@ public class DivisionPhase
     /// Whether this phase has been manually locked (no automatic slot resolution)
     /// </summary>
     public bool IsManuallyLocked { get; set; } = false;
+
+    /// <summary>
+    /// Include 3rd place (consolation) match for semifinal losers.
+    /// Only applies to BracketRound phases with 4 incoming teams (semifinals).
+    /// </summary>
+    public bool IncludeConsolation { get; set; } = false;
+
+    /// <summary>
+    /// Seeding strategy when receiving from multiple pools: Snake, Sequential, CrossPool
+    /// Snake = 1A, 1B, 2B, 2A (standard snake draft)
+    /// </summary>
+    [MaxLength(30)]
+    public string? SeedingStrategy { get; set; } = SeedingStrategies.Snake;
 
     /// <summary>
     /// When this phase was locked/finalized

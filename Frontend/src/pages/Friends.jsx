@@ -240,7 +240,7 @@ export default function Friends() {
                 {friends.map(friend => (
                   <div
                     key={friend.id}
-                    onClick={() => setProfileModalUserId(friend.id)}
+                    onClick={() => setProfileModalUserId(friend.friendUserId || friend.id)}
                     className="block p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
@@ -271,7 +271,7 @@ export default function Friends() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={(e) => handleStartChat(friend.id, e)}
+                          onClick={(e) => handleStartChat(friend.friendUserId || friend.id, e)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Send message"
                         >

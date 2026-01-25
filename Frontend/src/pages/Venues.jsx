@@ -71,6 +71,12 @@ export default function Venues() {
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 20;
 
+  // Map bounds for viewport-based search
+  const [mapBounds, setMapBounds] = useState(null); // Bounds used in last search
+  const [pendingBounds, setPendingBounds] = useState(null); // Bounds user has panned to
+  const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
+  const mapInitializedRef = useRef(false); // Track if map has finished initial load
+
   // Check if location permission is blocked
   const [locationBlocked, setLocationBlocked] = useState(false);
 
@@ -289,6 +295,13 @@ export default function Venues() {
         courtTypeId: selectedCourtType || undefined,
         sortBy: sortBy || undefined,
         sortOrder: sortOrder || undefined,
+        // Include map bounds when in map mode
+        ...(viewMode === 'map' && mapBounds ? {
+          minLat: mapBounds.minLat,
+          maxLat: mapBounds.maxLat,
+          minLng: mapBounds.minLng,
+          maxLng: mapBounds.maxLng
+        } : {})
       };
 
       if (searchMode === 'distance') {
@@ -331,11 +344,33 @@ export default function Venues() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, debouncedSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder]);
+  }, [page, searchMode, userLocation, radiusMiles, selectedCountry, selectedState, selectedCity, debouncedSearch, hasLights, isIndoor, selectedCourtType, sortBy, sortOrder, viewMode, mapBounds]);
 
   useEffect(() => {
     loadCourts();
   }, [loadCourts]);
+
+  // Handle map bounds change - show "Search this area" button
+  const handleMapBoundsChange = useCallback((bounds) => {
+    setPendingBounds(bounds);
+    // Skip the initial fitBounds event - only show button for user interactions
+    if (!mapInitializedRef.current) {
+      // First bounds change is from fitBounds, mark as initialized
+      mapInitializedRef.current = true;
+      return;
+    }
+    // Show button for subsequent user-initiated map movements
+    setShowSearchAreaButton(true);
+  }, []);
+
+  // Search in the current map area
+  const handleSearchInArea = useCallback(() => {
+    if (pendingBounds) {
+      setMapBounds(pendingBounds);
+      setPage(1);
+      setShowSearchAreaButton(false);
+    }
+  }, [pendingBounds]);
 
   // Debounced search for court name - waits for user to stop typing
   const searchTimeoutRef = useRef(null);
@@ -811,7 +846,7 @@ export default function Venues() {
                     </div>
                   </div>
                   {/* Map - Desktop */}
-                  <div className="flex-1">
+                  <div className="flex-1 relative">
                     <VenueMap
                       venues={venues}
                       userLocation={userLocation}
@@ -819,14 +854,25 @@ export default function Venues() {
                       onMarkerSelect={(court) => setHoveredCourtId(court.courtId || court.id)}
                       selectedVenueId={hoveredCourtId}
                       showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
                     />
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {/* Mobile: Stacked layout with horizontal scrollable list */}
                 <div className="md:hidden flex flex-col">
                   {/* Map - Mobile (takes most of the viewport) */}
-                  <div className="h-[50vh] min-h-[300px]">
+                  <div className="h-[50vh] min-h-[300px] relative">
                     <VenueMap
                       venues={venues}
                       userLocation={userLocation}
@@ -834,7 +880,18 @@ export default function Venues() {
                       onMarkerSelect={(court) => setHoveredCourtId(court.courtId || court.id)}
                       selectedVenueId={hoveredCourtId}
                       showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
                     />
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
                   </div>
 
                   {/* Venue count indicator */}

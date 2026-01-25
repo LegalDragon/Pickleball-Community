@@ -117,6 +117,11 @@ public class VenueSearchRequest
     public int? VenueTypeId { get; set; }
     public bool? HasLights { get; set; }
     public bool? IsIndoor { get; set; }
+    // Map bounds for viewport-based search
+    public double? MinLat { get; set; }
+    public double? MaxLat { get; set; }
+    public double? MinLng { get; set; }
+    public double? MaxLng { get; set; }
     public string? SortBy { get; set; } = "match";  // 'match', 'distance', 'name', 'rating'
     public string? SortOrder { get; set; } = "asc";  // 'asc' or 'desc'
     public int Page { get; set; } = 1;

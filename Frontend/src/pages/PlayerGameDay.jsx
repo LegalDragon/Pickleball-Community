@@ -640,84 +640,95 @@ function MyGamesTab({
             </div>
 
             {/* Players Display */}
-            <div className="flex items-center justify-between gap-4 py-4">
-              {/* Team 1 Players */}
-              <div className="flex-1 text-center">
-                <div className="flex justify-center gap-2 mb-2">
-                  {currentGame.unit1Players?.length > 0 ? (
-                    currentGame.unit1Players.map((player, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => onPlayerClick(player.userId)}
-                        className="flex flex-col items-center hover:opacity-80 transition-opacity"
-                      >
-                        {player.profileImageUrl ? (
-                          <img
-                            src={getSharedAssetUrl(player.profileImageUrl)}
-                            alt=""
-                            className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center border-2 border-white/50">
-                            <User className="w-6 h-6 text-white/70" />
-                          </div>
-                        )}
-                        <span className="text-xs mt-1 max-w-[80px] truncate">{player.name?.split(' ')[0]}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-sm font-medium">{currentGame.unit1Name}</div>
-                  )}
-                </div>
-                {currentGame.unit1Players?.length > 0 && (
-                  <div className="text-xs text-blue-200">{currentGame.unit1Name}</div>
-                )}
-              </div>
+            {(() => {
+              // Determine if we should show lineup for each team
+              // Show my team's players always, show opponent's only when both lineups are locked
+              const isMyUnit1 = currentGame.myUnitId === currentGame.unit1Id
+              const isMyUnit2 = currentGame.myUnitId === currentGame.unit2Id
+              const showUnit1Players = isMyUnit1 || currentGame.bothLineupsLocked
+              const showUnit2Players = isMyUnit2 || currentGame.bothLineupsLocked
 
-              {/* VS / Score */}
-              <div className="flex flex-col items-center">
-                {(currentGame.status === 'Playing' || currentGame.status === 'InProgress') ? (
-                  <div className="text-3xl font-bold">
-                    {currentGame.unit1Score} - {currentGame.unit2Score}
+              return (
+                <div className="flex items-center justify-between gap-4 py-4">
+                  {/* Team 1 Players */}
+                  <div className="flex-1 text-center">
+                    <div className="flex justify-center gap-2 mb-2">
+                      {showUnit1Players && currentGame.unit1Players?.length > 0 ? (
+                        currentGame.unit1Players.map((player, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => onPlayerClick(player.userId)}
+                            className="flex flex-col items-center hover:opacity-80 transition-opacity"
+                          >
+                            {player.profileImageUrl ? (
+                              <img
+                                src={getSharedAssetUrl(player.profileImageUrl)}
+                                alt=""
+                                className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center border-2 border-white/50">
+                                <User className="w-6 h-6 text-white/70" />
+                              </div>
+                            )}
+                            <span className="text-xs mt-1 max-w-[80px] truncate">{player.name?.split(' ')[0]}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="text-sm font-medium">{currentGame.unit1Name}</div>
+                      )}
+                    </div>
+                    {showUnit1Players && currentGame.unit1Players?.length > 0 && (
+                      <div className="text-xs text-blue-200">{currentGame.unit1Name}</div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-xl font-bold text-white/80">VS</div>
-                )}
-              </div>
 
-              {/* Team 2 Players */}
-              <div className="flex-1 text-center">
-                <div className="flex justify-center gap-2 mb-2">
-                  {currentGame.unit2Players?.length > 0 ? (
-                    currentGame.unit2Players.map((player, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => onPlayerClick(player.userId)}
-                        className="flex flex-col items-center hover:opacity-80 transition-opacity"
-                      >
-                        {player.profileImageUrl ? (
-                          <img
-                            src={getSharedAssetUrl(player.profileImageUrl)}
-                            alt=""
-                            className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center border-2 border-white/50">
-                            <User className="w-6 h-6 text-white/70" />
-                          </div>
-                        )}
-                        <span className="text-xs mt-1 max-w-[80px] truncate">{player.name?.split(' ')[0]}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-sm font-medium">{currentGame.unit2Name}</div>
-                  )}
+                  {/* VS / Score */}
+                  <div className="flex flex-col items-center">
+                    {(currentGame.status === 'Playing' || currentGame.status === 'InProgress') ? (
+                      <div className="text-3xl font-bold">
+                        {currentGame.unit1Score} - {currentGame.unit2Score}
+                      </div>
+                    ) : (
+                      <div className="text-xl font-bold text-white/80">VS</div>
+                    )}
+                  </div>
+
+                  {/* Team 2 Players */}
+                  <div className="flex-1 text-center">
+                    <div className="flex justify-center gap-2 mb-2">
+                      {showUnit2Players && currentGame.unit2Players?.length > 0 ? (
+                        currentGame.unit2Players.map((player, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => onPlayerClick(player.userId)}
+                            className="flex flex-col items-center hover:opacity-80 transition-opacity"
+                          >
+                            {player.profileImageUrl ? (
+                              <img
+                                src={getSharedAssetUrl(player.profileImageUrl)}
+                                alt=""
+                                className="w-12 h-12 rounded-full object-cover border-2 border-white/50"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center border-2 border-white/50">
+                                <User className="w-6 h-6 text-white/70" />
+                              </div>
+                            )}
+                            <span className="text-xs mt-1 max-w-[80px] truncate">{player.name?.split(' ')[0]}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="text-sm font-medium">{currentGame.unit2Name}</div>
+                      )}
+                    </div>
+                    {showUnit2Players && currentGame.unit2Players?.length > 0 && (
+                      <div className="text-xs text-blue-200">{currentGame.unit2Name}</div>
+                    )}
+                  </div>
                 </div>
-                {currentGame.unit2Players?.length > 0 && (
-                  <div className="text-xs text-blue-200">{currentGame.unit2Name}</div>
-                )}
-              </div>
-            </div>
+              )
+            })()}
 
             {/* Court Info */}
             {currentGame.courtName && (

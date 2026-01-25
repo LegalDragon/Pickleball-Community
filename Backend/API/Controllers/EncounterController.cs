@@ -274,6 +274,11 @@ public class EncounterController : ControllerBase
             Notes = encounter.Notes,
             CreatedAt = encounter.CreatedAt,
             UpdatedAt = encounter.UpdatedAt,
+            Unit1LineupLocked = encounter.Unit1LineupLocked,
+            Unit2LineupLocked = encounter.Unit2LineupLocked,
+            Unit1LineupLockedAt = encounter.Unit1LineupLockedAt,
+            Unit2LineupLockedAt = encounter.Unit2LineupLockedAt,
+            BothLineupsLocked = encounter.Unit1LineupLocked && encounter.Unit2LineupLocked,
             Matches = encounter.Matches
                 .OrderBy(m => m.Format?.SortOrder ?? 0)
                 .Select(m => new EncounterMatchDto
@@ -793,5 +798,107 @@ public class EncounterController : ControllerBase
         }
 
         return Ok(new { success = true, message = "Game score updated" });
+    }
+
+    // ==========================================
+    // Lineup Locking
+    // ==========================================
+
+    /// <summary>
+    /// Lock or unlock lineup for a unit in an encounter.
+    /// Can be done by unit captain, event organizer, or admin.
+    /// </summary>
+    [HttpPost("{encounterId}/lineup-lock")]
+    public async Task<IActionResult> ToggleLineupLock(int encounterId, [FromBody] LineupLockToggleDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var encounter = await _context.EventEncounters
+            .Include(e => e.Unit1)
+            .Include(e => e.Unit2)
+            .Include(e => e.Event)
+            .FirstOrDefaultAsync(e => e.Id == encounterId);
+
+        if (encounter == null)
+            return NotFound(new { success = false, message = "Encounter not found" });
+
+        // Check authorization: must be organizer, admin, or captain of the unit
+        var isOrganizer = encounter.Event?.OrganizedByUserId == userId.Value;
+        var isAdmin = User.IsInRole("Admin");
+
+        EventUnit? targetUnit = dto.UnitSide == 1 ? encounter.Unit1 : encounter.Unit2;
+        if (targetUnit == null)
+            return BadRequest(new { success = false, message = $"Unit {dto.UnitSide} not assigned to encounter" });
+
+        var isCaptain = targetUnit.CaptainUserId == userId.Value;
+
+        if (!isOrganizer && !isAdmin && !isCaptain)
+            return Forbid();
+
+        // Update lock status
+        if (dto.UnitSide == 1)
+        {
+            encounter.Unit1LineupLocked = dto.Locked;
+            encounter.Unit1LineupLockedAt = dto.Locked ? DateTime.UtcNow : null;
+            encounter.Unit1LineupLockedByUserId = dto.Locked ? userId : null;
+        }
+        else
+        {
+            encounter.Unit2LineupLocked = dto.Locked;
+            encounter.Unit2LineupLockedAt = dto.Locked ? DateTime.UtcNow : null;
+            encounter.Unit2LineupLockedByUserId = dto.Locked ? userId : null;
+        }
+
+        encounter.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var result = new LineupLockResultDto
+        {
+            Success = true,
+            Message = dto.Locked ? "Lineup locked successfully" : "Lineup unlocked successfully",
+            Unit1LineupLocked = encounter.Unit1LineupLocked,
+            Unit2LineupLocked = encounter.Unit2LineupLocked,
+            BothLineupsLocked = encounter.Unit1LineupLocked && encounter.Unit2LineupLocked,
+            Unit1LineupLockedAt = encounter.Unit1LineupLockedAt,
+            Unit2LineupLockedAt = encounter.Unit2LineupLockedAt
+        };
+
+        return Ok(new { success = true, data = result });
+    }
+
+    /// <summary>
+    /// Get lineup lock status for an encounter
+    /// </summary>
+    [HttpGet("{encounterId}/lineup-lock")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetLineupLockStatus(int encounterId)
+    {
+        var encounter = await _context.EventEncounters
+            .Select(e => new
+            {
+                e.Id,
+                e.Unit1LineupLocked,
+                e.Unit2LineupLocked,
+                e.Unit1LineupLockedAt,
+                e.Unit2LineupLockedAt
+            })
+            .FirstOrDefaultAsync(e => e.Id == encounterId);
+
+        if (encounter == null)
+            return NotFound(new { success = false, message = "Encounter not found" });
+
+        var result = new LineupLockResultDto
+        {
+            Success = true,
+            Unit1LineupLocked = encounter.Unit1LineupLocked,
+            Unit2LineupLocked = encounter.Unit2LineupLocked,
+            BothLineupsLocked = encounter.Unit1LineupLocked && encounter.Unit2LineupLocked,
+            Unit1LineupLockedAt = encounter.Unit1LineupLockedAt,
+            Unit2LineupLockedAt = encounter.Unit2LineupLockedAt
+        };
+
+        return Ok(new { success = true, data = result });
     }
 }

@@ -261,7 +261,7 @@ public static class Utility
     }
 
     /// <summary>
-    /// Format unit display name showing player first names for pairs (e.g., "John + Jane")
+    /// Format unit display name showing player first names for pairs (e.g., "John & Jane")
     /// Falls back to provided name if no members available
     /// </summary>
     public static string FormatUnitDisplayName(IEnumerable<Pickleball.Community.Models.Entities.EventUnitMember>? members, string? fallbackName)
@@ -280,12 +280,116 @@ public static class Utility
         if (acceptedMembers.Count == 1)
             return acceptedMembers[0].User!.FirstName ?? fallbackName ?? "Unknown";
 
-        // For pairs: "FirstName1 + FirstName2"
+        // For pairs: "FirstName1 & FirstName2"
         if (acceptedMembers.Count == 2)
-            return $"{acceptedMembers[0].User!.FirstName} + {acceptedMembers[1].User!.FirstName}";
+            return $"{acceptedMembers[0].User!.FirstName} & {acceptedMembers[1].User!.FirstName}";
 
         // For teams with more than 2 members, show first 2 names + count
-        return $"{acceptedMembers[0].User!.FirstName} + {acceptedMembers[1].User!.FirstName} +{acceptedMembers.Count - 2}";
+        return $"{acceptedMembers[0].User!.FirstName} & {acceptedMembers[1].User!.FirstName} +{acceptedMembers.Count - 2}";
+    }
+
+    /// <summary>
+    /// Get the display name for a unit based on naming rules:
+    /// - Unit size > 2: Use stored Name (captain can customize), default is "Captain's FirstName's team"
+    /// - Unit size = 2 (pairs) with 2 members: Compute "FirstName1 & FirstName2"
+    /// - Unit size = 2 (pairs) with 1 member: Use "Captain's FirstName's team"
+    ///
+    /// This ensures pair names auto-update when member profiles change.
+    /// </summary>
+    /// <param name="unit">The EventUnit</param>
+    /// <param name="requiredPlayers">Required players (from Division's TeamUnit.TotalPlayers)</param>
+    /// <returns>The display name for the unit</returns>
+    public static string GetUnitDisplayName(Pickleball.Community.Models.Entities.EventUnit? unit, int requiredPlayers)
+    {
+        if (unit == null)
+            return "Unknown";
+
+        var acceptedMembers = unit.Members?
+            .Where(m => m.InviteStatus == "Accepted" && m.User != null)
+            .OrderBy(m => m.Id)
+            .ToList() ?? new List<Pickleball.Community.Models.Entities.EventUnitMember>();
+
+        // Singles (size = 1): Use stored name (formatted as "Last, First")
+        if (requiredPlayers == 1)
+        {
+            return unit.Name;
+        }
+
+        // Teams (size > 2): Captain can customize, use stored name
+        if (requiredPlayers > 2)
+        {
+            // If no custom name set, generate default
+            if (!unit.HasCustomName && string.IsNullOrEmpty(unit.Name))
+            {
+                var captain = acceptedMembers.FirstOrDefault(m => m.Role == "Captain")?.User
+                    ?? unit.Captain;
+                if (captain != null)
+                    return $"{captain.FirstName}'s team";
+            }
+            return unit.Name;
+        }
+
+        // Pairs (size = 2):
+        // - If captain set custom name (HasCustomName = true), use it
+        // - If 2 accepted members, compute "FirstName1 & FirstName2"
+        // - If only 1 member, use "FirstName's team"
+        if (unit.HasCustomName)
+        {
+            return unit.Name;
+        }
+
+        if (acceptedMembers.Count >= 2)
+        {
+            return $"{acceptedMembers[0].User!.FirstName} & {acceptedMembers[1].User!.FirstName}";
+        }
+
+        if (acceptedMembers.Count == 1)
+        {
+            return $"{acceptedMembers[0].User!.FirstName}'s team";
+        }
+
+        // Fallback to stored name if no members
+        return unit.Name ?? "Unknown";
+    }
+
+    /// <summary>
+    /// Compute the display name for a unit without loading the full unit (for projections).
+    /// Uses provided member data to compute the name.
+    /// </summary>
+    public static string ComputePairDisplayName(
+        IEnumerable<(string? FirstName, string Role)>? members,
+        int requiredPlayers,
+        bool hasCustomName,
+        string storedName,
+        string? captainFirstName)
+    {
+        // Singles: use stored name
+        if (requiredPlayers == 1)
+            return storedName;
+
+        // Teams (size > 2): use stored name
+        if (requiredPlayers > 2)
+        {
+            if (!hasCustomName && string.IsNullOrEmpty(storedName) && !string.IsNullOrEmpty(captainFirstName))
+                return $"{captainFirstName}'s team";
+            return storedName;
+        }
+
+        // Pairs (size = 2):
+        if (hasCustomName)
+            return storedName;
+
+        var memberList = members?
+            .Where(m => !string.IsNullOrEmpty(m.FirstName))
+            .ToList() ?? new List<(string? FirstName, string Role)>();
+
+        if (memberList.Count >= 2)
+            return $"{memberList[0].FirstName} & {memberList[1].FirstName}";
+
+        if (memberList.Count == 1)
+            return $"{memberList[0].FirstName}'s team";
+
+        return storedName ?? "Unknown";
     }
 
     public static string GetContentType(string fileName)

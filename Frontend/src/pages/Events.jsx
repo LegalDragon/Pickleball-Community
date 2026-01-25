@@ -393,6 +393,8 @@ export default function Events() {
   const loadEvents = useCallback(async () => {
     setLoading(true);
     try {
+      // Only send location params if user has location AND radiusMiles > 0 (not "Anywhere")
+      const useLocationFilter = userLocation && radiusMiles > 0;
       const params = {
         page,
         pageSize,
@@ -401,9 +403,9 @@ export default function Events() {
         country: country || undefined,
         state: state || undefined,
         city: city || undefined,
-        latitude: userLocation?.lat,
-        longitude: userLocation?.lng,
-        radiusMiles: userLocation ? radiusMiles : undefined,
+        latitude: useLocationFilter ? userLocation.lat : undefined,
+        longitude: useLocationFilter ? userLocation.lng : undefined,
+        radiusMiles: useLocationFilter ? radiusMiles : undefined,
         isUpcoming: !showRecentEvents,
         includeRecent: showRecentEvents,
         sortBy: sortBy,
@@ -668,9 +670,18 @@ export default function Events() {
                 {userLocation && (
                   <select
                     value={radiusMiles}
-                    onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
+                    onChange={(e) => {
+                      const newRadius = parseInt(e.target.value);
+                      setRadiusMiles(newRadius);
+                      // If selecting "Anywhere" and currently sorting by distance, switch to date
+                      if (newRadius === 0 && sortBy === 'distance') {
+                        setSortBy('date');
+                      }
+                      setPage(1);
+                    }}
                     className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
                   >
+                    <option value={0}>Anywhere</option>
                     <option value={25}>Within 25 miles</option>
                     <option value={50}>Within 50 miles</option>
                     <option value={100}>Within 100 miles</option>
@@ -690,7 +701,7 @@ export default function Events() {
                     onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
                   >
-                    {userLocation && <option value="distance">Distance</option>}
+                    {userLocation && radiusMiles > 0 && <option value="distance">Distance</option>}
                     <option value="date">Date</option>
                     <option value="name">Name</option>
                   </select>

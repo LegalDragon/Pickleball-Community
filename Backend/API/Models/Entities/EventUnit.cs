@@ -19,6 +19,13 @@ public class EventUnit
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// Whether the captain has set a custom team name.
+    /// For teams (size > 2): captain can always customize
+    /// For pairs (size = 2): if false, display name is computed from member first names
+    /// </summary>
+    public bool HasCustomName { get; set; } = false;
+
+    /// <summary>
     /// Random number assigned when tournament starts (for bracket placement)
     /// </summary>
     public int? UnitNumber { get; set; }

@@ -120,6 +120,12 @@ public class PhaseSlot
     public string? PlaceholderLabel { get; set; }
 
     /// <summary>
+    /// Exit label for advancing slots (e.g., "Champion", "Runner-up", "3rd Place")
+    /// </summary>
+    [MaxLength(50)]
+    public string? ExitLabel { get; set; }
+
+    /// <summary>
     /// Whether this slot has been resolved (unit assigned)
     /// </summary>
     public bool IsResolved { get; set; } = false;

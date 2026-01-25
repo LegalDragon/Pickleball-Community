@@ -138,6 +138,8 @@ builder.Services.AddScoped<ISharedAssetService, SharedAssetService>();
 builder.Services.AddScoped<IWaiverPdfService, WaiverPdfService>();
 builder.Services.AddScoped<ICourtAssignmentService, CourtAssignmentService>();
 builder.Services.AddScoped<IEmailNotificationService, EmailNotificationService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
 
 // CORS - Load allowed origins from configuration
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();

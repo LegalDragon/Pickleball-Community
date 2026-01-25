@@ -61,6 +61,8 @@ public class DivisionPhasesController : ControllerBase
                 p.ReseedOption,
                 p.Settings,
                 p.IsManuallyLocked,
+                p.IncludeConsolation,
+                p.SeedingStrategy,
                 EncounterCount = p.Encounters.Count,
                 SlotCount = p.Slots.Count,
                 PoolNames = p.Pools.OrderBy(pl => pl.PoolOrder).Select(pl => pl.PoolName).ToList()
@@ -111,6 +113,8 @@ public class DivisionPhasesController : ControllerBase
                 phase.ReseedOption,
                 phase.Settings,
                 phase.IsManuallyLocked,
+                phase.IncludeConsolation,
+                phase.SeedingStrategy,
                 Slots = phase.Slots.OrderBy(s => s.SlotType).ThenBy(s => s.SlotNumber).Select(s => new
                 {
                     s.Id,
@@ -184,7 +188,9 @@ public class DivisionPhasesController : ControllerBase
             BestOf = request.BestOf,
             RankingCriteria = request.RankingCriteria,
             ReseedOption = request.ReseedOption,
-            Settings = request.Settings
+            Settings = request.Settings,
+            IncludeConsolation = request.IncludeConsolation,
+            SeedingStrategy = request.SeedingStrategy ?? SeedingStrategies.Snake
         };
 
         _context.DivisionPhases.Add(phase);
@@ -232,6 +238,8 @@ public class DivisionPhasesController : ControllerBase
         if (request.RankingCriteria != null) phase.RankingCriteria = request.RankingCriteria;
         if (request.ReseedOption != null) phase.ReseedOption = request.ReseedOption;
         if (request.Settings != null) phase.Settings = request.Settings;
+        if (request.IncludeConsolation.HasValue) phase.IncludeConsolation = request.IncludeConsolation.Value;
+        if (request.SeedingStrategy != null) phase.SeedingStrategy = request.SeedingStrategy;
 
         phase.UpdatedAt = DateTime.UtcNow;
 
@@ -323,11 +331,20 @@ public class DivisionPhasesController : ControllerBase
                 encountersCreated = await GenerateDoubleEliminationSchedule(phase);
                 break;
 
+            case PhaseTypes.BracketRound:
+                encountersCreated = await GenerateBracketRoundSchedule(phase);
+                break;
+
             default:
                 return BadRequest(new { success = false, message = $"Unsupported phase type: {phase.PhaseType}" });
         }
 
         _logger.LogInformation("Generated {Count} encounters for phase {PhaseId}", encountersCreated, id);
+
+        // Assign sequential DivisionMatchNumber to all encounters in the division
+        await _context.Database.ExecuteSqlRawAsync(
+            "EXEC sp_AssignDivisionMatchNumbers @DivisionId = {0}",
+            phase.DivisionId);
 
         return Ok(new { success = true, data = new { encountersCreated } });
     }
@@ -353,6 +370,7 @@ public class DivisionPhasesController : ControllerBase
             {
                 e.Id,
                 e.EncounterNumber,
+                e.DivisionMatchNumber,
                 e.EncounterLabel,
                 e.RoundType,
                 e.RoundNumber,
@@ -453,6 +471,119 @@ public class DivisionPhasesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { success = true, message = $"{rules.Count} advancement rules saved" });
+    }
+
+    /// <summary>
+    /// Auto-generate advancement rules using snake seeding from source phase pools to target phase.
+    /// Snake order: 1A, 1B, 2B, 2A, 3A, 3B, 4B, 4A... (standard for fair bracket seeding)
+    /// </summary>
+    [HttpPost("{id}/auto-advancement-rules")]
+    [Authorize(Roles = "Admin,Organizer")]
+    public async Task<IActionResult> GenerateSnakeAdvancementRules(int id, [FromBody] AutoAdvancementRequest request)
+    {
+        var targetPhase = await _context.DivisionPhases.FindAsync(id);
+        if (targetPhase == null)
+            return NotFound(new { success = false, message = "Target phase not found" });
+
+        var sourcePhase = await _context.DivisionPhases
+            .Include(p => p.Pools)
+            .FirstOrDefaultAsync(p => p.Id == request.SourcePhaseId);
+
+        if (sourcePhase == null)
+            return NotFound(new { success = false, message = "Source phase not found" });
+
+        if (!sourcePhase.Pools.Any())
+            return BadRequest(new { success = false, message = "Source phase has no pools" });
+
+        // Clear existing incoming rules for this target phase from this source
+        var existingRules = await _context.PhaseAdvancementRules
+            .Where(r => r.TargetPhaseId == id && r.SourcePhaseId == request.SourcePhaseId)
+            .ToListAsync();
+        _context.PhaseAdvancementRules.RemoveRange(existingRules);
+
+        var pools = sourcePhase.Pools.OrderBy(p => p.PoolOrder).ToList();
+        int poolCount = pools.Count;
+        int advancingPerPool = request.AdvancingPerPool ?? (targetPhase.IncomingSlotCount / poolCount);
+
+        var rules = new List<PhaseAdvancementRule>();
+        int targetSlot = 1;
+        string seedingStrategy = targetPhase.SeedingStrategy ?? SeedingStrategies.Snake;
+
+        if (seedingStrategy == SeedingStrategies.Snake)
+        {
+            // Snake draft: 1A, 1B, 2B, 2A, 3A, 3B, 4B, 4A...
+            for (int rank = 1; rank <= advancingPerPool; rank++)
+            {
+                bool forward = (rank % 2 == 1);
+                var orderedPools = forward ? pools : pools.AsEnumerable().Reverse();
+
+                foreach (var pool in orderedPools)
+                {
+                    rules.Add(new PhaseAdvancementRule
+                    {
+                        SourcePhaseId = sourcePhase.Id,
+                        SourcePoolId = pool.Id,
+                        SourceRank = rank,
+                        TargetPhaseId = id,
+                        TargetSlotNumber = targetSlot,
+                        Description = $"Pool {pool.PoolName} #{rank} → Seed {targetSlot}",
+                        ProcessOrder = targetSlot
+                    });
+                    targetSlot++;
+                }
+            }
+        }
+        else if (seedingStrategy == SeedingStrategies.Sequential)
+        {
+            // Sequential: 1A, 2A, 3A, 4A, 1B, 2B, 3B, 4B...
+            foreach (var pool in pools)
+            {
+                for (int rank = 1; rank <= advancingPerPool; rank++)
+                {
+                    rules.Add(new PhaseAdvancementRule
+                    {
+                        SourcePhaseId = sourcePhase.Id,
+                        SourcePoolId = pool.Id,
+                        SourceRank = rank,
+                        TargetPhaseId = id,
+                        TargetSlotNumber = targetSlot,
+                        Description = $"Pool {pool.PoolName} #{rank} → Seed {targetSlot}",
+                        ProcessOrder = targetSlot
+                    });
+                    targetSlot++;
+                }
+            }
+        }
+        else if (seedingStrategy == SeedingStrategies.CrossPool && poolCount == 2)
+        {
+            // Cross-pool for 2 pools: 1A vs 2B, 1B vs 2A matchups
+            // Seed 1: 1A, Seed 2: 2B, Seed 3: 1B, Seed 4: 2A
+            var poolA = pools[0];
+            var poolB = pools[1];
+
+            rules.Add(new PhaseAdvancementRule { SourcePhaseId = sourcePhase.Id, SourcePoolId = poolA.Id, SourceRank = 1, TargetPhaseId = id, TargetSlotNumber = 1, Description = $"Pool {poolA.PoolName} #1 → Seed 1", ProcessOrder = 1 });
+            rules.Add(new PhaseAdvancementRule { SourcePhaseId = sourcePhase.Id, SourcePoolId = poolB.Id, SourceRank = 2, TargetPhaseId = id, TargetSlotNumber = 2, Description = $"Pool {poolB.PoolName} #2 → Seed 2", ProcessOrder = 2 });
+            rules.Add(new PhaseAdvancementRule { SourcePhaseId = sourcePhase.Id, SourcePoolId = poolB.Id, SourceRank = 1, TargetPhaseId = id, TargetSlotNumber = 3, Description = $"Pool {poolB.PoolName} #1 → Seed 3", ProcessOrder = 3 });
+            rules.Add(new PhaseAdvancementRule { SourcePhaseId = sourcePhase.Id, SourcePoolId = poolA.Id, SourceRank = 2, TargetPhaseId = id, TargetSlotNumber = 4, Description = $"Pool {poolA.PoolName} #2 → Seed 4", ProcessOrder = 4 });
+        }
+
+        _context.PhaseAdvancementRules.AddRange(rules);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Generated {Count} advancement rules from phase {SourceId} to {TargetId} using {Strategy} seeding",
+            rules.Count, sourcePhase.Id, id, seedingStrategy);
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                rulesCreated = rules.Count,
+                seedingStrategy,
+                rules = rules.Select(r => new { r.SourcePoolId, r.SourceRank, r.TargetSlotNumber, r.Description })
+            }
+        });
     }
 
     #endregion
@@ -817,6 +948,124 @@ public class DivisionPhasesController : ControllerBase
         return created;
     }
 
+    /// <summary>
+    /// Generate a single bracket round (e.g., just Semifinal or just Final).
+    /// Creates N/2 matches for N incoming teams, plus optional consolation match.
+    /// </summary>
+    private async Task<int> GenerateBracketRoundSchedule(DivisionPhase phase)
+    {
+        var slots = await _context.PhaseSlots
+            .Where(s => s.PhaseId == phase.Id && s.SlotType == SlotTypes.Incoming)
+            .OrderBy(s => s.SlotNumber)
+            .ToListAsync();
+
+        int n = slots.Count;
+        if (n < 2)
+        {
+            _logger.LogWarning("BracketRound phase {PhaseId} has fewer than 2 incoming slots", phase.Id);
+            return 0;
+        }
+
+        int encountersCreated = 0;
+        int encounterNumber = 1;
+        var bracketMatches = new List<EventEncounter>();
+
+        // Handle odd number of teams: top seed gets bye
+        bool hasBye = n % 2 == 1;
+        int matchCount = n / 2;
+
+        // Create bracket matches
+        for (int i = 0; i < matchCount; i++)
+        {
+            int slot1Index = i * 2;
+            int slot2Index = slot1Index + 1;
+
+            // If odd number and this is the last potential match, skip (top seed has bye)
+            if (hasBye && slot2Index >= n)
+            {
+                break;
+            }
+
+            var encounter = new EventEncounter
+            {
+                EventId = phase.Division!.EventId,
+                DivisionId = phase.DivisionId,
+                PhaseId = phase.Id,
+                RoundType = "Bracket",
+                RoundNumber = 1,
+                RoundName = phase.Name, // Use phase name directly (e.g., "Semifinal", "Final")
+                EncounterNumber = encounterNumber,
+                EncounterLabel = matchCount == 1 ? phase.Name : $"{phase.Name} {i + 1}",
+                BracketPosition = i + 1,
+                Unit1SlotId = slots[slot1Index].Id,
+                Unit1SeedLabel = slots[slot1Index].PlaceholderLabel,
+                BestOf = phase.BestOf ?? 1,
+                Status = "Scheduled"
+            };
+
+            if (slot2Index < slots.Count)
+            {
+                encounter.Unit2SlotId = slots[slot2Index].Id;
+                encounter.Unit2SeedLabel = slots[slot2Index].PlaceholderLabel;
+            }
+            else
+            {
+                encounter.Status = "Bye";
+            }
+
+            _context.EventEncounters.Add(encounter);
+            bracketMatches.Add(encounter);
+            encounterNumber++;
+            encountersCreated++;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Create consolation match if enabled (for 4-team semifinals: losers play for 3rd)
+        EventEncounter? consolationMatch = null;
+        if (phase.IncludeConsolation && matchCount >= 2)
+        {
+            consolationMatch = new EventEncounter
+            {
+                EventId = phase.Division!.EventId,
+                DivisionId = phase.DivisionId,
+                PhaseId = phase.Id,
+                RoundType = "Consolation",
+                RoundNumber = 2, // Plays after bracket round
+                RoundName = "3rd Place",
+                EncounterNumber = encounterNumber,
+                EncounterLabel = "3rd Place",
+                BracketPosition = 1,
+                Unit1SeedLabel = $"Loser {bracketMatches[0].EncounterLabel}",
+                Unit2SeedLabel = $"Loser {bracketMatches[1].EncounterLabel}",
+                BestOf = phase.BestOf ?? 1,
+                Status = "Scheduled"
+            };
+
+            _context.EventEncounters.Add(consolationMatch);
+            encountersCreated++;
+
+            await _context.SaveChangesAsync();
+
+            // Link semifinal losers to consolation match
+            bracketMatches[0].LoserNextEncounterId = consolationMatch.Id;
+            bracketMatches[0].LoserSlotPosition = 1;
+            bracketMatches[1].LoserNextEncounterId = consolationMatch.Id;
+            bracketMatches[1].LoserSlotPosition = 2;
+        }
+
+        // If there's a next phase (e.g., Final after Semifinal), link winners
+        // This is done via advancement rules, not hardcoded here
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Generated {Count} encounters for BracketRound phase {PhaseId} ({Name}), consolation: {Consolation}",
+            encountersCreated, phase.Id, phase.Name, phase.IncludeConsolation);
+
+        return encountersCreated;
+    }
+
     #endregion
 }
 
@@ -838,6 +1087,14 @@ public class CreatePhaseRequest
     public string? RankingCriteria { get; set; }
     public string? ReseedOption { get; set; }
     public string? Settings { get; set; }
+    /// <summary>
+    /// Include 3rd place match for semifinal losers (BracketRound phases)
+    /// </summary>
+    public bool IncludeConsolation { get; set; }
+    /// <summary>
+    /// Seeding strategy from pools: Snake, Sequential, CrossPool
+    /// </summary>
+    public string? SeedingStrategy { get; set; }
 }
 
 public class UpdatePhaseRequest
@@ -855,6 +1112,8 @@ public class UpdatePhaseRequest
     public string? RankingCriteria { get; set; }
     public string? ReseedOption { get; set; }
     public string? Settings { get; set; }
+    public bool? IncludeConsolation { get; set; }
+    public string? SeedingStrategy { get; set; }
 }
 
 public class AdvancementRuleRequest
@@ -873,6 +1132,18 @@ public class CourtAssignmentRequest
     public int? Priority { get; set; }
     public TimeSpan? ValidFromTime { get; set; }
     public TimeSpan? ValidToTime { get; set; }
+}
+
+public class AutoAdvancementRequest
+{
+    /// <summary>
+    /// Source phase ID (pool play phase to advance from)
+    /// </summary>
+    public int SourcePhaseId { get; set; }
+    /// <summary>
+    /// Number of teams advancing per pool (optional, defaults to target slots / pool count)
+    /// </summary>
+    public int? AdvancingPerPool { get; set; }
 }
 
 #endregion

@@ -178,6 +178,9 @@ export default function AdminEventManage() {
         country: editForm.country || null,
         registrationFee: editForm.registrationFee ? parseFloat(editForm.registrationFee) : 0,
         perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0,
+        // Preserve existing image URLs
+        posterImageUrl: event.posterImageUrl || null,
+        bannerImageUrl: event.bannerImageUrl || null,
       };
 
       const response = await eventsApi.update(eventId, updateData);

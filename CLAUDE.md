@@ -289,11 +289,12 @@ public ICollection<EventEncounter> LoserSourceEncounters { get; set; }
 - **Migration_113_DivisionPhases.sql** - Base DivisionPhases and PhaseSlots tables
 - **Migration_114_PhaseScheduling.sql** - Bracket progression, pools, court groups, awards
 - **Migration_115_PhaseSchedulingProcs.sql** - Stored procedures for advancement and calculations
+- **Migration_137_PhaseTemplates.sql** - Phase template library system
 
 ### Usage Flow
 
 1. **Configure Division**: Set division settings, match formats
-2. **Create Phases**: Add phases (Pool Play → Semifinals → Finals)
+2. **Create Phases**: Use a template OR add phases manually (Pool Play → Semifinals → Finals)
 3. **Configure Pools**: If pool play, create multiple pools
 4. **Set Advancement Rules**: Define how units advance between phases
 5. **Generate Schedules**: Create placeholder-based schedules for each phase
@@ -302,6 +303,85 @@ public ICollection<EventEncounter> LoserSourceEncounters { get; set; }
 8. **Preview**: View complete schedule with placeholders
 9. **Drawing**: Fill phase 1 slots with actual units
 10. **Execute**: As matches complete, winners/losers advance automatically
+
+## Phase Template System (Migration 137+)
+
+Pre-built tournament format templates that TDs can select and apply to divisions, treating phases as composable "Lego blocks" with clear input/output slots.
+
+### Core Concepts
+
+**Phases as Composable Units**: Each phase has:
+- **Incoming Slots**: Units entering this phase (from seeding or previous phase)
+- **Exiting Slots**: Units leaving this phase (with final ranking/position)
+- **Internal Logic**: How incoming → exiting (bracket, round robin, etc.)
+
+**Phase Chaining**: Phases connect when `Phase A.ExitingSlotCount == Phase B.IncomingSlotCount`
+
+### PhaseTemplate Entity
+
+```csharp
+public class PhaseTemplate
+{
+    public int Id { get; set; }
+    public string Name { get; set; }           // "8-Team Single Elimination"
+    public string Category { get; set; }       // SingleElimination, DoubleElimination, RoundRobin, Pools, Combined
+    public int MinUnits { get; set; }          // Minimum supported units
+    public int MaxUnits { get; set; }          // Maximum supported units
+    public int DefaultUnits { get; set; }      // Default unit count
+    public bool IsSystemTemplate { get; set; } // Pre-built vs user-created
+    public string StructureJson { get; set; }  // Full structure definition
+}
+```
+
+### System Templates
+
+| Template | Description | Units |
+|----------|-------------|-------|
+| Single Elimination (Flexible) | Auto-sizes bracket with byes | 4-32 |
+| 4-Team Single Elim | SF → F (+ 3rd place) | 4 |
+| 8-Team Single Elim | QF → SF → F | 8 |
+| 16-Team Single Elim | R16 → QF → SF → F | 16 |
+| Round Robin (4/8 teams) | All play all | 4, 8 |
+| 2 Pools + Semifinals + Finals | Pool A/B → SF → F | 8 |
+| 4 Pools + Bracket | Pools → QF → SF → F | 16 |
+| 8-Team Double Elimination | WB + LB → Grand Final | 8 |
+| Pools + Bracket (Flexible) | Auto-pools → bracket | 6-32 |
+
+### API Endpoints
+
+**PhaseTemplatesController** (`/phasetemplates`):
+- `GET` - List all active templates
+- `GET /for-units/{unitCount}` - Get templates suitable for unit count
+- `GET /{id}` - Get template with full structure
+- `GET /category/{category}` - Get templates by category
+- `POST` - Create custom template (Admin)
+- `PUT /{id}` - Update template (Admin)
+- `DELETE /{id}` - Soft delete template (Admin)
+- `POST /preview` - Preview what applying a template would create
+- `POST /{templateId}/apply/{divisionId}` - Apply template to division
+- `POST /manual-exit-assignment` - TD manually assigns exit slot
+- `GET /{phaseId}/exit-slots` - Get exit slot status
+- `POST /{phaseId}/process-byes` - Process all bye encounters
+
+### Stored Procedures (Migration 137)
+
+- `sp_ManuallyAssignExitSlot` - TD override for exit slot assignment
+- `sp_ProcessByeEncounters` - Auto-complete bye encounters and advance winners
+- `sp_ApplyPhaseTemplate` - Apply template to division (helper)
+
+### Frontend Components
+
+**TemplateSelector.jsx** (`/Frontend/src/components/tournament/TemplateSelector.jsx`):
+- Template browsing by category
+- Unit count filtering (shows suitable templates)
+- Live preview of tournament structure
+- Advancement rules visualization
+- One-click template application
+
+**PhaseManager.jsx** Integration:
+- "Use Template" button (purple) for template-based creation
+- "Add Phase" button (blue) for manual phase creation
+- Template selector modal with preview
 
 ## Shared Authentication (Funtime-Shared)
 This project uses shared authentication from the Funtime-Shared repository:

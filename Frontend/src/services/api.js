@@ -1055,6 +1055,9 @@ export const clubsApi = {
   // Update a club
   update: (id, data) => api.put(`/clubs/${id}`, data),
 
+  // Update club coordinates (for geocoding cache)
+  updateCoordinates: (id, latitude, longitude) => api.patch(`/clubs/${id}/coordinates`, { latitude, longitude }),
+
   // Delete a club (soft delete)
   delete: (id) => api.delete(`/clubs/${id}`),
 
@@ -1627,11 +1630,48 @@ export const tournamentApi = {
 
   // Advancement Rules
   setAdvancementRules: (phaseId, rules) => api.post(`/divisionphases/${phaseId}/advancement-rules`, rules),
+  /** Auto-generate advancement rules from source phase using seeding strategy (Snake, Sequential, CrossPool) */
+  generateAdvancementRules: (phaseId, sourcePhaseId, advancingPerPool = null) =>
+    api.post(`/divisionphases/${phaseId}/auto-advancement-rules`, { sourcePhaseId, advancingPerPool }),
 
   // Court Assignments
   setPhaseCourtAssignments: (phaseId, assignments) => api.post(`/divisionphases/${phaseId}/court-assignments`, assignments),
   autoAssignPhaseCourts: (phaseId) => api.post(`/divisionphases/${phaseId}/auto-assign-courts`),
   calculatePhaseTimes: (phaseId) => api.post(`/divisionphases/${phaseId}/calculate-times`),
+
+  // =====================================================
+  // Phase Templates (pre-built tournament structures)
+  // =====================================================
+
+  // Template CRUD
+  getPhaseTemplates: (category = null) =>
+    api.get(`/phasetemplates${category ? `?category=${category}` : ''}`),
+  getPhaseTemplatesForUnitCount: (unitCount) =>
+    api.get(`/phasetemplates/for-units/${unitCount}`),
+  getPhaseTemplate: (templateId) =>
+    api.get(`/phasetemplates/${templateId}`),
+  getTemplatesByCategory: (category) =>
+    api.get(`/phasetemplates/category/${category}`),
+  createPhaseTemplate: (data) =>
+    api.post('/phasetemplates', data),
+  updatePhaseTemplate: (templateId, data) =>
+    api.put(`/phasetemplates/${templateId}`, data),
+  deletePhaseTemplate: (templateId) =>
+    api.delete(`/phasetemplates/${templateId}`),
+
+  // Template Application
+  previewTemplate: (templateId, divisionId, unitCount = null) =>
+    api.post('/phasetemplates/preview', { templateId, divisionId, unitCount }),
+  applyTemplate: (templateId, divisionId, unitCount = null, clearExisting = true) =>
+    api.post(`/phasetemplates/${templateId}/apply/${divisionId}?unitCount=${unitCount || ''}&clearExisting=${clearExisting}`),
+
+  // Manual Exit Slot Assignment (TD override)
+  manualExitSlotAssignment: (phaseId, slotNumber, unitId, notes = null) =>
+    api.post('/phasetemplates/manual-exit-assignment', { phaseId, slotNumber, unitId, notes }),
+  getExitSlots: (phaseId) =>
+    api.get(`/phasetemplates/${phaseId}/exit-slots`),
+  processByes: (phaseId) =>
+    api.post(`/phasetemplates/${phaseId}/process-byes`),
 
   // =====================================================
   // Court Groups
@@ -2446,7 +2486,13 @@ export const locationApi = {
 
   // Get a specific state by country and state code
   getState: (countryCode, stateCode) =>
-    api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`)
+    api.get(`/location/countries/${encodeURIComponent(countryCode)}/states/${encodeURIComponent(stateCode)}`),
+
+  // Get cities for a state (by ID or code)
+  getCitiesByState: (stateId) => api.get(`/location/states/${encodeURIComponent(stateId)}/cities`),
+
+  // Add a new city to a state (creates if doesn't exist, returns existing if it does)
+  addCity: (stateId, name) => api.post(`/location/states/${encodeURIComponent(stateId)}/cities`, { name })
 }
 
 // Event Staff API
@@ -2483,6 +2529,25 @@ export const eventStaffApi = {
 
   // Staff dashboard
   getDashboard: (eventId) => api.get(`/eventstaff/event/${eventId}/dashboard`)
+}
+
+// Encounter API (Team Scrimmage / Lineup Management)
+export const encounterApi = {
+  // Division encounter config
+  getDivisionConfig: (divisionId) => api.get(`/encounters/divisions/${divisionId}/config`),
+  updateDivisionConfig: (divisionId, data) => api.put(`/encounters/divisions/${divisionId}/config`, data),
+
+  // Encounter management
+  getEncounter: (encounterId) => api.get(`/encounters/${encounterId}`),
+  createEncounter: (eventId, data) => api.post(`/encounters/events/${eventId}`, data),
+
+  // Match player assignment
+  getMatchPlayers: (matchId) => api.get(`/encounters/matches/${matchId}/players`),
+  updateMatchPlayers: (matchId, data) => api.put(`/encounters/matches/${matchId}/players`, data),
+
+  // Lineup locking
+  toggleLineupLock: (encounterId, data) => api.post(`/encounters/${encounterId}/lineup-lock`, data),
+  getLineupLockStatus: (encounterId) => api.get(`/encounters/${encounterId}/lineup-lock`)
 }
 
 export default api

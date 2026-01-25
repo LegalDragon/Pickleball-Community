@@ -478,7 +478,8 @@ public class CreateEventDivisionDto
 public class UpdateEventDto : CreateEventDto
 {
     public bool IsPublished { get; set; }
-    public new List<UpdateEventDivisionDto> Divisions { get; set; } = new();
+    // Note: null means "don't change divisions", empty list means "delete all divisions"
+    public new List<UpdateEventDivisionDto>? Divisions { get; set; }
 }
 
 // Update division (includes ID for existing divisions)
@@ -802,6 +803,7 @@ public class DeclineStaffRequest
 public class CreateEventStaffDto
 {
     public int UserId { get; set; }
+    public string? Email { get; set; } // Alternative to UserId - look up user by email
     public int? RoleId { get; set; }
     public string Status { get; set; } = "Active";
     public int Priority { get; set; } = 0;

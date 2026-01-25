@@ -169,7 +169,10 @@ const EventsAdmin = ({ embedded = false }) => {
         registrationFee: editForm.registrationFee ? parseFloat(editForm.registrationFee) : 0,
         perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0,
         registrationOpenDate,
-        registrationCloseDate
+        registrationCloseDate,
+        // Preserve existing image URLs
+        posterImageUrl: editingEvent.posterImageUrl || null,
+        bannerImageUrl: editingEvent.bannerImageUrl || null
       }
       const response = await eventsApi.adminUpdate(editingEvent.id, updateData)
       if (response.success) {

@@ -104,6 +104,21 @@ public class VenuesController : ControllerBase
                 await connection.CloseAsync();
             }
 
+            // Apply bounds filter if provided (for map viewport search)
+            // Note: This is done post-query since the stored proc doesn't support bounds
+            if (request.MinLat.HasValue && request.MaxLat.HasValue &&
+                request.MinLng.HasValue && request.MaxLng.HasValue)
+            {
+                venues = venues.Where(v =>
+                    v.Latitude.HasValue && v.Longitude.HasValue &&
+                    v.Latitude.Value >= request.MinLat.Value &&
+                    v.Latitude.Value <= request.MaxLat.Value &&
+                    v.Longitude.Value >= request.MinLng.Value &&
+                    v.Longitude.Value <= request.MaxLng.Value
+                ).ToList();
+                totalCount = venues.Count;
+            }
+
             return Ok(new ApiResponse<PagedResult<VenueDto>>
             {
                 Success = true,
@@ -190,6 +205,22 @@ public class VenuesController : ControllerBase
         else
         {
             venuesWithDistance = venues.Select(v => (venue: v, distance: (double?)null)).ToList();
+        }
+
+        // Apply bounds filter if provided (for map viewport search)
+        if (request.MinLat.HasValue && request.MaxLat.HasValue &&
+            request.MinLng.HasValue && request.MaxLng.HasValue)
+        {
+            venuesWithDistance = venuesWithDistance.Where(x =>
+            {
+                if (!double.TryParse(x.venue.GpsLat, out var lat) ||
+                    !double.TryParse(x.venue.GpsLng, out var lng))
+                    return false;
+                return lat >= request.MinLat.Value &&
+                       lat <= request.MaxLat.Value &&
+                       lng >= request.MinLng.Value &&
+                       lng <= request.MaxLng.Value;
+            }).ToList();
         }
 
         var totalCount = venuesWithDistance.Count;

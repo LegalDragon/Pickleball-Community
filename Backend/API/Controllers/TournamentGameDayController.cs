@@ -252,7 +252,10 @@ public class TournamentGameDayController : ControllerBase
                         StartedAt = g.StartedAt,
                         FinishedAt = g.FinishedAt,
                         CanSubmitScore = g.Status == "Playing" && g.ScoreSubmittedByUnitId != myUnitId,
-                        NeedsConfirmation = g.ScoreSubmittedByUnitId != null && g.ScoreSubmittedByUnitId != myUnitId && g.ScoreConfirmedByUnitId == null
+                        NeedsConfirmation = g.ScoreSubmittedByUnitId != null && g.ScoreSubmittedByUnitId != myUnitId && g.ScoreConfirmedByUnitId == null,
+                        Unit1LineupLocked = encounter.Unit1LineupLocked,
+                        Unit2LineupLocked = encounter.Unit2LineupLocked,
+                        BothLineupsLocked = encounter.Unit1LineupLocked && encounter.Unit2LineupLocked
                     };
                 })
                 .ToList();
@@ -2309,6 +2312,21 @@ public class PlayerGameInfoDto
     public DateTime? FinishedAt { get; set; }
     public bool CanSubmitScore { get; set; }
     public bool NeedsConfirmation { get; set; }
+
+    /// <summary>
+    /// Whether Unit1's lineup is locked for this encounter
+    /// </summary>
+    public bool Unit1LineupLocked { get; set; }
+
+    /// <summary>
+    /// Whether Unit2's lineup is locked for this encounter
+    /// </summary>
+    public bool Unit2LineupLocked { get; set; }
+
+    /// <summary>
+    /// Whether both lineups are locked (lineup visible to all)
+    /// </summary>
+    public bool BothLineupsLocked { get; set; }
 }
 
 public class QueueGameRequest

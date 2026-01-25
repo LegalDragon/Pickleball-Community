@@ -53,7 +53,10 @@ export default function VenueMap({
   selectedCourtId, // Backward compatibility
   userLocation,
   fitBounds = true,
-  showNumbers = false
+  showNumbers = false,
+  onBoundsChange = null, // Callback when map viewport changes: ({ minLat, maxLat, minLng, maxLng }, isUserInteraction) => void
+  forceRefitBounds = false, // Set to a new value to force a re-fit
+  skipInitialFitBounds = false // If true, skip fitBounds even on initial mount (used when parent knows user has interacted)
 }) {
   // Support both venues and courts props for backward compatibility
   const items = venues || courts || [];
@@ -65,6 +68,25 @@ export default function VenueMap({
   const [isClient, setIsClient] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [inChina] = useState(() => isLikelyInChina());
+  const userHasInteractedRef = useRef(false); // Track if user has panned/zoomed
+  const initialFitDoneRef = useRef(false); // Track if initial fitBounds was done
+  const lastForceRefitRef = useRef(forceRefitBounds); // Track forceRefitBounds changes
+
+  // Store callbacks and props in refs to avoid unnecessary effect re-runs
+  const onBoundsChangeRef = useRef(onBoundsChange);
+  const onMarkerSelectRef = useRef(onMarkerSelect);
+  const handleItemClickRef = useRef(handleItemClick);
+  const itemsRef = useRef(items);
+  const fitBoundsRef = useRef(fitBounds);
+
+  // Keep refs updated when values change
+  useEffect(() => {
+    onBoundsChangeRef.current = onBoundsChange;
+    onMarkerSelectRef.current = onMarkerSelect;
+    handleItemClickRef.current = handleItemClick;
+    itemsRef.current = items;
+    fitBoundsRef.current = fitBounds;
+  }, [onBoundsChange, onMarkerSelect, handleItemClick, items, fitBounds]);
 
   // Filter venues with valid coordinates
   const venuesWithCoords = useMemo(() => {
@@ -129,14 +151,41 @@ export default function VenueMap({
       const btn = e.target.closest('.venue-detail-btn');
       if (btn) {
         const venueId = parseInt(btn.dataset.venueId, 10);
-        const venue = items.find(v => (v.id || v.courtId) === venueId);
+        const venue = itemsRef.current.find(v => (v.id || v.courtId) === venueId);
         if (venue) {
-          if (onMarkerSelect) onMarkerSelect(venue);
-          if (handleItemClick) handleItemClick(venue);
+          if (onMarkerSelectRef.current) onMarkerSelectRef.current(venue);
+          if (handleItemClickRef.current) handleItemClickRef.current(venue);
         }
       }
     };
     mapRef.current.addEventListener('click', handlePopupClick);
+
+    // Track programmatic moves to distinguish from user interaction
+    let isProgrammaticMove = false;
+
+    // Handle map bounds changes (pan/zoom)
+    const handleMoveEnd = () => {
+      if (onBoundsChangeRef.current) {
+        const bounds = map.getBounds();
+        const isUserInteraction = !isProgrammaticMove;
+        if (isUserInteraction) {
+          userHasInteractedRef.current = true;
+          // Also mark initial fit as done to prevent any future fitBounds
+          initialFitDoneRef.current = true;
+        }
+        onBoundsChangeRef.current({
+          minLat: bounds.getSouth(),
+          maxLat: bounds.getNorth(),
+          minLng: bounds.getWest(),
+          maxLng: bounds.getEast()
+        }, isUserInteraction);
+      }
+      isProgrammaticMove = false;
+    };
+    map.on('moveend', handleMoveEnd);
+
+    // Store the programmatic move setter on the map instance for use by fitBounds
+    map._setProgrammaticMove = (value) => { isProgrammaticMove = value; };
 
     // Mark map as ready so markers can be added
     setMapReady(true);
@@ -146,12 +195,13 @@ export default function VenueMap({
         mapRef.current.removeEventListener('click', handlePopupClick);
       }
       if (mapInstanceRef.current) {
+        mapInstanceRef.current.off('moveend', handleMoveEnd);
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
         setMapReady(false);
       }
     };
-  }, [isClient, inChina, items, onMarkerSelect, handleItemClick]);
+  }, [isClient, inChina]); // Removed items, callbacks from deps - map should only init once
 
   // Create numbered marker icon
   const createNumberedIcon = (number, isSelected) => {
@@ -222,8 +272,8 @@ export default function VenueMap({
       marker.bindPopup(popupContent, { maxWidth: 300 });
 
       marker.on('click', () => {
-        if (onMarkerSelect) onMarkerSelect(court);
-        if (onCourtClick) onCourtClick(court);
+        if (onMarkerSelectRef.current) onMarkerSelectRef.current(court);
+        if (handleItemClickRef.current) handleItemClickRef.current(court);
       });
 
       // Store court reference for later
@@ -247,15 +297,25 @@ export default function VenueMap({
       markersRef.current.push(userMarker);
     }
 
-    // Fit bounds if requested
-    if (fitBounds && venuesWithCoords.length > 0) {
+    // Fit bounds only on initial load, not when venues change after user interaction
+    // This prevents the map from jumping when the user has already panned/zoomed
+    const shouldFitBounds = fitBoundsRef.current &&
+                            venuesWithCoords.length > 0 &&
+                            !initialFitDoneRef.current &&
+                            !userHasInteractedRef.current &&
+                            !skipInitialFitBounds;
+
+    if (shouldFitBounds) {
       const bounds = L.latLngBounds(venuesWithCoords.map(c => [c.lat, c.lng]));
       if (userLocation) {
         bounds.extend([userLocation.lat, userLocation.lng]);
       }
+      // Mark as programmatic to avoid triggering user interaction flag
+      if (map._setProgrammaticMove) map._setProgrammaticMove(true);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+      initialFitDoneRef.current = true;
     }
-  }, [mapReady, venuesWithCoords, userLocation, fitBounds, onCourtClick, onMarkerSelect, selectedCourtId, showNumbers]);
+  }, [mapReady, venuesWithCoords, userLocation, selectedCourtId, showNumbers]);
 
   // Update marker styles when selection changes
   useEffect(() => {
@@ -271,10 +331,9 @@ export default function VenueMap({
       const icon = createNumberedIcon(number, isSelected);
       marker.setIcon(icon);
 
-      // Open popup if selected
+      // Open popup if selected (but don't pan - user controls map position)
       if (isSelected && mapInstanceRef.current) {
         marker.openPopup();
-        mapInstanceRef.current.panTo([court.lat, court.lng]);
       }
     });
   }, [selectedCourtId, showNumbers]);

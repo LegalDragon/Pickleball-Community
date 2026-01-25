@@ -549,9 +549,23 @@ public class EventStaffController : EventControllerBase
 
         var adminUserId = GetUserId()!.Value;
 
+        // Resolve UserId from email if not provided directly
+        int targetUserId = dto.UserId;
+        if (targetUserId == 0 && !string.IsNullOrWhiteSpace(dto.Email))
+        {
+            var userByEmail = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == dto.Email.ToLower());
+            if (userByEmail == null)
+                return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = $"No user found with email: {dto.Email}" });
+            targetUserId = userByEmail.Id;
+        }
+
+        if (targetUserId == 0)
+            return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = "Please provide a user ID or email" });
+
         // Check if already registered
         var existing = await _context.EventStaff
-            .FirstOrDefaultAsync(s => s.EventId == eventId && s.UserId == dto.UserId);
+            .FirstOrDefaultAsync(s => s.EventId == eventId && s.UserId == targetUserId);
 
         if (existing != null)
             return BadRequest(new ApiResponse<EventStaffDto> { Success = false, Message = "User is already registered as staff for this event" });
@@ -559,7 +573,7 @@ public class EventStaffController : EventControllerBase
         var staff = new EventStaff
         {
             EventId = eventId,
-            UserId = dto.UserId,
+            UserId = targetUserId,
             RoleId = dto.RoleId,
             IsSelfRegistered = false,
             Status = dto.Status,

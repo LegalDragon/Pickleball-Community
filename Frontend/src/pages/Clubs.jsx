@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Search, Filter, MapPin, Plus, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, X, Copy, Check, Bell, UserPlus, Settings, Crown, Shield, Clock, DollarSign, Calendar, Upload, Image, Edit3, RefreshCw, Trash2, MessageCircle, List, Map, Loader2, Star, Heart, Award, Briefcase, ClipboardList, Flag, Key, Medal, Trophy, Wrench, Zap, Megaphone, UserCog, FileText, Download, File, Video, Table, Presentation, Eye, EyeOff, Lock, GripVertical, Building2, Building, AlertCircle, Send, Network, ExternalLink, QrCode } from 'lucide-react';
 
@@ -19,6 +19,7 @@ import VenueMap from '../components/ui/VenueMap';
 import VenuePicker from '../components/ui/VenuePicker';
 import ShareLink from '../components/ui/ShareLink';
 import HelpIcon from '../components/ui/HelpIcon';
+import AddressInput from '../components/ui/AddressInput';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -52,10 +53,10 @@ export default function Clubs() {
   const pageSize = 20;
 
   // View mode: 'list' or 'map'
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('map');
 
   // Sorting
-  const [sortBy, setSortBy] = useState('distance'); // distance, name
+  const [sortBy, setSortBy] = useState('name'); // name, distance (if location available)
   const [sortOrder, setSortOrder] = useState('asc');
 
   // Location state
@@ -65,6 +66,107 @@ export default function Clubs() {
 
   // For map view hover
   const [hoveredClubId, setHoveredClubId] = useState(null);
+
+  // Map bounds for viewport-based search
+  const [mapBounds, setMapBounds] = useState(null); // Bounds used in last search
+  const [pendingBounds, setPendingBounds] = useState(null); // Bounds user has panned to
+  const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
+  const mapInitializedRef = useRef(false); // Track if map has finished initial load
+  const userInteractedWithMapRef = useRef(false); // Track if user has panned/zoomed
+
+  // Memoize venues array for VenueMap to prevent re-renders on every parent state change
+  const mapVenues = useMemo(() => {
+    return clubs.map(c => ({
+      ...c,
+      id: c.id,
+      name: c.name,
+      latitude: c.latitude,
+      longitude: c.longitude
+    }));
+  }, [clubs]);
+
+  // Geocoding cache for clubs without coordinates
+  const [geocodeCache, setGeocodeCache] = useState({});
+
+  // Geocode a single address using OpenStreetMap Nominatim
+  const geocodeAddress = async (city, state, country) => {
+    if (!city && !state) return null;
+
+    const addressParts = [city, state, country].filter(Boolean);
+    const addressKey = addressParts.join(',');
+
+    // Check cache first
+    if (geocodeCache[addressKey]) {
+      return geocodeCache[addressKey];
+    }
+
+    try {
+      const encodedAddress = encodeURIComponent(addressParts.join(', '));
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'PickleballCommunity/1.0'
+          }
+        }
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const result = {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon)
+        };
+        // Update cache
+        setGeocodeCache(prev => ({ ...prev, [addressKey]: result }));
+        return result;
+      }
+    } catch (err) {
+      console.error('Geocoding error for', addressKey, err);
+    }
+    return null;
+  };
+
+  // Geocode clubs that don't have coordinates and save to DB for faster future loads
+  const geocodeClubsWithoutCoords = async (clubsList) => {
+    const clubsToGeocode = clubsList.filter(c => !c.latitude && !c.gpsLat && (c.city || c.state));
+
+    if (clubsToGeocode.length === 0) return clubsList;
+
+    // Process in batches to avoid rate limiting (Nominatim allows 1 req/sec)
+    const updatedClubs = [...clubsList];
+    const geocodePromises = [];
+
+    for (const club of clubsToGeocode) {
+      // Add delay between requests to respect Nominatim rate limit
+      const promise = (async () => {
+        await new Promise(resolve => setTimeout(resolve, geocodePromises.length * 1100)); // 1.1s delay
+        const coords = await geocodeAddress(club.city, club.state, club.country);
+        if (coords) {
+          const idx = updatedClubs.findIndex(c => c.id === club.id);
+          if (idx !== -1) {
+            updatedClubs[idx] = { ...updatedClubs[idx], latitude: coords.lat, longitude: coords.lng };
+          }
+
+          // Save coordinates to database for faster future loads
+          try {
+            await clubsApi.updateCoordinates(club.id, coords.lat, coords.lng);
+          } catch (err) {
+            // Silently fail - geocoding still works, just won't persist
+            console.debug('Could not save coordinates for club', club.id, err);
+          }
+        }
+      })();
+      geocodePromises.push(promise);
+    }
+
+    // Wait for all geocoding to complete (but don't block UI - set state progressively)
+    Promise.all(geocodePromises).then(() => {
+      setClubs([...updatedClubs]);
+    });
+
+    return clubsList; // Return original list immediately, will update via state
+  };
 
   // Load available member roles on mount
   useEffect(() => {
@@ -269,25 +371,51 @@ export default function Clubs() {
   const loadClubs = useCallback(async () => {
     setLoading(true);
     try {
+      // Determine which search mode to use:
+      // 1. Map bounds search (highest priority) - when user clicked "Search this area"
+      // 2. Address filter search - when user selected country/state/city/name
+      // 3. Location-based search (default) - use current location + distance
+
+      const hasAddressFilters = searchQuery || country || state || city;
+      const hasMapBounds = viewMode === 'map' && mapBounds;
+
       const params = {
         page,
         pageSize,
-        query: searchQuery || undefined,
-        country: country || undefined,
-        state: state || undefined,
-        city: city || undefined,
-        latitude: userLocation?.lat,
-        longitude: userLocation?.lng,
-        radiusMiles: userLocation ? radiusMiles : undefined,
         sortBy: sortBy,
-        sortOrder: sortOrder
+        sortOrder: sortOrder,
       };
+
+      if (hasMapBounds) {
+        // Map bounds search - ignore distance and address filters
+        params.minLat = mapBounds.minLat;
+        params.maxLat = mapBounds.maxLat;
+        params.minLng = mapBounds.minLng;
+        params.maxLng = mapBounds.maxLng;
+      } else if (hasAddressFilters) {
+        // Address filter search - ignore distance
+        if (searchQuery) params.query = searchQuery;
+        if (country) params.country = country;
+        if (state) params.state = state;
+        if (city) params.city = city;
+      } else if (userLocation) {
+        // Default: Location-based search with distance
+        params.latitude = userLocation.lat;
+        params.longitude = userLocation.lng;
+        params.radiusMiles = radiusMiles;
+      }
 
       const response = await clubsApi.search(params);
       if (response.success && response.data) {
-        setClubs(response.data.items || []);
+        const loadedClubs = response.data.items || [];
+        setClubs(loadedClubs);
         setTotalPages(response.data.totalPages || 1);
         setTotalCount(response.data.totalCount || 0);
+
+        // Geocode clubs without coordinates (runs asynchronously)
+        if (viewMode === 'map') {
+          geocodeClubsWithoutCoords(loadedClubs);
+        }
       }
     } catch (err) {
       console.error('Error loading clubs:', err);
@@ -295,7 +423,33 @@ export default function Clubs() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder]);
+  }, [page, searchQuery, country, state, city, userLocation, radiusMiles, sortBy, sortOrder, viewMode, mapBounds]);
+
+  // Handle map bounds change - show "Search this area" button
+  const handleMapBoundsChange = useCallback((bounds, isUserInteraction) => {
+    setPendingBounds(bounds);
+    // Skip the initial fitBounds event - only show button for user interactions
+    if (!mapInitializedRef.current) {
+      // First bounds change is from fitBounds, mark as initialized
+      mapInitializedRef.current = true;
+      return;
+    }
+    // Track that user has interacted with the map
+    if (isUserInteraction !== false) {
+      userInteractedWithMapRef.current = true;
+    }
+    // Show button for subsequent user-initiated map movements
+    setShowSearchAreaButton(true);
+  }, []);
+
+  // Search in the current map area
+  const handleSearchInArea = useCallback(() => {
+    if (pendingBounds) {
+      setMapBounds(pendingBounds);
+      setPage(1);
+      setShowSearchAreaButton(false);
+    }
+  }, [pendingBounds]);
 
   useEffect(() => {
     if (activeTab === 'search') {
@@ -303,14 +457,37 @@ export default function Clubs() {
     }
   }, [loadClubs, activeTab]);
 
+  // Trigger geocoding when switching to map view with existing clubs
+  useEffect(() => {
+    if (viewMode === 'map' && clubs.length > 0) {
+      const clubsWithoutCoords = clubs.filter(c => !c.latitude && !c.gpsLat && (c.city || c.state));
+      if (clubsWithoutCoords.length > 0) {
+        geocodeClubsWithoutCoords(clubs);
+      }
+    }
+  }, [viewMode]);
+
   // Debounced search
   const [searchTimeout, setSearchTimeout] = useState(null);
   const handleSearchChange = (value) => {
     setSearchQuery(value);
+    // Clear map bounds when using text search
+    if (value) {
+      setMapBounds(null);
+      setShowSearchAreaButton(false);
+    }
     if (searchTimeout) clearTimeout(searchTimeout);
     setSearchTimeout(setTimeout(() => {
       setPage(1);
     }, 500));
+  };
+
+  // Clear map bounds when address filters change
+  const handleFilterChange = (setter) => (value) => {
+    setter(value);
+    setMapBounds(null);
+    setShowSearchAreaButton(false);
+    setPage(1);
   };
 
   const handleViewDetails = async (club) => {
@@ -508,7 +685,7 @@ export default function Clubs() {
                 {/* Country Filter */}
                 <select
                   value={country}
-                  onChange={(e) => { setCountry(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setCountry)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                 >
                   <option value="">All Countries</option>
@@ -522,7 +699,7 @@ export default function Clubs() {
                 {/* State Filter */}
                 <select
                   value={state}
-                  onChange={(e) => { setState(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setState)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                   disabled={!country}
                 >
@@ -537,7 +714,7 @@ export default function Clubs() {
                 {/* City Filter */}
                 <select
                   value={city}
-                  onChange={(e) => { setCity(e.target.value); setPage(1); }}
+                  onChange={(e) => handleFilterChange(setCity)(e.target.value)}
                   className="w-40 border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
                   disabled={!state}
                 >
@@ -549,8 +726,8 @@ export default function Clubs() {
                   ))}
                 </select>
 
-                {/* Distance Filter (only if location available) */}
-                {userLocation && (
+                {/* Distance Filter (only if location available and no address filters) */}
+                {userLocation && !searchQuery && !country && !state && !city && !mapBounds && (
                   <select
                     value={radiusMiles}
                     onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
@@ -622,25 +799,24 @@ export default function Clubs() {
             </div>
 
             {/* Clubs Results */}
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
-              </div>
-            ) : clubs.length > 0 ? (
-              <>
-                {viewMode === 'map' ? (
-                  /* Map View - Mobile responsive */
-                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    {/* Desktop: Side-by-side layout */}
-                    <div className="hidden md:flex h-[600px]">
-                      {/* Compact Club List - Desktop */}
-                      <div className="w-80 border-r border-gray-200 flex flex-col">
-                        <div className="p-3 border-b bg-gray-50">
-                          <p className="text-sm font-medium text-gray-700">
-                            {clubs.filter(c => c.latitude || c.gpsLat).length} clubs on map
-                          </p>
+            {viewMode === 'map' ? (
+              /* Map View - Keep mounted during loading to preserve map state */
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                {/* Desktop: Side-by-side layout */}
+                <div className="hidden md:flex h-[600px]">
+                  {/* Compact Club List - Desktop */}
+                  <div className="w-80 border-r border-gray-200 flex flex-col">
+                    <div className="p-3 border-b bg-gray-50">
+                      <p className="text-sm font-medium text-gray-700">
+                        {loading ? 'Loading...' : `${clubs.filter(c => c.latitude || c.gpsLat).length} clubs on map`}
+                      </p>
+                    </div>
+                    <div className="flex-1 overflow-y-auto relative">
+                      {loading && (
+                        <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
+                          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-600"></div>
                         </div>
-                        <div className="flex-1 overflow-y-auto">
+                      )}
                           {clubs.filter(c => c.latitude || c.gpsLat).map((club, index) => {
                             const clubId = club.id;
                             const isSelected = hoveredClubId === clubId;
@@ -689,119 +865,143 @@ export default function Clubs() {
                           )}
                         </div>
                       </div>
-                      {/* Map - Desktop */}
-                      <div className="flex-1">
-                        <VenueMap
-                          venues={clubs.map(c => ({
-                            ...c,
-                            id: c.id,
-                            name: c.name,
-                            latitude: c.latitude,
-                            longitude: c.longitude
-                          }))}
-                          userLocation={userLocation}
-                          onVenueClick={(club) => handleViewDetails(club)}
-                          onMarkerSelect={(club) => setHoveredClubId(club.id)}
-                          selectedVenueId={hoveredClubId}
-                          showNumbers={true}
-                        />
+                  {/* Map - Desktop */}
+                  <div className="flex-1 relative">
+                    <VenueMap
+                      venues={mapVenues}
+                      userLocation={userLocation}
+                      onVenueClick={(club) => handleViewDetails(club)}
+                      onMarkerSelect={(club) => setHoveredClubId(club.id)}
+                      selectedVenueId={hoveredClubId}
+                      showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
+                      skipInitialFitBounds={userInteractedWithMapRef.current}
+                    />
+                    {loading && (
+                      <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-[999]">
+                        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
                       </div>
-                    </div>
+                    )}
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-                    {/* Mobile: Stacked layout with horizontal scrollable list */}
-                    <div className="md:hidden flex flex-col">
-                      {/* Map - Mobile (takes most of the viewport) */}
-                      <div className="h-[50vh] min-h-[300px]">
-                        <VenueMap
-                          venues={clubs.map(c => ({
-                            ...c,
-                            id: c.id,
-                            name: c.name,
-                            latitude: c.latitude,
-                            longitude: c.longitude
-                          }))}
-                          userLocation={userLocation}
-                          onVenueClick={(club) => handleViewDetails(club)}
-                          onMarkerSelect={(club) => setHoveredClubId(club.id)}
-                          selectedVenueId={hoveredClubId}
-                          showNumbers={true}
-                        />
+                {/* Mobile: Stacked layout with horizontal scrollable list */}
+                <div className="md:hidden flex flex-col">
+                  {/* Map - Mobile (takes most of the viewport) */}
+                  <div className="h-[50vh] min-h-[300px] relative">
+                    <VenueMap
+                      venues={mapVenues}
+                      userLocation={userLocation}
+                      onVenueClick={(club) => handleViewDetails(club)}
+                      onMarkerSelect={(club) => setHoveredClubId(club.id)}
+                      selectedVenueId={hoveredClubId}
+                      showNumbers={true}
+                      onBoundsChange={handleMapBoundsChange}
+                      fitBounds={!mapBounds}
+                      skipInitialFitBounds={userInteractedWithMapRef.current}
+                    />
+                    {loading && (
+                      <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-[999]">
+                        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
                       </div>
+                    )}
+                    {showSearchAreaButton && (
+                      <button
+                        onClick={handleSearchInArea}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] px-4 py-2 bg-white rounded-full shadow-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        Search this area
+                      </button>
+                    )}
+                  </div>
 
-                      {/* Club count indicator */}
-                      <div className="px-3 py-2 bg-gray-50 border-t border-b border-gray-200">
-                        <p className="text-sm font-medium text-gray-700">
-                          {clubs.filter(c => c.latitude || c.gpsLat).length} clubs on map - scroll to browse
-                        </p>
-                      </div>
+                  {/* Club count indicator */}
+                  <div className="px-3 py-2 bg-gray-50 border-t border-b border-gray-200">
+                    <p className="text-sm font-medium text-gray-700">
+                      {loading ? 'Loading...' : `${clubs.filter(c => c.latitude || c.gpsLat).length} clubs on map - scroll to browse`}
+                    </p>
+                  </div>
 
-                      {/* Horizontal scrollable club cards - Mobile */}
-                      <div className="overflow-x-auto">
-                        <div className="flex gap-3 p-3" style={{ minWidth: 'min-content' }}>
-                          {clubs.filter(c => c.latitude || c.gpsLat).map((club, index) => {
-                            const clubId = club.id;
-                            const isSelected = hoveredClubId === clubId;
-                            return (
-                              <div
-                                key={clubId}
-                                className={`flex-shrink-0 w-[200px] p-3 rounded-lg border cursor-pointer transition-colors ${
-                                  isSelected
-                                    ? 'bg-purple-50 border-purple-300 shadow-md'
-                                    : 'bg-white border-gray-200 hover:border-purple-200'
-                                }`}
-                                onClick={() => handleViewDetails(club)}
-                              >
-                                <div className="flex items-start gap-2">
-                                  <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
-                                    isSelected ? 'bg-purple-600' : 'bg-blue-600'
-                                  }`}>
-                                    {index + 1}
+                  {/* Horizontal scrollable club cards - Mobile */}
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-3 p-3" style={{ minWidth: 'min-content' }}>
+                      {clubs.filter(c => c.latitude || c.gpsLat).map((club, index) => {
+                        const clubId = club.id;
+                        const isSelected = hoveredClubId === clubId;
+                        return (
+                          <div
+                            key={clubId}
+                            className={`flex-shrink-0 w-[200px] p-3 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-purple-50 border-purple-300 shadow-md'
+                                : 'bg-white border-gray-200 hover:border-purple-200'
+                            }`}
+                            onClick={() => handleViewDetails(club)}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white ${
+                                isSelected ? 'bg-purple-600' : 'bg-blue-600'
+                              }`}>
+                                {index + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
+                                  {club.name}
+                                </h4>
+                                <p className="text-xs text-gray-500 truncate mt-0.5">
+                                  {[club.city, club.state].filter(Boolean).join(', ')}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  {club.distance && (
+                                    <span className="text-xs text-purple-600 font-medium">
+                                      {club.distance.toFixed(1)} mi
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-gray-400">
+                                    {club.memberCount} members
                                   </span>
-                                  <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-gray-900 text-sm line-clamp-2">
-                                      {club.name}
-                                    </h4>
-                                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                                      {[club.city, club.state].filter(Boolean).join(', ')}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-1.5">
-                                      {club.distance && (
-                                        <span className="text-xs text-purple-600 font-medium">
-                                          {club.distance.toFixed(1)} mi
-                                        </span>
-                                      )}
-                                      <span className="text-xs text-gray-400">
-                                        {club.memberCount} members
-                                      </span>
-                                    </div>
-                                  </div>
                                 </div>
                               </div>
-                            );
-                          })}
-                          {clubs.filter(c => !(c.latitude || c.gpsLat)).length > 0 && (
-                            <div className="flex-shrink-0 w-[150px] p-3 flex items-center justify-center text-xs text-gray-400 text-center">
-                              +{clubs.filter(c => !(c.latitude || c.gpsLat)).length} clubs without location
                             </div>
-                          )}
+                          </div>
+                        );
+                      })}
+                      {clubs.filter(c => !(c.latitude || c.gpsLat)).length > 0 && (
+                        <div className="flex-shrink-0 w-[150px] p-3 flex items-center justify-center text-xs text-gray-400 text-center">
+                          +{clubs.filter(c => !(c.latitude || c.gpsLat)).length} clubs without location
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  /* List View - Row-based cards */
-                  <div className="space-y-4">
-                    {clubs.map(club => (
-                      <ClubCard
-                        key={club.id}
-                        club={club}
-                        onViewDetails={() => handleViewDetails(club)}
-                      />
-                    ))}
-                  </div>
-                )}
+                </div>
+              </div>
+            ) : loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-600"></div>
+              </div>
+            ) : clubs.length > 0 ? (
+              /* List View - Row-based cards */
+              <div className="space-y-4">
+                {clubs.map(club => (
+                  <ClubCard
+                    key={club.id}
+                    club={club}
+                    onViewDetails={() => handleViewDetails(club)}
+                  />
+                ))}
 
-                {/* Pagination */}
+                {/* Pagination for List View */}
                 {totalPages > 1 && (
                   <div className="mt-8 flex items-center justify-center gap-4">
                     <button
@@ -825,7 +1025,7 @@ export default function Clubs() {
                     </button>
                   </div>
                 )}
-              </>
+              </div>
             ) : (
               <div className="bg-white rounded-xl shadow-sm p-12 text-center">
                 <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -1909,11 +2109,15 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
     setEditFormData({
       name: clubData.name || '',
       description: clubData.description || '',
+      logoUrl: clubData.logoUrl || null,
+      bannerUrl: clubData.bannerUrl || null,
       address: clubData.address || '',
       city: clubData.city || '',
       state: clubData.state || '',
       country: clubData.country || '',
       postalCode: clubData.postalCode || '',
+      latitude: clubData.latitude || null,
+      longitude: clubData.longitude || null,
       website: clubData.website || '',
       email: clubData.email || '',
       phone: clubData.phone || '',
@@ -1939,6 +2143,25 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
         ...editFormData,
         homeVenueId: selectedVenue?.id || null,
       };
+
+      // Geocode address if we have city/state but no coordinates, or if address changed
+      const addressChanged = editFormData.city !== clubData.city ||
+                            editFormData.state !== clubData.state ||
+                            editFormData.country !== clubData.country ||
+                            editFormData.address !== clubData.address;
+
+      const needsGeocode = (editFormData.city || editFormData.state) &&
+                          (!editFormData.latitude || !editFormData.longitude || addressChanged);
+
+      if (needsGeocode && !selectedVenue?.id) {
+        // Only geocode if no home venue is selected (venue provides coordinates)
+        const coords = await geocodeAddress(editFormData.city, editFormData.state, editFormData.country);
+        if (coords) {
+          dataToSave.latitude = coords.lat;
+          dataToSave.longitude = coords.lng;
+        }
+      }
+
       const response = await clubsApi.update(clubData.id, dataToSave);
       if (response.success) {
         // Refresh club data
@@ -3421,57 +3644,35 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                       <p className="text-xs text-gray-500 mt-1">The club's home venue location will be used for the club address</p>
                     </div>
 
+                    {/* Address fields using reusable component */}
+                    <AddressInput
+                      value={{
+                        address: editFormData.address,
+                        country: editFormData.country,
+                        state: editFormData.state,
+                        city: editFormData.city,
+                        postalCode: editFormData.postalCode
+                      }}
+                      onChange={(addr) => setEditFormData({
+                        ...editFormData,
+                        address: addr.address,
+                        country: addr.country,
+                        state: addr.state,
+                        city: addr.city,
+                        postalCode: addr.postalCode
+                      })}
+                      showPostalCode={false}
+                    />
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
                       <input
-                        type="text"
-                        value={editFormData.address || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                        type="url"
+                        value={editFormData.website || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
                         className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Street address"
+                        placeholder="https://example.com"
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                        <input
-                          type="text"
-                          value={editFormData.city || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                        <input
-                          type="text"
-                          value={editFormData.state || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                        <input
-                          type="text"
-                          value={editFormData.country || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-                        <input
-                          type="url"
-                          value={editFormData.website || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
-                          className="w-full border border-gray-300 rounded-lg p-2 focus:ring-purple-500 focus:border-purple-500"
-                        />
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

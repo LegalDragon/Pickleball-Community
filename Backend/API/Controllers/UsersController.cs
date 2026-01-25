@@ -48,6 +48,57 @@ public class UsersController : ControllerBase
         return user?.Role == "Admin";
     }
 
+    /// <summary>
+    /// Refreshes unit display names for all pairs where this user is a member.
+    /// Called when user updates their first name to keep pair names current.
+    /// </summary>
+    private async Task RefreshUserUnitNamesAsync(int userId)
+    {
+        // Find all units where this user is an accepted member
+        var memberUnits = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+                    .ThenInclude(d => d!.TeamUnit)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Members.Where(mem => mem.InviteStatus == "Accepted"))
+                    .ThenInclude(mem => mem.User)
+            .Where(m => m.UserId == userId && m.InviteStatus == "Accepted")
+            .Select(m => m.Unit)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var unit in memberUnits)
+        {
+            if (unit == null) continue;
+
+            var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? 1;
+
+            // Only update pairs (size = 2) without custom names
+            if (teamSize != 2 || unit.HasCustomName) continue;
+
+            var acceptedMembers = unit.Members
+                .Where(m => m.InviteStatus == "Accepted" && m.User != null)
+                .OrderBy(m => m.Id)
+                .ToList();
+
+            if (acceptedMembers.Count >= 2)
+            {
+                unit.Name = $"{acceptedMembers[0].User!.FirstName} & {acceptedMembers[1].User!.FirstName}";
+            }
+            else if (acceptedMembers.Count == 1)
+            {
+                unit.Name = $"{acceptedMembers[0].User!.FirstName}'s team";
+            }
+
+            unit.UpdatedAt = DateTime.Now;
+        }
+
+        if (memberUnits.Any())
+        {
+            await _context.SaveChangesAsync();
+        }
+    }
+
     // GET: api/Users/profile
     [HttpGet("profile")]
     public async Task<ActionResult<ApiResponse<UserProfileDto>>> GetProfile()
@@ -327,6 +378,12 @@ public class UsersController : ControllerBase
             user.UpdatedAt = DateTime.Now;
 
             await _context.SaveChangesAsync();
+
+            // If first name changed, update unit display names for pairs
+            if (!string.IsNullOrEmpty(request.FirstName))
+            {
+                await RefreshUserUnitNamesAsync(userId.Value);
+            }
 
             // Log activity
             var log = new ActivityLog

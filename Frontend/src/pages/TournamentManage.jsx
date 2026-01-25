@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, objectAssetTypesApi } from '../services/api';
+import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, objectAssetTypesApi, friendsApi } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
@@ -102,9 +102,12 @@ export default function TournamentManage() {
   const [staffRoles, setStaffRoles] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
-  const [addStaffForm, setAddStaffForm] = useState({ email: '', roleId: '' });
+  const [addStaffForm, setAddStaffForm] = useState({ email: '', roleId: '', userId: null });
   const [addingStaff, setAddingStaff] = useState(false);
   const [pendingStaff, setPendingStaff] = useState([]);
+  const [staffModalTab, setStaffModalTab] = useState('friends'); // 'friends' or 'email'
+  const [friendsList, setFriendsList] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   // Court groups state
   const [courtGroups, setCourtGroups] = useState([]);
@@ -485,22 +488,54 @@ export default function TournamentManage() {
     }
   };
 
+  // Load friends for staff modal
+  const loadFriendsForStaff = async () => {
+    setLoadingFriends(true);
+    try {
+      const response = await friendsApi.getFriends();
+      const data = response.data?.data ?? response.data ?? [];
+      setFriendsList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error loading friends:', err);
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  // Open add staff modal and load friends
+  const openAddStaffModal = () => {
+    setShowAddStaffModal(true);
+    setStaffModalTab('friends');
+    setAddStaffForm({ email: '', roleId: '', userId: null });
+    loadFriendsForStaff();
+  };
+
   const handleAddStaff = async () => {
-    if (!addStaffForm.email || !addStaffForm.roleId) {
-      toast.error('Please enter email and select a role');
+    if (!addStaffForm.roleId) {
+      toast.error('Please select a role');
+      return;
+    }
+    if (!addStaffForm.email && !addStaffForm.userId) {
+      toast.error('Please select a friend or enter an email');
       return;
     }
 
     setAddingStaff(true);
     try {
-      const response = await eventStaffApi.assignStaff(eventId, {
-        email: addStaffForm.email,
+      const payload = {
         roleId: parseInt(addStaffForm.roleId)
-      });
+      };
+      if (addStaffForm.userId) {
+        payload.userId = addStaffForm.userId;
+      } else {
+        payload.email = addStaffForm.email;
+      }
+
+      const response = await eventStaffApi.assignStaff(eventId, payload);
       if (response.success) {
         toast.success('Staff member added');
         setShowAddStaffModal(false);
-        setAddStaffForm({ email: '', roleId: '' });
+        setAddStaffForm({ email: '', roleId: '', userId: null });
         loadStaff();
       } else {
         toast.error(response.message || 'Failed to add staff');
@@ -6101,7 +6136,7 @@ export default function TournamentManage() {
                   <RefreshCw className={`w-5 h-5 ${loadingStaff ? 'animate-spin' : ''}`} />
                 </button>
                 <button
-                  onClick={() => setShowAddStaffModal(true)}
+                  onClick={openAddStaffModal}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4" />
@@ -6224,19 +6259,117 @@ export default function TournamentManage() {
         {/* Add Staff Modal */}
         {showAddStaffModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Staff Member</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={addStaffForm.email}
-                    onChange={(e) => setAddStaffForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="staff@example.com"
-                  />
-                </div>
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+              <div className="p-6 border-b">
+                <h3 className="text-lg font-semibold text-gray-900">Add Staff Member</h3>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b">
+                <button
+                  onClick={() => {
+                    setStaffModalTab('friends');
+                    setAddStaffForm(prev => ({ ...prev, email: '', userId: null }));
+                  }}
+                  className={`flex-1 px-4 py-3 text-sm font-medium ${
+                    staffModalTab === 'friends'
+                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Users className="w-4 h-4 inline mr-2" />
+                  My Friends
+                </button>
+                <button
+                  onClick={() => {
+                    setStaffModalTab('email');
+                    setAddStaffForm(prev => ({ ...prev, email: '', userId: null }));
+                  }}
+                  className={`flex-1 px-4 py-3 text-sm font-medium ${
+                    staffModalTab === 'email'
+                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  By Email
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Friends Tab */}
+                {staffModalTab === 'friends' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Friend</label>
+                    {loadingFriends ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                      </div>
+                    ) : friendsList.length === 0 ? (
+                      <div className="text-center py-6 text-gray-500">
+                        <Users className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm">No friends yet</p>
+                        <p className="text-xs mt-1">Add friends to quickly invite them as staff</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                        {friendsList.map(friend => {
+                          const friendUserId = friend.friendUserId || friend.id;
+                          const isSelected = addStaffForm.userId === friendUserId;
+                          return (
+                            <button
+                              key={friend.id}
+                              onClick={() => setAddStaffForm(prev => ({
+                                ...prev,
+                                userId: friendUserId,
+                                email: ''
+                              }))}
+                              className={`w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 ${
+                                isSelected ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                              }`}
+                            >
+                              {friend.profileImageUrl ? (
+                                <img
+                                  src={getSharedAssetUrl(friend.profileImageUrl)}
+                                  alt=""
+                                  className="w-8 h-8 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-gray-500" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 text-sm truncate">{friend.name}</p>
+                                {friend.experienceLevel && (
+                                  <p className="text-xs text-gray-500">{friend.experienceLevel}</p>
+                                )}
+                              </div>
+                              {isSelected && (
+                                <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Email Tab */}
+                {staffModalTab === 'email' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      value={addStaffForm.email}
+                      onChange={(e) => setAddStaffForm(prev => ({ ...prev, email: e.target.value, userId: null }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="staff@example.com"
+                    />
+                  </div>
+                )}
+
+                {/* Role Selection (always shown) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                   <select
@@ -6251,11 +6384,12 @@ export default function TournamentManage() {
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 mt-6">
+
+              <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
                 <button
                   onClick={() => {
                     setShowAddStaffModal(false);
-                    setAddStaffForm({ email: '', roleId: '' });
+                    setAddStaffForm({ email: '', roleId: '', userId: null });
                   }}
                   className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
                 >
@@ -6263,7 +6397,7 @@ export default function TournamentManage() {
                 </button>
                 <button
                   onClick={handleAddStaff}
-                  disabled={addingStaff || !addStaffForm.email || !addStaffForm.roleId}
+                  disabled={addingStaff || (!addStaffForm.email && !addStaffForm.userId) || !addStaffForm.roleId}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   {addingStaff ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}

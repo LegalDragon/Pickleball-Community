@@ -786,6 +786,10 @@ public class TournamentController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Update unit display name based on members
+        await UpdateUnitDisplayNameAsync(unit.Id);
+        await _context.SaveChangesAsync();
+
         // Reload unit with all data
         var loadedUnit = await _context.EventUnits
             .Include(u => u.Members)
@@ -973,6 +977,10 @@ public class TournamentController : EventControllerBase
                 // Update requester's unit completeness check
                 var updatedMemberCount = requesterUnit.Members.Count(m => m.InviteStatus == "Accepted") + 1; // +1 for newly added captain
 
+                await _context.SaveChangesAsync();
+
+                // Update unit display name after merge
+                await UpdateUnitDisplayNameAsync(requesterUnit.Id);
                 await _context.SaveChangesAsync();
 
                 // Return success with merged unit info
@@ -1210,6 +1218,13 @@ public class TournamentController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Update unit display name after membership change
+        if (request.Accept)
+        {
+            await UpdateUnitDisplayNameAsync(joinRequest.UnitId);
+            await _context.SaveChangesAsync();
+        }
+
         return Ok(new ApiResponse<bool>
         {
             Success = true,
@@ -1429,6 +1444,13 @@ public class TournamentController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Update unit display name after membership change
+        if (request.Accept)
+        {
+            await UpdateUnitDisplayNameAsync(request.UnitId);
+            await _context.SaveChangesAsync();
+        }
+
         return Ok(new ApiResponse<bool> { Success = true, Data = true });
     }
 
@@ -1453,7 +1475,12 @@ public class TournamentController : EventControllerBase
         if (membership.Unit?.CaptainUserId == userId.Value)
             return BadRequest(new ApiResponse<bool> { Success = false, Message = "Captain cannot leave the unit. Disband or transfer captaincy first." });
 
+        var memberUnitId = membership.UnitId;
         _context.EventUnitMembers.Remove(membership);
+        await _context.SaveChangesAsync();
+
+        // Update unit display name after member leaves
+        await UpdateUnitDisplayNameAsync(memberUnitId);
         await _context.SaveChangesAsync();
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true });
@@ -1513,6 +1540,101 @@ public class TournamentController : EventControllerBase
             _logger.LogError(ex, "Error unregistering user {UserId} from division {DivisionId} in event {EventId}", userId, divisionId, eventId);
             return StatusCode(500, new ApiResponse<bool> { Success = false, Message = "An error occurred while unregistering" });
         }
+    }
+
+    /// <summary>
+    /// Set a custom team name (captain only for teams, not allowed for pairs/singles)
+    /// For pairs (size=2), names are auto-computed from member first names
+    /// </summary>
+    [Authorize]
+    [HttpPut("units/{unitId}/name")]
+    public async Task<ActionResult<ApiResponse<EventUnitDto>>> SetUnitName(int unitId, [FromBody] SetUnitNameRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventUnitDto> { Success = false, Message = "Unauthorized" });
+
+        var unit = await _context.EventUnits
+            .Include(u => u.Members.Where(m => m.InviteStatus == "Accepted"))
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .FirstOrDefaultAsync(u => u.Id == unitId);
+
+        if (unit == null)
+            return NotFound(new ApiResponse<EventUnitDto> { Success = false, Message = "Unit not found" });
+
+        // Only captain can change unit name
+        if (unit.CaptainUserId != userId.Value)
+        {
+            var isAdmin = await IsAdminAsync();
+            var isOrganizer = await IsEventOrganizerAsync(unit.EventId, userId.Value);
+            if (!isAdmin && !isOrganizer)
+                return Forbid();
+        }
+
+        var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? 1;
+
+        // For teams (size > 2): allow custom names
+        if (teamSize > 2)
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                // Reset to default
+                unit.HasCustomName = false;
+                var captain = unit.Members.FirstOrDefault(m => m.Role == "Captain")?.User ?? unit.Captain;
+                unit.Name = captain != null ? $"{captain.FirstName}'s team" : "Team";
+            }
+            else
+            {
+                unit.Name = request.Name.Trim();
+                unit.HasCustomName = true;
+            }
+        }
+        // For pairs (size = 2): normally auto-computed, but allow custom if explicitly requested
+        else if (teamSize == 2)
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                // Reset to auto-computed name
+                unit.HasCustomName = false;
+                await UpdateUnitDisplayNameAsync(unitId);
+            }
+            else
+            {
+                unit.Name = request.Name.Trim();
+                unit.HasCustomName = true;
+            }
+        }
+        else
+        {
+            // Singles: use player's name, no custom names
+            return BadRequest(new ApiResponse<EventUnitDto>
+            {
+                Success = false,
+                Message = "Cannot set custom name for singles registration"
+            });
+        }
+
+        unit.UpdatedAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        // Reload with all data
+        var loadedUnit = await _context.EventUnits
+            .Include(u => u.Members)
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .FirstOrDefaultAsync(u => u.Id == unitId);
+
+        return Ok(new ApiResponse<EventUnitDto>
+        {
+            Success = true,
+            Data = MapToUnitDto(loadedUnit!),
+            Message = unit.HasCustomName ? "Custom team name set" : "Team name reset to default"
+        });
     }
 
     /// <summary>
@@ -2678,16 +2800,6 @@ public class TournamentController : EventControllerBase
                 }
             }
 
-            // Update old unit name if it was using the removed member's name
-            if (unit.Name == memberName)
-            {
-                var remainingCaptain = acceptedMembers.FirstOrDefault(m => m.UserId != userId);
-                if (remainingCaptain != null)
-                {
-                    unit.Name = Utility.FormatName(remainingCaptain.User?.LastName, remainingCaptain.User?.FirstName);
-                }
-            }
-
             // Recalculate old unit's payment status
             var remainingMembers = acceptedMembers.Where(m => m.UserId != userId).ToList();
             var allPaid = remainingMembers.All(m => m.HasPaid);
@@ -2710,6 +2822,11 @@ public class TournamentController : EventControllerBase
             }
 
             unit.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            // Update unit display names after membership change
+            await UpdateUnitDisplayNameAsync(unit.Id);
+            await UpdateUnitDisplayNameAsync(newUnit.Id);
             await _context.SaveChangesAsync();
 
             return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = $"{memberName} now has their own registration" });
@@ -3150,6 +3267,10 @@ public class TournamentController : EventControllerBase
         targetUnit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
+        // Update unit display name after merge
+        await UpdateUnitDisplayNameAsync(targetUnit.Id);
+        await _context.SaveChangesAsync();
+
         // Reload target unit to get updated data
         var updatedUnit = await _context.EventUnits
             .Include(u => u.Members)
@@ -3180,6 +3301,8 @@ public class TournamentController : EventControllerBase
             DivisionId = unit.DivisionId,
             DivisionName = unit.Division?.Name,
             Name = unit.Name,
+            DisplayName = Utility.GetUnitDisplayName(unit, requiredPlayers),
+            HasCustomName = unit.HasCustomName,
             UnitNumber = unit.UnitNumber,
             PoolNumber = unit.PoolNumber,
             PoolName = unit.PoolName,
@@ -3591,6 +3714,11 @@ public class TournamentController : EventControllerBase
         }
         await _context.SaveChangesAsync();
 
+        // Assign sequential DivisionMatchNumber to all encounters in the division
+        await _context.Database.ExecuteSqlRawAsync(
+            "EXEC sp_AssignDivisionMatchNumbers @DivisionId = {0}",
+            divisionId);
+
         // Reload with games
         var result = await _context.EventEncounters
             .Include(m => m.Matches).ThenInclude(match => match.Games)
@@ -3757,6 +3885,52 @@ public class TournamentController : EventControllerBase
         {
             Success = true,
             Data = result.Select(MapToUnitDto).ToList()
+        });
+    }
+
+    /// <summary>
+    /// Get match statistics for a division including total encounters, matches, and games
+    /// </summary>
+    [HttpGet("divisions/{divisionId}/match-stats")]
+    public async Task<ActionResult<ApiResponse<DivisionMatchStatsDto>>> GetDivisionMatchStats(int divisionId)
+    {
+        var division = await _context.EventDivisions
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new ApiResponse<DivisionMatchStatsDto> { Success = false, Message = "Division not found" });
+
+        var encounters = await _context.EventEncounters
+            .Where(e => e.DivisionId == divisionId)
+            .Select(e => new
+            {
+                e.Id,
+                e.Status,
+                MatchCount = e.Matches.Count,
+                CompletedMatchCount = e.Matches.Count(m => m.Status == "Completed"),
+                GameCount = e.Matches.SelectMany(m => m.Games).Count(),
+                CompletedGameCount = e.Matches.SelectMany(m => m.Games).Count(g => g.Status == "Completed")
+            })
+            .ToListAsync();
+
+        var stats = new DivisionMatchStatsDto
+        {
+            DivisionId = divisionId,
+            DivisionName = division.Name,
+            TotalEncounters = encounters.Count,
+            TotalMatches = encounters.Sum(e => e.MatchCount),
+            TotalGames = encounters.Sum(e => e.GameCount),
+            CompletedEncounters = encounters.Count(e => e.Status == "Completed"),
+            CompletedMatches = encounters.Sum(e => e.CompletedMatchCount),
+            CompletedGames = encounters.Sum(e => e.CompletedGameCount),
+            InProgressEncounters = encounters.Count(e => e.Status == "InProgress"),
+            ScheduledEncounters = encounters.Count(e => e.Status == "Scheduled")
+        };
+
+        return Ok(new ApiResponse<DivisionMatchStatsDto>
+        {
+            Success = true,
+            Data = stats
         });
     }
 
@@ -3929,6 +4103,7 @@ public class TournamentController : EventControllerBase
                     {
                         EncounterId = m.Id,
                         MatchNumber = m.MatchNumber,
+                        DivisionMatchNumber = m.DivisionMatchNumber,
                         Unit1Number = m.Unit1Number,
                         Unit2Number = m.Unit2Number,
                         Unit1Name = GetUnitDisplayName(m.Unit1Id) ?? m.Unit1?.Name,
@@ -5927,6 +6102,8 @@ public class TournamentController : EventControllerBase
             EventId = u.EventId,
             DivisionId = u.DivisionId,
             Name = u.Name,
+            DisplayName = Utility.GetUnitDisplayName(u, teamSize),
+            HasCustomName = u.HasCustomName,
             UnitNumber = u.UnitNumber,
             PoolNumber = u.PoolNumber,
             PoolName = u.PoolName,
@@ -6019,6 +6196,75 @@ public class TournamentController : EventControllerBase
         return "Unknown";
     }
 
+    /// <summary>
+    /// Updates the unit's Name field based on current members and naming rules:
+    /// - Singles (size=1): "LastName, FirstName"
+    /// - Pairs (size=2) without custom name: "FirstName1 & FirstName2" or "FirstName's team" if solo
+    /// - Teams (size>2): Keep stored name (captain can customize)
+    /// Call this when members join/leave to keep display name current.
+    /// </summary>
+    private async Task UpdateUnitDisplayNameAsync(int unitId)
+    {
+        var unit = await _context.EventUnits
+            .Include(u => u.Members.Where(m => m.InviteStatus == "Accepted"))
+                .ThenInclude(m => m.User)
+            .Include(u => u.Division)
+                .ThenInclude(d => d!.TeamUnit)
+            .Include(u => u.Captain)
+            .FirstOrDefaultAsync(u => u.Id == unitId);
+
+        if (unit == null) return;
+
+        var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? 1;
+
+        // Singles: use "LastName, FirstName"
+        if (teamSize == 1)
+        {
+            var player = unit.Members.FirstOrDefault(m => m.InviteStatus == "Accepted")?.User ?? unit.Captain;
+            if (player != null)
+            {
+                unit.Name = FormatName(player.LastName, player.FirstName);
+            }
+            return;
+        }
+
+        // Teams (size > 2): Don't auto-update unless name is empty
+        if (teamSize > 2)
+        {
+            if (string.IsNullOrEmpty(unit.Name))
+            {
+                var captain = unit.Members.FirstOrDefault(m => m.Role == "Captain")?.User ?? unit.Captain;
+                if (captain != null)
+                {
+                    unit.Name = $"{captain.FirstName}'s team";
+                }
+            }
+            return;
+        }
+
+        // Pairs (size = 2): Auto-update name based on members if not custom
+        if (unit.HasCustomName)
+            return;
+
+        var acceptedMembers = unit.Members
+            .Where(m => m.InviteStatus == "Accepted" && m.User != null)
+            .OrderBy(m => m.Id)
+            .ToList();
+
+        if (acceptedMembers.Count >= 2)
+        {
+            // Both players present: "FirstName1 & FirstName2"
+            unit.Name = $"{acceptedMembers[0].User!.FirstName} & {acceptedMembers[1].User!.FirstName}";
+        }
+        else if (acceptedMembers.Count == 1)
+        {
+            // Only one player: "FirstName's team"
+            unit.Name = $"{acceptedMembers[0].User!.FirstName}'s team";
+        }
+
+        unit.UpdatedAt = DateTime.Now;
+    }
+
     private EventMatchDto MapToMatchDto(EventEncounter m)
     {
         return new EventMatchDto
@@ -6030,6 +6276,7 @@ public class TournamentController : EventControllerBase
             RoundNumber = m.RoundNumber,
             RoundName = m.RoundName,
             MatchNumber = m.MatchNumber,
+            DivisionMatchNumber = m.DivisionMatchNumber,
             BracketPosition = m.BracketPosition,
             Unit1Number = m.Unit1Number,
             Unit2Number = m.Unit2Number,
@@ -7938,30 +8185,32 @@ public class TournamentController : EventControllerBase
                 court.Status = "Available";
             }
 
-            // Delete all score history (wrapped in try-catch in case table doesn't exist)
+            // Delete all score history using raw SQL to avoid EF Core query generation issues
             try
             {
-                var scoreHistories = await _context.EventGameScoreHistories
-                    .Where(h => h.Game!.EncounterMatch!.Encounter!.EventId == eventId)
-                    .ToListAsync();
-                if (scoreHistories.Any())
-                {
-                    _context.EventGameScoreHistories.RemoveRange(scoreHistories);
-                }
+                await _context.Database.ExecuteSqlRawAsync(@"
+                    DELETE h FROM EventGameScoreHistories h
+                    INNER JOIN EventGames g ON h.GameId = g.Id
+                    INNER JOIN EncounterMatches m ON g.EncounterMatchId = m.Id
+                    INNER JOIN EventEncounters e ON m.EncounterId = e.Id
+                    WHERE e.EventId = {0}", eventId);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Could not delete score histories for event {EventId} - table may not exist", eventId);
             }
 
-            // Delete game-related notifications for this event
-            var gameIds = games.Select(g => g.Id).ToList();
-            var notifications = await _context.Notifications
-                .Where(n =>
-                    (n.ReferenceType == "Event" && n.ReferenceId == eventId) ||
-                    (n.ReferenceType == "Game" && n.ReferenceId.HasValue && gameIds.Contains(n.ReferenceId.Value)))
-                .ToListAsync();
-            _context.Notifications.RemoveRange(notifications);
+            // Delete game-related notifications for this event using raw SQL
+            // This avoids EF Core SQL generation issues with Contains() on lists
+            await _context.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM Notifications
+                WHERE (ReferenceType = 'Event' AND ReferenceId = {0})
+                OR (ReferenceType = 'Game' AND ReferenceId IN (
+                    SELECT g.Id FROM EventGames g
+                    INNER JOIN EncounterMatches m ON g.EncounterMatchId = m.Id
+                    INNER JOIN EventEncounters e ON m.EncounterId = e.Id
+                    WHERE e.EventId = {0}
+                ))", eventId);
 
             // Reset division drawing state
             var divisions = await _context.EventDivisions.Where(d => d.EventId == eventId).ToListAsync();
@@ -9395,4 +9644,15 @@ public class JoinableUnitMemberDto
     public int UserId { get; set; }
     public string? Name { get; set; }
     public string? ProfileImageUrl { get; set; }
+}
+
+/// <summary>
+/// Request to set a custom team name
+/// </summary>
+public class SetUnitNameRequest
+{
+    /// <summary>
+    /// Custom team name. If null or empty, resets to default (auto-computed for pairs).
+    /// </summary>
+    public string? Name { get; set; }
 }
