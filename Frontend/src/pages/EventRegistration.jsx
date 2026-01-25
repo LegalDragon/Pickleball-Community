@@ -12,9 +12,9 @@ import { eventsApi, tournamentApi, sharedAssetApi, getSharedAssetUrl, checkInApi
 import SignatureCanvas from '../components/SignatureCanvas';
 
 const STEPS = [
-  { id: 1, name: 'Select Division', description: 'Choose your division' },
+  { id: 1, name: 'Select Division', description: 'Choose a division' },
   { id: 2, name: 'Team Formation', description: 'Set up your team' },
-  { id: 3, name: 'Confirmation', description: 'Review & complete' },
+  { id: 3, name: 'Summary', description: 'Review registrations' },
   { id: 4, name: 'Waiver', description: 'Sign waiver' },
   { id: 5, name: 'Payment', description: 'Complete payment' }
 ];
@@ -585,6 +585,9 @@ export default function EventRegistration() {
               u.members?.some(m => m.userId === user?.id && m.inviteStatus === 'Accepted')
             );
 
+            // Update userRegistrations for the summary step
+            setUserRegistrations(myUnits);
+
             // Collect all accepted members across all divisions, deduping by userId
             const allMembersMap = new Map();
             myUnits.forEach(unit => {
@@ -602,34 +605,9 @@ export default function EventRegistration() {
           console.log('Could not load unit members:', e);
         }
 
-        // Load waivers for this event and navigate accordingly
-        try {
-          const waiverResponse = await checkInApi.getWaivers(eventId);
-          if (waiverResponse.success && waiverResponse.data?.length > 0) {
-            setWaivers(waiverResponse.data);
-            setCurrentWaiverIndex(0);
-            resetWaiverState();
-            setCurrentStep(4); // Go to waiver step
-          } else {
-            // No waivers, check for payment
-            const hasFee = getEffectiveFeeAmount() > 0;
-            if (hasFee) {
-              setCurrentStep(5); // Go to payment step
-            } else {
-              setCurrentStep(3); // Show success confirmation
-            }
-          }
-        } catch (e) {
-          console.log('Could not load waivers:', e);
-          // No waivers or error, check for payment
-          const hasFee = getEffectiveFeeAmount() > 0;
-          if (hasFee) {
-            setCurrentStep(5);
-          } else {
-            setCurrentStep(3);
-          }
-        }
-
+        // Always go to summary step after registration
+        // User can add more divisions or click "Complete" to proceed to waiver/payment
+        setCurrentStep(3);
         toast.success('Successfully registered!');
       } else {
         toast.error(response.message || 'Failed to register');
@@ -640,6 +618,52 @@ export default function EventRegistration() {
     } finally {
       setRegistering(false);
     }
+  };
+
+  // Handle "Complete Registration" - proceed to waiver/payment
+  const handleCompleteRegistration = async () => {
+    // Load waivers and proceed to waiver step or payment
+    try {
+      const waiverResponse = await checkInApi.getWaivers(eventId);
+      if (waiverResponse.success && waiverResponse.data?.length > 0) {
+        setWaivers(waiverResponse.data);
+        setCurrentWaiverIndex(0);
+        resetWaiverState();
+        setCurrentStep(4); // Go to waiver step
+      } else {
+        // No waivers, check for payment
+        const hasFee = getEffectiveFeeAmount() > 0;
+        if (hasFee) {
+          setCurrentStep(5); // Go to payment step
+        } else {
+          // No waiver, no fee - registration is complete
+          toast.success('Registration complete!');
+          navigate(`/event/${eventId}`);
+        }
+      }
+    } catch (e) {
+      console.log('Could not load waivers:', e);
+      // No waivers or error, check for payment
+      const hasFee = getEffectiveFeeAmount() > 0;
+      if (hasFee) {
+        setCurrentStep(5);
+      } else {
+        toast.success('Registration complete!');
+        navigate(`/event/${eventId}`);
+      }
+    }
+  };
+
+  // Handle "Add Another Division" - go back to step 1
+  const handleAddAnotherDivision = () => {
+    // Reset division selection for next registration
+    setSelectedDivision(null);
+    setSelectedDivisions([]);
+    setSelectedFeeId(null);
+    setDivisionFeeSelections({});
+    setSelectedJoinMethod('Approval');
+    setRegistrationResult(null);
+    setCurrentStep(1);
   };
 
   // Helper to check if URL is a PDF
@@ -1797,206 +1821,100 @@ export default function EventRegistration() {
           </div>
         )}
 
-        {/* Step 3: Confirmation */}
+        {/* Step 3: Registration Summary */}
         {currentStep === 3 && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl shadow-sm p-6">
-              {registrationResult ? (
-                // Success state
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Check className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">You're Registered!</h2>
-                  <p className="text-gray-600 mb-4">
-                    {selectedDivisions.length > 1
-                      ? `You have successfully registered for ${selectedDivisions.length} divisions:`
-                      : `You have successfully registered for ${selectedDivision?.name || 'this division'}.`}
-                  </p>
-                  {selectedDivisions.length > 1 && (
-                    <div className="flex flex-wrap justify-center gap-2 mb-6">
-                      {selectedDivisions.map(div => (
-                        <span key={div.id} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                          {div.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-
-                  {/* Payment Info */}
-                  {(event.registrationFee > 0 || event.perDivisionFee > 0) && (
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6 text-left">
-                      <div className="flex items-center gap-2 text-orange-800 font-medium mb-2">
-                        <DollarSign className="w-5 h-5" />
-                        Payment Required
-                      </div>
-                      <p className="text-sm text-orange-700 mb-2">
-                        Please complete payment to confirm your registration.
-                      </p>
-                      {event.paymentInstructions && (
-                        <p className="text-sm text-orange-600">{event.paymentInstructions}</p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Link
-                      to={`/event/${eventId}`}
-                      className="px-6 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700"
-                    >
-                      View Event
-                    </Link>
-                    <Link
-                      to="/member/dashboard"
-                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-                    >
-                      Go to Dashboard
-                    </Link>
-                  </div>
+              {/* Success header */}
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Check className="w-8 h-8 text-green-600" />
                 </div>
-              ) : (
-                // Confirmation for singles (direct registration)
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Confirm Registration</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Registration Successful!</h2>
+                <p className="text-gray-600">
+                  You can add more divisions or complete your registration.
+                </p>
+              </div>
 
-                  {/* Fee Selection for singles */}
-                  {hasFeeOptions(selectedDivision) && (
-                    <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                      <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                        <DollarSign className="w-4 h-4" />
-                        Select Registration Fee
-                      </h3>
-                      <div className="space-y-2">
-                        {selectedDivision.fees
-                          .filter(f => f.isActive && f.isCurrentlyAvailable)
-                          .map(fee => (
-                            <label
-                              key={fee.id}
-                              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
-                                selectedFeeId === fee.id
-                                  ? 'border-orange-500 bg-orange-100'
-                                  : 'border-gray-200 bg-white hover:border-orange-300'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type="radio"
-                                  name="fee"
-                                  value={fee.id}
-                                  checked={selectedFeeId === fee.id}
-                                  onChange={() => setSelectedFeeId(fee.id)}
-                                  className="text-orange-600"
-                                />
-                                <div>
-                                  <span className="font-medium text-gray-900">{fee.name}</span>
-                                  {fee.description && (
-                                    <p className="text-sm text-gray-500">{fee.description}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <span className="text-lg font-semibold text-orange-600">${fee.amount}</span>
-                            </label>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                    <h3 className="font-medium text-gray-900 mb-3">Registration Summary</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Event</span>
-                        <span className="font-medium">{event.name}</span>
-                      </div>
-                      {selectedDivisions.length > 1 ? (
-                        <div>
-                          <span className="text-gray-600">Divisions ({selectedDivisions.length})</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {selectedDivisions.map(div => (
-                              <span key={div.id} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                                {div.name}
+              {/* Registered Divisions List */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Your Registered Divisions
+                </h3>
+                {userRegistrations.length > 0 ? (
+                  <div className="space-y-2">
+                    {userRegistrations.map((reg, idx) => {
+                      const partners = reg.members?.filter(m => m.userId !== user?.id && m.inviteStatus === 'Accepted') || [];
+                      return (
+                        <div
+                          key={reg.id || idx}
+                          className="flex items-center justify-between p-3 bg-white rounded-lg border border-green-200"
+                        >
+                          <div>
+                            <span className="font-medium text-gray-900">{reg.divisionName}</span>
+                            {partners.length > 0 && (
+                              <span className="text-sm text-gray-500 ml-2">
+                                with {partners.map(p => p.name).join(', ')}
                               </span>
-                            ))}
+                            )}
+                            {!reg.isComplete && (
+                              <span className="text-sm text-orange-600 ml-2">(looking for partner)</span>
+                            )}
                           </div>
+                          <Check className="w-5 h-5 text-green-600" />
                         </div>
-                      ) : (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Division</span>
-                          <span className="font-medium">{selectedDivision?.name}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Player</span>
-                        <span className="font-medium">{user?.firstName} {user?.lastName}</span>
-                      </div>
-                      {/* Fee Breakdown */}
-                      {(getEventFee() > 0 || getDivisionFee() > 0) && (
-                        <div className="pt-2 border-t space-y-1">
-                          {hasSeparateFees() ? (
-                            <>
-                              {/* Event Fee (one-time) */}
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Event Fee</span>
-                                <span className="font-medium">${getEventFee()}</span>
-                              </div>
-                              {/* Division Fee */}
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">
-                                  {getSelectedFee() ? getSelectedFee().name : 'Division Fee'}
-                                </span>
-                                <span className="font-medium">${getDivisionFee()}</span>
-                              </div>
-                              {/* Total */}
-                              <div className="flex justify-between pt-1 border-t font-semibold">
-                                <span className="text-gray-900">Total</span>
-                                <span className="text-orange-600">${getEventFee() + getDivisionFee()}</span>
-                              </div>
-                            </>
-                          ) : (
-                            /* Single fee display */
-                            <div className="flex justify-between font-semibold">
-                              <span className="text-gray-600">
-                                {getSelectedFee() ? getSelectedFee().name : 'Fee'}
-                              </span>
-                              <span className="text-orange-600">${getEffectiveFeeAmount()}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
+                ) : (
+                  /* Fallback to just-registered division if userRegistrations not loaded yet */
+                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-green-200">
+                    <span className="font-medium text-gray-900">
+                      {selectedDivision?.name || 'Division registered'}
+                    </span>
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                )}
+              </div>
 
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setCurrentStep(1);
-                        setSelectedDivision(null);
-                        setSelectedDivisions([]);
-                        setDivisionFeeSelections({});
-                        setSelectedFeeId(null);
-                      }}
-                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={() => handleRegister()}
-                      disabled={registering}
-                      className="flex-1 px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {registering ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Registering...
-                        </>
-                      ) : (
-                        'Confirm Registration'
-                      )}
-                    </button>
-                  </div>
+              {/* Available Divisions to Add */}
+              {event?.divisions?.filter(d =>
+                d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+              ).length > 0 && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>{event.divisions.filter(d =>
+                      d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                    ).length}</strong> more division{event.divisions.filter(d =>
+                      d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                    ).length === 1 ? '' : 's'} available to register for.
+                  </p>
                 </div>
               )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Add Another Division - only show if there are more divisions available */}
+                {event?.divisions?.filter(d =>
+                  d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                ).length > 0 && (
+                  <button
+                    onClick={handleAddAnotherDivision}
+                    className="flex-1 px-4 py-3 border-2 border-blue-500 text-blue-600 rounded-lg font-medium hover:bg-blue-50 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Add Another Division
+                  </button>
+                )}
+                <button
+                  onClick={handleCompleteRegistration}
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center justify-center gap-2"
+                >
+                  <Check className="w-5 h-5" />
+                  Complete Registration
+                </button>
+              </div>
             </div>
           </div>
         )}
