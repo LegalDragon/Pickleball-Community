@@ -1866,14 +1866,14 @@ export default function EventRegistration() {
 
               {/* Available Divisions to Add */}
               {event?.divisions?.filter(d =>
-                d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                !userRegistrations.some(r => r.divisionId === d.id)
               ).length > 0 && (
                 <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-700">
                     <strong>{event.divisions.filter(d =>
-                      d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                      !userRegistrations.some(r => r.divisionId === d.id)
                     ).length}</strong> more division{event.divisions.filter(d =>
-                      d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                      !userRegistrations.some(r => r.divisionId === d.id)
                     ).length === 1 ? '' : 's'} available to register for.
                   </p>
                 </div>
@@ -1883,7 +1883,7 @@ export default function EventRegistration() {
               <div className="flex flex-col sm:flex-row gap-3">
                 {/* Add Another Division - only show if there are more divisions available */}
                 {event?.divisions?.filter(d =>
-                  d.isActive && !userRegistrations.some(r => r.divisionId === d.id)
+                  !userRegistrations.some(r => r.divisionId === d.id)
                 ).length > 0 && (
                   <button
                     onClick={handleAddAnotherDivision}
