@@ -4208,16 +4208,14 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                 Change
                               </button>
                             )}
-                            {/* Cancel button */}
-                            {canRegister() && (
-                              <button
-                                onClick={() => handleCancelRegistration(reg.divisionId)}
-                                className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
-                              >
-                                <X className="w-4 h-4" />
-                                Cancel
-                              </button>
-                            )}
+                            {/* Cancel button - always show for registered users (backend enforces schedule restrictions) */}
+                            <button
+                              onClick={() => handleCancelRegistration(reg.divisionId)}
+                              className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <X className="w-4 h-4" />
+                              Cancel
+                            </button>
                           </div>
                         </div>
 
