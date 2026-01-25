@@ -596,11 +596,43 @@ export default function EventView() {
                           <div className="mt-2 space-y-2">
                             {hasTeams ? (
                               // Show players grouped by team
-                              teamNames.map((teamName) => (
+                              teamNames.map((teamName) => {
+                                // Get team info from first player (all players in team share same joinMethod/isComplete)
+                                const firstPlayer = playersByTeam[teamName][0];
+                                const isComplete = firstPlayer?.isComplete;
+                                const joinMethod = firstPlayer?.joinMethod || 'Approval';
+                                const isFriendsOnly = joinMethod === 'FriendsOnly';
+
+                                return (
                                 <div key={teamName} className="bg-white rounded p-2">
-                                  <div className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1">
-                                    <Users className="w-3 h-3" />
-                                    {teamName}
+                                  <div className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1 justify-between">
+                                    <div className="flex items-center gap-1">
+                                      <Users className="w-3 h-3" />
+                                      {teamName}
+                                    </div>
+                                    {/* Show join method indicator for incomplete teams */}
+                                    {!isComplete && (
+                                      <span
+                                        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded ${
+                                          isFriendsOnly
+                                            ? 'bg-purple-100 text-purple-700'
+                                            : 'bg-amber-100 text-amber-700'
+                                        }`}
+                                        title={isFriendsOnly ? 'Friends only - auto-accept' : 'Open to anyone'}
+                                      >
+                                        {isFriendsOnly ? (
+                                          <>
+                                            <Users className="w-2.5 h-2.5" />
+                                            Friends
+                                          </>
+                                        ) : (
+                                          <>
+                                            <UserPlus className="w-2.5 h-2.5" />
+                                            Open
+                                          </>
+                                        )}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex flex-wrap gap-1">
                                     {playersByTeam[teamName].map((player) => (
@@ -627,7 +659,7 @@ export default function EventView() {
                                     ))}
                                   </div>
                                 </div>
-                              ))
+                              );})
                             ) : (
                               // Show players as flat grid (no teams)
                               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">

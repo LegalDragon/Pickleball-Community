@@ -112,6 +112,14 @@ public class RegisteredPlayerPublicDto
     public string? State { get; set; }
     public string DivisionName { get; set; } = string.Empty;
     public string? TeamName { get; set; }
+    /// <summary>
+    /// How partners can join this unit: "Approval" (anyone can request) or "FriendsOnly" (friends auto-accept)
+    /// </summary>
+    public string JoinMethod { get; set; } = "Approval";
+    /// <summary>
+    /// Whether the team/unit is complete (has all required players)
+    /// </summary>
+    public bool IsComplete { get; set; }
 }
 
 // Event list item

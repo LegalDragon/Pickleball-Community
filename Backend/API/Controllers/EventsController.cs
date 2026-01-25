@@ -401,18 +401,29 @@ public class EventsController : EventControllerBase
             // Get registered players with public info only
             // Use composite key (UserId, DivisionName) to allow same player in multiple divisions
             var registeredPlayers = evt.Divisions
-                .SelectMany(d => d.Units
-                    .Where(u => u.Status != "Cancelled" && !u.IsTemporary)
-                    .SelectMany(u => u.Members.Select(m => new RegisteredPlayerPublicDto
-                    {
-                        UserId = m.UserId,
-                        Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "",
-                        ProfileImageUrl = m.User?.ProfileImageUrl,
-                        City = m.User?.City,
-                        State = m.User?.State,
-                        DivisionName = d.Name,
-                        TeamName = Utility.GetUnitDisplayName(u, d.TeamUnit?.TotalPlayers ?? 1)
-                    })))
+                .SelectMany(d =>
+                {
+                    var requiredPlayers = d.TeamUnit?.TotalPlayers ?? 1;
+                    return d.Units
+                        .Where(u => u.Status != "Cancelled" && !u.IsTemporary)
+                        .SelectMany(u =>
+                        {
+                            var acceptedCount = u.Members.Count(m => m.InviteStatus == "Accepted");
+                            var isComplete = acceptedCount >= requiredPlayers;
+                            return u.Members.Select(m => new RegisteredPlayerPublicDto
+                            {
+                                UserId = m.UserId,
+                                Name = m.User != null ? Utility.FormatName(m.User.LastName, m.User.FirstName) : "",
+                                ProfileImageUrl = m.User?.ProfileImageUrl,
+                                City = m.User?.City,
+                                State = m.User?.State,
+                                DivisionName = d.Name,
+                                TeamName = Utility.GetUnitDisplayName(u, requiredPlayers),
+                                JoinMethod = u.JoinMethod ?? "Approval",
+                                IsComplete = isComplete
+                            });
+                        });
+                })
                 .DistinctBy(p => (p.UserId, p.DivisionName))
                 .ToList();
 
