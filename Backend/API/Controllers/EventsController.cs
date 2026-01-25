@@ -399,6 +399,7 @@ public class EventsController : EventControllerBase
                 : 2;
 
             // Get registered players with public info only
+            // Use composite key (UserId, DivisionName) to allow same player in multiple divisions
             var registeredPlayers = evt.Divisions
                 .SelectMany(d => d.Units
                     .Where(u => u.Status != "Cancelled" && !u.IsTemporary)
@@ -412,7 +413,7 @@ public class EventsController : EventControllerBase
                         DivisionName = d.Name,
                         TeamName = u.Name
                     })))
-                .DistinctBy(p => p.UserId)
+                .DistinctBy(p => (p.UserId, p.DivisionName))
                 .ToList();
 
             var dto = new EventPublicViewDto
