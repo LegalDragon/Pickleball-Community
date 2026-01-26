@@ -56,8 +56,32 @@ public class Event
     [MaxLength(500)]
     public string? PosterImageUrl { get; set; }
 
+    /// <summary>
+    /// Focal point X coordinate (0-100%) for responsive cropping of poster/logo image
+    /// </summary>
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal? PosterFocusX { get; set; } = 50;
+
+    /// <summary>
+    /// Focal point Y coordinate (0-100%) for responsive cropping of poster/logo image
+    /// </summary>
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal? PosterFocusY { get; set; } = 50;
+
     [MaxLength(500)]
     public string? BannerImageUrl { get; set; }
+
+    /// <summary>
+    /// Focal point X coordinate (0-100%) for responsive cropping of banner image
+    /// </summary>
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal? BannerFocusX { get; set; } = 50;
+
+    /// <summary>
+    /// Focal point Y coordinate (0-100%) for responsive cropping of banner image
+    /// </summary>
+    [Column(TypeName = "decimal(5,2)")]
+    public decimal? BannerFocusY { get; set; } = 50;
 
     // Fees
     [Column(TypeName = "decimal(10,2)")]

@@ -403,9 +403,13 @@ export default function TournamentManage() {
       startTime: startDate.time || '08:00',
       endDate: endDate.date,
       endTime: endDate.time || '18:00',
-      // Logo & Banner
+      // Logo & Banner with focus points
       posterImageUrl: eventData.posterImageUrl || '',
+      posterFocusX: eventData.posterFocusX ?? 50,
+      posterFocusY: eventData.posterFocusY ?? 50,
       bannerImageUrl: eventData.bannerImageUrl || '',
+      bannerFocusX: eventData.bannerFocusX ?? 50,
+      bannerFocusY: eventData.bannerFocusY ?? 50,
       // Contact Info
       contactName: eventData.contactName || '',
       contactEmail: eventData.contactEmail || '',
@@ -455,9 +459,13 @@ export default function TournamentManage() {
         country: editForm.country || null,
         registrationFee: editForm.registrationFee ? parseFloat(editForm.registrationFee) : 0,
         perDivisionFee: editForm.perDivisionFee ? parseFloat(editForm.perDivisionFee) : 0,
-        // Logo & Banner
+        // Logo & Banner with focus points
         posterImageUrl: editForm.posterImageUrl || null,
+        posterFocusX: editForm.posterFocusX ?? 50,
+        posterFocusY: editForm.posterFocusY ?? 50,
         bannerImageUrl: editForm.bannerImageUrl || null,
+        bannerFocusX: editForm.bannerFocusX ?? 50,
+        bannerFocusY: editForm.bannerFocusY ?? 50,
         // Contact Info
         contactName: editForm.contactName || null,
         contactEmail: editForm.contactEmail || null,
@@ -2781,21 +2789,48 @@ export default function TournamentManage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Event Logo</label>
                   {editForm.posterImageUrl ? (
-                    <div className="relative">
-                      <img
-                        src={editForm.posterImageUrl}
-                        alt="Event Logo"
-                        className="w-full h-40 object-contain bg-gray-50 rounded-lg border border-gray-200"
-                      />
-                      <button
-                        onClick={() => handleFormChange('posterImageUrl', '')}
-                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    <div className="space-y-2">
+                      <div
+                        className="relative cursor-crosshair"
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = ((e.clientX - rect.left) / rect.width) * 100;
+                          const y = ((e.clientY - rect.top) / rect.height) * 100;
+                          handleFormChange('posterFocusX', Math.round(x));
+                          handleFormChange('posterFocusY', Math.round(y));
+                        }}
                       >
-                        <X className="w-4 h-4" />
-                      </button>
+                        <img
+                          src={editForm.posterImageUrl}
+                          alt="Event Logo"
+                          className="w-full h-48 object-contain bg-gray-50 rounded-lg border border-gray-200"
+                        />
+                        {/* Focus point indicator */}
+                        <div
+                          className="absolute w-6 h-6 -ml-3 -mt-3 pointer-events-none"
+                          style={{
+                            left: `${editForm.posterFocusX || 50}%`,
+                            top: `${editForm.posterFocusY || 50}%`
+                          }}
+                        >
+                          <div className="w-full h-full rounded-full border-2 border-orange-500 bg-orange-500/30">
+                            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-orange-500 -translate-y-1/2" />
+                            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-orange-500 -translate-x-1/2" />
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleFormChange('posterImageUrl', ''); }}
+                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 text-center">
+                        Click on image to set focus point ({Math.round(editForm.posterFocusX || 50)}%, {Math.round(editForm.posterFocusY || 50)}%)
+                      </p>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
                       <div className="flex flex-col items-center justify-center py-4">
                         {uploadingLogo ? (
                           <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
@@ -2822,21 +2857,48 @@ export default function TournamentManage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Event Banner</label>
                   {editForm.bannerImageUrl ? (
-                    <div className="relative">
-                      <img
-                        src={editForm.bannerImageUrl}
-                        alt="Event Banner"
-                        className="w-full h-40 object-cover bg-gray-50 rounded-lg border border-gray-200"
-                      />
-                      <button
-                        onClick={() => handleFormChange('bannerImageUrl', '')}
-                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    <div className="space-y-2">
+                      <div
+                        className="relative cursor-crosshair"
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = ((e.clientX - rect.left) / rect.width) * 100;
+                          const y = ((e.clientY - rect.top) / rect.height) * 100;
+                          handleFormChange('bannerFocusX', Math.round(x));
+                          handleFormChange('bannerFocusY', Math.round(y));
+                        }}
                       >
-                        <X className="w-4 h-4" />
-                      </button>
+                        <img
+                          src={editForm.bannerImageUrl}
+                          alt="Event Banner"
+                          className="w-full h-48 object-cover bg-gray-50 rounded-lg border border-gray-200"
+                        />
+                        {/* Focus point indicator */}
+                        <div
+                          className="absolute w-6 h-6 -ml-3 -mt-3 pointer-events-none"
+                          style={{
+                            left: `${editForm.bannerFocusX || 50}%`,
+                            top: `${editForm.bannerFocusY || 50}%`
+                          }}
+                        >
+                          <div className="w-full h-full rounded-full border-2 border-orange-500 bg-orange-500/30">
+                            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-orange-500 -translate-y-1/2" />
+                            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-orange-500 -translate-x-1/2" />
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleFormChange('bannerImageUrl', ''); }}
+                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 text-center">
+                        Click on image to set focus point ({Math.round(editForm.bannerFocusX || 50)}%, {Math.round(editForm.bannerFocusY || 50)}%)
+                      </p>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
                       <div className="flex flex-col items-center justify-center py-4">
                         {uploadingBanner ? (
                           <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />

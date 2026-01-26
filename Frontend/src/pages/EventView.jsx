@@ -822,16 +822,16 @@ export default function EventView() {
       {/* Ad/Sponsor Fullsize Modal */}
       {selectedAd && (
         <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4"
           onClick={() => setSelectedAd(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+            className="bg-white rounded-xl shadow-2xl w-[95vw] sm:w-[90vw] md:w-[85vw] lg:w-[80vw] max-h-[95vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-semibold text-gray-900">
+            <div className="flex items-center justify-between p-3 sm:p-4 border-b flex-shrink-0">
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
                 {selectedAd.title || 'Sponsor'}
               </h3>
               <button
@@ -842,20 +842,20 @@ export default function EventView() {
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-4 flex items-center justify-center bg-gray-50">
+            {/* Modal Content - takes most of the space */}
+            <div className="flex-1 flex items-center justify-center bg-gray-50 p-2 sm:p-4 min-h-0 overflow-auto">
               {selectedAd.fileUrl && (
                 <img
                   src={getSharedAssetUrl(selectedAd.fileUrl)}
                   alt={selectedAd.title || 'Sponsor'}
-                  className="max-w-full max-h-[60vh] object-contain"
+                  className="max-w-full max-h-[75vh] sm:max-h-[80vh] object-contain"
                 />
               )}
             </div>
 
             {/* Modal Footer with Link */}
             {selectedAd.linkUrl && (
-              <div className="p-4 border-t bg-gray-50 flex justify-center">
+              <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-center flex-shrink-0">
                 <a
                   href={selectedAd.linkUrl}
                   target="_blank"

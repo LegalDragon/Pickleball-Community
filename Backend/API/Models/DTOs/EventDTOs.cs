@@ -148,6 +148,8 @@ public class EventDto
     public double? Longitude { get; set; }
     public int? VenueId { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
     public string? PriceUnit { get; set; }
@@ -170,6 +172,8 @@ public class EventDto
 public class EventDetailDto : EventDto
 {
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
     public string? CourtName { get; set; }
     public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }
@@ -434,7 +438,11 @@ public class CreateEventDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; } = 50;
+    public decimal? PosterFocusY { get; set; } = 50;
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; } = 50;
+    public decimal? BannerFocusY { get; set; } = 50;
     public decimal RegistrationFee { get; set; } = 0;
     public decimal PerDivisionFee { get; set; } = 0;
     public string? PriceUnit { get; set; }

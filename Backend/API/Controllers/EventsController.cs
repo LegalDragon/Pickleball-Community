@@ -450,7 +450,11 @@ public class EventsController : EventControllerBase
                 Longitude = evt.Longitude,
                 VenueId = evt.CourtId,
                 PosterImageUrl = evt.PosterImageUrl,
+                PosterFocusX = evt.PosterFocusX,
+                PosterFocusY = evt.PosterFocusY,
                 BannerImageUrl = evt.BannerImageUrl,
+                BannerFocusX = evt.BannerFocusX,
+                BannerFocusY = evt.BannerFocusY,
                 RegistrationFee = evt.RegistrationFee,
                 PerDivisionFee = evt.PerDivisionFee,
                 PriceUnit = evt.PriceUnit,
@@ -608,7 +612,11 @@ public class EventsController : EventControllerBase
                 VenueId = evt.CourtId,
                 CourtName = evt.Venue?.Name,
                 PosterImageUrl = evt.PosterImageUrl,
+                PosterFocusX = evt.PosterFocusX,
+                PosterFocusY = evt.PosterFocusY,
                 BannerImageUrl = evt.BannerImageUrl,
+                BannerFocusX = evt.BannerFocusX,
+                BannerFocusY = evt.BannerFocusY,
                 RegistrationFee = evt.RegistrationFee,
                 PerDivisionFee = evt.PerDivisionFee,
                 ContactName = evt.ContactName,
@@ -2462,9 +2470,13 @@ public class EventsController : EventControllerBase
         if (request.RegistrationFee.HasValue) evt.RegistrationFee = request.RegistrationFee.Value;
         if (request.PerDivisionFee.HasValue) evt.PerDivisionFee = request.PerDivisionFee.Value;
 
-        // Image URLs (preserve existing if not provided)
+        // Image URLs and focus points (preserve existing if not provided)
         if (request.PosterImageUrl != null) evt.PosterImageUrl = request.PosterImageUrl;
+        if (request.PosterFocusX.HasValue) evt.PosterFocusX = request.PosterFocusX.Value;
+        if (request.PosterFocusY.HasValue) evt.PosterFocusY = request.PosterFocusY.Value;
         if (request.BannerImageUrl != null) evt.BannerImageUrl = request.BannerImageUrl;
+        if (request.BannerFocusX.HasValue) evt.BannerFocusX = request.BannerFocusX.Value;
+        if (request.BannerFocusY.HasValue) evt.BannerFocusY = request.BannerFocusY.Value;
 
         evt.UpdatedAt = DateTime.Now;
 
@@ -2508,7 +2520,11 @@ public class EventsController : EventControllerBase
             RegistrationFee = evt.RegistrationFee,
             PerDivisionFee = evt.PerDivisionFee,
             PosterImageUrl = evt.PosterImageUrl,
+            PosterFocusX = evt.PosterFocusX,
+            PosterFocusY = evt.PosterFocusY,
             BannerImageUrl = evt.BannerImageUrl,
+            BannerFocusX = evt.BannerFocusX,
+            BannerFocusY = evt.BannerFocusY,
             CreatedAt = evt.CreatedAt,
             UpdatedAt = evt.UpdatedAt
         };
@@ -2901,7 +2917,11 @@ public class AdminEventDto
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -2929,7 +2949,11 @@ public class AdminEventUpdateRequest
     public decimal? RegistrationFee { get; set; }
     public decimal? PerDivisionFee { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
 }
 
 #endregion
