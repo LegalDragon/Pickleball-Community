@@ -2801,7 +2801,7 @@ export default function TournamentManage() {
                         }}
                       >
                         <img
-                          src={editForm.posterImageUrl}
+                          src={getSharedAssetUrl(editForm.posterImageUrl)}
                           alt="Event Logo"
                           className="w-full h-48 object-contain bg-gray-50 rounded-lg border border-gray-200"
                         />
@@ -2869,7 +2869,7 @@ export default function TournamentManage() {
                         }}
                       >
                         <img
-                          src={editForm.bannerImageUrl}
+                          src={getSharedAssetUrl(editForm.bannerImageUrl)}
                           alt="Event Banner"
                           className="w-full h-48 object-cover bg-gray-50 rounded-lg border border-gray-200"
                         />
