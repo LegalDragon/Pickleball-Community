@@ -5,7 +5,7 @@ PRINT 'Migration 139: Adding ad/sponsor asset type for events...'
 
 -- Get the Event object type ID
 DECLARE @EventTypeId INT
-SELECT @EventTypeId = Id FROM ObjectTypes WHERE TypeName = 'Event'
+SELECT @EventTypeId = Id FROM ObjectTypes WHERE Name = 'Event'
 
 IF @EventTypeId IS NULL
 BEGIN
