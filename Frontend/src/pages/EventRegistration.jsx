@@ -764,9 +764,10 @@ export default function EventRegistration() {
 
     setIsSubmittingPayment(true);
     try {
-      const unitId = registrationResult?.unitId;
+      // Support both unitId (from "Continue" button) and id (from registration response)
+      const unitId = registrationResult?.unitId || registrationResult?.id;
       if (!unitId) {
-        toast.error('Registration not found');
+        toast.error('Registration not found. Please try again from the event page.');
         return;
       }
 
@@ -784,7 +785,7 @@ export default function EventRegistration() {
 
       if (response.success) {
         toast.success('Payment submitted successfully!');
-        setCurrentStep(3); // Go to success step
+        navigate(`/event/${eventId}`); // Go back to event view
       } else {
         toast.error(response.message || 'Failed to submit payment');
       }
@@ -2172,11 +2173,11 @@ export default function EventRegistration() {
                   </div>
                   <div className="flex items-center gap-2">
                     <code className="bg-white px-3 py-2 rounded border border-blue-300 font-mono text-blue-900">
-                      E{event.id}-U{registrationResult?.unitId}-P{user?.id}
+                      E{event.id}-U{registrationResult?.unitId || registrationResult?.id}-P{user?.id}
                     </code>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`E${event.id}-U${registrationResult?.unitId}-P${user?.id}`);
+                        navigator.clipboard.writeText(`E${event.id}-U${registrationResult?.unitId || registrationResult?.id}-P${user?.id}`);
                         toast.success('Reference ID copied!');
                       }}
                       className="p-2 hover:bg-blue-100 rounded text-blue-600"
