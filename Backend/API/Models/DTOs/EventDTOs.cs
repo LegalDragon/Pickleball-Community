@@ -24,7 +24,11 @@ public class EventPublicViewDto
     public double? Longitude { get; set; }
     public int? VenueId { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
     public string? PriceUnit { get; set; }
