@@ -772,16 +772,22 @@ export default function EventRegistration() {
       }
 
       // Get member IDs to pay for (self + selected teammates)
+      // If we can't find the current member, let the backend determine who to apply payment to
       const currentMember = unitMembers.find(m => m.userId === user?.id);
       const memberIds = [currentMember?.id, ...selectedTeammateIds].filter(Boolean);
 
-      const response = await tournamentApi.uploadPaymentProof(event.id, unitId, {
+      // Only send memberIds if we have valid ones, otherwise let backend use its own lookup
+      const paymentRequest = {
         paymentProofUrl,
         paymentReference,
         paymentMethod,
-        amountPaid: getPaymentTotal(),
-        memberIds
-      });
+        amountPaid: getPaymentTotal()
+      };
+      if (memberIds.length > 0) {
+        paymentRequest.memberIds = memberIds;
+      }
+
+      const response = await tournamentApi.uploadPaymentProof(event.id, unitId, paymentRequest);
 
       if (response.success) {
         toast.success('Payment submitted successfully!');

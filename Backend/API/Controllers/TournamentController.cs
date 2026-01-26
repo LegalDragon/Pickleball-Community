@@ -1973,6 +1973,7 @@ public class TournamentController : EventControllerBase
         // Determine which members to apply payment to
         // If MemberIds provided, use those; otherwise just the submitting user
         var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+        var allMembers = unit.Members.ToList();
         List<EventUnitMember> membersToPayFor;
 
         if (request.MemberIds != null && request.MemberIds.Count > 0)
@@ -1987,13 +1988,24 @@ public class TournamentController : EventControllerBase
         else
         {
             // Default: just the submitting user
+            // First try accepted members, then fall back to any member (they may have just registered)
             var submitterMember = acceptedMembers.FirstOrDefault(m => m.UserId == userId.Value);
+            if (submitterMember == null)
+            {
+                // Try to find in all members - the user who registered should be able to pay
+                submitterMember = allMembers.FirstOrDefault(m => m.UserId == userId.Value);
+                if (submitterMember != null && submitterMember.InviteStatus != "Accepted")
+                {
+                    // Auto-accept the member since they're paying for their own registration
+                    submitterMember.InviteStatus = "Accepted";
+                }
+            }
             membersToPayFor = submitterMember != null ? new List<EventUnitMember> { submitterMember } : new List<EventUnitMember>();
         }
 
         if (membersToPayFor.Count == 0)
         {
-            return BadRequest(new ApiResponse<PaymentInfoDto> { Success = false, Message = "No members to apply payment to" });
+            return BadRequest(new ApiResponse<PaymentInfoDto> { Success = false, Message = "No members to apply payment to. Please ensure you are a registered member of this unit." });
         }
 
         // Calculate amount due and per-member amount
