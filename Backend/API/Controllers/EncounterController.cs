@@ -945,7 +945,7 @@ public class EncounterController : ControllerBase
         {
             DivisionId = division.Id,
             DivisionName = division.Name,
-            DefaultBestOf = division.MatchesPerEncounter <= 1 ? division.BestOf : null,
+            DefaultBestOf = division.MatchesPerEncounter <= 1 ? division.GamesPerMatch : null,
             DefaultScoreFormatId = division.DefaultScoreFormatId,
             DefaultScoreFormatName = defaultScoreFormat?.Name,
             MatchFormats = division.EncounterMatchFormats
