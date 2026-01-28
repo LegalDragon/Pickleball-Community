@@ -928,12 +928,16 @@ public class EncounterController : ControllerBase
             .OrderBy(p => p.PhaseOrder)
             .ToListAsync();
 
-        // Get all phase match settings for this division's phases
-        var phaseIds = phases.Select(p => p.Id).ToList();
+        // Get all phase match settings for this division's phases using join to avoid EF Core Contains() issues
         var allSettings = await _context.PhaseMatchSettings
             .Include(s => s.MatchFormat)
             .Include(s => s.ScoreFormat)
-            .Where(s => phaseIds.Contains(s.PhaseId))
+            .Join(
+                _context.DivisionPhases.Where(dp => dp.DivisionId == divisionId),
+                pms => pms.PhaseId,
+                dp => dp.Id,
+                (pms, dp) => pms
+            )
             .ToListAsync();
 
         // Get default score format
@@ -1062,16 +1066,23 @@ public class EncounterController : ControllerBase
             .Select(p => p.Id)
             .ToListAsync();
 
-        // Remove existing settings for all phases
+        var phaseIdSet = new HashSet<int>(phaseIds);
+
+        // Remove existing settings for all phases using join to avoid EF Core Contains() issues
         var existingSettings = await _context.PhaseMatchSettings
-            .Where(s => phaseIds.Contains(s.PhaseId))
+            .Join(
+                _context.DivisionPhases.Where(dp => dp.DivisionId == divisionId),
+                pms => pms.PhaseId,
+                dp => dp.Id,
+                (pms, dp) => pms
+            )
             .ToListAsync();
         _context.PhaseMatchSettings.RemoveRange(existingSettings);
 
         // Add new settings
         foreach (var setting in dto.Settings)
         {
-            if (!phaseIds.Contains(setting.PhaseId))
+            if (!phaseIdSet.Contains(setting.PhaseId))
                 continue; // Skip if phase doesn't belong to this division
 
             _context.PhaseMatchSettings.Add(new PhaseMatchSettings
