@@ -311,8 +311,8 @@ export default function GameDayCheckIn({ eventId, event, permissions, onRefresh 
                 </p>
               </div>
               <div className="divide-y divide-gray-100">
-                {divGroup.players.map(player => (
-                  <div key={`${player.divisionId}-${player.userId}`} className="hover:bg-gray-50">
+                {divGroup.players.map((player, playerIndex) => (
+                  <div key={`${player.divisionId}-${player.userId}-${playerIndex}`} className="hover:bg-gray-50">
                     {/* Player Row */}
                     <div
                       className="p-4 cursor-pointer"
