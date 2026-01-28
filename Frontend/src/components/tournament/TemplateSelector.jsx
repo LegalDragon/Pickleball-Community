@@ -88,6 +88,19 @@ export default function TemplateSelector({ divisionId, unitCount = 8, onApply, o
       // Response is the result object directly (axios interceptor returns response.data)
       const result = response?.data || response;
       if (result?.success !== false) {
+        // Auto-generate schedules for each created phase
+        const phaseIds = result?.createdPhaseIds || [];
+        if (phaseIds.length > 0) {
+          console.log('Generating schedules for phases:', phaseIds);
+          for (const phaseId of phaseIds) {
+            try {
+              await tournamentApi.generatePhaseSchedule(phaseId);
+            } catch (scheduleErr) {
+              console.warn(`Failed to generate schedule for phase ${phaseId}:`, scheduleErr);
+              // Continue with other phases even if one fails
+            }
+          }
+        }
         onApply?.(result);
       } else {
         alert('Failed to apply template: ' + (result?.message || 'Unknown error'));
