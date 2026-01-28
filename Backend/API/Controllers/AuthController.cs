@@ -41,16 +41,34 @@ public class AuthController : ControllerBase
     {
         try
         {
+            if (string.IsNullOrEmpty(request.Token))
+            {
+                Console.WriteLine("[Auth/Sync] Error: Empty token received");
+                return BadRequest("Token is required");
+            }
+
+            Console.WriteLine($"[Auth/Sync] Starting sync for token (first 50 chars): {request.Token.Substring(0, Math.Min(50, request.Token.Length))}...");
+
             // Validate the token with shared auth service
             var sharedUser = await _sharedAuthService.ValidateTokenAsync(request.Token);
 
-            if (sharedUser == null || !sharedUser.IsValid)
+            if (sharedUser == null)
             {
+                Console.WriteLine("[Auth/Sync] Error: ValidateTokenAsync returned null");
+                return Unauthorized("Invalid token - could not decode");
+            }
+
+            if (!sharedUser.IsValid)
+            {
+                Console.WriteLine($"[Auth/Sync] Error: Token marked as invalid for user {sharedUser.Id}");
                 return Unauthorized("Invalid token from shared auth");
             }
 
+            Console.WriteLine($"[Auth/Sync] Token valid for user {sharedUser.Id} ({sharedUser.Email})");
+
             // Sync user to local database
             var localUser = await _sharedAuthService.SyncUserAsync(sharedUser);
+            Console.WriteLine($"[Auth/Sync] User synced successfully: {localUser.Id} with role {localUser.Role}");
 
             // Update role if provided from shared auth (isSiteAdmin or siteRole)
             if (!string.IsNullOrEmpty(request.Role))
@@ -58,6 +76,7 @@ public class AuthController : ControllerBase
                 var validRoles = new[] { "Player", "Manager", "Admin" };
                 if (validRoles.Contains(request.Role) && localUser.Role != request.Role)
                 {
+                    Console.WriteLine($"[Auth/Sync] Updating role from {localUser.Role} to {request.Role}");
                     localUser = await _authService.UpdateRoleAsync(localUser.Id, request.Role);
                 }
             }
@@ -81,8 +100,16 @@ public class AuthController : ControllerBase
                 }
             });
         }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+        {
+            var innerMessage = dbEx.InnerException?.Message ?? dbEx.Message;
+            Console.WriteLine($"[Auth/Sync] Database error: {innerMessage}");
+            return BadRequest($"Database error during sync: {innerMessage}");
+        }
         catch (Exception ex)
         {
+            Console.WriteLine($"[Auth/Sync] Error: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[Auth/Sync] Stack trace: {ex.StackTrace}");
             return BadRequest($"Failed to sync user: {ex.Message}");
         }
     }

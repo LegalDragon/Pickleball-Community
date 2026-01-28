@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Crown, CheckCircle, Coffee, LogOut, Trophy } from 'lucide-react'
+import { getSharedAssetUrl } from '../../services/api'
 
 /**
  * PlayerList component for InstaGame
@@ -48,7 +49,7 @@ export default function PlayerList({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {myPlayerInfo.avatarUrl ? (
-                <img src={myPlayerInfo.avatarUrl} alt="" className="w-12 h-12 rounded-full" />
+                <img src={getSharedAssetUrl(myPlayerInfo.avatarUrl)} alt="" className="w-12 h-12 rounded-full" />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-lg font-bold">
                   {myPlayerInfo.displayName?.[0] || '?'}
@@ -131,7 +132,7 @@ export default function PlayerList({
             >
               <div className="flex items-center gap-3">
                 {player.avatarUrl ? (
-                  <img src={player.avatarUrl} alt="" className="w-10 h-10 rounded-full" />
+                  <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-10 h-10 rounded-full" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center">
                     {player.displayName?.[0] || '?'}

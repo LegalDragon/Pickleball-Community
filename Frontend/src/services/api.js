@@ -523,7 +523,10 @@ export const userApi = {
   adminSendTestSms: (userId, message = null) => api.post(`/users/${userId}/admin-test-sms`, { message }),
 
   // Admin: Update a user's phone number
-  adminUpdatePhone: (userId, newPhone) => api.put(`/users/${userId}/admin-phone`, { newPhone })
+  adminUpdatePhone: (userId, newPhone) => api.put(`/users/${userId}/admin-phone`, { newPhone }),
+
+  // Admin: Re-sync a user from Funtime-Shared service
+  adminResyncUser: (userId) => api.post(`/users/${userId}/admin-resync`)
 }
 
 // Content Types API
@@ -1481,7 +1484,7 @@ export const tournamentApi = {
     return api.get(`/tournament/events/${eventId}/units${params}`)
   },
   getMyUnits: () => api.get('/tournament/my-units'),
-  requestToJoinUnit: (unitId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message }),
+  requestToJoinUnit: (unitId, selectedFeeId, message) => api.post(`/tournament/units/${unitId}/join-request`, { unitId, message, selectedFeeId }),
   cancelJoinRequest: (requestId) => api.delete(`/tournament/join-requests/${requestId}`),
   respondToJoinRequest: (requestId, accept, message = null) =>
     api.post('/tournament/units/join-request/respond', { requestId, accept, message }),
@@ -1524,6 +1527,8 @@ export const tournamentApi = {
     api.post('/tournament/units/join-by-code', { joinCode, selectedFeeId }),
   regenerateJoinCode: (unitId) =>
     api.post(`/tournament/units/${unitId}/regenerate-code`),
+  updateJoinMethod: (unitId, joinMethod) =>
+    api.put(`/tournament/units/${unitId}/join-method`, { joinMethod }),
 
   // Payment
   getPaymentSummary: (eventId) =>

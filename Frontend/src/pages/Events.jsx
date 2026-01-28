@@ -42,7 +42,7 @@ export default function Events() {
   const [statesWithCounts, setStatesWithCounts] = useState([]);
   const [citiesWithCounts, setCitiesWithCounts] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
-  const [radiusMiles, setRadiusMiles] = useState(100);
+  const [radiusMiles, setRadiusMiles] = useState(0); // 0 = Anywhere
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -4157,7 +4157,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                             )}
                             {/* Partner status and find/change partner option */}
                             {reg.needsPartner && (
-                              <div className="mt-2">
+                              <div className="mt-2 space-y-2">
                                 <div className="flex items-center gap-2 text-orange-600">
                                   <UserPlus className="w-4 h-4" />
                                   <span className="text-sm">
@@ -4174,6 +4174,52 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                     {reg.partners?.length > 0 ? 'Change Partner' : 'Find a partner'}
                                   </button>
                                 </div>
+                                {/* Join method toggle - only for captain */}
+                                {reg.isCaptain && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-gray-500">Who can join:</span>
+                                    <button
+                                      onClick={async () => {
+                                        const newMethod = reg.joinMethod === 'FriendsOnly' ? 'Approval' : 'FriendsOnly';
+                                        try {
+                                          const response = await tournamentApi.updateJoinMethod(reg.unitId, newMethod);
+                                          if (response.success) {
+                                            toast.success(response.message || 'Join method updated');
+                                            // Update local state
+                                            setEvent(prev => ({
+                                              ...prev,
+                                              myRegistrations: prev.myRegistrations.map(r =>
+                                                r.unitId === reg.unitId ? { ...r, joinMethod: newMethod } : r
+                                              )
+                                            }));
+                                          } else {
+                                            toast.error(response.message || 'Failed to update');
+                                          }
+                                        } catch (err) {
+                                          toast.error(err?.message || 'Failed to update join method');
+                                        }
+                                      }}
+                                      className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                                        reg.joinMethod === 'FriendsOnly'
+                                          ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                      }`}
+                                    >
+                                      {reg.joinMethod === 'FriendsOnly' ? (
+                                        <span className="flex items-center gap-1">
+                                          <Users className="w-3 h-3" />
+                                          Friends only
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1">
+                                          <UserPlus className="w-3 h-3" />
+                                          Anyone
+                                        </span>
+                                      )}
+                                    </button>
+                                    <span className="text-xs text-gray-400">(tap to change)</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -4208,16 +4254,14 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                 Change
                               </button>
                             )}
-                            {/* Cancel button */}
-                            {canRegister() && (
-                              <button
-                                onClick={() => handleCancelRegistration(reg.divisionId)}
-                                className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
-                              >
-                                <X className="w-4 h-4" />
-                                Cancel
-                              </button>
-                            )}
+                            {/* Cancel button - always show for registered users (backend enforces schedule restrictions) */}
+                            <button
+                              onClick={() => handleCancelRegistration(reg.divisionId)}
+                              className="px-2 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <X className="w-4 h-4" />
+                              Cancel
+                            </button>
                           </div>
                         </div>
 
@@ -4716,10 +4760,19 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                           </span>
                                         );
                                       } else {
+                                        // Show join method: FriendsOnly or Open to anyone
+                                        const isFriendsOnly = unit.joinMethod === 'FriendsOnly';
                                         return (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-full" title="Looking for Partner">
-                                            <UserPlus className="w-3 h-3" />
-                                            <span className="hidden sm:inline">Looking for Partner</span>
+                                          <span
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                                              isFriendsOnly
+                                                ? 'text-purple-700 bg-purple-100'
+                                                : 'text-amber-700 bg-amber-100'
+                                            }`}
+                                            title={isFriendsOnly ? 'Friends only - auto-accept' : 'Open to anyone'}
+                                          >
+                                            {isFriendsOnly ? <Users className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
+                                            <span className="hidden sm:inline">{isFriendsOnly ? 'Friends Only' : 'Open'}</span>
                                           </span>
                                         );
                                       }
@@ -6263,7 +6316,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                           <div className="flex items-center gap-3">
                             <span className="text-gray-400 font-medium w-6">{index + 1}.</span>
                             <img
-                              src={acceptedMembers[0].profileImageUrl || '/default-avatar.png'}
+                              src={getSharedAssetUrl(acceptedMembers[0].profileImageUrl) || '/default-avatar.png'}
                               alt=""
                               className="w-10 h-10 rounded-full object-cover"
                             />
@@ -6285,7 +6338,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                   <div key={member.id} className="flex items-center gap-2">
                                     {mIndex > 0 && <span className="text-gray-400">&</span>}
                                     <img
-                                      src={member.profileImageUrl || '/default-avatar.png'}
+                                      src={getSharedAssetUrl(member.profileImageUrl) || '/default-avatar.png'}
                                       alt=""
                                       className="w-8 h-8 rounded-full object-cover"
                                     />
@@ -6305,7 +6358,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                 {pendingJoinRequests.map((member) => (
                                   <div key={member.joinRequestId} className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-full px-2 py-1">
                                     <img
-                                      src={member.profileImageUrl || '/default-avatar.png'}
+                                      src={getSharedAssetUrl(member.profileImageUrl) || '/default-avatar.png'}
                                       alt=""
                                       className="w-6 h-6 rounded-full object-cover"
                                     />
@@ -6350,7 +6403,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                               {acceptedMembers.map((member) => (
                                 <div key={member.id} className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1">
                                   <img
-                                    src={member.profileImageUrl || '/default-avatar.png'}
+                                    src={getSharedAssetUrl(member.profileImageUrl) || '/default-avatar.png'}
                                     alt=""
                                     className="w-5 h-5 rounded-full object-cover"
                                   />
@@ -6363,7 +6416,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                               {pendingJoinRequests.map((member) => (
                                 <div key={member.joinRequestId} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-full px-2 py-1">
                                   <img
-                                    src={member.profileImageUrl || '/default-avatar.png'}
+                                    src={getSharedAssetUrl(member.profileImageUrl) || '/default-avatar.png'}
                                     alt=""
                                     className="w-5 h-5 rounded-full object-cover"
                                   />

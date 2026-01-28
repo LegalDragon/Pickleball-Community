@@ -39,6 +39,11 @@ public class EventStaffRole
     public bool CanViewAllData { get; set; } = false;
 
     /// <summary>
+    /// Can manage payments - view/approve payments, issue refunds, manage payment records
+    /// </summary>
+    public bool CanManagePayments { get; set; } = false;
+
+    /// <summary>
     /// Full event admin - can do everything the organizer can do
     /// </summary>
     public bool CanFullyManageEvent { get; set; } = false;

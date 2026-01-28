@@ -47,6 +47,7 @@ public class EventStaffController : EventControllerBase
                 CanCheckInPlayers = r.CanCheckInPlayers,
                 CanManageLineups = r.CanManageLineups,
                 CanViewAllData = r.CanViewAllData,
+                CanManagePayments = r.CanManagePayments,
                 CanFullyManageEvent = r.CanFullyManageEvent,
                 AllowSelfRegistration = r.AllowSelfRegistration,
                 SortOrder = r.SortOrder,
@@ -76,6 +77,7 @@ public class EventStaffController : EventControllerBase
             CanCheckInPlayers = dto.CanCheckInPlayers,
             CanManageLineups = dto.CanManageLineups,
             CanViewAllData = dto.CanViewAllData,
+            CanManagePayments = dto.CanManagePayments,
             CanFullyManageEvent = dto.CanFullyManageEvent,
             AllowSelfRegistration = dto.AllowSelfRegistration,
             SortOrder = dto.SortOrder
@@ -116,6 +118,7 @@ public class EventStaffController : EventControllerBase
         role.CanCheckInPlayers = dto.CanCheckInPlayers;
         role.CanManageLineups = dto.CanManageLineups;
         role.CanViewAllData = dto.CanViewAllData;
+        role.CanManagePayments = dto.CanManagePayments;
         role.CanFullyManageEvent = dto.CanFullyManageEvent;
         role.AllowSelfRegistration = dto.AllowSelfRegistration;
         role.SortOrder = dto.SortOrder;
@@ -211,6 +214,7 @@ public class EventStaffController : EventControllerBase
                 CanCheckInPlayers = r.CanCheckInPlayers,
                 CanManageLineups = r.CanManageLineups,
                 CanViewAllData = r.CanViewAllData,
+                CanManagePayments = r.CanManagePayments,
                 CanFullyManageEvent = r.CanFullyManageEvent,
                 AllowSelfRegistration = r.AllowSelfRegistration,
                 SortOrder = r.SortOrder,
@@ -244,6 +248,7 @@ public class EventStaffController : EventControllerBase
             CanCheckInPlayers = dto.CanCheckInPlayers,
             CanManageLineups = dto.CanManageLineups,
             CanViewAllData = dto.CanViewAllData,
+            CanManagePayments = dto.CanManagePayments,
             CanFullyManageEvent = dto.CanFullyManageEvent,
             AllowSelfRegistration = dto.AllowSelfRegistration,
             SortOrder = dto.SortOrder
@@ -264,6 +269,7 @@ public class EventStaffController : EventControllerBase
             CanCheckInPlayers = role.CanCheckInPlayers,
             CanManageLineups = role.CanManageLineups,
             CanViewAllData = role.CanViewAllData,
+            CanManagePayments = role.CanManagePayments,
             CanFullyManageEvent = role.CanFullyManageEvent,
             AllowSelfRegistration = role.AllowSelfRegistration,
             SortOrder = role.SortOrder,
@@ -319,6 +325,7 @@ public class EventStaffController : EventControllerBase
                 CanCheckInPlayers = s.Role != null && s.Role.CanCheckInPlayers,
                 CanManageLineups = s.Role != null && s.Role.CanManageLineups,
                 CanViewAllData = s.Role != null && s.Role.CanViewAllData,
+                CanManagePayments = s.Role != null && s.Role.CanManagePayments,
                 CanFullyManageEvent = s.Role != null && s.Role.CanFullyManageEvent
             })
             .ToListAsync();
@@ -469,6 +476,7 @@ public class EventStaffController : EventControllerBase
                 CanCheckInPlayers = r.CanCheckInPlayers,
                 CanManageLineups = r.CanManageLineups,
                 CanViewAllData = r.CanViewAllData,
+                CanManagePayments = r.CanManagePayments,
                 CanFullyManageEvent = r.CanFullyManageEvent,
                 AllowSelfRegistration = r.AllowSelfRegistration,
                 SortOrder = r.SortOrder,
@@ -734,6 +742,7 @@ public class EventStaffController : EventControllerBase
             CanCheckInPlayers = isOrganizer || isAdmin || (staff?.Role?.CanCheckInPlayers ?? false),
             CanManageLineups = isOrganizer || isAdmin || (staff?.Role?.CanManageLineups ?? false),
             CanViewAllData = isOrganizer || isAdmin || (staff?.Role?.CanViewAllData ?? false),
+            CanManagePayments = isOrganizer || isAdmin || (staff?.Role?.CanManagePayments ?? false),
             CanFullyManageEvent = isOrganizer || isAdmin || (staff?.Role?.CanFullyManageEvent ?? false),
             IsOrganizer = isOrganizer,
             IsAdmin = isAdmin
@@ -742,7 +751,8 @@ public class EventStaffController : EventControllerBase
         // If no permissions at all, return dashboard (could be spectator/non-staff role)
         if (!permissions.CanManageSchedule && !permissions.CanManageCourts &&
             !permissions.CanRecordScores && !permissions.CanCheckInPlayers &&
-            !permissions.CanManageLineups && !permissions.CanViewAllData)
+            !permissions.CanManageLineups && !permissions.CanViewAllData &&
+            !permissions.CanManagePayments)
         {
             // Get event info for spectators too
             var eventInfo = await _context.Events.FindAsync(eventId);
@@ -957,6 +967,7 @@ public class EventStaffController : EventControllerBase
             "checkinplayers" => staff.Role.CanCheckInPlayers,
             "managelineups" => staff.Role.CanManageLineups,
             "viewalldata" => staff.Role.CanViewAllData,
+            "managepayments" => staff.Role.CanManagePayments,
             "fullymanageevent" => staff.Role.CanFullyManageEvent,
             _ => false
         };
@@ -996,6 +1007,7 @@ public class EventStaffController : EventControllerBase
             CanCheckInPlayers = s.Role?.CanCheckInPlayers ?? false,
             CanManageLineups = s.Role?.CanManageLineups ?? false,
             CanViewAllData = s.Role?.CanViewAllData ?? false,
+            CanManagePayments = s.Role?.CanManagePayments ?? false,
             CanFullyManageEvent = s.Role?.CanFullyManageEvent ?? false
         };
     }

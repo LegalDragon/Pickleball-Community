@@ -1299,6 +1299,116 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Admin: Re-sync a user from Funtime-Shared service
+    /// Fetches the latest user info from shared auth and updates local record
+    /// </summary>
+    [HttpPost("{id}/admin-resync")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> AdminResyncUser(int id)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<UserProfileDto>
+                {
+                    Success = false,
+                    Message = "User not found in local database"
+                });
+            }
+
+            // Call Funtime-Shared API to get user info using API key
+            var httpClientFactory = HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("SharedAuth");
+
+            var baseUrl = _configuration["SharedAuth:BaseUrl"];
+            var apiKey = _configuration["SharedAuth:ApiKey"];
+
+            if (string.IsNullOrEmpty(baseUrl) || string.IsNullOrEmpty(apiKey))
+            {
+                return BadRequest(new ApiResponse<UserProfileDto>
+                {
+                    Success = false,
+                    Message = "Shared auth service not configured (missing BaseUrl or ApiKey)"
+                });
+            }
+
+            // Ensure trailing slash for proper URL resolution
+            if (!baseUrl.EndsWith("/"))
+                baseUrl += "/";
+            httpClient.BaseAddress = new Uri(baseUrl);
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+
+            // Try to get user info from shared auth by ID
+            var response = await httpClient.GetAsync($"users/{id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var sharedUserJson = await response.Content.ReadAsStringAsync();
+                var sharedUser = System.Text.Json.JsonSerializer.Deserialize<SharedUserDto>(sharedUserJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (sharedUser != null)
+                {
+                    // Update local user with shared auth data
+                    if (!string.IsNullOrEmpty(sharedUser.Email))
+                        user.Email = sharedUser.Email;
+                    if (!string.IsNullOrEmpty(sharedUser.FirstName))
+                        user.FirstName = sharedUser.FirstName;
+                    if (!string.IsNullOrEmpty(sharedUser.LastName))
+                        user.LastName = sharedUser.LastName;
+                    if (!string.IsNullOrEmpty(sharedUser.Phone))
+                        user.Phone = sharedUser.Phone;
+                    if (!string.IsNullOrEmpty(sharedUser.ProfileImageUrl) && string.IsNullOrEmpty(user.ProfileImageUrl))
+                        user.ProfileImageUrl = sharedUser.ProfileImageUrl;
+
+                    user.UpdatedAt = DateTime.Now;
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Admin re-synced user {UserId} from shared auth", id);
+
+                    return Ok(new ApiResponse<UserProfileDto>
+                    {
+                        Success = true,
+                        Message = "User re-synced successfully from shared auth",
+                        Data = MapToProfileDto(user)
+                    });
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // User doesn't exist in shared auth
+                return Ok(new ApiResponse<UserProfileDto>
+                {
+                    Success = false,
+                    Message = "User not found in shared auth service. This user may have been created locally or the shared auth record was deleted.",
+                    Data = MapToProfileDto(user)
+                });
+            }
+
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning("Failed to fetch user {UserId} from shared auth: {Status} - {Error}",
+                id, response.StatusCode, errorContent);
+
+            return StatusCode((int)response.StatusCode, new ApiResponse<UserProfileDto>
+            {
+                Success = false,
+                Message = $"Failed to fetch user from shared auth: {response.StatusCode}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error re-syncing user {UserId} from shared auth", id);
+            return StatusCode(500, new ApiResponse<UserProfileDto>
+            {
+                Success = false,
+                Message = $"An error occurred while re-syncing user: {ex.Message}"
+            });
+        }
+    }
+
+    /// <summary>
     /// Admin: Update a user's email address
     /// </summary>
     [HttpPut("{id}/admin-email")]
@@ -1719,4 +1829,17 @@ public class AdminUpdateEmailRequest
 public class AdminSetPasswordRequest
 {
     public string NewPassword { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// DTO for user data from Funtime-Shared service
+/// </summary>
+public class SharedUserDto
+{
+    public int Id { get; set; }
+    public string? Email { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? Phone { get; set; }
+    public string? ProfileImageUrl { get; set; }
 }

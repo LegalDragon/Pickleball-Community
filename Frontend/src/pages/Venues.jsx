@@ -40,7 +40,7 @@ export default function Venues() {
   // Distance search state
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
-  const [radiusMiles, setRadiusMiles] = useState(50);
+  const [radiusMiles, setRadiusMiles] = useState(0); // 0 = Anywhere
   const [gettingLocation, setGettingLocation] = useState(false);
 
   // Full search state
@@ -543,20 +543,20 @@ export default function Venues() {
 
                 {/* Distance Radius */}
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600">Within</span>
+                  <span className="text-sm text-gray-600">Distance</span>
                   <select
                     value={radiusMiles}
                     onChange={(e) => { setRadiusMiles(parseInt(e.target.value)); setPage(1); }}
                     className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                    disabled={!userLocation}
                   >
-                    <option value={5}>5 miles</option>
-                    <option value={10}>10 miles</option>
-                    <option value={25}>25 miles</option>
-                    <option value={50}>50 miles</option>
-                    <option value={100}>100 miles</option>
-                    <option value={250}>250 miles</option>
-                    <option value={500}>500 miles</option>
+                    <option value={0}>Anywhere</option>
+                    <option value={5}>Within 5 miles</option>
+                    <option value={10}>Within 10 miles</option>
+                    <option value={25}>Within 25 miles</option>
+                    <option value={50}>Within 50 miles</option>
+                    <option value={100}>Within 100 miles</option>
+                    <option value={250}>Within 250 miles</option>
+                    <option value={500}>Within 500 miles</option>
                   </select>
                 </div>
               </div>

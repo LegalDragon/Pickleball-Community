@@ -12,21 +12,20 @@ public interface ISharedAssetService
 /// </summary>
 public class SharedAssetService : ISharedAssetService
 {
-    private readonly HttpClient _httpClient;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SharedAssetService> _logger;
     private readonly string _siteKey;
+    private readonly string? _apiKey;
 
     public SharedAssetService(
         IHttpClientFactory httpClientFactory,
-        IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
         ILogger<SharedAssetService> logger)
     {
-        _httpClient = httpClientFactory.CreateClient("SharedAuth");
-        _httpContextAccessor = httpContextAccessor;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _siteKey = configuration["SharedAuth:SiteCode"] ?? "community";
+        _apiKey = configuration["SharedAuth:ApiKey"];
     }
 
     /// <summary>
@@ -42,13 +41,7 @@ public class SharedAssetService : ISharedAssetService
     {
         try
         {
-            // Get the current user's auth token from the request
-            var authHeader = _httpContextAccessor.HttpContext?.Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    AuthenticationHeaderValue.Parse(authHeader);
-            }
+            var httpClient = _httpClientFactory.CreateClient("SharedAuth");
 
             using var content = new MultipartFormDataContent();
             var fileContent = new ByteArrayContent(fileData);
@@ -56,8 +49,17 @@ public class SharedAssetService : ISharedAssetService
             content.Add(fileContent, "file", fileName);
 
             var queryParams = $"assetType={Uri.EscapeDataString(assetType)}&category={Uri.EscapeDataString(category)}&siteKey={Uri.EscapeDataString(_siteKey)}&isPublic=true";
-            // Note: Don't use leading slash - HttpClient would resolve it from domain root, bypassing /api base path
-            var response = await _httpClient.PostAsync($"asset/upload?{queryParams}", content);
+
+            // Create request with API key header (consistent with AssetsController.UploadSharedAsset)
+            var request = new HttpRequestMessage(HttpMethod.Post, $"asset/upload?{queryParams}");
+            request.Content = content;
+
+            if (!string.IsNullOrEmpty(_apiKey))
+            {
+                request.Headers.Add("X-Api-Key", _apiKey);
+            }
+
+            var response = await httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)
             {

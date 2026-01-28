@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { eventStaffApi } from '../services/api'
 import {
   Shield, Plus, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle,
-  Users, Calendar, MapPin, ClipboardList, UserCheck, Eye, Settings, ChevronDown, ChevronUp
+  Users, Calendar, MapPin, ClipboardList, UserCheck, Eye, Settings, ChevronDown, ChevronUp,
+  DollarSign
 } from 'lucide-react'
 
 const StaffRolesAdmin = ({ embedded = false }) => {
@@ -23,6 +24,7 @@ const StaffRolesAdmin = ({ embedded = false }) => {
     canCheckInPlayers: false,
     canManageLineups: false,
     canViewAllData: false,
+    canManagePayments: false,
     canFullyManageEvent: false,
     allowSelfRegistration: true,
     sortOrder: 0
@@ -70,6 +72,7 @@ const StaffRolesAdmin = ({ embedded = false }) => {
       canCheckInPlayers: false,
       canManageLineups: false,
       canViewAllData: false,
+      canManagePayments: false,
       canFullyManageEvent: false,
       allowSelfRegistration: true,
       sortOrder: roles.length + 1
@@ -90,6 +93,7 @@ const StaffRolesAdmin = ({ embedded = false }) => {
       canCheckInPlayers: role.canCheckInPlayers,
       canManageLineups: role.canManageLineups,
       canViewAllData: role.canViewAllData,
+      canManagePayments: role.canManagePayments,
       canFullyManageEvent: role.canFullyManageEvent,
       allowSelfRegistration: role.allowSelfRegistration,
       sortOrder: role.sortOrder
@@ -287,6 +291,11 @@ const StaffRolesAdmin = ({ embedded = false }) => {
                           <Eye className="w-3 h-3" /> View All
                         </span>
                       )}
+                      {role.canManagePayments && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded">
+                          <DollarSign className="w-3 h-3" /> Payments
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
@@ -371,6 +380,7 @@ const StaffRolesAdmin = ({ embedded = false }) => {
                         canCheckInPlayers: false,
                         canManageLineups: false,
                         canViewAllData: false,
+                        canManagePayments: false,
                         canFullyManageEvent: false
                       }))
                     } else {
@@ -405,7 +415,8 @@ const StaffRolesAdmin = ({ embedded = false }) => {
                         canRecordScores: true,
                         canCheckInPlayers: true,
                         canManageLineups: true,
-                        canViewAllData: true
+                        canViewAllData: true,
+                        canManagePayments: true
                       } : {})
                     }))}
                     description="Has all permissions of the event organizer - can fully manage the event"
@@ -459,6 +470,13 @@ const StaffRolesAdmin = ({ embedded = false }) => {
                     checked={formData.canViewAllData}
                     onChange={(e) => setFormData(prev => ({ ...prev, canViewAllData: e.target.checked }))}
                     description="Access to all event data including contact info"
+                  />
+                  <PermissionToggle
+                    label="Manage Payments"
+                    icon={DollarSign}
+                    checked={formData.canManagePayments}
+                    onChange={(e) => setFormData(prev => ({ ...prev, canManagePayments: e.target.checked }))}
+                    description="View/approve payments, issue refunds, manage financial records"
                   />
                 </div>
               </div>

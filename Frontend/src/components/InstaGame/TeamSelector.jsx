@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Check, Users, ArrowRight, Shuffle } from 'lucide-react'
+import { getSharedAssetUrl } from '../../services/api'
 
 /**
  * TeamSelector component for manually creating matches
@@ -99,7 +100,7 @@ export default function TeamSelector({
                     >
                       <div className="flex items-center gap-2">
                         {player?.avatarUrl ? (
-                          <img src={player.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                          <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-8 h-8 rounded-full" />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
                             {player?.displayName?.[0] || '?'}
@@ -146,7 +147,7 @@ export default function TeamSelector({
                       <div className="flex items-center gap-2">
                         <span className="text-sm">{player?.displayName}</span>
                         {player?.avatarUrl ? (
-                          <img src={player.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                          <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-8 h-8 rounded-full" />
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-sm">
                             {player?.displayName?.[0] || '?'}
@@ -203,7 +204,7 @@ export default function TeamSelector({
                     }`}
                   >
                     {player.avatarUrl ? (
-                      <img src={player.avatarUrl} alt="" className="w-6 h-6 rounded-full" />
+                      <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-6 h-6 rounded-full" />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-xs">
                         {player.displayName?.[0]}

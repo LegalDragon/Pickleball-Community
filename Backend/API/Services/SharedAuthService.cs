@@ -147,10 +147,27 @@ public class SharedAuthService : ISharedAuthService
     /// </summary>
     public async Task<User> SyncUserAsync(SharedUserInfo sharedUser)
     {
+        _logger.LogInformation("SyncUserAsync starting for user {UserId} ({Email})", sharedUser.Id, sharedUser.Email);
+
+        // Check if another user already has this email (different UserId)
+        var userWithEmail = await _context.Users.FirstOrDefaultAsync(u => u.Email == sharedUser.Email && u.Id != sharedUser.Id);
+        if (userWithEmail != null)
+        {
+            _logger.LogWarning("Email {Email} already exists for different user {ExistingId}, syncing user {NewId}",
+                sharedUser.Email, userWithEmail.Id, sharedUser.Id);
+            // Update the existing user's email to avoid conflict (mark as orphaned)
+            userWithEmail.Email = $"orphaned_{userWithEmail.Id}_{userWithEmail.Email}";
+            userWithEmail.UpdatedAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Marked user {UserId} email as orphaned", userWithEmail.Id);
+        }
+
         var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == sharedUser.Id);
 
         if (existingUser == null)
         {
+            _logger.LogInformation("User {UserId} not found locally, creating new record", sharedUser.Id);
+
             // Create new local user record with the shared UserId
             var newUser = new User
             {
@@ -195,22 +212,70 @@ public class SharedAuthService : ISharedAuthService
 
                 return newUser;
             }
-            catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("duplicate key") == true ||
-                                                ex.InnerException?.Message?.Contains("PRIMARY KEY") == true)
+            catch (DbUpdateException ex)
             {
-                // Race condition - user was created between our check and insert
-                // Detach the failed entity and fetch the existing one
-                _context.Entry(newUser).State = EntityState.Detached;
+                var innerMessage = ex.InnerException?.Message ?? ex.Message;
+                _logger.LogWarning("DbUpdateException creating user {UserId}: {Message}", sharedUser.Id, innerMessage);
 
-                existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == sharedUser.Id);
-                if (existingUser != null)
+                if (innerMessage?.Contains("duplicate key") == true || innerMessage?.Contains("PRIMARY KEY") == true)
                 {
-                    _logger.LogInformation("User {UserId} was created by another request, updating instead", sharedUser.Id);
-                    // Fall through to update logic below
+                    // Race condition - user was created between our check and insert
+                    // Detach the failed entity and fetch the existing one
+                    _context.Entry(newUser).State = EntityState.Detached;
+
+                    existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == sharedUser.Id);
+                    if (existingUser != null)
+                    {
+                        _logger.LogInformation("User {UserId} was created by another request, updating instead", sharedUser.Id);
+                        // Fall through to update logic below
+                    }
+                    else
+                    {
+                        _logger.LogError(ex, "Failed to create or find user {UserId} after duplicate key error", sharedUser.Id);
+                        throw; // Something else went wrong
+                    }
+                }
+                else if (innerMessage?.Contains("UNIQUE") == true || innerMessage?.Contains("IX_Users_Email") == true)
+                {
+                    // Email uniqueness violation - try to resolve
+                    _context.Entry(newUser).State = EntityState.Detached;
+                    _logger.LogWarning("Email uniqueness violation for {Email}, attempting to resolve", sharedUser.Email);
+
+                    var conflictingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == sharedUser.Email);
+                    if (conflictingUser != null && conflictingUser.Id != sharedUser.Id)
+                    {
+                        // Mark the old user's email as orphaned
+                        conflictingUser.Email = $"orphaned_{conflictingUser.Id}_{conflictingUser.Email}";
+                        conflictingUser.UpdatedAt = DateTime.Now;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Resolved email conflict by orphaning user {UserId}", conflictingUser.Id);
+
+                        // Retry creating the new user
+                        var retryUser = new User
+                        {
+                            Id = sharedUser.Id,
+                            Email = sharedUser.Email,
+                            FirstName = !string.IsNullOrEmpty(sharedUser.FirstName) ? sharedUser.FirstName : "New",
+                            LastName = !string.IsNullOrEmpty(sharedUser.LastName) ? sharedUser.LastName : "User",
+                            Phone = sharedUser.Phone,
+                            ProfileImageUrl = sharedUser.ProfileImageUrl,
+                            Role = "Player",
+                            PasswordHash = null,
+                            IsActive = true,
+                            CreatedAt = DateTime.Now,
+                            UpdatedAt = DateTime.Now
+                        };
+                        _context.Users.Add(retryUser);
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Successfully created user {UserId} after resolving email conflict", sharedUser.Id);
+                        return retryUser;
+                    }
+                    throw;
                 }
                 else
                 {
-                    throw; // Something else went wrong
+                    _logger.LogError(ex, "Unexpected database error creating user {UserId}", sharedUser.Id);
+                    throw;
                 }
             }
         }

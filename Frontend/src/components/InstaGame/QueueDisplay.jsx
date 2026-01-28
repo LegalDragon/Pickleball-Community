@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Clock, Users, ArrowRight } from 'lucide-react'
+import { getSharedAssetUrl } from '../../services/api'
 
 /**
  * QueueDisplay component for InstaGame
@@ -67,7 +68,7 @@ export default function QueueDisplay({
                       {item.team1.map((player, i) => (
                         <span key={player.userId} className="flex items-center gap-1">
                           {player.avatarUrl ? (
-                            <img src={player.avatarUrl} alt="" className="w-6 h-6 rounded-full" />
+                            <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-6 h-6 rounded-full" />
                           ) : (
                             <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs">
                               {player.displayName?.[0] || '?'}
@@ -89,7 +90,7 @@ export default function QueueDisplay({
                         {item.team2.map((player, i) => (
                           <span key={player.userId} className="flex items-center gap-1">
                             {player.avatarUrl ? (
-                              <img src={player.avatarUrl} alt="" className="w-6 h-6 rounded-full" />
+                              <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-6 h-6 rounded-full" />
                             ) : (
                               <div className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center text-xs">
                                 {player.displayName?.[0] || '?'}
@@ -142,7 +143,7 @@ export default function QueueDisplay({
                     <span className="text-xs text-gray-400">#{player.queuePosition}</span>
                   )}
                   {player.avatarUrl ? (
-                    <img src={player.avatarUrl} alt="" className="w-5 h-5 rounded-full" />
+                    <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-5 h-5 rounded-full" />
                   ) : (
                     <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-xs">
                       {player.displayName?.[0]}

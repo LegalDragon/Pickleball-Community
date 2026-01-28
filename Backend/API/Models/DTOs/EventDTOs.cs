@@ -24,7 +24,11 @@ public class EventPublicViewDto
     public double? Longitude { get; set; }
     public int? VenueId { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
     public string? PriceUnit { get; set; }
@@ -112,6 +116,14 @@ public class RegisteredPlayerPublicDto
     public string? State { get; set; }
     public string DivisionName { get; set; } = string.Empty;
     public string? TeamName { get; set; }
+    /// <summary>
+    /// How partners can join this unit: "Approval" (anyone can request) or "FriendsOnly" (friends auto-accept)
+    /// </summary>
+    public string JoinMethod { get; set; } = "Approval";
+    /// <summary>
+    /// Whether the team/unit is complete (has all required players)
+    /// </summary>
+    public bool IsComplete { get; set; }
 }
 
 // Event list item
@@ -140,6 +152,8 @@ public class EventDto
     public double? Longitude { get; set; }
     public int? VenueId { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; }
+    public decimal? PosterFocusY { get; set; }
     public decimal RegistrationFee { get; set; }
     public decimal PerDivisionFee { get; set; }
     public string? PriceUnit { get; set; }
@@ -162,6 +176,8 @@ public class EventDto
 public class EventDetailDto : EventDto
 {
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; }
+    public decimal? BannerFocusY { get; set; }
     public string? CourtName { get; set; }
     public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }
@@ -231,6 +247,11 @@ public class UserRegistrationInfoDto
     // Captain info - for managing join requests
     public bool IsCaptain { get; set; } = false;
     public List<UnitJoinRequestInfoDto> PendingJoinRequests { get; set; } = new();
+
+    /// <summary>
+    /// How partners can join: "Approval" (open to anyone) or "FriendsOnly" (friends auto-accept)
+    /// </summary>
+    public string JoinMethod { get; set; } = "Approval";
 }
 
 /// <summary>
@@ -421,7 +442,11 @@ public class CreateEventDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public string? PosterImageUrl { get; set; }
+    public decimal? PosterFocusX { get; set; } = 50;
+    public decimal? PosterFocusY { get; set; } = 50;
     public string? BannerImageUrl { get; set; }
+    public decimal? BannerFocusX { get; set; } = 50;
+    public decimal? BannerFocusY { get; set; } = 50;
     public decimal RegistrationFee { get; set; } = 0;
     public decimal PerDivisionFee { get; set; } = 0;
     public string? PriceUnit { get; set; }
@@ -719,6 +744,7 @@ public class EventStaffRoleDto
     public bool CanCheckInPlayers { get; set; }
     public bool CanManageLineups { get; set; }
     public bool CanViewAllData { get; set; }
+    public bool CanManagePayments { get; set; }
     public bool CanFullyManageEvent { get; set; }
     public bool AllowSelfRegistration { get; set; }
     public int SortOrder { get; set; }
@@ -761,6 +787,7 @@ public class EventStaffDto
     public bool CanCheckInPlayers { get; set; }
     public bool CanManageLineups { get; set; }
     public bool CanViewAllData { get; set; }
+    public bool CanManagePayments { get; set; }
     public bool CanFullyManageEvent { get; set; }
 }
 
@@ -839,6 +866,7 @@ public class CreateEventStaffRoleDto
     public bool CanCheckInPlayers { get; set; }
     public bool CanManageLineups { get; set; }
     public bool CanViewAllData { get; set; }
+    public bool CanManagePayments { get; set; }
     public bool CanFullyManageEvent { get; set; }
     public bool AllowSelfRegistration { get; set; } = true;
     public int SortOrder { get; set; }
@@ -940,6 +968,7 @@ public class StaffPermissionsDto
     public bool CanCheckInPlayers { get; set; }
     public bool CanManageLineups { get; set; }
     public bool CanViewAllData { get; set; }
+    public bool CanManagePayments { get; set; }
     public bool CanFullyManageEvent { get; set; }
     public bool IsOrganizer { get; set; }
     public bool IsAdmin { get; set; }

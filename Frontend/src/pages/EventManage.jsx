@@ -482,7 +482,7 @@ export default function EventManage() {
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                               {user.profileImageUrl ? (
-                                <img src={user.profileImageUrl} alt="" className="w-full h-full object-cover" />
+                                <img src={getSharedAssetUrl(user.profileImageUrl)} alt="" className="w-full h-full object-cover" />
                               ) : (
                                 <Users className="w-4 h-4 text-gray-400" />
                               )}

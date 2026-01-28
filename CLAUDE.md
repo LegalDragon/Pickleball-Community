@@ -9,12 +9,12 @@ Full-stack web application for the pickleball community. Users can connect with 
 
 ## Directory Structure
 - `/Backend/API` - ASP.NET Core Web API
-- `/Backend/API/Scripts` - Database migration scripts
+- `/Backend/API/Scripts/archives` - Database migration scripts (archived)
 - `/Frontend` - React SPA
 - `/Deployment` - Deployment scripts
 
 ## Database Migrations
-Store all database migration scripts in `/Backend/API/Scripts/` with naming convention:
+Store all database migration scripts in `/Backend/API/Scripts/archives/` with naming convention:
 - `Migration_XXX_FeatureName.sql` (e.g., `Migration_014_SkillGroups.sql`)
 - Scripts should be idempotent (safe to run multiple times)
 - Include `IF NOT EXISTS` checks for tables and columns
@@ -44,6 +44,43 @@ Store all database migration scripts in `/Backend/API/Scripts/` with naming conv
   - IIS virtual application provides the `/api` prefix automatically
   - Frontend calls `/api/agegroups` → IIS routes to virtual app → controller handles `/agegroups`
 - **Frontend**: Static files served from IIS root
+
+## Asset URLs (Funtime-Shared)
+
+Assets (images, documents, videos) are stored in Funtime-Shared and served through a local proxy endpoint.
+
+### URL Format
+- **Production**: `https://pickleball.community/api/assets/shared/{assetId}`
+- **Development**: `{API_BASE_URL}/assets/shared/{assetId}`
+- **Example**: `https://pickleball.community/api/assets/shared/310`
+
+### How It Works
+1. Assets are uploaded to Funtime-Shared via `sharedAssetApi.uploadViaProxy()`
+2. Upload returns an asset path like `/asset/123`
+3. Frontend uses `getSharedAssetUrl(path)` to convert to full URL
+4. Backend proxy (`AssetsController.GetSharedAsset`) fetches from Funtime-Shared with API key auth
+5. Response is cached for 1 hour
+
+### Frontend Usage
+```javascript
+import { getSharedAssetUrl, sharedAssetApi } from '../services/api';
+
+// Upload an asset
+const response = await sharedAssetApi.uploadViaProxy(file, 'image', 'event-logo');
+// Returns: { success: true, data: { url: '/asset/310', assetId: 310 } }
+
+// Display an asset (converts /asset/310 → /api/assets/shared/310)
+<img src={getSharedAssetUrl(imageUrl)} alt="..." />
+```
+
+### Backend Endpoint
+- **Route**: `GET /assets/shared/{assetId}`
+- **Controller**: `AssetsController.GetSharedAsset()`
+- **Auth**: AllowAnonymous (public access)
+- **Caching**: 1 hour response cache
+
+### Database Storage
+Asset URLs are stored in the database as `/asset/{id}` format (e.g., `/asset/310`). The `getSharedAssetUrl()` function converts these to full URLs at display time.
 
 ## Mobile-First PWA Design
 This app is designed to be installed as a Progressive Web App (PWA) on mobile devices:

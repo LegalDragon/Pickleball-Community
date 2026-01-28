@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Play, Check, Minus, Plus, Trophy, Clock } from 'lucide-react'
+import { getSharedAssetUrl } from '../../services/api'
 
 /**
  * Scoreboard component for InstaGame
@@ -101,7 +102,7 @@ export default function Scoreboard({
                 {currentMatch.team1.map((player) => (
                   <div key={player.userId} className="flex items-center justify-center gap-2">
                     {player.avatarUrl ? (
-                      <img src={player.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                      <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-8 h-8 rounded-full" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm">
                         {player.displayName?.[0] || '?'}
@@ -143,7 +144,7 @@ export default function Scoreboard({
                 {currentMatch.team2.map((player) => (
                   <div key={player.userId} className="flex items-center justify-center gap-2">
                     {player.avatarUrl ? (
-                      <img src={player.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                      <img src={getSharedAssetUrl(player.avatarUrl)} alt="" className="w-8 h-8 rounded-full" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-sm">
                         {player.displayName?.[0] || '?'}

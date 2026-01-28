@@ -33,6 +33,7 @@ import HelpTopicsAdmin from './HelpTopicsAdmin'
 import ObjectAssetTypesAdmin from './ObjectAssetTypesAdmin'
 import EventsAdmin from './EventsAdmin'
 import StaffRolesAdmin from './StaffRolesAdmin'
+import PhaseTemplatesAdmin from './PhaseTemplatesAdmin'
 
 const AdminDashboard = () => {
   const { user } = useAuth()
@@ -51,6 +52,7 @@ const AdminDashboard = () => {
   const [usersError, setUsersError] = useState(null)
   const [selectedProfileUserId, setSelectedProfileUserId] = useState(null)
   const [sendingPasswordReset, setSendingPasswordReset] = useState(false)
+  const [resyncingUserId, setResyncingUserId] = useState(null)
   const [editingEmail, setEditingEmail] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [savingEmail, setSavingEmail] = useState(false)
@@ -758,6 +760,30 @@ const AdminDashboard = () => {
     setIsUserModalOpen(true)
   }
 
+  // Handle resync user from shared auth
+  const handleResyncUser = async (userId) => {
+    if (!window.confirm('Re-sync this user from Funtime-Shared? This will update their email, name, and phone with data from the shared auth service.')) {
+      return
+    }
+    setResyncingUserId(userId)
+    try {
+      const response = await userApi.adminResyncUser(userId)
+      if (response.success || response.Success) {
+        const message = response.message || response.Message
+        alert(message || 'User re-synced successfully!')
+        // Refresh users list
+        fetchUsers()
+      } else {
+        alert(response.message || response.Message || 'Failed to re-sync user')
+      }
+    } catch (error) {
+      console.error('Error re-syncing user:', error)
+      alert(error.message || 'Failed to re-sync user')
+    } finally {
+      setResyncingUserId(null)
+    }
+  }
+
   // Handle save user
   const handleSaveUser = async () => {
     if (!selectedUser) return
@@ -967,7 +993,8 @@ const AdminDashboard = () => {
         { id: 'teamUnits', label: 'Team Units', icon: Users },
         { id: 'skillLevels', label: 'Skill Levels', icon: Award },
         { id: 'scoreMethods', label: 'Score Methods', icon: Play },
-        { id: 'gameFormats', label: 'Game Formats', icon: Settings }
+        { id: 'gameFormats', label: 'Game Formats', icon: Settings },
+        { id: 'phaseTemplates', label: 'Phase Templates', icon: Layers }
       ]
     },
     {
@@ -1188,8 +1215,21 @@ const AdminDashboard = () => {
                                 <Bell className="w-4 h-4" />
                               </button>
                               <button
+                                onClick={() => handleResyncUser(u.id)}
+                                disabled={resyncingUserId === u.id}
+                                className="text-green-600 hover:text-green-800 p-2 rounded-lg hover:bg-green-50 disabled:opacity-50"
+                                title="Re-sync from shared auth"
+                              >
+                                {resyncingUserId === u.id ? (
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600" />
+                                ) : (
+                                  <RefreshCw className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
                                 onClick={() => handleEditUser(u)}
                                 className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
+                                title="Edit user"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -2552,6 +2592,9 @@ const AdminDashboard = () => {
 
           {/* Game Formats Admin */}
           {activeTab === 'gameFormats' && <GameFormatsAdmin embedded />}
+
+          {/* Phase Templates Admin */}
+          {activeTab === 'phaseTemplates' && <PhaseTemplatesAdmin embedded />}
 
           {/* League Admin */}
           {activeTab === 'leagues' && <LeagueAdmin embedded />}
