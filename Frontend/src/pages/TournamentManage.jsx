@@ -2168,6 +2168,18 @@ export default function TournamentManage() {
     const division = scheduleConfigModal.division;
     if (!division) return;
 
+    // If template was applied via TemplateSelector, just refresh and close
+    if (config.templateApplied) {
+      toast.success('Template applied successfully!');
+      loadDashboard();
+      setScheduleConfigModal({ isOpen: false, division: null });
+      if (selectedDivision?.id === division.id) {
+        setSelectedDivision({ ...selectedDivision, scheduleReady: true });
+        loadSchedule(division.id);
+      }
+      return;
+    }
+
     setGeneratingSchedule(true);
     try {
       const response = await tournamentApi.generateSchedule(division.id, {
