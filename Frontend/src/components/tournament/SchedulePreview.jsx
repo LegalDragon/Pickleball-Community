@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
   Calendar, Clock, MapPin, Users, Trophy, ChevronDown, ChevronRight,
-  Filter, Grid3X3, GitBranch, Loader2, RefreshCw
+  Filter, Grid3X3, GitBranch, Loader2, RefreshCw, List, Table2, ArrowRight, Award
 } from 'lucide-react';
 import { tournamentApi } from '../../services/api';
 
 /**
  * SchedulePreview - Displays tournament schedule with placeholder or resolved units
  * Shows matches organized by phase/pool with court assignments and estimated times
+ *
+ * View modes:
+ * - list: Grouped by round with expandable sections
+ * - table: Clean tabular format with all info visible
+ * - bracket: Visual bracket for elimination tournaments
  */
 export default function SchedulePreview({ divisionId, phaseId = null, showFilters = true }) {
   const [phases, setPhases] = useState([]);
@@ -15,7 +20,7 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
   const [selectedPhase, setSelectedPhase] = useState(phaseId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); // 'list', 'grid', 'bracket'
+  const [viewMode, setViewMode] = useState('table'); // 'list', 'table', 'bracket'
   const [filters, setFilters] = useState({
     pool: 'all',
     round: 'all',
@@ -189,15 +194,22 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
           {/* View Mode */}
           <div className="ml-auto flex items-center gap-1 bg-white rounded-lg border border-gray-300">
             <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded-l-lg ${viewMode === 'table' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Table View"
+            >
+              <Table2 className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-l-lg ${viewMode === 'list' ? 'bg-blue-100 text-blue-700' : 'text-gray-500'}`}
+              className={`p-2 ${viewMode === 'list' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
               title="List View"
             >
-              <Grid3X3 className="w-4 h-4" />
+              <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('bracket')}
-              className={`p-2 rounded-r-lg ${viewMode === 'bracket' ? 'bg-blue-100 text-blue-700' : 'text-gray-500'}`}
+              className={`p-2 rounded-r-lg ${viewMode === 'bracket' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
               title="Bracket View"
             >
               <GitBranch className="w-4 h-4" />
@@ -237,6 +249,11 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
           <p className="text-gray-600">No matches scheduled yet</p>
           <p className="text-sm text-gray-500 mt-1">Generate a schedule from the Phase Manager</p>
         </div>
+      )}
+
+      {/* Table View */}
+      {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'table' && (
+        <TableView encounters={getFilteredEncounters()} phaseName={schedule?.phase?.name} />
       )}
 
       {/* Schedule List */}
@@ -453,6 +470,195 @@ function BracketMatchSide({ unit, isWinner }) {
         {unit?.label || 'TBD'}
       </span>
       {isWinner && <Trophy className="w-4 h-4 text-yellow-500" />}
+    </div>
+  );
+}
+
+/**
+ * TableView - Clean tabular format showing all match information
+ * Columns: Match #, Round, Unit 1 (Source), Unit 2 (Source), Advances To, Court, Time, Status
+ */
+function TableView({ encounters, phaseName }) {
+  const statusColors = {
+    Scheduled: 'bg-gray-100 text-gray-700',
+    Ready: 'bg-yellow-100 text-yellow-700',
+    InProgress: 'bg-blue-100 text-blue-700',
+    Completed: 'bg-green-100 text-green-700',
+    Bye: 'bg-purple-100 text-purple-700',
+  };
+
+  // Format unit source for display
+  const formatUnitSource = (unit) => {
+    if (!unit) return { name: 'BYE', source: '', isBye: true };
+    if (unit.isResolved) {
+      return { name: unit.label, source: '', isResolved: true };
+    }
+    // Parse placeholder label for source info
+    const label = unit.label || '';
+    if (label.startsWith('Winner ')) {
+      return { name: 'TBD', source: label, isWinner: true };
+    }
+    if (label.startsWith('Loser ')) {
+      return { name: 'TBD', source: label, isLoser: true };
+    }
+    if (label.includes('Seed')) {
+      return { name: label, source: '', isSeed: true };
+    }
+    if (label.startsWith('#')) {
+      return { name: 'TBD', source: `Rank ${label} from prev. phase`, isRank: true };
+    }
+    return { name: label || 'TBD', source: '' };
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+              Match
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Round
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Unit 1
+            </th>
+            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+              vs
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Unit 2
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Advances To
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+              Court
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+              Time
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {encounters.map((encounter, idx) => {
+            const unit1 = formatUnitSource(encounter.unit1);
+            const unit2 = formatUnitSource(encounter.unit2);
+            const isWinner1 = encounter.winnerUnitId && encounter.winnerUnitId === encounter.unit1?.unitId;
+            const isWinner2 = encounter.winnerUnitId && encounter.winnerUnitId === encounter.unit2?.unitId;
+
+            return (
+              <tr key={encounter.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                {/* Match Number */}
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <span className="inline-flex items-center justify-center w-10 h-8 bg-blue-100 text-blue-800 font-bold text-sm rounded">
+                    {encounter.divisionMatchNumber || encounter.encounterNumber || encounter.encounterLabel}
+                  </span>
+                </td>
+
+                {/* Round */}
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900">
+                      {encounter.roundName || `Round ${encounter.roundNumber}`}
+                    </span>
+                    {encounter.poolName && (
+                      <span className="text-xs text-blue-600">Pool {encounter.poolName}</span>
+                    )}
+                  </div>
+                </td>
+
+                {/* Unit 1 */}
+                <td className="px-3 py-3">
+                  <UnitCell unit={unit1} isWinner={isWinner1} />
+                </td>
+
+                {/* VS */}
+                <td className="px-3 py-3 text-center text-gray-400 text-sm">vs</td>
+
+                {/* Unit 2 */}
+                <td className="px-3 py-3">
+                  <UnitCell unit={unit2} isWinner={isWinner2} />
+                </td>
+
+                {/* Advances To */}
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <div className="flex flex-col gap-1 text-xs">
+                    {encounter.winnerNextEncounterId && (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <ArrowRight className="w-3 h-3" />
+                        Winner → M{encounter.winnerNextEncounterId}
+                      </span>
+                    )}
+                    {encounter.loserNextEncounterId && (
+                      <span className="flex items-center gap-1 text-orange-600">
+                        <ArrowRight className="w-3 h-3" />
+                        Loser → M{encounter.loserNextEncounterId}
+                      </span>
+                    )}
+                    {!encounter.winnerNextEncounterId && !encounter.loserNextEncounterId && (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </div>
+                </td>
+
+                {/* Court */}
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-600">
+                  {encounter.courtLabel || '—'}
+                </td>
+
+                {/* Time */}
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-600">
+                  {encounter.estimatedStartTime
+                    ? new Date(encounter.estimatedStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </td>
+
+                {/* Status */}
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[encounter.status] || 'bg-gray-100 text-gray-700'}`}>
+                    {encounter.status}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * UnitCell - Displays unit info with source indicator
+ */
+function UnitCell({ unit, isWinner }) {
+  if (unit.isBye) {
+    return <span className="text-purple-600 italic text-sm">BYE</span>;
+  }
+
+  return (
+    <div className={`flex flex-col ${isWinner ? 'text-green-700' : ''}`}>
+      <div className="flex items-center gap-1">
+        {isWinner && <Trophy className="w-3 h-3 text-yellow-500" />}
+        <span className={`text-sm ${unit.isResolved ? 'font-medium' : 'text-gray-500 italic'}`}>
+          {unit.name}
+        </span>
+      </div>
+      {unit.source && (
+        <span className={`text-xs ${
+          unit.isWinner ? 'text-green-600' :
+          unit.isLoser ? 'text-orange-600' :
+          unit.isRank ? 'text-purple-600' :
+          'text-gray-500'
+        }`}>
+          {unit.source}
+        </span>
+      )}
     </div>
   );
 }
