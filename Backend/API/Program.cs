@@ -229,10 +229,302 @@ using (var scope = app.Services.CreateScope())
             throw;
         }
     }
+
+    // Seed phase templates if they don't exist
+    try
+    {
+        await SeedPhaseTemplatesAsync(context, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to seed phase templates. This can be done manually later.");
+    }
 }
 Utility.Initialize(app.Configuration);
 
 app.Run();
+
+/// <summary>
+/// Seeds the default system phase templates if none exist.
+/// </summary>
+static async Task SeedPhaseTemplatesAsync(ApplicationDbContext context, ILogger logger)
+{
+    // Check if any system templates exist
+    var hasTemplates = await context.PhaseTemplates.AnyAsync(t => t.IsSystemTemplate);
+    if (hasTemplates)
+    {
+        logger.LogInformation("Phase templates already seeded.");
+        return;
+    }
+
+    logger.LogInformation("Seeding phase templates...");
+
+    var templates = new List<PhaseTemplate>
+    {
+        new PhaseTemplate
+        {
+            Name = "4-Team Single Elimination",
+            Description = "Simple 4-team bracket: Semifinals -> Finals with optional 3rd place match",
+            Category = "SingleElimination",
+            MinUnits = 4, MaxUnits = 4, DefaultUnits = 4,
+            IsSystemTemplate = true, SortOrder = 10,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Semifinals"", ""type"": ""BracketRound"", ""incomingSlots"": 4, ""exitingSlots"": 2, ""includeConsolation"": true },
+                    { ""order"": 2, ""name"": ""Finals"", ""type"": ""BracketRound"", ""incomingSlots"": 2, ""exitingSlots"": 2 }
+                ],
+                ""advancementRules"": [
+                    {""fromPhase"": 1, ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 1},
+                    {""fromPhase"": 1, ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 2}
+                ],
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "SF -> F (+ 3rd place)",
+            Tags = "small,quick,beginner"
+        },
+        new PhaseTemplate
+        {
+            Name = "8-Team Single Elimination",
+            Description = "Standard 8-team bracket: Quarterfinals -> Semifinals -> Finals",
+            Category = "SingleElimination",
+            MinUnits = 8, MaxUnits = 8, DefaultUnits = 8,
+            IsSystemTemplate = true, SortOrder = 20,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Quarterfinals"", ""type"": ""BracketRound"", ""incomingSlots"": 8, ""exitingSlots"": 4 },
+                    { ""order"": 2, ""name"": ""Semifinals"", ""type"": ""BracketRound"", ""incomingSlots"": 4, ""exitingSlots"": 2, ""includeConsolation"": true },
+                    { ""order"": 3, ""name"": ""Finals"", ""type"": ""BracketRound"", ""incomingSlots"": 2, ""exitingSlots"": 2 }
+                ],
+                ""advancementRules"": [
+                    {""fromPhase"": 1, ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 1},
+                    {""fromPhase"": 1, ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 2},
+                    {""fromPhase"": 1, ""fromRank"": 3, ""toPhase"": 2, ""toSlot"": 3},
+                    {""fromPhase"": 1, ""fromRank"": 4, ""toPhase"": 2, ""toSlot"": 4},
+                    {""fromPhase"": 2, ""fromRank"": 1, ""toPhase"": 3, ""toSlot"": 1},
+                    {""fromPhase"": 2, ""fromRank"": 2, ""toPhase"": 3, ""toSlot"": 2}
+                ],
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "QF -> SF -> F",
+            Tags = "standard,popular"
+        },
+        new PhaseTemplate
+        {
+            Name = "16-Team Single Elimination",
+            Description = "Large bracket: Round of 16 -> Quarterfinals -> Semifinals -> Finals",
+            Category = "SingleElimination",
+            MinUnits = 16, MaxUnits = 16, DefaultUnits = 16,
+            IsSystemTemplate = true, SortOrder = 30,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Round of 16"", ""type"": ""BracketRound"", ""incomingSlots"": 16, ""exitingSlots"": 8 },
+                    { ""order"": 2, ""name"": ""Quarterfinals"", ""type"": ""BracketRound"", ""incomingSlots"": 8, ""exitingSlots"": 4 },
+                    { ""order"": 3, ""name"": ""Semifinals"", ""type"": ""BracketRound"", ""incomingSlots"": 4, ""exitingSlots"": 2, ""includeConsolation"": true },
+                    { ""order"": 4, ""name"": ""Finals"", ""type"": ""BracketRound"", ""incomingSlots"": 2, ""exitingSlots"": 2 }
+                ],
+                ""advancementRules"": ""auto"",
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "R16 -> QF -> SF -> F",
+            Tags = "large"
+        },
+        new PhaseTemplate
+        {
+            Name = "Round Robin (4 teams)",
+            Description = "Everyone plays everyone. All 4 teams ranked at end.",
+            Category = "RoundRobin",
+            MinUnits = 4, MaxUnits = 4, DefaultUnits = 4,
+            IsSystemTemplate = true, SortOrder = 40,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Round Robin"", ""type"": ""RoundRobin"", ""incomingSlots"": 4, ""exitingSlots"": 4 }
+                ],
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""1st Place"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""2nd Place"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "All play all",
+            Tags = "casual,everyone-plays"
+        },
+        new PhaseTemplate
+        {
+            Name = "Round Robin (8 teams)",
+            Description = "Everyone plays everyone. All 8 teams ranked at end.",
+            Category = "RoundRobin",
+            MinUnits = 8, MaxUnits = 8, DefaultUnits = 8,
+            IsSystemTemplate = true, SortOrder = 41,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Round Robin"", ""type"": ""RoundRobin"", ""incomingSlots"": 8, ""exitingSlots"": 8 }
+                ],
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""1st Place"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""2nd Place"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""}
+                ]
+            }",
+            DiagramText = "All play all",
+            Tags = "casual,everyone-plays"
+        },
+        new PhaseTemplate
+        {
+            Name = "2 Pools + Semifinals + Finals (8 teams)",
+            Description = "Two pools of 4, top 2 from each advance to semifinals, then finals. Good balance of games.",
+            Category = "Combined",
+            MinUnits = 8, MaxUnits = 8, DefaultUnits = 8,
+            IsSystemTemplate = true, SortOrder = 50,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Pool Play"", ""type"": ""Pools"", ""poolCount"": 2, ""incomingSlots"": 8, ""exitingSlots"": 4 },
+                    { ""order"": 2, ""name"": ""Semifinals"", ""type"": ""BracketRound"", ""incomingSlots"": 4, ""exitingSlots"": 2, ""includeConsolation"": true },
+                    { ""order"": 3, ""name"": ""Finals"", ""type"": ""BracketRound"", ""incomingSlots"": 2, ""exitingSlots"": 2 }
+                ],
+                ""advancementRules"": [
+                    {""fromPhase"": 1, ""fromPool"": ""A"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 1},
+                    {""fromPhase"": 1, ""fromPool"": ""B"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 2},
+                    {""fromPhase"": 1, ""fromPool"": ""A"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 4},
+                    {""fromPhase"": 1, ""fromPool"": ""B"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 3}
+                ],
+                ""seedingStrategy"": ""CrossPool"",
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "Pool A/B (4 each) -> SF -> F",
+            Tags = "balanced,popular"
+        },
+        new PhaseTemplate
+        {
+            Name = "4 Pools + Bracket (16 teams)",
+            Description = "Four pools of 4, top 2 from each advance to quarterfinals, then bracket play.",
+            Category = "Combined",
+            MinUnits = 16, MaxUnits = 16, DefaultUnits = 16,
+            IsSystemTemplate = true, SortOrder = 51,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Pool Play"", ""type"": ""Pools"", ""poolCount"": 4, ""incomingSlots"": 16, ""exitingSlots"": 8 },
+                    { ""order"": 2, ""name"": ""Quarterfinals"", ""type"": ""BracketRound"", ""incomingSlots"": 8, ""exitingSlots"": 4 },
+                    { ""order"": 3, ""name"": ""Semifinals"", ""type"": ""BracketRound"", ""incomingSlots"": 4, ""exitingSlots"": 2, ""includeConsolation"": true },
+                    { ""order"": 4, ""name"": ""Finals"", ""type"": ""BracketRound"", ""incomingSlots"": 2, ""exitingSlots"": 2 }
+                ],
+                ""advancementRules"": [
+                    {""fromPhase"": 1, ""fromPool"": ""A"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 1},
+                    {""fromPhase"": 1, ""fromPool"": ""B"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 4},
+                    {""fromPhase"": 1, ""fromPool"": ""C"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 2},
+                    {""fromPhase"": 1, ""fromPool"": ""D"", ""fromRank"": 1, ""toPhase"": 2, ""toSlot"": 3},
+                    {""fromPhase"": 1, ""fromPool"": ""A"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 8},
+                    {""fromPhase"": 1, ""fromPool"": ""B"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 5},
+                    {""fromPhase"": 1, ""fromPool"": ""C"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 7},
+                    {""fromPhase"": 1, ""fromPool"": ""D"", ""fromRank"": 2, ""toPhase"": 2, ""toSlot"": 6}
+                ],
+                ""seedingStrategy"": ""Snake"",
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "Pool A/B/C/D (4 each) -> QF -> SF -> F",
+            Tags = "large,balanced"
+        },
+        new PhaseTemplate
+        {
+            Name = "8-Team Double Elimination",
+            Description = "Double elimination: Winner's bracket and Loser's bracket, must lose twice to be eliminated.",
+            Category = "DoubleElimination",
+            MinUnits = 8, MaxUnits = 8, DefaultUnits = 8,
+            IsSystemTemplate = true, SortOrder = 60,
+            StructureJson = @"{
+                ""phases"": [
+                    { ""order"": 1, ""name"": ""Double Elimination Bracket"", ""type"": ""DoubleElimination"", ""incomingSlots"": 8, ""exitingSlots"": 4, ""settings"": { ""grandFinalReset"": true } }
+                ],
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "WB + LB -> Grand Final",
+            Tags = "competitive,fair"
+        },
+        new PhaseTemplate
+        {
+            Name = "Single Elimination (Flexible)",
+            Description = "Adapts to any team count (4-32). Automatically calculates bracket size and byes.",
+            Category = "SingleElimination",
+            MinUnits = 4, MaxUnits = 32, DefaultUnits = 8,
+            IsSystemTemplate = true, SortOrder = 5,
+            StructureJson = @"{
+                ""isFlexible"": true,
+                ""generateBracket"": {
+                    ""type"": ""SingleElimination"",
+                    ""consolation"": true,
+                    ""calculateByes"": true
+                },
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "Auto-sizes bracket with byes",
+            Tags = "flexible,recommended"
+        },
+        new PhaseTemplate
+        {
+            Name = "Pools + Bracket (Flexible)",
+            Description = "Auto-configures pools based on team count, then bracket play for top finishers.",
+            Category = "Combined",
+            MinUnits = 6, MaxUnits = 32, DefaultUnits = 12,
+            IsSystemTemplate = true, SortOrder = 6,
+            StructureJson = @"{
+                ""isFlexible"": true,
+                ""generateFormat"": {
+                    ""poolSize"": 4,
+                    ""advancePerPool"": 2,
+                    ""bracketType"": ""SingleElimination"",
+                    ""consolation"": true
+                },
+                ""exitPositions"": [
+                    {""rank"": 1, ""label"": ""Champion"", ""awardType"": ""Gold""},
+                    {""rank"": 2, ""label"": ""Runner-up"", ""awardType"": ""Silver""},
+                    {""rank"": 3, ""label"": ""3rd Place"", ""awardType"": ""Bronze""},
+                    {""rank"": 4, ""label"": ""4th Place""}
+                ]
+            }",
+            DiagramText = "Auto-pools -> bracket",
+            Tags = "flexible,recommended"
+        }
+    };
+
+    context.PhaseTemplates.AddRange(templates);
+    await context.SaveChangesAsync();
+    logger.LogInformation("Seeded {Count} phase templates.", templates.Count);
+}
 
 /// <summary>
 /// Custom DateTime converter that preserves the date/time value without timezone conversion.

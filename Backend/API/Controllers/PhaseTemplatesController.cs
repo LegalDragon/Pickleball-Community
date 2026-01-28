@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Models.Entities;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Pickleball.Community.Controllers;
@@ -54,8 +55,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
@@ -82,8 +85,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
@@ -145,8 +150,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
@@ -160,7 +167,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PhaseTemplateDetailDto>> CreateTemplate([FromBody] PhaseTemplateCreateDto dto)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int? userId = int.TryParse(userIdClaim, out var id) ? id : null;
 
         // Validate JSON structure
@@ -342,7 +349,7 @@ public class PhaseTemplatesController : ControllerBase
         [FromQuery] int? unitCount = null,
         [FromQuery] bool clearExisting = true)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
@@ -392,7 +399,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize]
     public async Task<ActionResult<SlotAssignmentResultDto>> ManualExitAssignment([FromBody] ManualExitSlotRequest request)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
@@ -459,7 +466,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ByeProcessingResultDto>> ProcessByes(int phaseId)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
@@ -732,39 +739,12 @@ public class PhaseTemplatesController : ControllerBase
             CreatedPhaseIds = new List<int>()
         };
 
-        // Clear existing phases if requested
+        // Clear existing phases if requested using stored procedure
+        // (avoids EF Core OPENJSON query issues with Contains() on lists)
         if (clearExisting && division.Phases?.Any() == true)
         {
-            // Delete in correct order to respect FK constraints
-            var phaseIds = division.Phases.Select(p => p.Id).ToList();
-
-            // Delete advancement rules
-            var existingRules = await _context.PhaseAdvancementRules
-                .Where(r => phaseIds.Contains(r.SourcePhaseId) || phaseIds.Contains(r.TargetPhaseId))
-                .ToListAsync();
-            _context.PhaseAdvancementRules.RemoveRange(existingRules);
-
-            // Delete encounters (they reference phases)
-            var encounters = await _context.EventEncounters
-                .Where(e => e.PhaseId.HasValue && phaseIds.Contains(e.PhaseId.Value))
-                .ToListAsync();
-            _context.EventEncounters.RemoveRange(encounters);
-
-            // Delete slots
-            var slots = await _context.PhaseSlots
-                .Where(s => phaseIds.Contains(s.PhaseId))
-                .ToListAsync();
-            _context.PhaseSlots.RemoveRange(slots);
-
-            // Delete pools
-            var pools = await _context.PhasePools
-                .Where(p => phaseIds.Contains(p.PhaseId))
-                .ToListAsync();
-            _context.PhasePools.RemoveRange(pools);
-
-            // Delete phases
-            _context.DivisionPhases.RemoveRange(division.Phases);
-            await _context.SaveChangesAsync();
+            await _context.Database.ExecuteSqlRawAsync(
+                "EXEC sp_ClearDivisionPhases @DivisionId = {0}", division.Id);
         }
 
         // Parse template structure
@@ -811,16 +791,17 @@ public class PhaseTemplatesController : ControllerBase
                     await CreateAdvancementRuleFromJson(ruleJson, createdPhases);
                 }
             }
+            // Count advancement rules using direct query on division phases (avoids Contains() OPENJSON issue)
             result.TotalAdvancementRules = await _context.PhaseAdvancementRules
-                .CountAsync(r => result.CreatedPhaseIds.Contains(r.SourcePhaseId) || result.CreatedPhaseIds.Contains(r.TargetPhaseId));
+                .CountAsync(r => r.SourcePhase != null && r.SourcePhase.DivisionId == division.Id);
         }
 
         await _context.SaveChangesAsync();
 
-        // Count created items
+        // Count created items (avoid Contains() OPENJSON issue by querying by division)
         result.TotalPhases = result.CreatedPhaseIds.Count;
         result.TotalSlots = await _context.PhaseSlots
-            .CountAsync(s => result.CreatedPhaseIds.Contains(s.PhaseId));
+            .CountAsync(s => s.Phase != null && s.Phase.DivisionId == division.Id);
 
         result.Message = $"Created {result.TotalPhases} phases with {result.TotalSlots} slots";
 

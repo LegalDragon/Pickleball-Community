@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Users, Grid, AlertCircle, Loader2, ChevronDown, ChevronUp, Plus, Settings, Trophy } from 'lucide-react';
+import { X, Calendar, Users, Grid, AlertCircle, Loader2, ChevronDown, ChevronUp, Plus, Settings, Trophy, FileText, Zap } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import HelpIcon from './ui/HelpIcon';
+import TemplateSelector from './tournament/TemplateSelector';
 
 const SCHEDULE_TYPES = [
   { value: 'RoundRobin', label: 'Round Robin', description: 'Every unit plays every other unit', hasPoolPhase: true, hasPlayoffPhase: false },
@@ -59,6 +60,7 @@ export default function ScheduleConfigModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [previewStats, setPreviewStats] = useState(null);
   const [activePhaseTab, setActivePhaseTab] = useState('pool'); // 'pool' or 'playoff'
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
   // Load score formats on mount
   useEffect(() => {
@@ -431,6 +433,39 @@ export default function ScheduleConfigModal({
             </div>
           </div>
 
+          {/* Template Option */}
+          <div className="border border-purple-200 bg-purple-50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-purple-900">Use a Template</h3>
+                  <p className="text-sm text-purple-700">
+                    Quick setup with pre-built tournament formats
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTemplateSelector(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Browse Templates
+              </button>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-3 bg-white text-gray-500">Or configure manually</span>
+            </div>
+          </div>
+
           {/* Schedule Type */}
           <div>
             <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-2">
@@ -766,6 +801,21 @@ export default function ScheduleConfigModal({
           </button>
         </div>
       </div>
+
+      {/* Template Selector Modal */}
+      {showTemplateSelector && (
+        <TemplateSelector
+          divisionId={division?.id}
+          unitCount={registeredUnits || 8}
+          onApply={(result) => {
+            setShowTemplateSelector(false);
+            onClose();
+            // Trigger a refresh by calling onGenerate with a special flag
+            onGenerate?.({ templateApplied: true, result });
+          }}
+          onClose={() => setShowTemplateSelector(false)}
+        />
+      )}
     </div>
   );
 }
