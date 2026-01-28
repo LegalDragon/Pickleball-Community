@@ -13,6 +13,7 @@ import GameDayScoreboard from '../components/tournament/GameDayScoreboard';
 import GameDayScoreEntry from '../components/tournament/GameDayScoreEntry';
 import GameDayNotifications from '../components/tournament/GameDayNotifications';
 import GameDayAdvancement from '../components/tournament/GameDayAdvancement';
+import GameDayCheckIn from '../components/tournament/GameDayCheckIn';
 
 /**
  * TournamentGameDay - Live tournament execution page
@@ -108,6 +109,10 @@ export default function TournamentGameDay() {
     const tabs = [
       { id: 'scoreboard', label: 'Scoreboard', icon: Trophy, always: true }
     ];
+
+    if (permissions?.canCheckInPlayers || permissions?.isOrganizer) {
+      tabs.push({ id: 'checkin', label: 'Check-in', icon: Users });
+    }
 
     if (permissions?.canRecordScores || permissions?.isOrganizer) {
       tabs.push({ id: 'scores', label: 'Score Entry', icon: ClipboardList });
@@ -236,6 +241,15 @@ export default function TournamentGameDay() {
           <GameDayScoreboard
             eventId={eventId}
             event={event}
+            onRefresh={loadData}
+          />
+        )}
+
+        {activeTab === 'checkin' && (
+          <GameDayCheckIn
+            eventId={eventId}
+            event={event}
+            permissions={permissions}
             onRefresh={loadData}
           />
         )}
