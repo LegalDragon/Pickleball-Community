@@ -671,7 +671,7 @@ public class DivisionPhasesController : ControllerBase
                 SlotType = slotType,
                 SlotNumber = i,
                 SourceType = slotType == SlotTypes.Incoming ? SlotSourceTypes.Seeded : SlotSourceTypes.RankFromPhase,
-                PlaceholderLabel = slotType == SlotTypes.Incoming ? $"Seed {i}" : $"#{i}"
+                PlaceholderLabel = slotType == SlotTypes.Incoming ? $"Team {i}" : $"#{i}"
             };
             _context.PhaseSlots.Add(slot);
         }
@@ -722,9 +722,7 @@ public class DivisionPhasesController : ControllerBase
                         PoolPosition = i + 1
                     };
                     _context.PhasePoolSlots.Add(poolSlot);
-
-                    // Update slot label
-                    slots[slotIndex].PlaceholderLabel = $"Pool {poolName} Seed {i + 1}";
+                    // Keep original "Team X" label - pool assignment tracked via PhasePoolSlot
                 }
             }
         }

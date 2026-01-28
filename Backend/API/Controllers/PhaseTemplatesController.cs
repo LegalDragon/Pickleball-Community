@@ -835,11 +835,12 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Incoming,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Seeded,
-                PlaceholderLabel = $"Seed {i}"
+                PlaceholderLabel = $"Team {i}"
             });
         }
 
         // Create advancing/exit slots
+        var poolCount = preview.PoolCount ?? 1;
         for (int i = 1; i <= preview.ExitingSlots; i++)
         {
             _context.PhaseSlots.Add(new PhaseSlot
@@ -848,16 +849,16 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Advancing,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Manual,
-                PlaceholderLabel = GetExitLabel(i, preview.ExitingSlots)
+                PlaceholderLabel = GetExitLabel(i, preview.ExitingSlots, poolCount)
             });
         }
 
         await _context.SaveChangesAsync();
 
         // Create pools if this is a multi-pool phase
-        if ((preview.PoolCount ?? 1) > 1)
+        if (poolCount > 1)
         {
-            await CreatePhasePools(phase.Id, preview.PoolCount!.Value, preview.IncomingSlots);
+            await CreatePhasePools(phase.Id, poolCount, preview.IncomingSlots);
         }
 
         return phase;
@@ -895,7 +896,7 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Incoming,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Seeded,
-                PlaceholderLabel = $"Seed {i}"
+                PlaceholderLabel = $"Team {i}"
             });
         }
 
@@ -908,7 +909,7 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Advancing,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Manual,
-                PlaceholderLabel = GetExitLabel(i, phase.AdvancingSlotCount)
+                PlaceholderLabel = GetExitLabel(i, phase.AdvancingSlotCount, phase.PoolCount)
             });
         }
 
@@ -923,15 +924,26 @@ public class PhaseTemplatesController : ControllerBase
         return phase;
     }
 
-    private string GetExitLabel(int position, int total)
+    private string GetExitLabel(int slotNumber, int total, int poolCount = 1)
     {
-        return position switch
+        // For pool phases, generate pool-based exit labels
+        // E.g., with 2 pools and 4 exit slots: Pool A #1, Pool B #1, Pool A #2, Pool B #2
+        if (poolCount > 1)
+        {
+            int poolIndex = (slotNumber - 1) % poolCount;
+            int positionInPool = ((slotNumber - 1) / poolCount) + 1;
+            char poolLetter = (char)('A' + poolIndex);
+            return $"Pool {poolLetter} #{positionInPool}";
+        }
+
+        // For non-pool phases, use standard placement labels
+        return slotNumber switch
         {
             1 => "Champion",
             2 => "Runner-up",
             3 => "3rd Place",
             4 => "4th Place",
-            _ => $"#{position}"
+            _ => $"#{slotNumber}"
         };
     }
 
@@ -978,9 +990,7 @@ public class PhaseTemplatesController : ControllerBase
                         PoolPosition = i + 1
                     };
                     _context.PhasePoolSlots.Add(poolSlot);
-
-                    // Update slot label
-                    slots[slotIndex].PlaceholderLabel = $"Pool {poolName} Seed {i + 1}";
+                    // Keep original "Team X" label - pool assignment tracked via PhasePoolSlot
                 }
             }
         }
