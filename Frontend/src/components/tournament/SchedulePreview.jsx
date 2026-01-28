@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import {
   Calendar, Clock, MapPin, Users, Trophy, ChevronDown, ChevronRight,
-  Filter, Grid3X3, GitBranch, Loader2, RefreshCw, List, Table2, ArrowRight, Award
+  Filter, Grid3X3, GitBranch, Loader2, RefreshCw, List, Table2, ArrowRight, Award, X
 } from 'lucide-react';
 import { tournamentApi } from '../../services/api';
+import EncounterDetail from './EncounterDetail';
 
 /**
  * SchedulePreview - Displays tournament schedule with placeholder or resolved units
@@ -26,6 +27,7 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
     round: 'all',
     status: 'all'
   });
+  const [selectedEncounterId, setSelectedEncounterId] = useState(null);
 
   useEffect(() => {
     if (divisionId) {
@@ -253,7 +255,11 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 
       {/* Table View */}
       {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'table' && (
-        <TableView encounters={getFilteredEncounters()} phaseName={schedule?.phase?.name} />
+        <TableView
+          encounters={getFilteredEncounters()}
+          phaseName={schedule?.phase?.name}
+          onEncounterClick={(encounterId) => setSelectedEncounterId(encounterId)}
+        />
       )}
 
       {/* Schedule List */}
@@ -268,6 +274,30 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
       {/* Bracket View */}
       {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'bracket' && (
         <BracketView encounters={getFilteredEncounters()} />
+      )}
+
+      {/* Encounter Detail Modal */}
+      {selectedEncounterId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-semibold text-gray-900">Encounter Details</h3>
+              <button
+                onClick={() => setSelectedEncounterId(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-60px)]">
+              <EncounterDetail
+                encounterId={selectedEncounterId}
+                showHeader={true}
+                readOnly={true}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -478,7 +508,7 @@ function BracketMatchSide({ unit, isWinner }) {
  * TableView - Clean tabular format showing all match information
  * Columns: Match #, Round, Unit 1 (Source), Unit 2 (Source), Advances To, Court, Time, Status
  */
-function TableView({ encounters, phaseName }) {
+function TableView({ encounters, phaseName, onEncounterClick }) {
   const statusColors = {
     Scheduled: 'bg-gray-100 text-gray-700',
     Ready: 'bg-yellow-100 text-yellow-700',
@@ -552,7 +582,11 @@ function TableView({ encounters, phaseName }) {
             const isWinner2 = encounter.winnerUnitId && encounter.winnerUnitId === encounter.unit2?.unitId;
 
             return (
-              <tr key={encounter.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <tr
+                key={encounter.id}
+                className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${onEncounterClick ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                onClick={() => onEncounterClick?.(encounter.id)}
+              >
                 {/* Match Number */}
                 <td className="px-3 py-3 whitespace-nowrap">
                   <span className="inline-flex items-center justify-center w-10 h-8 bg-blue-100 text-blue-800 font-bold text-sm rounded">
