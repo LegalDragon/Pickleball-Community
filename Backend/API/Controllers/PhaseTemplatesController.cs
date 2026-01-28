@@ -791,16 +791,17 @@ public class PhaseTemplatesController : ControllerBase
                     await CreateAdvancementRuleFromJson(ruleJson, createdPhases);
                 }
             }
+            // Count advancement rules using direct query on division phases (avoids Contains() OPENJSON issue)
             result.TotalAdvancementRules = await _context.PhaseAdvancementRules
-                .CountAsync(r => result.CreatedPhaseIds.Contains(r.SourcePhaseId) || result.CreatedPhaseIds.Contains(r.TargetPhaseId));
+                .CountAsync(r => r.SourcePhase != null && r.SourcePhase.DivisionId == division.Id);
         }
 
         await _context.SaveChangesAsync();
 
-        // Count created items
+        // Count created items (avoid Contains() OPENJSON issue by querying by division)
         result.TotalPhases = result.CreatedPhaseIds.Count;
         result.TotalSlots = await _context.PhaseSlots
-            .CountAsync(s => result.CreatedPhaseIds.Contains(s.PhaseId));
+            .CountAsync(s => s.Phase != null && s.Phase.DivisionId == division.Id);
 
         result.Message = $"Created {result.TotalPhases} phases with {result.TotalSlots} slots";
 
