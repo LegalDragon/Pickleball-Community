@@ -237,41 +237,86 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
         ? JSON.parse(template.structureJson)
         : template.structureJson
 
+      // Handle flexible templates that don't have explicit phases array
+      if (structure.isFlexible) {
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="bg-purple-100 px-2 py-1 rounded text-purple-700 font-medium">
+                Flexible Template
+              </span>
+            </div>
+            {structure.generateBracket && (
+              <p className="text-sm text-gray-600">
+                Auto-generates {structure.generateBracket.type} bracket
+                {structure.generateBracket.consolation && ' with consolation'}
+                {structure.generateBracket.calculateByes && ', handles byes'}
+              </p>
+            )}
+            {structure.generateFormat && (
+              <p className="text-sm text-gray-600">
+                Pool size: {structure.generateFormat.poolSize},
+                {structure.generateFormat.advancePerPool} advance per pool → {structure.generateFormat.bracketType}
+              </p>
+            )}
+          </div>
+        )
+      }
+
       if (!structure.phases || !Array.isArray(structure.phases)) {
         return <p className="text-gray-500 text-sm">No phases defined</p>
       }
 
       return (
         <div className="space-y-2">
-          {structure.phases.map((phase, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-sm">
-              <span className="bg-gray-100 px-2 py-1 rounded text-gray-700 font-medium">
-                {idx + 1}. {phase.name}
-              </span>
-              <span className="text-gray-500">
-                {phase.phaseType}
-              </span>
-              {phase.poolCount > 0 && (
-                <span className="text-blue-600">
-                  {phase.poolCount} pools
+          {structure.phases.map((phase, idx) => {
+            // Support both naming conventions (DB uses type/incomingSlots, frontend form uses phaseType/incomingSlotCount)
+            const phaseType = phase.phaseType || phase.type || 'Unknown'
+            const incomingSlots = phase.incomingSlotCount ?? phase.incomingSlots ?? '?'
+            const exitingSlots = phase.advancingSlotCount ?? phase.exitingSlots ?? '?'
+            const poolCount = phase.poolCount || 0
+
+            return (
+              <div key={idx} className="flex items-center gap-2 text-sm">
+                <span className="bg-gray-100 px-2 py-1 rounded text-gray-700 font-medium">
+                  {phase.order || idx + 1}. {phase.name}
                 </span>
-              )}
-              <span className="text-gray-400">
-                {phase.incomingSlotCount} in → {phase.advancingSlotCount} out
-              </span>
-            </div>
-          ))}
-          {structure.advancementRules && structure.advancementRules.length > 0 && (
+                <span className="text-gray-500">
+                  {phaseType}
+                </span>
+                {poolCount > 0 && (
+                  <span className="text-blue-600">
+                    {poolCount} pools
+                  </span>
+                )}
+                <span className="text-gray-400">
+                  {incomingSlots} in → {exitingSlots} out
+                </span>
+              </div>
+            )
+          })}
+          {structure.advancementRules && Array.isArray(structure.advancementRules) && structure.advancementRules.length > 0 && (
             <div className="mt-2 pt-2 border-t">
               <p className="text-xs text-gray-500 font-medium mb-1">Advancement Rules:</p>
               {structure.advancementRules.slice(0, 3).map((rule, idx) => (
                 <p key={idx} className="text-xs text-gray-500">
-                  Phase {rule.sourcePhaseOrder} #{rule.finishPosition} → Phase {rule.targetPhaseOrder} Slot {rule.targetSlotNumber}
+                  {rule.fromPhase ? (
+                    // DB format: fromPhase, fromRank, toPhase, toSlot
+                    <>Phase {rule.fromPhase} #{rule.fromRank} → Phase {rule.toPhase} Slot {rule.toSlot}</>
+                  ) : (
+                    // Frontend format: sourcePhaseOrder, finishPosition, targetPhaseOrder, targetSlotNumber
+                    <>Phase {rule.sourcePhaseOrder} #{rule.finishPosition} → Phase {rule.targetPhaseOrder} Slot {rule.targetSlotNumber}</>
+                  )}
                 </p>
               ))}
               {structure.advancementRules.length > 3 && (
                 <p className="text-xs text-gray-400">+{structure.advancementRules.length - 3} more...</p>
               )}
+            </div>
+          )}
+          {structure.advancementRules === 'auto' && (
+            <div className="mt-2 pt-2 border-t">
+              <p className="text-xs text-gray-500">Advancement: Auto-calculated</p>
             </div>
           )}
         </div>
