@@ -739,39 +739,12 @@ public class PhaseTemplatesController : ControllerBase
             CreatedPhaseIds = new List<int>()
         };
 
-        // Clear existing phases if requested
+        // Clear existing phases if requested using stored procedure
+        // (avoids EF Core OPENJSON query issues with Contains() on lists)
         if (clearExisting && division.Phases?.Any() == true)
         {
-            // Delete in correct order to respect FK constraints
-            var phaseIds = division.Phases.Select(p => p.Id).ToList();
-
-            // Delete advancement rules
-            var existingRules = await _context.PhaseAdvancementRules
-                .Where(r => phaseIds.Contains(r.SourcePhaseId) || phaseIds.Contains(r.TargetPhaseId))
-                .ToListAsync();
-            _context.PhaseAdvancementRules.RemoveRange(existingRules);
-
-            // Delete encounters (they reference phases)
-            var encounters = await _context.EventEncounters
-                .Where(e => e.PhaseId.HasValue && phaseIds.Contains(e.PhaseId.Value))
-                .ToListAsync();
-            _context.EventEncounters.RemoveRange(encounters);
-
-            // Delete slots
-            var slots = await _context.PhaseSlots
-                .Where(s => phaseIds.Contains(s.PhaseId))
-                .ToListAsync();
-            _context.PhaseSlots.RemoveRange(slots);
-
-            // Delete pools
-            var pools = await _context.PhasePools
-                .Where(p => phaseIds.Contains(p.PhaseId))
-                .ToListAsync();
-            _context.PhasePools.RemoveRange(pools);
-
-            // Delete phases
-            _context.DivisionPhases.RemoveRange(division.Phases);
-            await _context.SaveChangesAsync();
+            await _context.Database.ExecuteSqlRawAsync(
+                "EXEC sp_ClearDivisionPhases @DivisionId = {0}", division.Id);
         }
 
         // Parse template structure
