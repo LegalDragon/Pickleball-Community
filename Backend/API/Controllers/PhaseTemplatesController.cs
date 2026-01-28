@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Models.Entities;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Pickleball.Community.Controllers;
@@ -166,7 +167,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PhaseTemplateDetailDto>> CreateTemplate([FromBody] PhaseTemplateCreateDto dto)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int? userId = int.TryParse(userIdClaim, out var id) ? id : null;
 
         // Validate JSON structure
@@ -348,7 +349,7 @@ public class PhaseTemplatesController : ControllerBase
         [FromQuery] int? unitCount = null,
         [FromQuery] bool clearExisting = true)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
@@ -398,7 +399,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize]
     public async Task<ActionResult<SlotAssignmentResultDto>> ManualExitAssignment([FromBody] ManualExitSlotRequest request)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
@@ -465,7 +466,7 @@ public class PhaseTemplatesController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ByeProcessingResultDto>> ProcessByes(int phaseId)
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!int.TryParse(userIdClaim, out var userId))
             return Unauthorized();
 
