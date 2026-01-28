@@ -259,6 +259,7 @@ public class EncounterController : ControllerBase
             RoundNumber = encounter.RoundNumber,
             RoundName = encounter.RoundName,
             EncounterNumber = encounter.EncounterNumber,
+            DivisionMatchNumber = encounter.DivisionMatchNumber,
             Unit1Number = encounter.Unit1Number,
             Unit2Number = encounter.Unit2Number,
             Unit1Id = encounter.Unit1Id,
