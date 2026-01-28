@@ -15,8 +15,10 @@ public class PhaseTemplateListDto
     public int MaxUnits { get; set; }
     public int DefaultUnits { get; set; }
     public bool IsSystemTemplate { get; set; }
+    public bool IsActive { get; set; } = true;
     public string? DiagramText { get; set; }
     public string? Tags { get; set; }
+    public string StructureJson { get; set; } = "{}";
 }
 
 /// <summary>

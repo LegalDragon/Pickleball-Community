@@ -54,8 +54,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
@@ -82,8 +84,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
@@ -145,8 +149,10 @@ public class PhaseTemplatesController : ControllerBase
                 MaxUnits = t.MaxUnits,
                 DefaultUnits = t.DefaultUnits,
                 IsSystemTemplate = t.IsSystemTemplate,
+                IsActive = t.IsActive,
                 DiagramText = t.DiagramText,
-                Tags = t.Tags
+                Tags = t.Tags,
+                StructureJson = t.StructureJson
             })
             .ToListAsync();
 
