@@ -1569,6 +1569,10 @@ export const tournamentApi = {
   getSchedule: (divisionId) => api.get(`/tournament/divisions/${divisionId}/schedule`),
   downloadScoresheet: (divisionId) => api.get(`/tournament/divisions/${divisionId}/scoresheet`, { responseType: 'blob' }),
 
+  // Division game settings
+  updateDivisionGameSettings: (divisionId, data) =>
+    api.put(`/events/divisions/${divisionId}`, data),
+
   // Game Management
   assignGameToCourt: (gameId, courtId) =>
     api.post('/tournament/games/assign-court', { gameId, tournamentCourtId: courtId }),
