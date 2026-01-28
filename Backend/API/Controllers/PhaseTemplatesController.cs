@@ -852,6 +852,14 @@ public class PhaseTemplatesController : ControllerBase
             });
         }
 
+        await _context.SaveChangesAsync();
+
+        // Create pools if this is a multi-pool phase
+        if ((preview.PoolCount ?? 1) > 1)
+        {
+            await CreatePhasePools(phase.Id, preview.PoolCount!.Value, preview.IncomingSlots);
+        }
+
         return phase;
     }
 
@@ -904,6 +912,14 @@ public class PhaseTemplatesController : ControllerBase
             });
         }
 
+        await _context.SaveChangesAsync();
+
+        // Create pools if this is a multi-pool phase
+        if (phase.PoolCount > 1)
+        {
+            await CreatePhasePools(phase.Id, phase.PoolCount, phase.IncomingSlotCount);
+        }
+
         return phase;
     }
 
@@ -917,6 +933,58 @@ public class PhaseTemplatesController : ControllerBase
             4 => "4th Place",
             _ => $"#{position}"
         };
+    }
+
+    private async Task CreatePhasePools(int phaseId, int poolCount, int totalSlots)
+    {
+        var slotsPerPool = (int)Math.Ceiling((double)totalSlots / poolCount);
+        var slots = await _context.PhaseSlots
+            .Where(s => s.PhaseId == phaseId && s.SlotType == SlotTypes.Incoming)
+            .OrderBy(s => s.SlotNumber)
+            .ToListAsync();
+
+        for (int p = 0; p < poolCount; p++)
+        {
+            var poolName = ((char)('A' + p)).ToString();
+            var pool = new PhasePool
+            {
+                PhaseId = phaseId,
+                PoolName = poolName,
+                PoolOrder = p + 1,
+                SlotCount = Math.Min(slotsPerPool, totalSlots - p * slotsPerPool)
+            };
+            _context.PhasePools.Add(pool);
+            await _context.SaveChangesAsync();
+
+            // Assign slots to pool using snake draft (1-2-3-4, 8-7-6-5, etc.)
+            for (int i = 0; i < pool.SlotCount; i++)
+            {
+                int slotIndex;
+                if (p % 2 == 0)
+                {
+                    slotIndex = p * slotsPerPool + i;
+                }
+                else
+                {
+                    slotIndex = (p + 1) * slotsPerPool - 1 - i;
+                }
+
+                if (slotIndex < slots.Count)
+                {
+                    var poolSlot = new PhasePoolSlot
+                    {
+                        PoolId = pool.Id,
+                        SlotId = slots[slotIndex].Id,
+                        PoolPosition = i + 1
+                    };
+                    _context.PhasePoolSlots.Add(poolSlot);
+
+                    // Update slot label
+                    slots[slotIndex].PlaceholderLabel = $"Pool {poolName} Seed {i + 1}";
+                }
+            }
+        }
+        await _context.SaveChangesAsync();
     }
 
     private async Task CreateAdvancementRuleFromJson(JsonElement ruleJson, Dictionary<int, DivisionPhase> phases)
