@@ -43,8 +43,8 @@ export default function GameDayScoreboard({ eventId, event, onRefresh }) {
             // Get encounters for each phase
             for (const phase of phasesRes.data) {
               const scheduleRes = await tournamentApi.getPhaseSchedule(phase.id);
-              if (scheduleRes.success && scheduleRes.data) {
-                scheduleRes.data.forEach(enc => {
+              if (scheduleRes.success && scheduleRes.data?.encounters) {
+                scheduleRes.data.encounters.forEach(enc => {
                   allEncounters.push({
                     ...enc,
                     divisionId: division.id,

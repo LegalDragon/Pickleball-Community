@@ -47,7 +47,7 @@ export default function GameDayAdvancement({ eventId, event, permissions, onRefr
         for (const phase of (phasesRes.data || [])) {
           const scheduleRes = await tournamentApi.getPhaseSchedule(phase.id);
           if (scheduleRes.success) {
-            const encounters = scheduleRes.data || [];
+            const encounters = scheduleRes.data?.encounters || [];
             const completed = encounters.filter(e => e.status === 'Completed').length;
             const total = encounters.length;
 

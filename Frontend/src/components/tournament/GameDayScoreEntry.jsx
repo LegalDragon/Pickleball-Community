@@ -37,8 +37,8 @@ export default function GameDayScoreEntry({ eventId, event, permissions, onRefre
           if (phasesRes.success && phasesRes.data) {
             for (const phase of phasesRes.data) {
               const scheduleRes = await tournamentApi.getPhaseSchedule(phase.id);
-              if (scheduleRes.success && scheduleRes.data) {
-                scheduleRes.data.forEach(enc => {
+              if (scheduleRes.success && scheduleRes.data?.encounters) {
+                scheduleRes.data.encounters.forEach(enc => {
                   allEncounters.push({
                     ...enc,
                     divisionId: division.id,
