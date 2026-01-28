@@ -239,6 +239,7 @@ export default function ScheduleOverview() {
         isOpen={gameSettingsModal.isOpen}
         onClose={() => setGameSettingsModal({ isOpen: false, division: null })}
         division={gameSettingsModal.division}
+        eventId={eventId}
         onSave={() => fetchDashboard()}
       />
     </div>

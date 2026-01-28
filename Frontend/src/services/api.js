@@ -1570,8 +1570,8 @@ export const tournamentApi = {
   downloadScoresheet: (divisionId) => api.get(`/tournament/divisions/${divisionId}/scoresheet`, { responseType: 'blob' }),
 
   // Division game settings
-  updateDivisionGameSettings: (divisionId, data) =>
-    api.put(`/events/divisions/${divisionId}`, data),
+  updateDivisionGameSettings: (eventId, divisionId, data) =>
+    api.put(`/events/${eventId}/divisions/${divisionId}`, data),
 
   // Game Management
   assignGameToCourt: (gameId, courtId) =>
@@ -2556,7 +2556,13 @@ export const encounterApi = {
 
   // Lineup locking
   toggleLineupLock: (encounterId, data) => api.post(`/encounters/${encounterId}/lineup-lock`, data),
-  getLineupLockStatus: (encounterId) => api.get(`/encounters/${encounterId}/lineup-lock`)
+  getLineupLockStatus: (encounterId) => api.get(`/encounters/${encounterId}/lineup-lock`),
+
+  // Phase-specific game settings
+  getDivisionGameSettings: (divisionId) => api.get(`/encounters/divisions/${divisionId}/game-settings`),
+  updateDivisionGameSettings: (divisionId, data) => api.put(`/encounters/divisions/${divisionId}/game-settings`, data),
+  getPhaseGameSettings: (phaseId) => api.get(`/encounters/phases/${phaseId}/game-settings`),
+  updatePhaseGameSettings: (phaseId, data) => api.put(`/encounters/phases/${phaseId}/game-settings`, data)
 }
 
 export default api

@@ -27,6 +27,13 @@ public class EncounterMatchFormat
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// Short code for this match type (e.g., "MD", "WD", "XD")
+    /// Used to identify games: Encounter 1 - MD - Game 1
+    /// </summary>
+    [MaxLength(10)]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>
     /// Number of male players required per side
     /// </summary>
     public int MaleCount { get; set; } = 0;

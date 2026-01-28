@@ -61,6 +61,7 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
         allowLineupChangePerEncounter: config.allowLineupChangePerEncounter,
         matchFormats: config.matchFormats.map((f, idx) => ({
           name: f.name,
+          code: f.code || '',
           matchNumber: idx + 1,
           maleCount: f.maleCount || 0,
           femaleCount: f.femaleCount || 0,
@@ -95,6 +96,7 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
       for (let i = currentFormats.length; i < newCount; i++) {
         currentFormats.push({
           name: `Match ${i + 1}`,
+          code: `M${i + 1}`,
           matchNumber: i + 1,
           maleCount: 0,
           femaleCount: 0,
@@ -126,23 +128,23 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
     switch (preset) {
       case 'team-scrimmage-3':
         formats = [
-          { name: "Men's Doubles", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
-          { name: "Women's Doubles", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 },
-          { name: "Mixed Doubles", maleCount: 1, femaleCount: 1, unisexCount: 0, bestOf: 1 }
+          { name: "Men's Doubles", code: "MD", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
+          { name: "Women's Doubles", code: "WD", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 },
+          { name: "Mixed Doubles", code: "XD", maleCount: 1, femaleCount: 1, unisexCount: 0, bestOf: 1 }
         ];
         break;
       case 'team-scrimmage-5':
         formats = [
-          { name: "Men's Doubles 1", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
-          { name: "Women's Doubles 1", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 },
-          { name: "Mixed Doubles 1", maleCount: 1, femaleCount: 1, unisexCount: 0, bestOf: 1 },
-          { name: "Men's Doubles 2", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
-          { name: "Women's Doubles 2", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 }
+          { name: "Men's Doubles 1", code: "MD1", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
+          { name: "Women's Doubles 1", code: "WD1", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 },
+          { name: "Mixed Doubles 1", code: "XD1", maleCount: 1, femaleCount: 1, unisexCount: 0, bestOf: 1 },
+          { name: "Men's Doubles 2", code: "MD2", maleCount: 2, femaleCount: 0, unisexCount: 0, bestOf: 1 },
+          { name: "Women's Doubles 2", code: "WD2", maleCount: 0, femaleCount: 2, unisexCount: 0, bestOf: 1 }
         ];
         break;
       case 'doubles-only':
         formats = [
-          { name: "Doubles", maleCount: 0, femaleCount: 0, unisexCount: 2, bestOf: 1 }
+          { name: "Doubles", code: "D", maleCount: 0, femaleCount: 0, unisexCount: 2, bestOf: 1 }
         ];
         break;
       default:
@@ -154,6 +156,7 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
       matchesPerEncounter: formats.length,
       matchFormats: formats.map((f, idx) => ({
         ...f,
+        code: f.code || `M${idx + 1}`,
         matchNumber: idx + 1,
         sortOrder: idx
       }))
@@ -293,6 +296,18 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
                       />
 
                       <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-500">Code:</label>
+                        <input
+                          type="text"
+                          value={format.code || ''}
+                          onChange={(e) => handleFormatChange(index, 'code', e.target.value.toUpperCase())}
+                          placeholder="MD"
+                          maxLength={10}
+                          className="w-16 border border-gray-300 rounded p-1 text-sm text-center uppercase"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         <label className="text-xs text-gray-500">M:</label>
                         <input
                           type="number"
@@ -343,6 +358,7 @@ export default function MatchFormatEditor({ divisionId, onConfigChange }) {
                     </div>
 
                     <div className="mt-2 text-xs text-gray-500 ml-12">
+                      {format.code && <span className="font-medium mr-2">[{format.code}]</span>}
                       Players per side: {(format.maleCount || 0) + (format.femaleCount || 0) + (format.unisexCount || 0)}
                       {format.maleCount > 0 && ` (${format.maleCount} male)`}
                       {format.femaleCount > 0 && ` (${format.femaleCount} female)`}
