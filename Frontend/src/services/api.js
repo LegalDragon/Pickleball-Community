@@ -1636,6 +1636,8 @@ export const tournamentApi = {
   // Schedule Generation
   generatePhaseSchedule: (phaseId) => api.post(`/divisionphases/${phaseId}/generate-schedule`),
   getPhaseSchedule: (phaseId) => api.get(`/divisionphases/${phaseId}/schedule`),
+  // Create EncounterMatches for phases that don't have them (retroactive fix)
+  createMatchesForPhase: (phaseId) => api.post(`/divisionphases/${phaseId}/create-matches`),
 
   // Advancement Rules
   setAdvancementRules: (phaseId, rules) => api.post(`/divisionphases/${phaseId}/advancement-rules`, rules),

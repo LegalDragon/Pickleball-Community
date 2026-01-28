@@ -354,6 +354,41 @@ public class DivisionPhasesController : ControllerBase
     }
 
     /// <summary>
+    /// Create EncounterMatches for an existing phase that doesn't have them
+    /// Use this to fix phases that were generated before EncounterMatch creation was added
+    /// </summary>
+    [HttpPost("{id}/create-matches")]
+    public async Task<IActionResult> CreateMatchesForPhase(int id)
+    {
+        var phase = await _context.DivisionPhases
+            .Include(p => p.Division)
+                .ThenInclude(d => d!.Event)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (phase == null)
+            return NotFound(new { success = false, message = "Phase not found" });
+
+        // Check if matches already exist using join to avoid EF Core Contains() issues
+        var existingMatchCount = await _context.EncounterMatches
+            .Join(
+                _context.EventEncounters.Where(e => e.PhaseId == id),
+                m => m.EncounterId,
+                e => e.Id,
+                (m, e) => m
+            )
+            .CountAsync();
+
+        if (existingMatchCount > 0)
+        {
+            return Ok(new { success = true, message = "Matches already exist for this phase", matchesCreated = 0, existingMatches = existingMatchCount });
+        }
+
+        var matchesCreated = await CreateEncounterMatchesForPhase(phase);
+
+        return Ok(new { success = true, data = new { matchesCreated } });
+    }
+
+    /// <summary>
     /// Get the schedule (encounters) for a phase with placeholder labels
     /// </summary>
     [HttpGet("{id}/schedule")]
