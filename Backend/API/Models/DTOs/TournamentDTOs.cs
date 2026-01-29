@@ -170,6 +170,11 @@ public class EventUnitDto
     /// </summary>
     public string? JoinCode { get; set; }
 
+    /// <summary>
+    /// When true, join requests are automatically accepted without captain approval
+    /// </summary>
+    public bool AutoAcceptMembers { get; set; }
+
     // Stats
     public int MatchesPlayed { get; set; }
     public int MatchesWon { get; set; }
@@ -770,6 +775,10 @@ public class EventRegistrationRequest
     /// How partners can join: "Approval" (default) or "Code"
     /// </summary>
     public string JoinMethod { get; set; } = "Approval";
+    /// <summary>
+    /// When true, join requests will be automatically accepted without captain approval
+    /// </summary>
+    public bool AutoAcceptMembers { get; set; } = false;
     /// <summary>
     /// The selected fee option ID (if division has multiple fee options)
     /// </summary>
