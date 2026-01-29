@@ -224,6 +224,7 @@ public class EncounterController : ControllerBase
     /// Get encounter details
     /// </summary>
     [HttpGet("{encounterId}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetEncounter(int encounterId)
     {
         var encounter = await _context.EventEncounters
