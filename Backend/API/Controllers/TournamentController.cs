@@ -450,6 +450,7 @@ public class TournamentController : EventControllerBase
                 CaptainUserId = userId.Value,
                 JoinMethod = joinMethod,
                 JoinCode = joinCode,
+                AutoAcceptMembers = !isSingles && request.AutoAcceptMembers,
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
             };
@@ -1059,6 +1060,56 @@ public class TournamentController : EventControllerBase
                     UserName = Utility.FormatName(acceptedUser?.LastName, acceptedUser?.FirstName),
                     ProfileImageUrl = acceptedUser?.ProfileImageUrl,
                     Message = "Auto-accepted (friends)",
+                    Status = "Accepted",
+                    CreatedAt = DateTime.Now
+                },
+                Warnings = waitlistWarning != null ? new List<string> { waitlistWarning } : null
+            });
+        }
+
+        // Check if unit has AutoAcceptMembers enabled - auto-accept without captain approval
+        if (unit.AutoAcceptMembers)
+        {
+            // Auto-accept: Add user directly as accepted member
+            if (string.IsNullOrEmpty(unit.ReferenceId))
+            {
+                unit.ReferenceId = $"E{unit.EventId}-U{unitId}";
+            }
+
+            var autoAcceptedMember = new EventUnitMember
+            {
+                UnitId = unitId,
+                UserId = userId.Value,
+                Role = "Player",
+                InviteStatus = "Accepted",
+                CreatedAt = DateTime.Now,
+                ReferenceId = $"E{unit.EventId}-U{unitId}-P{userId.Value}",
+                SelectedFeeId = request.SelectedFeeId
+            };
+            _context.EventUnitMembers.Add(autoAcceptedMember);
+
+            await _context.SaveChangesAsync();
+
+            // Update unit display name after member added
+            await UpdateUnitDisplayNameAsync(unit.Id);
+            await _context.SaveChangesAsync();
+
+            var autoAcceptedUser = await _context.Users.FindAsync(userId.Value);
+            var unitCaptain = await _context.Users.FindAsync(unit.CaptainUserId);
+
+            return Ok(new ApiResponse<UnitJoinRequestDto>
+            {
+                Success = true,
+                Message = $"You have joined {Utility.FormatName(unitCaptain?.LastName, unitCaptain?.FirstName)}'s team!",
+                Data = new UnitJoinRequestDto
+                {
+                    Id = 0, // No join request created - auto-accepted
+                    UnitId = unitId,
+                    UnitName = unit.Name,
+                    UserId = userId.Value,
+                    UserName = Utility.FormatName(autoAcceptedUser?.LastName, autoAcceptedUser?.FirstName),
+                    ProfileImageUrl = autoAcceptedUser?.ProfileImageUrl,
+                    Message = "Auto-accepted",
                     Status = "Accepted",
                     CreatedAt = DateTime.Now
                 },
@@ -6268,6 +6319,7 @@ public class TournamentController : EventControllerBase
             RegistrationStatus = registrationStatus,
             JoinMethod = u.JoinMethod ?? "Approval",
             JoinCode = u.JoinCode,
+            AutoAcceptMembers = u.AutoAcceptMembers,
             MatchesPlayed = u.MatchesPlayed,
             MatchesWon = u.MatchesWon,
             MatchesLost = u.MatchesLost,

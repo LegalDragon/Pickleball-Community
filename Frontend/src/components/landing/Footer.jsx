@@ -1,9 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { RefreshCw } from 'lucide-react';
 
 const Footer = () => {
   const { t } = useTranslation('nav');
+  const [checking, setChecking] = useState(false);
+
+  // Get build version from environment
+  const buildTime = import.meta.env.VITE_BUILD_TIME;
+  const buildDate = buildTime ? new Date(parseInt(buildTime)).toLocaleDateString() : null;
+
+  // Check for updates manually
+  const handleCheckForUpdates = async () => {
+    if (!('serviceWorker' in navigator)) {
+      alert('Service worker not supported');
+      return;
+    }
+
+    setChecking(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.update();
+
+      // Check if there's a waiting worker after update check
+      if (registration.waiting) {
+        window.dispatchEvent(new CustomEvent('swUpdateAvailable', {
+          detail: { registration }
+        }));
+      } else {
+        alert('You have the latest version!');
+      }
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      alert('Error checking for updates. Try refreshing the page.');
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const footerLinks = {
     quickLinks: [
@@ -87,7 +121,23 @@ const Footer = () => {
           </div>
         </div>
         <div className="copyright">
-          &copy; 2023-{new Date().getFullYear()} {t('footer.copyright')}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+            <span>&copy; 2023-{new Date().getFullYear()} {t('footer.copyright')}</span>
+            {buildDate && (
+              <span className="text-gray-500 text-xs">
+                Build: {buildDate}
+              </span>
+            )}
+            <button
+              onClick={handleCheckForUpdates}
+              disabled={checking}
+              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 disabled:opacity-50"
+              title="Check for app updates"
+            >
+              <RefreshCw className={`w-3 h-3 ${checking ? 'animate-spin' : ''}`} />
+              {checking ? 'Checking...' : 'Check for Updates'}
+            </button>
+          </div>
         </div>
       </div>
     </footer>

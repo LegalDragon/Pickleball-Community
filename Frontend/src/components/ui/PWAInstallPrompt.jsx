@@ -91,9 +91,20 @@ export default function PWAInstallPrompt() {
           </h3>
 
           {isIOS ? (
-            <p className="text-xs text-gray-600 mt-1">
-              Tap <span className="inline-flex items-center"><svg className="w-4 h-4 inline text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></span> then <strong>"Add to Home Screen"</strong> for the best experience.
-            </p>
+            <div className="text-xs text-gray-600 mt-1 space-y-1">
+              <p className="font-medium text-gray-700">To install on iPhone/iPad:</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
+                <li>
+                  Tap the <span className="inline-flex items-center mx-0.5 align-middle">
+                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                  </span> <strong>Share</strong> button at the bottom
+                </li>
+                <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                <li>Tap <strong>"Add"</strong> in the top right</li>
+              </ol>
+            </div>
           ) : (
             <p className="text-xs text-gray-600 mt-1">
               Add to your home screen for quick access and a better experience.

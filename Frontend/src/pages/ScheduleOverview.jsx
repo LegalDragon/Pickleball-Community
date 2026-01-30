@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, Loader2, ChevronDown, ChevronRight, Users, Trophy, Check } from 'lucide-react';
+import { ArrowLeft, Calendar, Loader2, ChevronDown, ChevronRight, Users, Trophy, Check, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { tournamentApi } from '../services/api';
 import SchedulePreview from '../components/tournament/SchedulePreview';
+import GameSettingsModal from '../components/GameSettingsModal';
 
 export default function ScheduleOverview() {
   const { eventId } = useParams();
@@ -14,6 +15,7 @@ export default function ScheduleOverview() {
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [expandedDivisions, setExpandedDivisions] = useState({});
+  const [gameSettingsModal, setGameSettingsModal] = useState({ isOpen: false, division: null });
 
   useEffect(() => {
     fetchDashboard();
@@ -134,9 +136,12 @@ export default function ScheduleOverview() {
         {divisionsWithSchedules.map(div => (
           <div key={div.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
             {/* Division Header */}
-            <button
+            <div
               onClick={() => toggleDivision(div.id)}
-              className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && toggleDivision(div.id)}
+              className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 {expandedDivisions[div.id] ? (
@@ -167,21 +172,35 @@ export default function ScheduleOverview() {
                 </div>
               </div>
 
-              {/* Progress bar */}
-              {div.totalMatches > 0 && (
-                <div className="flex items-center gap-3">
-                  <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-orange-500 transition-all"
-                      style={{ width: `${(div.completedMatches / div.totalMatches) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-sm text-gray-500 w-16 text-right">
-                    {div.totalMatches > 0 ? Math.round((div.completedMatches / div.totalMatches) * 100) : 0}%
-                  </span>
-                </div>
-              )}
-            </button>
+              <div className="flex items-center gap-3">
+                {/* Game Settings Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setGameSettingsModal({ isOpen: true, division: div });
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Game Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+
+                {/* Progress bar */}
+                {div.totalMatches > 0 && (
+                  <>
+                    <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-orange-500 transition-all"
+                        style={{ width: `${(div.completedMatches / div.totalMatches) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-gray-500 w-16 text-right">
+                      {div.totalMatches > 0 ? Math.round((div.completedMatches / div.totalMatches) * 100) : 0}%
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
 
             {/* Schedule Preview */}
             {expandedDivisions[div.id] && (
@@ -217,6 +236,15 @@ export default function ScheduleOverview() {
           </div>
         )}
       </div>
+
+      {/* Game Settings Modal */}
+      <GameSettingsModal
+        isOpen={gameSettingsModal.isOpen}
+        onClose={() => setGameSettingsModal({ isOpen: false, division: null })}
+        division={gameSettingsModal.division}
+        eventId={eventId}
+        onSave={() => fetchDashboard()}
+      />
     </div>
   );
 }

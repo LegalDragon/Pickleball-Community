@@ -341,12 +341,51 @@ public class DivisionPhasesController : ControllerBase
 
         _logger.LogInformation("Generated {Count} encounters for phase {PhaseId}", encountersCreated, id);
 
+        // Create EncounterMatches based on division's match format configuration
+        var matchesCreated = await CreateEncounterMatchesForPhase(phase);
+        _logger.LogInformation("Created {Count} encounter matches for phase {PhaseId}", matchesCreated, id);
+
         // Assign sequential DivisionMatchNumber to all encounters in the division
         await _context.Database.ExecuteSqlRawAsync(
             "EXEC sp_AssignDivisionMatchNumbers @DivisionId = {0}",
             phase.DivisionId);
 
-        return Ok(new { success = true, data = new { encountersCreated } });
+        return Ok(new { success = true, data = new { encountersCreated, matchesCreated } });
+    }
+
+    /// <summary>
+    /// Create EncounterMatches for an existing phase that doesn't have them
+    /// Use this to fix phases that were generated before EncounterMatch creation was added
+    /// </summary>
+    [HttpPost("{id}/create-matches")]
+    public async Task<IActionResult> CreateMatchesForPhase(int id)
+    {
+        var phase = await _context.DivisionPhases
+            .Include(p => p.Division)
+                .ThenInclude(d => d!.Event)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (phase == null)
+            return NotFound(new { success = false, message = "Phase not found" });
+
+        // Check if matches already exist using join to avoid EF Core Contains() issues
+        var existingMatchCount = await _context.EncounterMatches
+            .Join(
+                _context.EventEncounters.Where(e => e.PhaseId == id),
+                m => m.EncounterId,
+                e => e.Id,
+                (m, e) => m
+            )
+            .CountAsync();
+
+        if (existingMatchCount > 0)
+        {
+            return Ok(new { success = true, message = "Matches already exist for this phase", matchesCreated = 0, existingMatches = existingMatchCount });
+        }
+
+        var matchesCreated = await CreateEncounterMatchesForPhase(phase);
+
+        return Ok(new { success = true, data = new { matchesCreated } });
     }
 
     /// <summary>
@@ -657,9 +696,160 @@ public class DivisionPhasesController : ControllerBase
         return Ok(new { success = true, data = new { updated = result.UpdatedCount, estimatedEndTime = result.EstimatedEndTime } });
     }
 
+    /// <summary>
+    /// Process advancements from a completed phase to the next phase
+    /// </summary>
+    [HttpPost("{id}/process-advancements")]
+    [Authorize(Roles = "Admin,Organizer")]
+    public async Task<IActionResult> ProcessAdvancements(int id)
+    {
+        var phase = await _context.DivisionPhases
+            .Include(p => p.Division)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (phase == null)
+            return NotFound(new { success = false, message = "Phase not found" });
+
+        // Get all completed encounters in this phase
+        var completedEncounters = await _context.EventEncounters
+            .Where(e => e.PhaseId == id && e.Status == "Completed" && e.WinnerUnitId != null)
+            .ToListAsync();
+
+        if (!completedEncounters.Any())
+            return Ok(new { success = true, message = "No completed encounters to process", processed = 0 });
+
+        int advancementsProcessed = 0;
+        var errors = new List<string>();
+
+        foreach (var encounter in completedEncounters)
+        {
+            try
+            {
+                // Process winner advancement
+                if (encounter.WinnerNextEncounterId.HasValue && encounter.WinnerSlotPosition.HasValue)
+                {
+                    var nextEncounter = await _context.EventEncounters.FindAsync(encounter.WinnerNextEncounterId.Value);
+                    if (nextEncounter != null)
+                    {
+                        if (encounter.WinnerSlotPosition == 1)
+                        {
+                            nextEncounter.Unit1Id = encounter.WinnerUnitId;
+                        }
+                        else
+                        {
+                            nextEncounter.Unit2Id = encounter.WinnerUnitId;
+                        }
+                        advancementsProcessed++;
+                    }
+                }
+
+                // Process loser advancement (for double elimination)
+                if (encounter.LoserNextEncounterId.HasValue && encounter.LoserSlotPosition.HasValue)
+                {
+                    var loserUnitId = encounter.Unit1Id == encounter.WinnerUnitId
+                        ? encounter.Unit2Id
+                        : encounter.Unit1Id;
+
+                    var nextEncounter = await _context.EventEncounters.FindAsync(encounter.LoserNextEncounterId.Value);
+                    if (nextEncounter != null && loserUnitId.HasValue)
+                    {
+                        if (encounter.LoserSlotPosition == 1)
+                        {
+                            nextEncounter.Unit1Id = loserUnitId;
+                        }
+                        else
+                        {
+                            nextEncounter.Unit2Id = loserUnitId;
+                        }
+                        advancementsProcessed++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Failed to process encounter {encounter.Id}: {ex.Message}");
+                _logger.LogError(ex, "Error processing advancement for encounter {EncounterId}", encounter.Id);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            success = true,
+            data = new {
+                processed = advancementsProcessed,
+                totalCompleted = completedEncounters.Count,
+                errors = errors.Any() ? errors : null
+            }
+        });
+    }
+
     #endregion
 
     #region Private Helpers
+
+    /// <summary>
+    /// Create EncounterMatch records for all encounters in a phase based on division's match format configuration
+    /// </summary>
+    private async Task<int> CreateEncounterMatchesForPhase(DivisionPhase phase)
+    {
+        // Get encounters for this phase
+        var encounters = await _context.EventEncounters
+            .Where(e => e.PhaseId == phase.Id)
+            .ToListAsync();
+
+        if (!encounters.Any())
+            return 0;
+
+        // Get division's match format configuration
+        var matchFormats = await _context.EncounterMatchFormats
+            .Where(f => f.DivisionId == phase.DivisionId && f.IsActive)
+            .OrderBy(f => f.SortOrder)
+            .ThenBy(f => f.MatchNumber)
+            .ToListAsync();
+
+        // Get division's MatchesPerEncounter setting
+        var division = await _context.EventDivisions.FindAsync(phase.DivisionId);
+        var matchesPerEncounter = division?.MatchesPerEncounter ?? 1;
+
+        int totalMatchesCreated = 0;
+
+        foreach (var encounter in encounters)
+        {
+            if (matchesPerEncounter > 1 && matchFormats.Any())
+            {
+                // Create one EncounterMatch per format
+                int matchOrder = 1;
+                foreach (var format in matchFormats)
+                {
+                    var encounterMatch = new EncounterMatch
+                    {
+                        EncounterId = encounter.Id,
+                        FormatId = format.Id,
+                        MatchOrder = matchOrder++,
+                        Status = "Scheduled"
+                    };
+                    _context.EncounterMatches.Add(encounterMatch);
+                    totalMatchesCreated++;
+                }
+            }
+            else
+            {
+                // Create a single EncounterMatch for simple tournaments
+                var encounterMatch = new EncounterMatch
+                {
+                    EncounterId = encounter.Id,
+                    MatchOrder = 1,
+                    Status = "Scheduled"
+                };
+                _context.EncounterMatches.Add(encounterMatch);
+                totalMatchesCreated++;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return totalMatchesCreated;
+    }
 
     private async Task CreatePhaseSlots(int phaseId, int count, string slotType)
     {
@@ -671,7 +861,7 @@ public class DivisionPhasesController : ControllerBase
                 SlotType = slotType,
                 SlotNumber = i,
                 SourceType = slotType == SlotTypes.Incoming ? SlotSourceTypes.Seeded : SlotSourceTypes.RankFromPhase,
-                PlaceholderLabel = slotType == SlotTypes.Incoming ? $"Seed {i}" : $"#{i}"
+                PlaceholderLabel = slotType == SlotTypes.Incoming ? $"Team {i}" : $"#{i}"
             };
             _context.PhaseSlots.Add(slot);
         }
@@ -722,9 +912,7 @@ public class DivisionPhasesController : ControllerBase
                         PoolPosition = i + 1
                     };
                     _context.PhasePoolSlots.Add(poolSlot);
-
-                    // Update slot label
-                    slots[slotIndex].PlaceholderLabel = $"Pool {poolName} Seed {i + 1}";
+                    // Keep original "Team X" label - pool assignment tracked via PhasePoolSlot
                 }
             }
         }

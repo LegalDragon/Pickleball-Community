@@ -66,6 +66,7 @@ export default function EventRegistration() {
   const [divisionFeeSelections, setDivisionFeeSelections] = useState({}); // { divisionId: feeId }
   const [selectedFeeId, setSelectedFeeId] = useState(null);
   const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
+  const [autoAcceptMembers, setAutoAcceptMembers] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [requestingToJoin, setRequestingToJoin] = useState(null);
@@ -565,6 +566,7 @@ export default function EventRegistration() {
         divisionIds: divisionIds,
         partnerUserId: partnerUserId > 0 ? partnerUserId : null,
         joinMethod: teamSize > 1 ? selectedJoinMethod : 'Approval',
+        autoAcceptMembers: teamSize > 1 && autoAcceptMembers,
         selectedFeeId: primaryFeeId
       });
 
@@ -662,6 +664,7 @@ export default function EventRegistration() {
     setSelectedFeeId(null);
     setDivisionFeeSelections({});
     setSelectedJoinMethod('Approval');
+    setAutoAcceptMembers(false);
     setRegistrationResult(null);
     setCurrentStep(1);
   };
@@ -1583,6 +1586,7 @@ export default function EventRegistration() {
                     setDivisionFeeSelections({});
                     setSelectedFeeId(null);
                     setSelectedJoinMethod('Approval');
+                    setAutoAcceptMembers(false);
                   }}
                   className="text-sm text-orange-600 hover:text-orange-700"
                 >
@@ -1675,6 +1679,22 @@ export default function EventRegistration() {
                           <div className="text-sm text-gray-500">Auto accepted when a friend joins</div>
                         </div>
                       </label>
+
+                      {/* Auto-accept checkbox - only show when Approval method is selected */}
+                      {selectedJoinMethod === 'Approval' && (
+                        <label className="flex items-start gap-3 p-3 border border-blue-200 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 mt-2">
+                          <input
+                            type="checkbox"
+                            checked={autoAcceptMembers}
+                            onChange={(e) => setAutoAcceptMembers(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 mt-0.5"
+                          />
+                          <div>
+                            <div className="font-medium text-gray-900">Auto-accept partner</div>
+                            <div className="text-sm text-gray-500">First person to join is automatically accepted without your approval</div>
+                          </div>
+                        </label>
+                      )}
                     </div>
 
                     <button

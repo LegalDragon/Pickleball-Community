@@ -12,6 +12,7 @@ public class EncounterMatchFormatDto
     public int Id { get; set; }
     public int DivisionId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public int MatchNumber { get; set; }
     public int MaleCount { get; set; }
     public int FemaleCount { get; set; }
@@ -30,6 +31,7 @@ public class EncounterMatchFormatDto
 public class EncounterMatchFormatCreateDto
 {
     public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
     public int MatchNumber { get; set; } = 1;
     public int MaleCount { get; set; } = 0;
     public int FemaleCount { get; set; } = 0;
@@ -374,4 +376,69 @@ public class LineupLockResultDto
     public bool BothLineupsLocked { get; set; }
     public DateTime? Unit1LineupLockedAt { get; set; }
     public DateTime? Unit2LineupLockedAt { get; set; }
+}
+
+// =====================================================
+// Phase Match Settings DTOs
+// =====================================================
+
+/// <summary>
+/// DTO for viewing phase-specific match settings
+/// </summary>
+public class PhaseMatchSettingsDto
+{
+    public int Id { get; set; }
+    public int PhaseId { get; set; }
+    public string? PhaseName { get; set; }
+    public int? MatchFormatId { get; set; }
+    public string? MatchFormatName { get; set; }
+    public string? MatchFormatCode { get; set; }
+    public int BestOf { get; set; }
+    public int? ScoreFormatId { get; set; }
+    public string? ScoreFormatName { get; set; }
+}
+
+/// <summary>
+/// DTO for creating/updating phase match settings
+/// </summary>
+public class PhaseMatchSettingsCreateDto
+{
+    public int PhaseId { get; set; }
+    public int? MatchFormatId { get; set; }
+    public int BestOf { get; set; } = 1;
+    public int? ScoreFormatId { get; set; }
+}
+
+/// <summary>
+/// DTO for bulk updating phase match settings for a division
+/// </summary>
+public class DivisionPhaseSettingsUpdateDto
+{
+    public List<PhaseMatchSettingsCreateDto> Settings { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for retrieving all game settings for a division (organized by phase)
+/// </summary>
+public class DivisionGameSettingsDto
+{
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public int? DefaultBestOf { get; set; }
+    public int? DefaultScoreFormatId { get; set; }
+    public string? DefaultScoreFormatName { get; set; }
+    public List<PhaseGameSettingsDto> Phases { get; set; } = new();
+    public List<EncounterMatchFormatDto> MatchFormats { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for phase-level game settings
+/// </summary>
+public class PhaseGameSettingsDto
+{
+    public int PhaseId { get; set; }
+    public string PhaseName { get; set; } = string.Empty;
+    public string PhaseType { get; set; } = string.Empty;
+    public int PhaseOrder { get; set; }
+    public List<PhaseMatchSettingsDto> MatchSettings { get; set; } = new();
 }

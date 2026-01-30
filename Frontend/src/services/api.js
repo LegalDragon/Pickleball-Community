@@ -1569,6 +1569,10 @@ export const tournamentApi = {
   getSchedule: (divisionId) => api.get(`/tournament/divisions/${divisionId}/schedule`),
   downloadScoresheet: (divisionId) => api.get(`/tournament/divisions/${divisionId}/scoresheet`, { responseType: 'blob' }),
 
+  // Division game settings
+  updateDivisionGameSettings: (eventId, divisionId, data) =>
+    api.put(`/events/${eventId}/divisions/${divisionId}`, data),
+
   // Game Management
   assignGameToCourt: (gameId, courtId) =>
     api.post('/tournament/games/assign-court', { gameId, tournamentCourtId: courtId }),
@@ -1632,6 +1636,8 @@ export const tournamentApi = {
   // Schedule Generation
   generatePhaseSchedule: (phaseId) => api.post(`/divisionphases/${phaseId}/generate-schedule`),
   getPhaseSchedule: (phaseId) => api.get(`/divisionphases/${phaseId}/schedule`),
+  // Create EncounterMatches for phases that don't have them (retroactive fix)
+  createMatchesForPhase: (phaseId) => api.post(`/divisionphases/${phaseId}/create-matches`),
 
   // Advancement Rules
   setAdvancementRules: (phaseId, rules) => api.post(`/divisionphases/${phaseId}/advancement-rules`, rules),
@@ -1677,6 +1683,10 @@ export const tournamentApi = {
     api.get(`/phasetemplates/${phaseId}/exit-slots`),
   processByes: (phaseId) =>
     api.post(`/phasetemplates/${phaseId}/process-byes`),
+
+  // Phase Advancement
+  processPhaseAdvancements: (phaseId) =>
+    api.post(`/divisionphases/${phaseId}/process-advancements`),
 
   // =====================================================
   // Court Groups
@@ -2552,7 +2562,13 @@ export const encounterApi = {
 
   // Lineup locking
   toggleLineupLock: (encounterId, data) => api.post(`/encounters/${encounterId}/lineup-lock`, data),
-  getLineupLockStatus: (encounterId) => api.get(`/encounters/${encounterId}/lineup-lock`)
+  getLineupLockStatus: (encounterId) => api.get(`/encounters/${encounterId}/lineup-lock`),
+
+  // Phase-specific game settings
+  getDivisionGameSettings: (divisionId) => api.get(`/encounters/divisions/${divisionId}/game-settings`),
+  updateDivisionGameSettings: (divisionId, data) => api.put(`/encounters/divisions/${divisionId}/game-settings`, data),
+  getPhaseGameSettings: (phaseId) => api.get(`/encounters/phases/${phaseId}/game-settings`),
+  updatePhaseGameSettings: (phaseId, data) => api.put(`/encounters/phases/${phaseId}/game-settings`, data)
 }
 
 export default api

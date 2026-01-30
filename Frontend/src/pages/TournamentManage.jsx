@@ -15,6 +15,7 @@ import { useNotifications } from '../hooks/useNotifications';
 import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, sharedAssetApi, getSharedAssetUrl, eventTypesApi, eventStaffApi, teamUnitsApi, skillLevelsApi, ageGroupsApi, objectAssetTypesApi, friendsApi } from '../services/api';
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DivisionFeesEditor from '../components/DivisionFeesEditor';
+import MatchFormatEditor from '../components/MatchFormatEditor';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -2375,6 +2376,18 @@ export default function TournamentManage() {
                 >
                   <Send className="w-4 h-4" />
                   <span className="hidden sm:inline">Notify</span>
+                </Link>
+              )}
+
+              {/* Game Day Live link - organizers only */}
+              {isOrganizer && (dashboard?.tournamentStatus === 'Running' || dashboard?.tournamentStatus === 'Started' || dashboard?.divisions?.some(d => d.totalMatches > 0)) && (
+                <Link
+                  to={`/tournament/${eventId}/gameday`}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2"
+                  title="Game Day Live"
+                >
+                  <Radio className="w-4 h-4" />
+                  <span className="hidden sm:inline">Game Day</span>
                 </Link>
               )}
 
@@ -8332,6 +8345,14 @@ export default function TournamentManage() {
                   eventId={parseInt(eventId)}
                   divisionFee={editingDivision.divisionFee || 0}
                   onFeesChange={() => loadEvent()}
+                />
+              )}
+
+              {/* Match Format Configuration - only show when editing existing division */}
+              {editingDivision.id && (
+                <MatchFormatEditor
+                  divisionId={editingDivision.id}
+                  onConfigChange={() => loadEvent()}
                 />
               )}
 

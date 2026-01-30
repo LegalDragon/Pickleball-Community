@@ -28,6 +28,7 @@ import TournamentManage from './pages/TournamentManage'
 import CourtPlanning from './pages/CourtPlanning'
 import EventMassNotification from './pages/EventMassNotification'
 import GameDayManage from './pages/GameDayManage'
+import TournamentGameDay from './pages/TournamentGameDay'
 import StaffDashboard from './pages/StaffDashboard'
 import EventManage from './pages/EventManage'
 import AdminEventManage from './pages/AdminEventManage'
@@ -154,6 +155,11 @@ function App() {
       <Route path="/tournament/:eventId/schedules" element={
         <ProtectedRoute>
           <ScheduleOverview />
+        </ProtectedRoute>
+      } />
+      <Route path="/tournament/:eventId/gameday" element={
+        <ProtectedRoute>
+          <TournamentGameDay />
         </ProtectedRoute>
       } />
       <Route path="/event/:eventId/division/:divisionId/schedule" element={<DivisionSchedule />} />

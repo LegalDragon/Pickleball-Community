@@ -835,11 +835,12 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Incoming,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Seeded,
-                PlaceholderLabel = $"Seed {i}"
+                PlaceholderLabel = $"Team {i}"
             });
         }
 
         // Create advancing/exit slots
+        var poolCount = preview.PoolCount ?? 1;
         for (int i = 1; i <= preview.ExitingSlots; i++)
         {
             _context.PhaseSlots.Add(new PhaseSlot
@@ -848,8 +849,16 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Advancing,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Manual,
-                PlaceholderLabel = GetExitLabel(i, preview.ExitingSlots)
+                PlaceholderLabel = GetExitLabel(i, preview.ExitingSlots, poolCount)
             });
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Create pools if this is a multi-pool phase
+        if (poolCount > 1)
+        {
+            await CreatePhasePools(phase.Id, poolCount, preview.IncomingSlots);
         }
 
         return phase;
@@ -887,7 +896,7 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Incoming,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Seeded,
-                PlaceholderLabel = $"Seed {i}"
+                PlaceholderLabel = $"Team {i}"
             });
         }
 
@@ -900,23 +909,92 @@ public class PhaseTemplatesController : ControllerBase
                 SlotType = SlotTypes.Advancing,
                 SlotNumber = i,
                 SourceType = SlotSourceTypes.Manual,
-                PlaceholderLabel = GetExitLabel(i, phase.AdvancingSlotCount)
+                PlaceholderLabel = GetExitLabel(i, phase.AdvancingSlotCount, phase.PoolCount)
             });
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Create pools if this is a multi-pool phase
+        if (phase.PoolCount > 1)
+        {
+            await CreatePhasePools(phase.Id, phase.PoolCount, phase.IncomingSlotCount);
         }
 
         return phase;
     }
 
-    private string GetExitLabel(int position, int total)
+    private string GetExitLabel(int slotNumber, int total, int poolCount = 1)
     {
-        return position switch
+        // For pool phases, generate pool-based exit labels
+        // E.g., with 2 pools and 4 exit slots: Pool A #1, Pool B #1, Pool A #2, Pool B #2
+        if (poolCount > 1)
+        {
+            int poolIndex = (slotNumber - 1) % poolCount;
+            int positionInPool = ((slotNumber - 1) / poolCount) + 1;
+            char poolLetter = (char)('A' + poolIndex);
+            return $"Pool {poolLetter} #{positionInPool}";
+        }
+
+        // For non-pool phases, use standard placement labels
+        return slotNumber switch
         {
             1 => "Champion",
             2 => "Runner-up",
             3 => "3rd Place",
             4 => "4th Place",
-            _ => $"#{position}"
+            _ => $"#{slotNumber}"
         };
+    }
+
+    private async Task CreatePhasePools(int phaseId, int poolCount, int totalSlots)
+    {
+        var slotsPerPool = (int)Math.Ceiling((double)totalSlots / poolCount);
+        var slots = await _context.PhaseSlots
+            .Where(s => s.PhaseId == phaseId && s.SlotType == SlotTypes.Incoming)
+            .OrderBy(s => s.SlotNumber)
+            .ToListAsync();
+
+        for (int p = 0; p < poolCount; p++)
+        {
+            var poolName = ((char)('A' + p)).ToString();
+            var pool = new PhasePool
+            {
+                PhaseId = phaseId,
+                PoolName = poolName,
+                PoolOrder = p + 1,
+                SlotCount = Math.Min(slotsPerPool, totalSlots - p * slotsPerPool)
+            };
+            _context.PhasePools.Add(pool);
+            await _context.SaveChangesAsync();
+
+            // Assign slots to pool using snake draft (1-2-3-4, 8-7-6-5, etc.)
+            for (int i = 0; i < pool.SlotCount; i++)
+            {
+                int slotIndex;
+                if (p % 2 == 0)
+                {
+                    slotIndex = p * slotsPerPool + i;
+                }
+                else
+                {
+                    slotIndex = (p + 1) * slotsPerPool - 1 - i;
+                }
+
+                if (slotIndex < slots.Count)
+                {
+                    var poolSlot = new PhasePoolSlot
+                    {
+                        PoolId = pool.Id,
+                        SlotId = slots[slotIndex].Id,
+                        PoolPosition = i + 1
+                    };
+                    _context.PhasePoolSlots.Add(poolSlot);
+                    // Keep original "Team X" label - pool assignment tracked via PhasePoolSlot
+                }
+            }
+        }
+        await _context.SaveChangesAsync();
     }
 
     private async Task CreateAdvancementRuleFromJson(JsonElement ruleJson, Dictionary<int, DivisionPhase> phases)

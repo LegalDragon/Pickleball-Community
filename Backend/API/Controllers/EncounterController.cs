@@ -73,6 +73,7 @@ public class EncounterController : ControllerBase
                     Id = f.Id,
                     DivisionId = f.DivisionId,
                     Name = f.Name,
+                    Code = f.Code,
                     MatchNumber = f.MatchNumber,
                     MaleCount = f.MaleCount,
                     FemaleCount = f.FemaleCount,
@@ -132,6 +133,7 @@ public class EncounterController : ControllerBase
             if (existingFormat != null)
             {
                 existingFormat.Name = formatDto.Name;
+                existingFormat.Code = formatDto.Code;
                 existingFormat.MaleCount = formatDto.MaleCount;
                 existingFormat.FemaleCount = formatDto.FemaleCount;
                 existingFormat.UnisexCount = formatDto.UnisexCount;
@@ -147,6 +149,7 @@ public class EncounterController : ControllerBase
                 {
                     DivisionId = divisionId,
                     Name = formatDto.Name,
+                    Code = formatDto.Code,
                     MatchNumber = formatDto.MatchNumber,
                     MaleCount = formatDto.MaleCount,
                     FemaleCount = formatDto.FemaleCount,
@@ -221,6 +224,7 @@ public class EncounterController : ControllerBase
     /// Get encounter details
     /// </summary>
     [HttpGet("{encounterId}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetEncounter(int encounterId)
     {
         var encounter = await _context.EventEncounters
@@ -256,6 +260,7 @@ public class EncounterController : ControllerBase
             RoundNumber = encounter.RoundNumber,
             RoundName = encounter.RoundName,
             EncounterNumber = encounter.EncounterNumber,
+            DivisionMatchNumber = encounter.DivisionMatchNumber,
             Unit1Number = encounter.Unit1Number,
             Unit2Number = encounter.Unit2Number,
             Unit1Id = encounter.Unit1Id,
@@ -900,5 +905,233 @@ public class EncounterController : ControllerBase
         };
 
         return Ok(new { success = true, data = result });
+    }
+
+    // ==========================================
+    // Phase Match Settings (Game Configuration per Phase)
+    // ==========================================
+
+    /// <summary>
+    /// Get all game settings for a division (organized by phase and match format)
+    /// </summary>
+    [HttpGet("divisions/{divisionId}/game-settings")]
+    public async Task<IActionResult> GetDivisionGameSettings(int divisionId)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.EncounterMatchFormats.Where(f => f.IsActive))
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new { success = false, message = "Division not found" });
+
+        // Get phases with their settings
+        var phases = await _context.DivisionPhases
+            .Where(p => p.DivisionId == divisionId)
+            .OrderBy(p => p.PhaseOrder)
+            .ToListAsync();
+
+        // Get all phase match settings for this division's phases using join to avoid EF Core Contains() issues
+        var allSettings = await _context.PhaseMatchSettings
+            .Include(s => s.MatchFormat)
+            .Include(s => s.ScoreFormat)
+            .Join(
+                _context.DivisionPhases.Where(dp => dp.DivisionId == divisionId),
+                pms => pms.PhaseId,
+                dp => dp.Id,
+                (pms, dp) => pms
+            )
+            .ToListAsync();
+
+        // Get default score format
+        var defaultScoreFormat = division.DefaultScoreFormatId.HasValue
+            ? await _context.ScoreFormats.FindAsync(division.DefaultScoreFormatId.Value)
+            : null;
+
+        var dto = new DivisionGameSettingsDto
+        {
+            DivisionId = division.Id,
+            DivisionName = division.Name,
+            DefaultBestOf = division.MatchesPerEncounter <= 1 ? division.GamesPerMatch : null,
+            DefaultScoreFormatId = division.DefaultScoreFormatId,
+            DefaultScoreFormatName = defaultScoreFormat?.Name,
+            MatchFormats = division.EncounterMatchFormats
+                .OrderBy(f => f.SortOrder)
+                .Select(f => new EncounterMatchFormatDto
+                {
+                    Id = f.Id,
+                    DivisionId = f.DivisionId,
+                    Name = f.Name,
+                    Code = f.Code,
+                    MatchNumber = f.MatchNumber,
+                    MaleCount = f.MaleCount,
+                    FemaleCount = f.FemaleCount,
+                    UnisexCount = f.UnisexCount,
+                    TotalPlayers = f.TotalPlayers,
+                    BestOf = f.BestOf,
+                    ScoreFormatId = f.ScoreFormatId,
+                    SortOrder = f.SortOrder,
+                    IsActive = f.IsActive
+                }).ToList(),
+            Phases = phases.Select(p => new PhaseGameSettingsDto
+            {
+                PhaseId = p.Id,
+                PhaseName = p.Name,
+                PhaseType = p.PhaseType,
+                PhaseOrder = p.PhaseOrder,
+                MatchSettings = allSettings
+                    .Where(s => s.PhaseId == p.Id)
+                    .Select(s => new PhaseMatchSettingsDto
+                    {
+                        Id = s.Id,
+                        PhaseId = s.PhaseId,
+                        PhaseName = p.Name,
+                        MatchFormatId = s.MatchFormatId,
+                        MatchFormatName = s.MatchFormat?.Name,
+                        MatchFormatCode = s.MatchFormat?.Code,
+                        BestOf = s.BestOf,
+                        ScoreFormatId = s.ScoreFormatId,
+                        ScoreFormatName = s.ScoreFormat?.Name
+                    }).ToList()
+            }).ToList()
+        };
+
+        return Ok(new { success = true, data = dto });
+    }
+
+    /// <summary>
+    /// Update game settings for a phase (or create if not exists)
+    /// </summary>
+    [HttpPut("phases/{phaseId}/game-settings")]
+    public async Task<IActionResult> UpdatePhaseGameSettings(int phaseId, [FromBody] List<PhaseMatchSettingsCreateDto> settings)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var phase = await _context.DivisionPhases
+            .Include(p => p.Division)
+                .ThenInclude(d => d!.Event)
+            .FirstOrDefaultAsync(p => p.Id == phaseId);
+
+        if (phase == null)
+            return NotFound(new { success = false, message = "Phase not found" });
+
+        if (!await IsEventOrganizer(phase.Division!.EventId, userId.Value))
+            return Forbid();
+
+        // Remove existing settings for this phase
+        var existingSettings = await _context.PhaseMatchSettings
+            .Where(s => s.PhaseId == phaseId)
+            .ToListAsync();
+        _context.PhaseMatchSettings.RemoveRange(existingSettings);
+
+        // Add new settings
+        foreach (var dto in settings)
+        {
+            _context.PhaseMatchSettings.Add(new PhaseMatchSettings
+            {
+                PhaseId = phaseId,
+                MatchFormatId = dto.MatchFormatId,
+                BestOf = dto.BestOf,
+                ScoreFormatId = dto.ScoreFormatId
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { success = true, message = "Phase game settings updated" });
+    }
+
+    /// <summary>
+    /// Bulk update game settings for all phases in a division
+    /// </summary>
+    [HttpPut("divisions/{divisionId}/game-settings")]
+    public async Task<IActionResult> UpdateDivisionGameSettings(int divisionId, [FromBody] DivisionPhaseSettingsUpdateDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Event)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new { success = false, message = "Division not found" });
+
+        if (!await IsEventOrganizer(division.EventId, userId.Value))
+            return Forbid();
+
+        // Get all phases for this division
+        var phaseIds = await _context.DivisionPhases
+            .Where(p => p.DivisionId == divisionId)
+            .Select(p => p.Id)
+            .ToListAsync();
+
+        var phaseIdSet = new HashSet<int>(phaseIds);
+
+        // Remove existing settings for all phases using join to avoid EF Core Contains() issues
+        var existingSettings = await _context.PhaseMatchSettings
+            .Join(
+                _context.DivisionPhases.Where(dp => dp.DivisionId == divisionId),
+                pms => pms.PhaseId,
+                dp => dp.Id,
+                (pms, dp) => pms
+            )
+            .ToListAsync();
+        _context.PhaseMatchSettings.RemoveRange(existingSettings);
+
+        // Add new settings
+        foreach (var setting in dto.Settings)
+        {
+            if (!phaseIdSet.Contains(setting.PhaseId))
+                continue; // Skip if phase doesn't belong to this division
+
+            _context.PhaseMatchSettings.Add(new PhaseMatchSettings
+            {
+                PhaseId = setting.PhaseId,
+                MatchFormatId = setting.MatchFormatId,
+                BestOf = setting.BestOf,
+                ScoreFormatId = setting.ScoreFormatId
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { success = true, message = "Division game settings updated" });
+    }
+
+    /// <summary>
+    /// Get game settings for a specific phase
+    /// </summary>
+    [HttpGet("phases/{phaseId}/game-settings")]
+    public async Task<IActionResult> GetPhaseGameSettings(int phaseId)
+    {
+        var phase = await _context.DivisionPhases
+            .FirstOrDefaultAsync(p => p.Id == phaseId);
+
+        if (phase == null)
+            return NotFound(new { success = false, message = "Phase not found" });
+
+        var settings = await _context.PhaseMatchSettings
+            .Include(s => s.MatchFormat)
+            .Include(s => s.ScoreFormat)
+            .Where(s => s.PhaseId == phaseId)
+            .ToListAsync();
+
+        var dtos = settings.Select(s => new PhaseMatchSettingsDto
+        {
+            Id = s.Id,
+            PhaseId = s.PhaseId,
+            PhaseName = phase.Name,
+            MatchFormatId = s.MatchFormatId,
+            MatchFormatName = s.MatchFormat?.Name,
+            MatchFormatCode = s.MatchFormat?.Code,
+            BestOf = s.BestOf,
+            ScoreFormatId = s.ScoreFormatId,
+            ScoreFormatName = s.ScoreFormat?.Name
+        }).ToList();
+
+        return Ok(new { success = true, data = dtos });
     }
 }

@@ -76,6 +76,12 @@ public class EventUnit
     [MaxLength(10)]
     public string? JoinCode { get; set; }
 
+    /// <summary>
+    /// When true, join requests are automatically accepted without captain approval.
+    /// Useful for casual tournaments where the first partner to join is automatically accepted.
+    /// </summary>
+    public bool AutoAcceptMembers { get; set; } = false;
+
     // Payment
     /// <summary>
     /// Payment status: Pending, Paid, Partial, Waived
