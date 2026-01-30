@@ -2387,7 +2387,34 @@ export const gameDayApi = {
 
   // Score History (TD, admin, scorekeeper only)
   getGameScoreHistory: (eventId, gameId) => api.get(`/eventrunning/${eventId}/games/${gameId}/history`),
-  getEncounterScoreHistory: (eventId, encounterId) => api.get(`/eventrunning/${eventId}/encounters/${encounterId}/history`)
+  getEncounterScoreHistory: (eventId, encounterId) => api.get(`/eventrunning/${eventId}/encounters/${encounterId}/history`),
+
+  // === Game Day Enhancement APIs ===
+
+  // Get cross-division tournament progress summary
+  getEventProgress: (eventId) => api.get(`/tournament-gameday/progress/${eventId}`),
+
+  // Get game day activity feed
+  getActivityFeed: (eventId, limit = 50, since = null) => {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit);
+    if (since) params.append('since', since);
+    return api.get(`/tournament-gameday/activity/${eventId}?${params}`);
+  },
+
+  // Get court utilization statistics
+  getCourtUtilization: (eventId) => api.get(`/tournament-gameday/court-stats/${eventId}`),
+
+  // Update court status (Available, Maintenance, Reserved, Closed)
+  updateCourtStatus: (courtId, status) =>
+    api.post(`/tournament-gameday/court-status/${courtId}`, { status }),
+
+  // Batch start multiple queued games
+  batchStartGames: (gameIds) =>
+    api.post('/tournament-gameday/batch-start-games', { gameIds }),
+
+  // Get quick stats (lightweight polling endpoint)
+  getQuickStats: (eventId) => api.get(`/tournament-gameday/quick-stats/${eventId}`)
 }
 
 // Spectator API

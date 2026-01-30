@@ -495,7 +495,7 @@ public class TournamentGameDayController : ControllerBase
         try
         {
             await _scoreBroadcaster.BroadcastScheduleRefresh(encounter.EventId, encounter.DivisionId);
-            await _scoreBroadcaster.BroadcastCourtStatusChanged(encounter.EventId, new CourtStatusDto
+            await _scoreBroadcaster.BroadcastCourtStatusChanged(encounter.EventId, new Pickleball.Community.Hubs.CourtStatusDto
             {
                 CourtId = court.Id,
                 CourtLabel = court.CourtLabel,
@@ -612,7 +612,7 @@ public class TournamentGameDayController : ControllerBase
         try
         {
             await _scoreBroadcaster.BroadcastScheduleRefresh(encounter.EventId, encounter.DivisionId);
-            await _scoreBroadcaster.BroadcastCourtStatusChanged(encounter.EventId, new CourtStatusDto
+            await _scoreBroadcaster.BroadcastCourtStatusChanged(encounter.EventId, new Pickleball.Community.Hubs.CourtStatusDto
             {
                 CourtId = court.Id,
                 CourtLabel = court.CourtLabel,
@@ -2283,6 +2283,460 @@ public class TournamentGameDayController : ControllerBase
             Message = "No available games found. All players may be busy or all pool games completed."
         });
     }
+
+    // ====================================================
+    // Game Day Enhancement Endpoints
+    // ====================================================
+
+    /// <summary>
+    /// Get cross-division tournament progress summary
+    /// </summary>
+    [HttpGet("progress/{eventId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<EventProgressSummaryDto>>> GetEventProgress(int eventId)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<EventProgressSummaryDto> { Success = false, Message = "Event not found" });
+
+        // Get division progress
+        var divisions = await _context.EventDivisions
+            .Where(d => d.EventId == eventId && d.IsActive)
+            .OrderBy(d => d.SortOrder)
+            .ToListAsync();
+
+        var divisionIds = divisions.Select(d => d.Id).ToList();
+
+        // Fetch all encounters for the event in one query
+        var allEncounters = await _context.EventEncounters
+            .Where(e => e.EventId == eventId && e.Status != "Cancelled")
+            .Select(e => new { e.Id, e.DivisionId, e.PhaseId, e.Status, e.EstimatedStartTime, e.EstimatedEndTime })
+            .ToListAsync();
+
+        // Get phases
+        var phases = await _context.DivisionPhases
+            .Where(p => divisionIds.Contains(p.DivisionId))
+            .OrderBy(p => p.PhaseOrder)
+            .ToListAsync();
+
+        var divisionSummaries = divisions.Select(d =>
+        {
+            var divEncounters = allEncounters.Where(e => e.DivisionId == d.Id).ToList();
+            var divPhases = phases.Where(p => p.DivisionId == d.Id).ToList();
+
+            return new DivisionProgressDto
+            {
+                DivisionId = d.Id,
+                DivisionName = d.Name,
+                SortOrder = d.SortOrder,
+                TotalEncounters = divEncounters.Count,
+                CompletedEncounters = divEncounters.Count(e => e.Status == "Completed"),
+                InProgressEncounters = divEncounters.Count(e => e.Status == "InProgress" || e.Status == "Playing"),
+                PendingEncounters = divEncounters.Count(e => e.Status == "Scheduled" || e.Status == "Ready"),
+                ByeEncounters = divEncounters.Count(e => e.Status == "Bye"),
+                CompletionPercentage = divEncounters.Count > 0
+                    ? Math.Round((double)divEncounters.Count(e => e.Status == "Completed") / divEncounters.Count * 100, 1)
+                    : 0,
+                EarliestStartTime = divEncounters.Where(e => e.EstimatedStartTime.HasValue).Min(e => e.EstimatedStartTime),
+                LatestEndTime = divEncounters.Where(e => e.EstimatedEndTime.HasValue).Max(e => e.EstimatedEndTime),
+                Phases = divPhases.Select(p =>
+                {
+                    var phaseEncounters = divEncounters.Where(e => e.PhaseId == p.Id).ToList();
+                    return new PhaseProgressDto
+                    {
+                        PhaseId = p.Id,
+                        PhaseName = p.Name,
+                        PhaseType = p.PhaseType,
+                        PhaseOrder = p.PhaseOrder,
+                        TotalEncounters = phaseEncounters.Count,
+                        CompletedEncounters = phaseEncounters.Count(e => e.Status == "Completed"),
+                        InProgressEncounters = phaseEncounters.Count(e => e.Status == "InProgress" || e.Status == "Playing")
+                    };
+                }).ToList()
+            };
+        }).ToList();
+
+        var totalEncounters = allEncounters.Count;
+        var completedEncounters = allEncounters.Count(e => e.Status == "Completed");
+
+        return Ok(new ApiResponse<EventProgressSummaryDto>
+        {
+            Success = true,
+            Data = new EventProgressSummaryDto
+            {
+                EventId = eventId,
+                EventName = evt.Name,
+                TotalEncounters = totalEncounters,
+                CompletedEncounters = completedEncounters,
+                OverallCompletionPercentage = totalEncounters > 0
+                    ? Math.Round((double)completedEncounters / totalEncounters * 100, 1) : 0,
+                Divisions = divisionSummaries
+            }
+        });
+    }
+
+    /// <summary>
+    /// Get game day activity feed (recent events)
+    /// </summary>
+    [HttpGet("activity/{eventId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<ActivityFeedItemDto>>>> GetActivityFeed(
+        int eventId, [FromQuery] int limit = 50, [FromQuery] DateTime? since = null)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var items = new List<ActivityFeedItemDto>();
+
+        // Game completions
+        var finishedGames = await _context.EventGames
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId
+                     && g.Status == "Finished"
+                     && g.FinishedAt != null
+                     && (since == null || g.FinishedAt > since))
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit1)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit2)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Division)
+            .Include(g => g.TournamentCourt)
+            .OrderByDescending(g => g.FinishedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        foreach (var g in finishedGames)
+        {
+            var enc = g.EncounterMatch?.Encounter;
+            items.Add(new ActivityFeedItemDto
+            {
+                ActivityType = "GameCompleted",
+                ReferenceId = g.Id,
+                ActivityTime = g.FinishedAt!.Value,
+                Description = $"{enc?.Unit1?.Name} vs {enc?.Unit2?.Name} - Game {g.GameNumber} finished ({g.Unit1Score}-{g.Unit2Score})",
+                DivisionId = enc?.DivisionId ?? 0,
+                DivisionName = enc?.Division?.Name ?? "",
+                CourtId = g.TournamentCourtId,
+                CourtLabel = g.TournamentCourt?.CourtLabel
+            });
+        }
+
+        // Match completions
+        var completedMatches = await _context.EventEncounters
+            .Where(e => e.EventId == eventId
+                     && e.Status == "Completed"
+                     && e.CompletedAt != null
+                     && e.WinnerUnitId != null
+                     && (since == null || e.CompletedAt > since))
+            .Include(e => e.Unit1)
+            .Include(e => e.Unit2)
+            .Include(e => e.Division)
+            .OrderByDescending(e => e.CompletedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        foreach (var enc in completedMatches)
+        {
+            var winner = enc.WinnerUnitId == enc.Unit1Id ? enc.Unit1 : enc.Unit2;
+            var loser = enc.WinnerUnitId == enc.Unit1Id ? enc.Unit2 : enc.Unit1;
+            items.Add(new ActivityFeedItemDto
+            {
+                ActivityType = "MatchCompleted",
+                ReferenceId = enc.Id,
+                ActivityTime = enc.CompletedAt!.Value,
+                Description = $"{winner?.Name} defeated {loser?.Name} ({enc.RoundName})",
+                DivisionId = enc.DivisionId,
+                DivisionName = enc.Division?.Name ?? ""
+            });
+        }
+
+        // Game starts
+        var startedGames = await _context.EventGames
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId
+                     && g.StartedAt != null
+                     && (since == null || g.StartedAt > since))
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit1)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Unit2)
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter).ThenInclude(e => e!.Division)
+            .Include(g => g.TournamentCourt)
+            .OrderByDescending(g => g.StartedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        foreach (var g in startedGames)
+        {
+            var enc = g.EncounterMatch?.Encounter;
+            items.Add(new ActivityFeedItemDto
+            {
+                ActivityType = "GameStarted",
+                ReferenceId = g.Id,
+                ActivityTime = g.StartedAt!.Value,
+                Description = $"{enc?.Unit1?.Name} vs {enc?.Unit2?.Name} started on {g.TournamentCourt?.CourtLabel}",
+                DivisionId = enc?.DivisionId ?? 0,
+                DivisionName = enc?.Division?.Name ?? "",
+                CourtId = g.TournamentCourtId,
+                CourtLabel = g.TournamentCourt?.CourtLabel
+            });
+        }
+
+        // Sort all by time descending and take limit
+        var sorted = items.OrderByDescending(i => i.ActivityTime).Take(limit).ToList();
+
+        return Ok(new ApiResponse<List<ActivityFeedItemDto>> { Success = true, Data = sorted });
+    }
+
+    /// <summary>
+    /// Get court utilization statistics
+    /// </summary>
+    [HttpGet("court-stats/{eventId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<CourtUtilizationDto>>>> GetCourtUtilization(int eventId)
+    {
+        var userId = GetUserId();
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var courts = await _context.TournamentCourts
+            .Where(c => c.EventId == eventId && c.IsActive)
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+
+        var courtIds = courts.Select(c => c.Id).ToList();
+
+        // Get all games for these courts
+        var gameStats = await _context.EventGames
+            .Where(g => g.TournamentCourtId != null && courtIds.Contains(g.TournamentCourtId.Value))
+            .GroupBy(g => g.TournamentCourtId!.Value)
+            .Select(grp => new
+            {
+                CourtId = grp.Key,
+                TotalGames = grp.Count(),
+                CompletedGames = grp.Count(g => g.Status == "Finished"),
+                ActiveGames = grp.Count(g => g.Status == "Playing" || g.Status == "Started" || g.Status == "InProgress"),
+                QueuedGames = grp.Count(g => g.Status == "Queued"),
+                AvgDurationMinutes = grp.Where(g => g.Status == "Finished" && g.StartedAt != null && g.FinishedAt != null)
+                    .Average(g => (double?)EF.Functions.DateDiffMinute(g.StartedAt!.Value, g.FinishedAt!.Value)),
+                TotalPlayingMinutes = grp.Where(g => g.Status == "Finished" && g.StartedAt != null && g.FinishedAt != null)
+                    .Sum(g => (int?)EF.Functions.DateDiffMinute(g.StartedAt!.Value, g.FinishedAt!.Value)) ?? 0
+            })
+            .ToListAsync();
+
+        var statLookup = gameStats.ToDictionary(s => s.CourtId);
+
+        var result = courts.Select(c =>
+        {
+            var stats = statLookup.GetValueOrDefault(c.Id);
+            return new CourtUtilizationDto
+            {
+                CourtId = c.Id,
+                CourtLabel = c.CourtLabel,
+                Status = c.Status,
+                SortOrder = c.SortOrder,
+                CurrentGameId = c.CurrentGameId,
+                TotalGamesPlayed = stats?.TotalGames ?? 0,
+                CompletedGames = stats?.CompletedGames ?? 0,
+                ActiveGames = stats?.ActiveGames ?? 0,
+                QueuedGames = stats?.QueuedGames ?? 0,
+                AvgGameDurationMinutes = stats?.AvgDurationMinutes.HasValue == true
+                    ? Math.Round(stats.AvgDurationMinutes.Value, 1) : null,
+                TotalPlayingMinutes = stats?.TotalPlayingMinutes ?? 0
+            };
+        }).ToList();
+
+        return Ok(new ApiResponse<List<CourtUtilizationDto>> { Success = true, Data = result });
+    }
+
+    /// <summary>
+    /// Update court status (mark as maintenance, available, etc.)
+    /// </summary>
+    [HttpPost("court-status/{courtId}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateCourtStatus(int courtId, [FromBody] UpdateCourtStatusRequest request)
+    {
+        var userId = GetUserId();
+
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Court not found" });
+
+        if (!await IsEventOrganizer(court.EventId, userId))
+            return Forbid();
+
+        var validStatuses = new[] { "Available", "InUse", "Maintenance", "Reserved", "Closed" };
+        if (!validStatuses.Contains(request.Status))
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Invalid status" });
+
+        // Don't allow marking InUse courts as Available if they have active games
+        if (request.Status == "Available" && court.Status == "InUse" && court.CurrentGameId != null)
+        {
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = "Cannot mark court as available while a game is in progress. Finish or cancel the game first."
+            });
+        }
+
+        court.Status = request.Status;
+
+        // If marking as maintenance or closed, clear current game
+        if (request.Status == "Maintenance" || request.Status == "Closed")
+        {
+            court.CurrentGameId = null;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Broadcast court status change
+        try
+        {
+            await _scoreBroadcaster.BroadcastCourtStatusChanged(court.EventId, new Pickleball.Community.Hubs.CourtStatusDto
+            {
+                CourtId = court.Id,
+                CourtLabel = court.CourtLabel,
+                Status = court.Status,
+                CurrentGameId = court.CurrentGameId,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to broadcast court status change for court {CourtId}", courtId);
+        }
+
+        _logger.LogInformation("Court {CourtId} status changed to {Status} by user {UserId}", courtId, request.Status, userId);
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = $"Court {court.CourtLabel} is now {request.Status}"
+        });
+    }
+
+    /// <summary>
+    /// Batch start multiple queued games
+    /// </summary>
+    [HttpPost("batch-start-games")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<BatchGameResultDto>>> BatchStartGames([FromBody] BatchGameRequest request)
+    {
+        var userId = GetUserId();
+
+        if (request.GameIds == null || !request.GameIds.Any())
+            return BadRequest(new ApiResponse<BatchGameResultDto> { Success = false, Message = "No game IDs provided" });
+
+        // Verify first game to check event authorization
+        var firstGame = await _context.EventGames
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .FirstOrDefaultAsync(g => g.Id == request.GameIds.First());
+
+        if (firstGame?.EncounterMatch?.Encounter == null)
+            return NotFound(new ApiResponse<BatchGameResultDto> { Success = false, Message = "Game not found" });
+
+        var eventId = firstGame.EncounterMatch.Encounter.EventId;
+        if (!await IsEventOrganizer(eventId, userId))
+            return Forbid();
+
+        var games = await _context.EventGames
+            .Include(g => g.EncounterMatch).ThenInclude(m => m!.Encounter)
+            .Where(g => request.GameIds.Contains(g.Id) && g.Status == "Queued")
+            .ToListAsync();
+
+        int started = 0;
+        foreach (var game in games)
+        {
+            game.Status = "Playing";
+            game.StartedAt = DateTime.Now;
+            game.UpdatedAt = DateTime.Now;
+
+            var queueEntry = await _context.GameQueues
+                .FirstOrDefaultAsync(q => q.GameId == game.Id && q.Status == "Queued");
+            if (queueEntry != null)
+            {
+                queueEntry.Status = "Current";
+                queueEntry.StartedAt = DateTime.Now;
+            }
+
+            started++;
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Broadcast updates for affected divisions
+        try
+        {
+            var divisionIds = games.Select(g => g.EncounterMatch?.Encounter?.DivisionId).Where(d => d.HasValue).Distinct().ToList();
+            foreach (var divId in divisionIds)
+            {
+                await _scoreBroadcaster.BroadcastScheduleRefresh(eventId, divId!.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to broadcast batch start game updates");
+        }
+
+        _logger.LogInformation("Batch started {Count} games by user {UserId}", started, userId);
+
+        return Ok(new ApiResponse<BatchGameResultDto>
+        {
+            Success = true,
+            Data = new BatchGameResultDto
+            {
+                ProcessedCount = started,
+                TotalRequested = request.GameIds.Count,
+                Message = $"Started {started} games"
+            },
+            Message = $"Started {started} games"
+        });
+    }
+
+    /// <summary>
+    /// Get a quick summary for the game day header (lightweight endpoint for frequent polling)
+    /// </summary>
+    [HttpGet("quick-stats/{eventId}")]
+    public async Task<ActionResult<ApiResponse<QuickStatsDto>>> GetQuickStats(int eventId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            return NotFound(new ApiResponse<QuickStatsDto> { Success = false, Message = "Event not found" });
+
+        var encounterStats = await _context.EventEncounters
+            .Where(e => e.EventId == eventId && e.Status != "Cancelled")
+            .GroupBy(e => e.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var gameStats = await _context.EventGames
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
+            .GroupBy(g => g.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var courtStats = await _context.TournamentCourts
+            .Where(c => c.EventId == eventId && c.IsActive)
+            .GroupBy(c => c.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<QuickStatsDto>
+        {
+            Success = true,
+            Data = new QuickStatsDto
+            {
+                TotalEncounters = encounterStats.Sum(s => s.Count),
+                CompletedEncounters = encounterStats.FirstOrDefault(s => s.Status == "Completed")?.Count ?? 0,
+                InProgressEncounters = encounterStats.Where(s => s.Status == "InProgress" || s.Status == "Playing").Sum(s => s.Count),
+                ActiveGames = gameStats.Where(s => s.Status == "Playing" || s.Status == "Started" || s.Status == "InProgress").Sum(s => s.Count),
+                ReadyGames = gameStats.FirstOrDefault(s => s.Status == "Ready")?.Count ?? 0,
+                QueuedGames = gameStats.FirstOrDefault(s => s.Status == "Queued")?.Count ?? 0,
+                AvailableCourts = courtStats.FirstOrDefault(s => s.Status == "Available")?.Count ?? 0,
+                TotalCourts = courtStats.Sum(s => s.Count),
+                EventStatus = evt.TournamentStatus ?? "Unknown"
+            }
+        });
+    }
 }
 
 // DTOs for Tournament Game Day
@@ -2590,4 +3044,102 @@ public class SuggestedGameDto
     public string Unit2Players { get; set; } = string.Empty;
     public string PoolProgress { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
+}
+
+// ====================================================
+// Game Day Enhancement DTOs
+// ====================================================
+
+public class EventProgressSummaryDto
+{
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public int TotalEncounters { get; set; }
+    public int CompletedEncounters { get; set; }
+    public double OverallCompletionPercentage { get; set; }
+    public List<DivisionProgressDto> Divisions { get; set; } = new();
+}
+
+public class DivisionProgressDto
+{
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public int TotalEncounters { get; set; }
+    public int CompletedEncounters { get; set; }
+    public int InProgressEncounters { get; set; }
+    public int PendingEncounters { get; set; }
+    public int ByeEncounters { get; set; }
+    public double CompletionPercentage { get; set; }
+    public DateTime? EarliestStartTime { get; set; }
+    public DateTime? LatestEndTime { get; set; }
+    public List<PhaseProgressDto> Phases { get; set; } = new();
+}
+
+public class PhaseProgressDto
+{
+    public int PhaseId { get; set; }
+    public string PhaseName { get; set; } = string.Empty;
+    public string PhaseType { get; set; } = string.Empty;
+    public int PhaseOrder { get; set; }
+    public int TotalEncounters { get; set; }
+    public int CompletedEncounters { get; set; }
+    public int InProgressEncounters { get; set; }
+}
+
+public class ActivityFeedItemDto
+{
+    public string ActivityType { get; set; } = string.Empty;
+    public int ReferenceId { get; set; }
+    public DateTime ActivityTime { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public int? CourtId { get; set; }
+    public string? CourtLabel { get; set; }
+}
+
+public class CourtUtilizationDto
+{
+    public int CourtId { get; set; }
+    public string CourtLabel { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public int? CurrentGameId { get; set; }
+    public int TotalGamesPlayed { get; set; }
+    public int CompletedGames { get; set; }
+    public int ActiveGames { get; set; }
+    public int QueuedGames { get; set; }
+    public double? AvgGameDurationMinutes { get; set; }
+    public int TotalPlayingMinutes { get; set; }
+}
+
+public class UpdateCourtStatusRequest
+{
+    public string Status { get; set; } = string.Empty;
+}
+
+public class BatchGameRequest
+{
+    public List<int> GameIds { get; set; } = new();
+}
+
+public class BatchGameResultDto
+{
+    public int ProcessedCount { get; set; }
+    public int TotalRequested { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class QuickStatsDto
+{
+    public int TotalEncounters { get; set; }
+    public int CompletedEncounters { get; set; }
+    public int InProgressEncounters { get; set; }
+    public int ActiveGames { get; set; }
+    public int ReadyGames { get; set; }
+    public int QueuedGames { get; set; }
+    public int AvailableCourts { get; set; }
+    public int TotalCourts { get; set; }
+    public string EventStatus { get; set; } = string.Empty;
 }

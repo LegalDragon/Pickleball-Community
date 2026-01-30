@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Trophy, Users, Clock, MapPin, CheckCircle2,
   ClipboardList, Radio, Settings, Bell, ChevronRight, Loader2,
-  Filter, RefreshCw, Play, Pause, AlertTriangle, Search
+  Filter, RefreshCw, Play, Pause, AlertTriangle, Search,
+  Activity, BarChart3, Target
 } from 'lucide-react';
-import { tournamentApi, eventStaffApi } from '../services/api';
+import { tournamentApi, eventStaffApi, gameDayApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 // Tab Components (defined below)
@@ -14,6 +15,9 @@ import GameDayScoreEntry from '../components/tournament/GameDayScoreEntry';
 import GameDayNotifications from '../components/tournament/GameDayNotifications';
 import GameDayAdvancement from '../components/tournament/GameDayAdvancement';
 import GameDayCheckIn from '../components/tournament/GameDayCheckIn';
+import TournamentProgressTracker from '../components/tournament/TournamentProgressTracker';
+import GameDayActivityFeed from '../components/tournament/GameDayActivityFeed';
+import CourtUtilizationPanel from '../components/tournament/CourtUtilizationPanel';
 
 /**
  * TournamentGameDay - Live tournament execution page
@@ -104,11 +108,36 @@ export default function TournamentGameDay() {
     }
   };
 
+  // Quick stats for header bar
+  const [quickStats, setQuickStats] = useState(null);
+
+  // Load quick stats periodically
+  const loadQuickStats = useCallback(async () => {
+    try {
+      const res = await gameDayApi.getQuickStats(eventId);
+      if (res.success) setQuickStats(res.data);
+    } catch (err) {
+      // Silent fail for quick stats
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    if (permissions?.isOrganizer) {
+      loadQuickStats();
+      const interval = setInterval(loadQuickStats, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [permissions, loadQuickStats]);
+
   // Define available tabs based on permissions
   const getTabs = () => {
     const tabs = [
       { id: 'scoreboard', label: 'Scoreboard', icon: Trophy, always: true }
     ];
+
+    if (permissions?.isOrganizer || permissions?.canFullyManageEvent) {
+      tabs.push({ id: 'progress', label: 'Progress', icon: Target });
+    }
 
     if (permissions?.canCheckInPlayers || permissions?.isOrganizer) {
       tabs.push({ id: 'checkin', label: 'Check-in', icon: Users });
@@ -123,7 +152,11 @@ export default function TournamentGameDay() {
     }
 
     if (permissions?.isOrganizer || permissions?.canFullyManageEvent) {
-      tabs.push({ id: 'notifications', label: 'Notifications', icon: Bell, debug: true });
+      tabs.push({ id: 'courts', label: 'Courts', icon: BarChart3 });
+    }
+
+    if (permissions?.isOrganizer || permissions?.canFullyManageEvent) {
+      tabs.push({ id: 'activity', label: 'Activity', icon: Activity });
     }
 
     return tabs;
@@ -184,6 +217,23 @@ export default function TournamentGameDay() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Quick Stats Badges (for organizers) */}
+              {quickStats && (
+                <div className="hidden md:flex items-center gap-2 mr-2">
+                  {quickStats.activeGames > 0 && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                      <Play className="w-3 h-3" /> {quickStats.activeGames} live
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                    {quickStats.completedEncounters}/{quickStats.totalEncounters}
+                  </span>
+                  <span className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                    <MapPin className="w-3 h-3" /> {quickStats.availableCourts}/{quickStats.totalCourts}
+                  </span>
+                </div>
+              )}
+
               {/* Auto-refresh toggle */}
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
@@ -269,6 +319,43 @@ export default function TournamentGameDay() {
             event={event}
             permissions={permissions}
             onRefresh={loadData}
+          />
+        )}
+
+        {activeTab === 'progress' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <TournamentProgressTracker
+                eventId={eventId}
+                onDivisionClick={(divId) => {
+                  // Could navigate to division schedule
+                  console.log('Division clicked:', divId);
+                }}
+              />
+            </div>
+            <div>
+              <GameDayActivityFeed
+                eventId={eventId}
+                maxItems={15}
+                compact={true}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'courts' && (
+          <CourtUtilizationPanel
+            eventId={eventId}
+            showControls={permissions?.isOrganizer || permissions?.canManageCourts}
+            onCourtStatusChange={() => loadData(true)}
+          />
+        )}
+
+        {activeTab === 'activity' && (
+          <GameDayActivityFeed
+            eventId={eventId}
+            maxItems={50}
+            autoRefresh={autoRefresh}
           />
         )}
 

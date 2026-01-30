@@ -4,6 +4,7 @@ using Pickleball.Community.Database;
 using Pickleball.Community.Models.Constants;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
+using Pickleball.Community.API.Controllers;
 
 namespace Pickleball.Community.Services;
 

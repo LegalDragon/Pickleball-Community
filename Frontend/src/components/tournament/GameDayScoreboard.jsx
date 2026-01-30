@@ -153,25 +153,48 @@ export default function GameDayScoreboard({ eventId, event, onRefresh }) {
 
   return (
     <div className="space-y-4">
-      {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm p-4">
+      {/* Stats Bar - Mobile Responsive */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
           <div className="text-sm text-gray-500">Total Matches</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="text-2xl font-bold text-green-600">{stats.live}</div>
+        <div className={`rounded-xl shadow-sm p-4 ${stats.live > 0 ? 'bg-green-50 border border-green-200' : 'bg-white'}`}>
+          <div className={`text-2xl font-bold ${stats.live > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+            {stats.live > 0 && <Play className="w-5 h-5 inline mr-1 animate-pulse" />}
+            {stats.live}
+          </div>
           <div className="text-sm text-gray-500">Live Now</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="text-2xl font-bold text-blue-600">{stats.completed}</div>
           <div className="text-sm text-gray-500">Completed</div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="bg-white rounded-xl shadow-sm p-4">
           <div className="text-2xl font-bold text-gray-600">{stats.upcoming}</div>
           <div className="text-sm text-gray-500">Upcoming</div>
         </div>
       </div>
+
+      {/* Overall Progress */}
+      {stats.total > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Overall Progress</span>
+            <span className="text-sm font-bold text-orange-600">
+              {Math.round((stats.completed / stats.total) * 100)}%
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 rounded-full ${
+                stats.completed === stats.total ? 'bg-green-500' : 'bg-orange-500'
+              }`}
+              style={{ width: `${(stats.completed / stats.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm p-4">
@@ -253,27 +276,27 @@ export default function GameDayScoreboard({ eventId, event, onRefresh }) {
                 {division.encounters.map(enc => (
                   <div
                     key={enc.id}
-                    className={`p-4 ${enc.status === 'InProgress' ? 'bg-green-50' : ''}`}
+                    className={`p-3 md:p-4 ${enc.status === 'InProgress' ? 'bg-green-50' : ''}`}
                   >
                     <div className="flex items-center justify-between">
                       {/* Match Info */}
-                      <div className="flex items-center gap-4">
-                        <div className="text-center w-12">
-                          <div className="text-lg font-bold text-gray-900">
+                      <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+                        <div className="text-center w-10 md:w-12 flex-shrink-0">
+                          <div className="text-base md:text-lg font-bold text-gray-900">
                             #{enc.divisionMatchNumber || enc.encounterNumber}
                           </div>
-                          <div className="text-xs text-gray-500">{enc.phaseName}</div>
+                          <div className="text-xs text-gray-500 truncate">{enc.phaseName}</div>
                         </div>
 
                         {/* Teams & Score */}
-                        <div className="space-y-1">
-                          <div className={`flex items-center gap-3 ${
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className={`flex items-center gap-2 md:gap-3 ${
                             enc.winnerUnitId === enc.unit1?.unitId ? 'font-bold' : ''
                           }`}>
-                            <span className="w-32 truncate">
+                            <span className="flex-1 truncate text-sm md:text-base">
                               {enc.unit1?.label || 'TBD'}
                             </span>
-                            <span className={`text-xl w-8 text-center ${
+                            <span className={`text-lg md:text-xl w-8 text-center font-bold ${
                               enc.status === 'Completed' && enc.winnerUnitId === enc.unit1?.unitId
                                 ? 'text-green-600'
                                 : 'text-gray-900'
@@ -281,13 +304,13 @@ export default function GameDayScoreboard({ eventId, event, onRefresh }) {
                               {enc.unit1Score ?? '-'}
                             </span>
                           </div>
-                          <div className={`flex items-center gap-3 ${
+                          <div className={`flex items-center gap-2 md:gap-3 ${
                             enc.winnerUnitId === enc.unit2?.unitId ? 'font-bold' : ''
                           }`}>
-                            <span className="w-32 truncate">
+                            <span className="flex-1 truncate text-sm md:text-base">
                               {enc.unit2?.label || 'TBD'}
                             </span>
-                            <span className={`text-xl w-8 text-center ${
+                            <span className={`text-lg md:text-xl w-8 text-center font-bold ${
                               enc.status === 'Completed' && enc.winnerUnitId === enc.unit2?.unitId
                                 ? 'text-green-600'
                                 : 'text-gray-900'
@@ -299,14 +322,20 @@ export default function GameDayScoreboard({ eventId, event, onRefresh }) {
                       </div>
 
                       {/* Status & Court */}
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
+                        {getStatusBadge(enc.status)}
                         {enc.courtLabel && (
-                          <div className="flex items-center gap-1 text-sm text-gray-500">
-                            <MapPin className="w-4 h-4" />
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <MapPin className="w-3 h-3" />
                             {enc.courtLabel}
                           </div>
                         )}
-                        {getStatusBadge(enc.status)}
+                        {enc.estimatedStartTime && enc.status === 'Scheduled' && (
+                          <div className="flex items-center gap-1 text-xs text-gray-400">
+                            <Clock className="w-3 h-3" />
+                            {new Date(enc.estimatedStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
