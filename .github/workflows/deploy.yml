@@ -1,0 +1,201 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deploy target"
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore backend
+        run: dotnet restore Backend/API/Pickleball.Community.API.csproj
+
+      - name: Build backend
+        run: dotnet build Backend/API/Pickleball.Community.API.csproj --configuration Release --no-restore
+
+      - name: Publish backend
+        run: dotnet publish Backend/API/Pickleball.Community.API.csproj --configuration Release --output ./publish/backend --no-build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: Frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: Frontend
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: publish/backend/
+          retention-days: 3
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend
+          path: Frontend/dist/
+          retention-days: 3
+
+      - name: Upload deploy script
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-script
+          path: Deployment/deploy-iis.ps1
+          retention-days: 3
+
+  deploy:
+    name: Deploy to IIS (${{ inputs.environment || 'staging' }})
+    needs: build
+    runs-on: [self-hosted, windows, iis]
+    environment: ${{ inputs.environment || 'staging' }}
+    steps:
+      - name: Checkout (for commit info)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set environment variables
+        shell: powershell
+        run: |
+          $env_name = "${{ inputs.environment || 'staging' }}"
+          if ($env_name -eq "production") {
+            echo "SITE_NAME=Pickleball_Community" >> $env:GITHUB_ENV
+            echo "APP_POOL=Pickleball_Community" >> $env:GITHUB_ENV
+            echo "APP_DOMAIN=pickleball.community" >> $env:GITHUB_ENV
+            echo "FRONTEND_PATH=F:\New_WWW\Pickleball_Community\WWW" >> $env:GITHUB_ENV
+            echo "BACKEND_PATH=F:\New_WWW\Pickleball_Community\API" >> $env:GITHUB_ENV
+          } else {
+            echo "SITE_NAME=Pickleball_Community_STG" >> $env:GITHUB_ENV
+            echo "APP_POOL=Pickleball_Community_STG" >> $env:GITHUB_ENV
+            echo "APP_DOMAIN=stage.pickleball.community" >> $env:GITHUB_ENV
+            echo "FRONTEND_PATH=F:\New_WWW\Pickleball_Community_STG\WWW" >> $env:GITHUB_ENV
+            echo "BACKEND_PATH=F:\New_WWW\Pickleball_Community_STG\API" >> $env:GITHUB_ENV
+          }
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Deploy to IIS
+        shell: powershell
+        run: |
+          & artifacts\deploy-script\deploy-iis.ps1 `
+            -SiteName "${{ env.SITE_NAME }}" `
+            -AppPoolName "${{ env.APP_POOL }}" `
+            -FrontendPath "${{ env.FRONTEND_PATH }}" `
+            -BackendPath "${{ env.BACKEND_PATH }}" `
+            -FrontendArtifact "artifacts\frontend" `
+            -BackendArtifact "artifacts\backend"
+
+      - name: Run SQL migrations
+        shell: powershell
+        env:
+          DEPLOY_API_KEY: ${{ secrets.DEPLOY_API_KEY }}
+        run: |
+          Write-Host "[MIGRATIONS] Running deployment SQL..."
+          Start-Sleep -Seconds 10
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $headers = @{
+            "X-Deploy-Key" = $env:DEPLOY_API_KEY
+            "Content-Type" = "application/json"
+          }
+          # Ensure Deployments table exists
+          $sql = @"
+          IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deployments')
+          BEGIN
+            CREATE TABLE Deployments (
+              DeploymentId INT IDENTITY(1,1) PRIMARY KEY,
+              Summary NVARCHAR(500) NOT NULL,
+              CommitHash NVARCHAR(40) NULL,
+              Branch NVARCHAR(100) NULL DEFAULT 'main',
+              DeployedBy NVARCHAR(100) NULL DEFAULT 'GitHub Actions',
+              Status NVARCHAR(20) NOT NULL DEFAULT 'success',
+              DurationSeconds INT NULL,
+              DeployedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+            );
+            CREATE INDEX IX_Deployments_DeployedAt ON Deployments (DeployedAt DESC);
+          END
+          "@
+          $body = @{ sql = $sql } | ConvertTo-Json
+          $url = "https://${{ env.APP_DOMAIN }}/api/admin/migrations/run-sql"
+          Write-Host "[MIGRATIONS] Trying $url ..."
+          try {
+            $response = Invoke-RestMethod -Uri $url -Method POST -Headers $headers -Body $body -TimeoutSec 60
+            Write-Host "[MIGRATIONS] $($response.message)"
+          } catch {
+            Write-Host "[MIGRATIONS] Failed: $($_.Exception.Message)"
+            Write-Host "[MIGRATIONS] WARN: SQL migration failed. Run manually if needed."
+          }
+
+      - name: Record deployment
+        if: always()
+        shell: powershell
+        env:
+          DEPLOY_API_KEY: ${{ secrets.DEPLOY_API_KEY }}
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $headers = @{
+            "X-Deploy-Key" = $env:DEPLOY_API_KEY
+            "Content-Type" = "application/json"
+          }
+          $commitHash = "${{ github.sha }}".Substring(0,7)
+          $branch = "${{ github.ref_name }}"
+          $summary = ""
+          try {
+            $summary = (git log -1 --pretty=format:"%s" 2>$null)
+          } catch {}
+          if (-not $summary -or $summary -eq "") {
+            try {
+              $apiUrl = "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}"
+              $commit = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "deploy" } -TimeoutSec 10
+              $summary = $commit.commit.message.Split("`n")[0]
+            } catch {}
+          }
+          if (-not $summary -or $summary -eq "") { $summary = "Deployment $commitHash" }
+          $status = if ("${{ job.status }}" -eq "success") { "success" } else { "failed" }
+          $body = @{
+            summary = $summary
+            commitHash = $commitHash
+            branch = $branch
+            deployedBy = "GitHub Actions"
+            status = $status
+          } | ConvertTo-Json -Depth 3
+          $url = "https://${{ env.APP_DOMAIN }}/api/deployments"
+          Write-Host "[DEPLOY] Recording deployment: $summary ($commitHash) [$status]"
+          try {
+            Invoke-RestMethod -Uri $url -Method POST -Headers $headers -Body $body -TimeoutSec 30
+            Write-Host "[DEPLOY] Recorded successfully"
+          } catch {
+            Write-Host "[DEPLOY] Could not record: $($_.Exception.Message)"
+          }
