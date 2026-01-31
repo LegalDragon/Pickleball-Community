@@ -4265,8 +4265,8 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                           </div>
                         </div>
 
-                        {/* Pending Join Requests - Only for captains */}
-                        {reg.isCaptain && reg.pendingJoinRequests?.length > 0 && (
+                        {/* Pending Join Requests - For captains, organizers, and admins */}
+                        {(reg.isCaptain || isOrganizer || isAdmin) && reg.pendingJoinRequests?.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-green-100">
                             <div className="text-sm font-medium text-purple-700 mb-2 flex items-center gap-1">
                               <Users className="w-4 h-4" />
@@ -4295,14 +4295,18 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                   </button>
                                   <div className="flex items-center gap-1">
                                     <button
-                                      onClick={() => handleRespondToJoinRequest(request.requestId, false)}
+                                      onClick={() => (isOrganizer || isAdmin) && !reg.isCaptain
+                                        ? handleRespondToJoinRequestAdmin(request.requestId, false, reg.divisionId)
+                                        : handleRespondToJoinRequest(request.requestId, false)}
                                       className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                                       title="Decline"
                                     >
                                       <X className="w-4 h-4" />
                                     </button>
                                     <button
-                                      onClick={() => handleRespondToJoinRequest(request.requestId, true)}
+                                      onClick={() => (isOrganizer || isAdmin) && !reg.isCaptain
+                                        ? handleRespondToJoinRequestAdmin(request.requestId, true, reg.divisionId)
+                                        : handleRespondToJoinRequest(request.requestId, true)}
                                       className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
                                       title="Accept"
                                     >
