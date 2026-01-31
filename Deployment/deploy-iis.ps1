@@ -87,11 +87,14 @@ if (-not $SkipBackup) {
 # -- Stop app pool --
 Write-Host "`n[DEPLOY] Stopping app pool: $AppPoolName" -ForegroundColor Yellow
 $appcmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
-$ErrorActionPreference = "Continue"
-& $appcmd stop apppool $AppPoolName 2>&1 | ForEach-Object { Write-Host "  $_" }
-Start-Sleep -Seconds 3
-Write-Host "[DEPLOY] App pool stop requested" -ForegroundColor Green
-$ErrorActionPreference = "Stop"
+try {
+    & $appcmd stop apppool $AppPoolName 2>&1 | ForEach-Object { Write-Host "  $_" }
+    Start-Sleep -Seconds 3
+    Write-Host "[DEPLOY] App pool stop requested" -ForegroundColor Green
+} catch {
+    Write-Host "[DEPLOY] App pool stop skipped (may not exist): $($_.Exception.Message)" -ForegroundColor DarkYellow
+}
+$LASTEXITCODE = 0
 
 # -- Deploy frontend --
 Write-Host "`n[DEPLOY] Copying frontend..." -ForegroundColor Yellow
@@ -109,11 +112,14 @@ Write-Host "[DEPLOY] Backend deployed" -ForegroundColor Green
 
 # -- Start app pool --
 Write-Host "`n[DEPLOY] Starting app pool: $AppPoolName" -ForegroundColor Yellow
-$ErrorActionPreference = "Continue"
-& $appcmd start apppool $AppPoolName 2>&1 | ForEach-Object { Write-Host "  $_" }
-Start-Sleep -Seconds 2
-Write-Host "[DEPLOY] App pool start requested" -ForegroundColor Green
-$ErrorActionPreference = "Stop"
+try {
+    & $appcmd start apppool $AppPoolName 2>&1 | ForEach-Object { Write-Host "  $_" }
+    Start-Sleep -Seconds 2
+    Write-Host "[DEPLOY] App pool start requested" -ForegroundColor Green
+} catch {
+    Write-Host "[DEPLOY] App pool start skipped (may not exist): $($_.Exception.Message)" -ForegroundColor DarkYellow
+}
+$LASTEXITCODE = 0
 
 # -- Health check --
 if ($HealthCheckUrl) {
