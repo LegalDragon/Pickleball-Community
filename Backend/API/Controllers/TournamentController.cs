@@ -6173,6 +6173,11 @@ public class TournamentController : EventControllerBase
         var paymentsPaid = activeUnits.Count(u => u.PaymentStatus == "Paid");
         var paymentsPending = activeUnits.Count(u => u.PaymentStatus == "Pending" || u.PaymentStatus == "PendingVerification" || u.PaymentStatus == "Partial");
 
+        // Count pending join requests for this event
+        var pendingJoinRequestCount = await _context.EventUnitJoinRequests
+            .Include(r => r.Unit)
+            .CountAsync(r => r.Unit!.EventId == eventId && r.Status == "Pending");
+
         var dashboard = new TournamentDashboardDto
         {
             EventId = eventId,
@@ -6192,7 +6197,9 @@ public class TournamentController : EventControllerBase
                 PaymentsPaid = paymentsPaid,
                 PaymentsPending = paymentsPending,
                 TotalAmountDue = activeUnits.Sum(u => evt.RegistrationFee + (evt.Divisions.FirstOrDefault(d => d.Id == u.DivisionId)?.DivisionFee ?? 0m)),
-                TotalAmountPaid = activeUnits.Sum(u => u.AmountPaid)
+                TotalAmountPaid = activeUnits.Sum(u => u.AmountPaid),
+                // Join request stats
+                PendingJoinRequests = pendingJoinRequestCount
             },
             Divisions = evt.Divisions.OrderBy(d => d.SortOrder).Select(d => new DivisionStatusDto
             {
@@ -6265,6 +6272,52 @@ public class TournamentController : EventControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new ApiResponse<bool> { Success = true, Data = true });
+    }
+
+    // ============================================
+    // Join Requests (TD/Organizer View)
+    // ============================================
+
+    [Authorize]
+    [HttpGet("events/{eventId}/join-requests")]
+    public async Task<ActionResult<ApiResponse<EventJoinRequestsDto>>> GetEventJoinRequests(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<EventJoinRequestsDto> { Success = false, Message = "Unauthorized" });
+
+        var canManage = await CanManageEventAsync(eventId);
+        if (!canManage)
+            return Forbid();
+
+        var pendingRequests = await _context.EventUnitJoinRequests
+            .Include(r => r.User)
+            .Include(r => r.Unit)
+                .ThenInclude(u => u!.Division)
+            .Where(r => r.Unit!.EventId == eventId && r.Status == "Pending")
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new PendingJoinRequestDto
+            {
+                RequestId = r.Id,
+                RequesterName = (r.User!.FirstName ?? "") + " " + (r.User.LastName ?? ""),
+                RequesterProfileImage = r.User.ProfileImageUrl,
+                RequesterUserId = r.UserId,
+                UnitId = r.UnitId,
+                UnitName = r.Unit!.Name,
+                DivisionId = r.Unit.DivisionId,
+                DivisionName = r.Unit.Division != null ? r.Unit.Division.Name : "",
+                Message = r.Message,
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync();
+
+        var result = new EventJoinRequestsDto
+        {
+            EventId = eventId,
+            PendingRequests = pendingRequests
+        };
+
+        return Ok(new ApiResponse<EventJoinRequestsDto> { Success = true, Data = result });
     }
 
     // ============================================

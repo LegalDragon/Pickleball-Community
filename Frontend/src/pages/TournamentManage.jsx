@@ -134,6 +134,11 @@ export default function TournamentManage() {
   const [expandedUnit, setExpandedUnit] = useState(null); // unitId for expanded view
   const [movingUnitToDivision, setMovingUnitToDivision] = useState(null); // { unit, targetDivisionId }
 
+  // Join requests state (TD/organizer view)
+  const [joinRequests, setJoinRequests] = useState([]);
+  const [loadingJoinRequests, setLoadingJoinRequests] = useState(false);
+  const [respondingToRequest, setRespondingToRequest] = useState(null); // requestId being processed
+
   // Registration validation state
   const [validationResults, setValidationResults] = useState(null);
   const [loadingValidation, setLoadingValidation] = useState(false);
@@ -1901,6 +1906,43 @@ export default function TournamentManage() {
     }
   };
 
+  const loadJoinRequests = async () => {
+    setLoadingJoinRequests(true);
+    try {
+      const response = await tournamentApi.getEventJoinRequests(eventId);
+      if (response.success) {
+        setJoinRequests(response.data?.pendingRequests || []);
+      } else {
+        toast.error(response.message || 'Failed to load join requests');
+      }
+    } catch (err) {
+      console.error('Error loading join requests:', err);
+      toast.error('Failed to load join requests');
+    } finally {
+      setLoadingJoinRequests(false);
+    }
+  };
+
+  const handleRespondToJoinRequest = async (requestId, accept) => {
+    setRespondingToRequest(requestId);
+    try {
+      const response = await tournamentApi.respondToJoinRequest(requestId, accept);
+      if (response.success) {
+        toast.success(accept ? 'Join request accepted' : 'Join request declined');
+        // Refresh join requests and dashboard
+        loadJoinRequests();
+        loadDashboard(true);
+      } else {
+        toast.error(response.message || 'Failed to respond to join request');
+      }
+    } catch (err) {
+      console.error('Error responding to join request:', err);
+      toast.error('Failed to respond to join request');
+    } finally {
+      setRespondingToRequest(null);
+    }
+  };
+
   const loadEventFeeTypes = async () => {
     try {
       const response = await tournamentApi.getEventFeeTypes(eventId);
@@ -2454,7 +2496,7 @@ export default function TournamentManage() {
                   { key: 'eventinfo', label: 'Event Info' },
                   { key: 'divisions', label: 'Divisions' },
                   { key: 'courts', label: 'Courts' },
-                  { key: 'registrations', label: 'Registrations' },
+                  { key: 'registrations', label: 'Registrations', badge: dashboard?.stats?.pendingJoinRequests },
                   { key: 'payments', label: 'Payments' },
                   { key: 'documents', label: 'Documents' },
                   { key: 'staff', label: 'Staff' },
@@ -2473,6 +2515,9 @@ export default function TournamentManage() {
                       if (tab.key === 'courts' && courtGroups.length === 0) {
                         loadCourtGroups();
                       }
+                      if (tab.key === 'registrations') {
+                        loadJoinRequests();
+                      }
                       if (tab.key === 'documents' && documents.length === 0) {
                         loadDocuments();
                         loadAssetTypes();
@@ -2481,13 +2526,18 @@ export default function TournamentManage() {
                         loadCourtGroups();
                       }
                     }}
-                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors whitespace-nowrap relative ${
                       activeTab === tab.key
                         ? 'border-orange-600 text-orange-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
+                    {tab.badge > 0 && (
+                      <span className="ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
+                        {tab.badge}
+                      </span>
+                    )}
                   </button>
                 ))
               ) : (
@@ -5071,6 +5121,103 @@ export default function TournamentManage() {
                 </button>
               </div>
             </div>
+
+            {/* Pending Join Requests Section */}
+            {isOrganizer && (joinRequests.length > 0 || loadingJoinRequests) && (
+              <div className="bg-white rounded-xl shadow-sm border border-orange-200">
+                <div className="px-4 py-3 border-b border-orange-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-orange-600" />
+                    <h3 className="font-semibold text-gray-900">Pending Join Requests</h3>
+                    {joinRequests.length > 0 && (
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">
+                        {joinRequests.length}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={loadJoinRequests}
+                    disabled={loadingJoinRequests}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingJoinRequests ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {loadingJoinRequests && joinRequests.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      Loading join requests...
+                    </div>
+                  ) : (
+                    joinRequests.map(req => (
+                      <div key={req.requestId} className="px-4 py-3 flex items-center gap-3">
+                        {/* Profile image */}
+                        <div className="flex-shrink-0">
+                          {req.requesterProfileImage ? (
+                            <img
+                              src={req.requesterProfileImage}
+                              alt={req.requesterName}
+                              className="w-9 h-9 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center">
+                              <User className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        {/* Request details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm">
+                            <span className="font-medium text-gray-900">{req.requesterName}</span>
+                            <span className="text-gray-500"> wants to join </span>
+                            <span className="font-medium text-gray-900">{req.unitName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                            <span className="bg-gray-100 px-1.5 py-0.5 rounded">{req.divisionName}</span>
+                            <span>·</span>
+                            <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                            {req.message && (
+                              <>
+                                <span>·</span>
+                                <span className="italic truncate max-w-[200px]">"{req.message}"</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => handleRespondToJoinRequest(req.requestId, true)}
+                            disabled={respondingToRequest === req.requestId}
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {respondingToRequest === req.requestId ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Check className="w-3 h-3" />
+                            )}
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleRespondToJoinRequest(req.requestId, false)}
+                            disabled={respondingToRequest === req.requestId}
+                            className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {respondingToRequest === req.requestId ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <X className="w-3 h-3" />
+                            )}
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Division Filter */}
             <div className="bg-white rounded-xl shadow-sm p-4">

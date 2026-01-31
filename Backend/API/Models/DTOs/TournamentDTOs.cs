@@ -642,6 +642,9 @@ public class TournamentStatsDto
     public int PaymentsPending { get; set; }
     public decimal TotalAmountDue { get; set; }
     public decimal TotalAmountPaid { get; set; }
+
+    // Join request stats
+    public int PendingJoinRequests { get; set; }
 }
 
 /// <summary>
@@ -659,6 +662,30 @@ public class DivisionMatchStatsDto
     public int CompletedGames { get; set; }
     public int InProgressEncounters { get; set; }
     public int ScheduledEncounters { get; set; }
+}
+
+// ============================================
+// Join Request DTOs (for TD/organizer view)
+// ============================================
+
+public class PendingJoinRequestDto
+{
+    public int RequestId { get; set; }
+    public string RequesterName { get; set; } = string.Empty;
+    public string? RequesterProfileImage { get; set; }
+    public int RequesterUserId { get; set; }
+    public int UnitId { get; set; }
+    public string UnitName { get; set; } = string.Empty;
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class EventJoinRequestsDto
+{
+    public int EventId { get; set; }
+    public List<PendingJoinRequestDto> PendingRequests { get; set; } = new();
 }
 
 // ============================================
