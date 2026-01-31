@@ -9,6 +9,7 @@ export default function VideoRoomList() {
   const navigate = useNavigate()
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createdRoom, setCreatedRoom] = useState(null)
@@ -26,10 +27,13 @@ export default function VideoRoomList() {
   const loadRooms = async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await videoRoomApi.getActiveRooms()
       setRooms(Array.isArray(res) ? res : (res?.data || []))
     } catch (err) {
       console.error('Failed to load rooms:', err)
+      const msg = typeof err === 'string' ? err : (err?.message || 'Unable to load video rooms. Please try again later.')
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -50,7 +54,8 @@ export default function VideoRoomList() {
       loadRooms()
     } catch (err) {
       console.error('Failed to create room:', err)
-      alert('Failed to create room. Please try again.')
+      const msg = typeof err === 'string' ? err : (err?.message || 'Failed to create room. Please try again.')
+      alert(msg)
     } finally {
       setCreating(false)
     }
@@ -220,6 +225,18 @@ export default function VideoRoomList() {
             {loading ? (
               <div className="flex justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              </div>
+            ) : error ? (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
+                <Video className="w-10 h-10 text-red-400 mx-auto mb-3" />
+                <p className="text-red-400 font-medium mb-2">Failed to load rooms</p>
+                <p className="text-gray-400 text-sm mb-4">{error}</p>
+                <button
+                  onClick={loadRooms}
+                  className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                >
+                  Try Again
+                </button>
               </div>
             ) : rooms.length === 0 ? (
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-12 text-center">

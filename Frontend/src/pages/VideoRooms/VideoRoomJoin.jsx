@@ -32,10 +32,13 @@ export default function VideoRoomJoin() {
       const res = await videoRoomApi.getRoom(roomCode)
       setRoom(res?.data || res || null)
     } catch (err) {
-      if (err.response?.status === 404) {
+      // Note: api interceptor transforms errors to error.response?.data || error.message
+      // so err here is a string or data object, not a full axios error
+      const msg = typeof err === 'string' ? err : (err?.message || 'Failed to load room information.')
+      if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('ended')) {
         setError('Room not found or has ended.')
       } else {
-        setError('Failed to load room information.')
+        setError(msg)
       }
     } finally {
       setLoading(false)
@@ -77,7 +80,15 @@ export default function VideoRoomJoin() {
         setError(joinResult?.error || 'Failed to join room')
       }
     } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.Error || 'Failed to join room'
+      // api interceptor transforms errors: err is string or data object
+      let msg = 'Failed to join room'
+      if (typeof err === 'string') {
+        msg = err
+      } else if (err?.error || err?.Error) {
+        msg = err.error || err.Error
+      } else if (err?.message) {
+        msg = err.message
+      }
       setError(msg)
     } finally {
       setJoining(false)
