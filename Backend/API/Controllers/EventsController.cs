@@ -702,7 +702,7 @@ public class EventsController : EventControllerBase
                                     // Captain info for managing join requests
                                     IsCaptain = u.CaptainUserId == userId.Value,
                                     JoinMethod = u.JoinMethod ?? "Approval",
-                                    PendingJoinRequests = u.CaptainUserId == userId.Value
+                                    PendingJoinRequests = (u.CaptainUserId == userId.Value || isAdmin || (userId.HasValue && evt.OrganizedByUserId == userId.Value))
                                         ? (u.JoinRequests ?? new List<EventUnitJoinRequest>())
                                             .Where(jr => jr.Status == "Pending")
                                             .Select(jr => new UnitJoinRequestInfoDto
