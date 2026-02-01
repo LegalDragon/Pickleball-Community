@@ -73,6 +73,7 @@ export default function EventRegistration() {
 
   // Result state
   const [registrationResult, setRegistrationResult] = useState(null);
+  const [allRegisteredUnitIds, setAllRegisteredUnitIds] = useState([]); // #6: Track ALL registered unit IDs
 
   // Payment state
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -572,7 +573,12 @@ export default function EventRegistration() {
       });
 
       if (response.success) {
-        setRegistrationResult(response.data?.[0] || response.data);
+        // #6: Store ALL registered unit results, not just the first one
+        const results = Array.isArray(response.data) ? response.data : [response.data].filter(Boolean);
+        setRegistrationResult(results[0]); // Keep for backward compat
+        // Accumulate unit IDs across multiple registration rounds
+        const newUnitIds = results.map(r => r?.id || r?.unitId).filter(Boolean);
+        setAllRegisteredUnitIds(prev => [...new Set([...prev, ...newUnitIds])]);
 
         // Show warnings
         if (response.warnings?.length > 0) {
@@ -590,6 +596,9 @@ export default function EventRegistration() {
 
             // Update userRegistrations for the summary step
             setUserRegistrations(myUnits);
+
+            // #6: Update allRegisteredUnitIds with ALL user's units
+            setAllRegisteredUnitIds(prev => [...new Set([...prev, ...myUnits.map(u => u.id)])]);
 
             // Collect all accepted members across all divisions, deduping by userId
             const allMembersMap = new Map();
@@ -768,9 +777,12 @@ export default function EventRegistration() {
 
     setIsSubmittingPayment(true);
     try {
-      // Support both unitId (from "Continue" button) and id (from registration response)
-      const unitId = registrationResult?.unitId || registrationResult?.id;
-      if (!unitId) {
+      // #6: Handle payment for all registered units
+      const unitIds = allRegisteredUnitIds.length > 0
+        ? allRegisteredUnitIds
+        : [registrationResult?.unitId || registrationResult?.id].filter(Boolean);
+
+      if (unitIds.length === 0) {
         toast.error('Registration not found. Please try again from the event page.');
         return;
       }
@@ -780,24 +792,29 @@ export default function EventRegistration() {
       const currentMember = unitMembers.find(m => m.userId === user?.id);
       const memberIds = [currentMember?.id, ...selectedTeammateIds].filter(Boolean);
 
-      // Only send memberIds if we have valid ones, otherwise let backend use its own lookup
-      const paymentRequest = {
-        paymentProofUrl,
-        paymentReference,
-        paymentMethod,
-        amountPaid: getPaymentTotal()
-      };
-      if (memberIds.length > 0) {
-        paymentRequest.memberIds = memberIds;
+      // Submit payment for each registered unit
+      let allSucceeded = true;
+      for (const unitId of unitIds) {
+        const paymentRequest = {
+          paymentProofUrl,
+          paymentReference,
+          paymentMethod,
+          amountPaid: getPaymentTotal() / unitIds.length // Split evenly across units
+        };
+        if (memberIds.length > 0) {
+          paymentRequest.memberIds = memberIds;
+        }
+
+        const response = await tournamentApi.uploadPaymentProof(event.id, unitId, paymentRequest);
+        if (!response.success) {
+          allSucceeded = false;
+          toast.error(response.message || `Failed to submit payment for unit ${unitId}`);
+        }
       }
 
-      const response = await tournamentApi.uploadPaymentProof(event.id, unitId, paymentRequest);
-
-      if (response.success) {
+      if (allSucceeded) {
         toast.success('Payment submitted successfully!');
         navigate(`/event/${eventId}`); // Go back to event view
-      } else {
-        toast.error(response.message || 'Failed to submit payment');
       }
     } catch (err) {
       console.error('Error submitting payment:', err);
@@ -2224,9 +2241,30 @@ export default function EventRegistration() {
                 <Check className="w-8 h-8 text-green-600 mx-auto mb-2" />
                 <h3 className="font-semibold text-green-800">Registration Successful!</h3>
                 <p className="text-sm text-green-700 mt-1">
-                  You're registered for {selectedDivision?.name}
+                  {/* #6: Show all registered divisions, not just one */}
+                  {userRegistrations.length > 1
+                    ? `You're registered for ${userRegistrations.length} divisions`
+                    : `You're registered for ${selectedDivision?.name || userRegistrations[0]?.divisionName || 'your division'}`
+                  }
                 </p>
               </div>
+
+              {/* #6: Show all registered divisions in payment step */}
+              {userRegistrations.length > 1 && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                  <h3 className="font-medium text-gray-900 mb-2">Registered Divisions:</h3>
+                  <div className="space-y-1">
+                    {userRegistrations.map((reg, idx) => (
+                      <div key={reg.id || idx} className="flex justify-between text-sm">
+                        <span className="text-gray-700">{reg.divisionName}</span>
+                        <span className="text-orange-600 font-medium">
+                          {reg.amountDue > 0 ? `$${reg.amountDue}` : 'Free'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />

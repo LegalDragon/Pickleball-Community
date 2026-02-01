@@ -56,6 +56,22 @@ public class TournamentRegistrationService : ITournamentRegistrationService
         if (evt == null)
             return ServiceResult<List<EventUnitDto>>.NotFound("Event not found");
 
+        // #1/#7: Check event is active and in valid status for registration
+        if (!evt.IsActive)
+            return ServiceResult<List<EventUnitDto>>.Fail("This event is no longer active");
+
+        var blockedStatuses = new[] { "Draft", "Cancelled", "Completed" };
+        if (blockedStatuses.Contains(evt.TournamentStatus))
+            return ServiceResult<List<EventUnitDto>>.Fail("Registration is not available for this event");
+
+        // #1: Check registration dates
+        var now = DateTime.Now;
+        if (evt.RegistrationOpenDate.HasValue && now < evt.RegistrationOpenDate.Value)
+            return ServiceResult<List<EventUnitDto>>.Fail($"Registration is not open yet. Opens on {evt.RegistrationOpenDate.Value:MMMM d, yyyy}");
+
+        if (evt.RegistrationCloseDate.HasValue && now > evt.RegistrationCloseDate.Value)
+            return ServiceResult<List<EventUnitDto>>.Fail("Registration has closed for this event");
+
         var user = await _context.Users.FindAsync(userId);
         if (user == null)
             return ServiceResult<List<EventUnitDto>>.NotFound("User not found");
@@ -81,6 +97,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             if (existingRegistration)
                 return ServiceResult<List<EventUnitDto>>.Fail("This event only allows registration for one division. You are already registered.");
         }
+
+        // #2: Wrap registration in transaction for isolation
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
 
         foreach (var divisionId in request.DivisionIds)
         {
@@ -188,19 +209,57 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             };
             _context.EventUnitMembers.Add(member);
 
+            // #5: Partner invitation eligibility checks
             if (!isSingles && request.PartnerUserId.HasValue)
             {
-                var partnerMember = new EventUnitMember
+                var partnerUser = await _context.Users.FindAsync(request.PartnerUserId.Value);
+                if (partnerUser == null)
                 {
-                    UnitId = unit.Id,
-                    UserId = request.PartnerUserId.Value,
-                    Role = "Player",
-                    InviteStatus = "Pending",
-                    InvitedAt = DateTime.Now,
-                    CreatedAt = DateTime.Now,
-                    ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
-                };
-                _context.EventUnitMembers.Add(partnerMember);
+                    warnings.Add($"Partner user not found for division '{division.Name}'. Registering without partner.");
+                }
+                else
+                {
+                    var partnerRegistered = await _context.EventUnitMembers
+                        .Include(m => m.Unit)
+                        .AnyAsync(m => m.UserId == request.PartnerUserId.Value &&
+                            m.Unit!.DivisionId == divisionId &&
+                            m.Unit.EventId == eventId &&
+                            m.Unit.Status != "Cancelled" &&
+                            m.InviteStatus == "Accepted");
+
+                    if (partnerRegistered)
+                    {
+                        warnings.Add($"Partner is already registered in division '{division.Name}'. Registering without partner.");
+                    }
+                    else
+                    {
+                        var partnerHasPendingRequest = await _context.EventUnitJoinRequests
+                            .Include(r => r.Unit)
+                            .AnyAsync(r => r.UserId == request.PartnerUserId.Value &&
+                                r.Unit!.DivisionId == divisionId &&
+                                r.Unit.EventId == eventId &&
+                                r.Status == "Pending");
+
+                        if (partnerHasPendingRequest)
+                        {
+                            warnings.Add($"Partner has a pending join request in division '{division.Name}'. Registering without partner.");
+                        }
+                        else
+                        {
+                            var partnerMember = new EventUnitMember
+                            {
+                                UnitId = unit.Id,
+                                UserId = request.PartnerUserId.Value,
+                                Role = "Player",
+                                InviteStatus = "Pending",
+                                InvitedAt = DateTime.Now,
+                                CreatedAt = DateTime.Now,
+                                ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
+                            };
+                            _context.EventUnitMembers.Add(partnerMember);
+                        }
+                    }
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -217,6 +276,7 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         if (!createdUnits.Any())
         {
+            await transaction.CommitAsync();
             return ServiceResult<List<EventUnitDto>>.OkWithWarnings(new List<EventUnitDto>(), warnings);
         }
 
@@ -224,19 +284,26 @@ public class TournamentRegistrationService : ITournamentRegistrationService
         var allUnits = await _context.EventUnits
             .Include(u => u.Members)
                 .ThenInclude(m => m.User)
+            .Include(u => u.Members)
+                .ThenInclude(m => m.SelectedFee)
             .Include(u => u.Division)
                 .ThenInclude(d => d!.TeamUnit)
             .Where(u => u.EventId == eventId)
             .ToListAsync();
         var units = allUnits.Where(u => unitIdsSet.Contains(u.Id)).ToList();
 
-        // Send registration confirmation email
+        await transaction.CommitAsync();
+
+        // Send registration confirmation email (outside transaction)
         try
         {
             foreach (var unit in units)
             {
                 var division = evt.Divisions.FirstOrDefault(d => d.Id == unit.DivisionId);
-                var feeAmount = division?.DivisionFee ?? 0;
+
+                // #9: Use member's selected fee amount for email
+                var memberRecord = unit.Members.FirstOrDefault(m => m.UserId == userId);
+                var feeAmount = memberRecord?.SelectedFee?.Amount ?? division?.DivisionFee ?? 0;
 
                 var waiverCount = await _context.ObjectAssets
                     .Include(a => a.AssetType)
@@ -277,6 +344,13 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             units.Select(MapToUnitDto).ToList(),
             warnings
         );
+
+        } // end try
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<EventUnitDto>> AdminRegisterUserAsync(int eventId, int organizerId, bool isOrganizer, bool isAdmin, AdminAddRegistrationRequest request)
@@ -291,6 +365,13 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         if (!isOrganizer && !isAdmin)
             return ServiceResult<EventUnitDto>.Forbidden();
+
+        // #1: Admins bypass date checks but not cancelled/inactive events
+        if (!evt.IsActive)
+            return ServiceResult<EventUnitDto>.Fail("This event is no longer active");
+
+        if (evt.TournamentStatus == "Cancelled")
+            return ServiceResult<EventUnitDto>.Fail("Cannot register for a cancelled event");
 
         var user = await _context.Users.FindAsync(request.UserId);
         if (user == null)
@@ -343,86 +424,98 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             ? Utility.FormatName(user.LastName, user.FirstName)
             : $"{user.FirstName}'s Team";
 
-        var unit = new EventUnit
+        // #2: Wrap in transaction for isolation
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            EventId = eventId,
-            DivisionId = request.DivisionId,
-            Name = unitName,
-            Status = isWaitlisted ? "Waitlisted" : "Registered",
-            WaitlistPosition = isWaitlisted ? await GetNextWaitlistPosition(request.DivisionId) : null,
-            CaptainUserId = request.UserId,
-            CreatedAt = DateTime.Now,
-            UpdatedAt = DateTime.Now
-        };
-
-        _context.EventUnits.Add(unit);
-        await _context.SaveChangesAsync();
-
-        unit.ReferenceId = $"E{eventId}-U{unit.Id}";
-
-        var member = new EventUnitMember
-        {
-            UnitId = unit.Id,
-            UserId = request.UserId,
-            Role = "Captain",
-            InviteStatus = "Accepted",
-            IsCheckedIn = request.AutoCheckIn,
-            CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
-            CreatedAt = DateTime.Now,
-            ReferenceId = $"E{eventId}-U{unit.Id}-P{request.UserId}"
-        };
-        _context.EventUnitMembers.Add(member);
-
-        if (!isSingles && request.PartnerUserId.HasValue)
-        {
-            var partnerUser = await _context.Users.FindAsync(request.PartnerUserId.Value);
-            if (partnerUser != null)
+            var unit = new EventUnit
             {
-                var partnerExisting = await _context.EventUnitMembers
-                    .Include(m => m.Unit)
-                    .FirstOrDefaultAsync(m => m.UserId == request.PartnerUserId.Value &&
-                        m.Unit!.DivisionId == request.DivisionId &&
-                        m.Unit.EventId == eventId &&
-                        m.Unit.Status != "Cancelled" &&
-                        m.InviteStatus == "Accepted");
+                EventId = eventId,
+                DivisionId = request.DivisionId,
+                Name = unitName,
+                Status = isWaitlisted ? "Waitlisted" : "Registered",
+                WaitlistPosition = isWaitlisted ? await GetNextWaitlistPosition(request.DivisionId) : null,
+                CaptainUserId = request.UserId,
+                CreatedAt = DateTime.Now,
+                UpdatedAt = DateTime.Now
+            };
 
-                if (partnerExisting == null)
+            _context.EventUnits.Add(unit);
+            await _context.SaveChangesAsync();
+
+            unit.ReferenceId = $"E{eventId}-U{unit.Id}";
+
+            var member = new EventUnitMember
+            {
+                UnitId = unit.Id,
+                UserId = request.UserId,
+                Role = "Captain",
+                InviteStatus = "Accepted",
+                IsCheckedIn = request.AutoCheckIn,
+                CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+                CreatedAt = DateTime.Now,
+                ReferenceId = $"E{eventId}-U{unit.Id}-P{request.UserId}"
+            };
+            _context.EventUnitMembers.Add(member);
+
+            if (!isSingles && request.PartnerUserId.HasValue)
+            {
+                var partnerUser = await _context.Users.FindAsync(request.PartnerUserId.Value);
+                if (partnerUser != null)
                 {
-                    var partnerMember = new EventUnitMember
+                    var partnerExisting = await _context.EventUnitMembers
+                        .Include(m => m.Unit)
+                        .FirstOrDefaultAsync(m => m.UserId == request.PartnerUserId.Value &&
+                            m.Unit!.DivisionId == request.DivisionId &&
+                            m.Unit.EventId == eventId &&
+                            m.Unit.Status != "Cancelled" &&
+                            m.InviteStatus == "Accepted");
+
+                    if (partnerExisting == null)
                     {
-                        UnitId = unit.Id,
-                        UserId = request.PartnerUserId.Value,
-                        Role = "Player",
-                        InviteStatus = "Accepted",
-                        IsCheckedIn = request.AutoCheckIn,
-                        CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
-                        CreatedAt = DateTime.Now,
-                        ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
-                    };
-                    _context.EventUnitMembers.Add(partnerMember);
+                        var partnerMember = new EventUnitMember
+                        {
+                            UnitId = unit.Id,
+                            UserId = request.PartnerUserId.Value,
+                            Role = "Player",
+                            InviteStatus = "Accepted",
+                            IsCheckedIn = request.AutoCheckIn,
+                            CheckedInAt = request.AutoCheckIn ? DateTime.Now : null,
+                            CreatedAt = DateTime.Now,
+                            ReferenceId = $"E{eventId}-U{unit.Id}-P{request.PartnerUserId.Value}"
+                        };
+                        _context.EventUnitMembers.Add(partnerMember);
+                    }
                 }
             }
+
+            await _context.SaveChangesAsync();
+
+            await UpdateUnitDisplayNameAsync(unit.Id);
+            await _context.SaveChangesAsync();
+
+            var loadedUnit = await _context.EventUnits
+                .Include(u => u.Members)
+                    .ThenInclude(m => m.User)
+                .Include(u => u.Division)
+                    .ThenInclude(d => d!.TeamUnit)
+                .FirstOrDefaultAsync(u => u.Id == unit.Id);
+
+            await transaction.CommitAsync();
+
+            var message = $"{Utility.FormatName(user.LastName, user.FirstName)} has been registered for {division.Name}";
+            if (isWaitlisted)
+                message += " (placed on waitlist)";
+            if (request.AutoCheckIn)
+                message += " and checked in";
+
+            return ServiceResult<EventUnitDto>.Ok(MapToUnitDto(loadedUnit!), message);
         }
-
-        await _context.SaveChangesAsync();
-
-        await UpdateUnitDisplayNameAsync(unit.Id);
-        await _context.SaveChangesAsync();
-
-        var loadedUnit = await _context.EventUnits
-            .Include(u => u.Members)
-                .ThenInclude(m => m.User)
-            .Include(u => u.Division)
-                .ThenInclude(d => d!.TeamUnit)
-            .FirstOrDefaultAsync(u => u.Id == unit.Id);
-
-        var message = $"{Utility.FormatName(user.LastName, user.FirstName)} has been registered for {division.Name}";
-        if (isWaitlisted)
-            message += " (placed on waitlist)";
-        if (request.AutoCheckIn)
-            message += " and checked in";
-
-        return ServiceResult<EventUnitDto>.Ok(MapToUnitDto(loadedUnit!), message);
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<UnitJoinRequestDto>> RequestToJoinUnitAsync(int unitId, int userId, JoinUnitRequest request)
@@ -435,6 +528,15 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         if (unit == null)
             return ServiceResult<UnitJoinRequestDto>.NotFound("Unit not found");
+
+        // #7: Check event status
+        var evt = await _context.Events.FindAsync(unit.EventId);
+        if (evt == null || !evt.IsActive)
+            return ServiceResult<UnitJoinRequestDto>.Fail("This event is no longer active");
+
+        var blockedStatuses = new[] { "Draft", "Cancelled", "Completed" };
+        if (blockedStatuses.Contains(evt.TournamentStatus))
+            return ServiceResult<UnitJoinRequestDto>.Fail("Registration is not available for this event");
 
         var teamSize = unit.Division?.TeamUnit?.TotalPlayers ?? 1;
         var currentMembers = unit.Members.Count(m => m.InviteStatus == "Accepted");
@@ -482,6 +584,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         if (alreadyRegisteredAsNonCaptain)
             return ServiceResult<UnitJoinRequestDto>.Fail("You are already registered in this division");
+
+        // #2: Wrap join logic in transaction for isolation
+        using var joinTransaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
 
         // Check for MUTUAL REQUEST scenario
         var requesterUnit = await _context.EventUnits
@@ -535,9 +642,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
                 var requesterUser = await _context.Users.FindAsync(userId);
                 var targetUser = await _context.Users.FindAsync(unit.CaptainUserId);
 
+                await joinTransaction.CommitAsync();
+                // #3: Use actual member Id instead of 0 for reliable DTO
                 return ServiceResult<UnitJoinRequestDto>.Ok(new UnitJoinRequestDto
                 {
-                    Id = 0,
+                    Id = newMember.Id,
                     UnitId = requesterUnit.Id,
                     UnitName = requesterUnit.Name,
                     UserId = userId,
@@ -585,10 +694,12 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             var acceptedUser = await _context.Users.FindAsync(userId);
             var captain = await _context.Users.FindAsync(unit.CaptainUserId);
 
+            await joinTransaction.CommitAsync();
+            // #3: Use actual member Id for reliable DTO
             return ServiceResult<UnitJoinRequestDto>.OkWithWarnings(
                 new UnitJoinRequestDto
                 {
-                    Id = 0,
+                    Id = acceptedMember.Id,
                     UnitId = unitId,
                     UnitName = unit.Name,
                     UserId = userId,
@@ -629,10 +740,12 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             var autoAcceptedUser = await _context.Users.FindAsync(userId);
             var unitCaptain = await _context.Users.FindAsync(unit.CaptainUserId);
 
+            await joinTransaction.CommitAsync();
+            // #3: Use actual member Id for reliable DTO
             return ServiceResult<UnitJoinRequestDto>.OkWithWarnings(
                 new UnitJoinRequestDto
                 {
-                    Id = 0,
+                    Id = autoAcceptedMember.Id,
                     UnitId = unitId,
                     UnitName = unit.Name,
                     UserId = userId,
@@ -677,6 +790,7 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         var user2 = await _context.Users.FindAsync(userId);
 
+        await joinTransaction.CommitAsync();
         return ServiceResult<UnitJoinRequestDto>.OkWithWarnings(
             new UnitJoinRequestDto
             {
@@ -692,6 +806,13 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             },
             waitlistWarning != null ? new List<string> { waitlistWarning } : null
         );
+
+        } // end joinTransaction try
+        catch
+        {
+            await joinTransaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<bool>> RespondToJoinRequestAsync(int userId, bool canManageEvent, RespondToJoinRequest request)
@@ -707,6 +828,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
         var isCaptain = joinRequest.Unit?.CaptainUserId == userId;
         if (!isCaptain && !canManageEvent)
             return ServiceResult<bool>.Forbidden();
+
+        // #2: Wrap in transaction for isolation
+        using var respondTransaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
 
         bool shouldWaitlist = false;
         string? waitlistMessage = null;
@@ -829,7 +955,15 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             await _context.SaveChangesAsync();
         }
 
+        await respondTransaction.CommitAsync();
         return ServiceResult<bool>.OkWithWarnings(true, waitlistMessage != null ? new List<string> { waitlistMessage } : null);
+
+        } // end respondTransaction try
+        catch
+        {
+            await respondTransaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<bool>> RespondToInvitationAsync(int userId, RespondToInvitationRequest request)
@@ -1081,6 +1215,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
         if (acceptedMembers.Count <= 1)
             return ServiceResult<object>.Fail("Unit only has one member. Nothing to break apart.");
 
+        // #2: Wrap in transaction for isolation
+        using var breakTransaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+
         if (unit.JoinRequests.Any())
             _context.EventUnitJoinRequests.RemoveRange(unit.JoinRequests);
 
@@ -1166,10 +1305,18 @@ public class TournamentRegistrationService : ITournamentRegistrationService
 
         await _context.SaveChangesAsync();
 
+        await breakTransaction.CommitAsync();
         return ServiceResult<object>.Ok(
             new { createdUnits = createdUnits.Count },
             $"Unit broken apart. {createdUnits.Count} new individual registration(s) created: {string.Join(", ", createdUnits)}"
         );
+
+        } // end breakTransaction try
+        catch
+        {
+            await breakTransaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<object>> MoveRegistrationAsync(int eventId, int unitId, int userId, bool isAdmin, MoveRegistrationRequest request)
@@ -1453,6 +1600,11 @@ public class TournamentRegistrationService : ITournamentRegistrationService
         if (targetMemberCount + sourceMemberCount > teamSize)
             return ServiceResult<EventUnitDto>.Fail($"Combined members ({targetMemberCount + sourceMemberCount}) would exceed team size ({teamSize})");
 
+        // #2: Wrap merge in transaction for isolation
+        using var mergeTransaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+
         foreach (var member in sourceUnit.Members.ToList())
         {
             if (targetUnit.Members.Any(m => m.UserId == member.UserId))
@@ -1516,7 +1668,15 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             .Include(u => u.Event)
             .FirstOrDefaultAsync(u => u.Id == targetUnit.Id);
 
+        await mergeTransaction.CommitAsync();
         return ServiceResult<EventUnitDto>.Ok(MapToUnitDtoSimple(updatedUnit!), "Registrations merged successfully");
+
+        } // end mergeTransaction try
+        catch
+        {
+            await mergeTransaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task<ServiceResult<EventUnitDto>> JoinUnitByCodeAsync(int userId, JoinByCodeRequest request)
@@ -1736,6 +1896,24 @@ public class TournamentRegistrationService : ITournamentRegistrationService
     // Private Helper Methods
     // ============================================
 
+    /// <summary>
+    /// #8: Calculate AmountDue for a unit using members' SelectedFee when available,
+    /// falling back to division.DivisionFee + event.RegistrationFee
+    /// </summary>
+    private static decimal CalculateUnitAmountDue(EventUnit u)
+    {
+        var eventFee = u.Event?.RegistrationFee ?? 0m;
+        var defaultDivFee = u.Division?.DivisionFee ?? 0m;
+        var acceptedMembers = u.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+
+        if (acceptedMembers.Count == 0)
+            return eventFee + defaultDivFee;
+
+        return acceptedMembers.Sum(m =>
+            (m.SelectedFee?.Amount ?? defaultDivFee) + eventFee
+        );
+    }
+
     private async Task<int> GetNextWaitlistPosition(int divisionId)
     {
         var maxUnit = await _context.EventUnits
@@ -1868,7 +2046,8 @@ public class TournamentRegistrationService : ITournamentRegistrationService
             AllCheckedIn = acceptedMembers.All(m => m.IsCheckedIn),
             PaymentStatus = u.PaymentStatus ?? "Pending",
             AmountPaid = u.AmountPaid,
-            AmountDue = (u.Event?.RegistrationFee ?? 0m) + (u.Division?.DivisionFee ?? 0m),
+            // #8: Calculate AmountDue using member's SelectedFee when available
+            AmountDue = CalculateUnitAmountDue(u),
             PaymentProofUrl = u.PaymentProofUrl,
             PaymentReference = u.PaymentReference,
             ReferenceId = u.ReferenceId,
