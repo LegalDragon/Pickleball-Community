@@ -4512,6 +4512,131 @@ public class TournamentController : EventControllerBase
             fileName);
     }
 
+    /// <summary>
+    /// Export all registrations with payment status to Excel
+    /// </summary>
+    [HttpGet("events/{eventId}/registrations/export")]
+    [Authorize]
+    public async Task<IActionResult> ExportRegistrations(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return Unauthorized();
+
+        if (!await CanManageEventAsync(eventId)) return Forbid();
+
+        var evt = await _context.Events
+            .Include(e => e.Divisions)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+        if (evt == null) return NotFound();
+
+        var units = await _context.EventUnits
+            .Include(u => u.Members).ThenInclude(m => m.User)
+            .Include(u => u.Division)
+            .Where(u => u.EventId == eventId && u.Status != "Cancelled")
+            .OrderBy(u => u.Division != null ? u.Division.Name : "")
+            .ThenBy(u => u.Name)
+            .ToListAsync();
+
+        using var workbook = new ClosedXML.Excel.XLWorkbook();
+
+        // Summary sheet
+        var summarySheet = workbook.Worksheets.Add("Summary");
+        summarySheet.Cell(1, 1).Value = evt.Name;
+        summarySheet.Cell(1, 1).Style.Font.Bold = true;
+        summarySheet.Cell(1, 1).Style.Font.FontSize = 14;
+        summarySheet.Cell(2, 1).Value = $"Exported: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        summarySheet.Cell(3, 1).Value = $"Total Registrations: {units.Count}";
+
+        // Per-division summary
+        var row = 5;
+        summarySheet.Cell(row, 1).Value = "Division";
+        summarySheet.Cell(row, 2).Value = "Registrations";
+        summarySheet.Cell(row, 3).Value = "Fully Paid";
+        summarySheet.Cell(row, 4).Value = "Partial/Pending";
+        summarySheet.Cell(row, 5).Value = "Total Collected";
+        summarySheet.Cell(row, 6).Value = "Total Expected";
+        summarySheet.Range(row, 1, row, 6).Style.Font.Bold = true;
+        summarySheet.Range(row, 1, row, 6).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+
+        foreach (var division in evt.Divisions.OrderBy(d => d.Name))
+        {
+            row++;
+            var divUnits = units.Where(u => u.DivisionId == division.Id).ToList();
+            var feePerUnit = evt.RegistrationFee + (division.DivisionFee ?? 0m);
+            summarySheet.Cell(row, 1).Value = division.Name;
+            summarySheet.Cell(row, 2).Value = divUnits.Count;
+            summarySheet.Cell(row, 3).Value = divUnits.Count(u => u.PaymentStatus == "Paid");
+            summarySheet.Cell(row, 4).Value = divUnits.Count(u => u.PaymentStatus != "Paid");
+            summarySheet.Cell(row, 5).Value = divUnits.Sum(u => u.AmountPaid);
+            summarySheet.Cell(row, 5).Style.NumberFormat.Format = "$#,##0.00";
+            summarySheet.Cell(row, 6).Value = divUnits.Count * feePerUnit;
+            summarySheet.Cell(row, 6).Style.NumberFormat.Format = "$#,##0.00";
+        }
+        summarySheet.Columns().AdjustToContents();
+
+        // All registrations sheet
+        var regSheet = workbook.Worksheets.Add("All Registrations");
+        var headers = new[] { "Division", "Team/Unit Name", "Player Name", "Email", "Phone", "Payment Status", "Amount Paid", "Amount Due", "Payment Method", "Payment Reference", "Payment Proof", "Paid Date", "Registration Date" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            regSheet.Cell(1, i + 1).Value = headers[i];
+        }
+        regSheet.Range(1, 1, 1, headers.Length).Style.Font.Bold = true;
+        regSheet.Range(1, 1, 1, headers.Length).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+
+        row = 2;
+        foreach (var unit in units)
+        {
+            var feePerUnit = evt.RegistrationFee + (unit.Division?.DivisionFee ?? 0m);
+            var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
+
+            if (acceptedMembers.Count == 0)
+            {
+                // Unit with no accepted members - still show the unit
+                regSheet.Cell(row, 1).Value = unit.Division?.Name ?? "";
+                regSheet.Cell(row, 2).Value = unit.Name ?? "";
+                regSheet.Cell(row, 3).Value = "(No accepted members)";
+                regSheet.Cell(row, 6).Value = unit.PaymentStatus ?? "Pending";
+                regSheet.Cell(row, 7).Value = unit.AmountPaid;
+                regSheet.Cell(row, 7).Style.NumberFormat.Format = "$#,##0.00";
+                regSheet.Cell(row, 8).Value = feePerUnit;
+                regSheet.Cell(row, 8).Style.NumberFormat.Format = "$#,##0.00";
+                row++;
+            }
+            else
+            {
+                foreach (var member in acceptedMembers)
+                {
+                    regSheet.Cell(row, 1).Value = unit.Division?.Name ?? "";
+                    regSheet.Cell(row, 2).Value = unit.Name ?? "";
+                    regSheet.Cell(row, 3).Value = $"{member.User?.FirstName} {member.User?.LastName}".Trim();
+                    regSheet.Cell(row, 4).Value = member.User?.Email ?? "";
+                    regSheet.Cell(row, 5).Value = member.User?.Phone ?? "";
+                    regSheet.Cell(row, 6).Value = member.HasPaid ? "Paid" : (string.IsNullOrEmpty(member.PaymentProofUrl) ? "Unpaid" : "Proof Submitted");
+                    regSheet.Cell(row, 7).Value = member.AmountPaid;
+                    regSheet.Cell(row, 7).Style.NumberFormat.Format = "$#,##0.00";
+                    // Split fee evenly among accepted members
+                    regSheet.Cell(row, 8).Value = feePerUnit / Math.Max(1, acceptedMembers.Count);
+                    regSheet.Cell(row, 8).Style.NumberFormat.Format = "$#,##0.00";
+                    regSheet.Cell(row, 9).Value = member.PaymentMethod ?? "";
+                    regSheet.Cell(row, 10).Value = member.PaymentReference ?? "";
+                    regSheet.Cell(row, 11).Value = string.IsNullOrEmpty(member.PaymentProofUrl) ? "No" : "Yes";
+                    regSheet.Cell(row, 12).Value = member.PaidAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+                    regSheet.Cell(row, 13).Value = member.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                    row++;
+                }
+            }
+        }
+        regSheet.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var fileName = $"{evt.Name.Replace(" ", "_")}_Registrations_{DateTime.Now:yyyyMMdd}.xlsx";
+        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
     // ============================================
     // Game Management
     // ============================================

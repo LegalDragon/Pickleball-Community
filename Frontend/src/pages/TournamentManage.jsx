@@ -37,6 +37,7 @@ export default function TournamentManage() {
   const [calculatingRankings, setCalculatingRankings] = useState(false);
   const [finalizingPools, setFinalizingPools] = useState(false);
   const [downloadingStandings, setDownloadingStandings] = useState(false);
+  const [exportingRegistrations, setExportingRegistrations] = useState(false);
   const [editingRank, setEditingRank] = useState(null);
   const [showAdvancementPreview, setShowAdvancementPreview] = useState(false);
   const [standingsViewMode, setStandingsViewMode] = useState('grouped'); // 'grouped' or 'flat'
@@ -1995,6 +1996,30 @@ export default function TournamentManage() {
       }
     } catch (err) {
       console.error('Error loading fee types:', err);
+    }
+  };
+
+  const handleExportRegistrations = async () => {
+    setExportingRegistrations(true);
+    try {
+      const response = await tournamentApi.exportRegistrations(eventId);
+      const blob = new Blob([response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Registrations_${eventId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Registrations exported');
+    } catch (err) {
+      console.error('Error exporting registrations:', err);
+      toast.error('Failed to export registrations');
+    } finally {
+      setExportingRegistrations(false);
     }
   };
 
@@ -5137,6 +5162,16 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Registration Management</h2>
               <div className="flex items-center gap-2">
+                {isOrganizer && (
+                  <button
+                    onClick={handleExportRegistrations}
+                    disabled={exportingRegistrations}
+                    className="px-4 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {exportingRegistrations ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    Excel
+                  </button>
+                )}
                 {isOrganizer && (
                   <button
                     onClick={validateRegistrations}

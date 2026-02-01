@@ -1584,6 +1584,7 @@ export const tournamentApi = {
     api.post(`/tournament/divisions/${divisionId}/assign-unit-numbers`, { assignments }),
   getSchedule: (divisionId) => api.get(`/tournament/divisions/${divisionId}/schedule`),
   downloadScoresheet: (divisionId) => api.get(`/tournament/divisions/${divisionId}/scoresheet`, { responseType: 'blob' }),
+  exportRegistrations: (eventId) => api.get(`/tournament/events/${eventId}/registrations/export`, { responseType: 'blob' }),
 
   // Division game settings
   updateDivisionGameSettings: (eventId, divisionId, data) =>
