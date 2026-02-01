@@ -2505,25 +2505,37 @@ public class TournamentGameDayController : ControllerBase
 
         var courtIds = courts.Select(c => c.Id).ToList();
 
-        // Get all games for these courts
-        var gameStats = await _context.EventGames
+        // Get all games for these courts (aggregate in C# to avoid CTE syntax issues on SQL Server 2014)
+        var courtGames = await _context.EventGames
             .Where(g => g.TournamentCourtId != null && courtIds.Contains(g.TournamentCourtId.Value))
-            .GroupBy(g => g.TournamentCourtId!.Value)
-            .Select(grp => new
+            .Select(g => new
             {
-                CourtId = grp.Key,
-                TotalGames = grp.Count(),
-                CompletedGames = grp.Count(g => g.Status == "Finished"),
-                ActiveGames = grp.Count(g => g.Status == "Playing" || g.Status == "Started" || g.Status == "InProgress"),
-                QueuedGames = grp.Count(g => g.Status == "Queued"),
-                AvgDurationMinutes = grp.Where(g => g.Status == "Finished" && g.StartedAt != null && g.FinishedAt != null)
-                    .Average(g => (double?)EF.Functions.DateDiffMinute(g.StartedAt!.Value, g.FinishedAt!.Value)),
-                TotalPlayingMinutes = grp.Where(g => g.Status == "Finished" && g.StartedAt != null && g.FinishedAt != null)
-                    .Sum(g => (int?)EF.Functions.DateDiffMinute(g.StartedAt!.Value, g.FinishedAt!.Value)) ?? 0
+                CourtId = g.TournamentCourtId!.Value,
+                g.Status,
+                g.StartedAt,
+                g.FinishedAt
             })
             .ToListAsync();
 
-        var statLookup = gameStats.ToDictionary(s => s.CourtId);
+        var statLookup = courtGames
+            .GroupBy(g => g.CourtId)
+            .ToDictionary(
+                grp => grp.Key,
+                grp =>
+                {
+                    var finished = grp.Where(g => g.Status == "Finished" && g.StartedAt != null && g.FinishedAt != null).ToList();
+                    var durations = finished.Select(g => (g.FinishedAt!.Value - g.StartedAt!.Value).TotalMinutes).ToList();
+                    return new
+                    {
+                        CourtId = grp.Key,
+                        TotalGames = grp.Count(),
+                        CompletedGames = grp.Count(g => g.Status == "Finished"),
+                        ActiveGames = grp.Count(g => g.Status == "Playing" || g.Status == "Started" || g.Status == "InProgress"),
+                        QueuedGames = grp.Count(g => g.Status == "Queued"),
+                        AvgDurationMinutes = durations.Count > 0 ? (double?)durations.Average() : null,
+                        TotalPlayingMinutes = durations.Count > 0 ? (int)durations.Sum() : 0
+                    };
+                });
 
         var result = courts.Select(c =>
         {
