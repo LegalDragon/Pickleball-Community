@@ -915,6 +915,14 @@ public class UpdateMemberPaymentRequest
     public string? ReferenceId { get; set; }
 }
 
+public class UpdatePaymentProofRequest
+{
+    public string? PaymentProofUrl { get; set; }
+    public string? PaymentReference { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? Notes { get; set; }
+}
+
 public class ApplyPaymentToTeammatesRequest
 {
     /// <summary>

@@ -150,6 +150,8 @@ export default function TournamentManage() {
   const [expandedPayment, setExpandedPayment] = useState(null);
   const [verifyingPayment, setVerifyingPayment] = useState(null);
   const [viewingProofUrl, setViewingProofUrl] = useState(null); // URL to display in modal
+  const [uploadingProofForPayment, setUploadingProofForPayment] = useState(null);
+  const proofFileInputRef = useRef(null);
 
   // Division editing state
   const [editingDivision, setEditingDivision] = useState(null);
@@ -1745,6 +1747,48 @@ export default function TournamentManage() {
       toast.error('Failed to upload file');
     } finally {
       setUploadingPaymentProof(false);
+    }
+  };
+
+  // Handle admin proof upload for payment records in Payments tab
+  const handleAdminProofUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingProofForPayment) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload an image (JPG, PNG, GIF, WebP) or PDF');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File must be less than 5MB');
+      return;
+    }
+
+    const paymentId = uploadingProofForPayment;
+    setUploadingProofForPayment('uploading');
+    try {
+      const assetType = file.type === 'application/pdf' ? 'document' : 'image';
+      const uploadRes = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
+      if (uploadRes.success && uploadRes.url) {
+        const response = await tournamentApi.updatePaymentProof(paymentId, {
+          paymentProofUrl: uploadRes.url
+        });
+        if (response.success) {
+          toast.success('Payment proof uploaded');
+          loadPaymentSummary();
+        } else {
+          toast.error(response.message || 'Failed to save proof');
+        }
+      } else {
+        toast.error(uploadRes.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Error uploading proof:', err);
+      toast.error('Failed to upload proof');
+    } finally {
+      setUploadingProofForPayment(null);
+      if (proofFileInputRef.current) proofFileInputRef.current.value = '';
     }
   };
 
@@ -6041,6 +6085,13 @@ export default function TournamentManage() {
         {/* Payments Tab */}
         {activeTab === 'payments' && (
           <div className="space-y-6">
+            <input
+              type="file"
+              ref={proofFileInputRef}
+              className="hidden"
+              accept="image/*,.pdf"
+              onChange={handleAdminProofUpload}
+            />
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Payment Management</h2>
               <button
@@ -6243,6 +6294,21 @@ export default function TournamentManage() {
                                         View Proof
                                       </button>
                                     )}
+                                    <button
+                                      onClick={() => {
+                                        setUploadingProofForPayment(payment.id);
+                                        proofFileInputRef.current?.click();
+                                      }}
+                                      disabled={uploadingProofForPayment === 'uploading'}
+                                      className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                      {uploadingProofForPayment === 'uploading' ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <Upload className="w-4 h-4" />
+                                      )}
+                                      Upload Proof
+                                    </button>
                                   </div>
                                 </div>
                               </div>

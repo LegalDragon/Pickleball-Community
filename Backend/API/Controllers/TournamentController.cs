@@ -8346,6 +8346,60 @@ public class TournamentController : EventControllerBase
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment verification removed" });
     }
 
+    /// <summary>
+    /// Update payment proof on a UserPayment record (organizer/admin only)
+    /// </summary>
+    [HttpPut("payments/{paymentId}/proof")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> UpdatePaymentProof(int paymentId, [FromBody] UpdatePaymentProofRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
+
+        // Check authorization - must be event organizer or admin
+        if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
+        {
+            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
+            if (evt == null)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
+
+            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+                return Forbid();
+        }
+        else if (!await IsAdminAsync())
+        {
+            return Forbid();
+        }
+
+        // Update fields
+        if (request.PaymentProofUrl != null)
+            payment.PaymentProofUrl = request.PaymentProofUrl;
+        if (request.PaymentReference != null)
+            payment.PaymentReference = request.PaymentReference;
+        if (request.PaymentMethod != null)
+            payment.PaymentMethod = request.PaymentMethod;
+        if (request.Notes != null)
+            payment.Notes = request.Notes;
+
+        // Auto-update status if proof is uploaded and status is Pending
+        if (!string.IsNullOrEmpty(request.PaymentProofUrl) && payment.Status == "Pending")
+            payment.Status = "PendingVerification";
+
+        payment.UpdatedAt = DateTime.Now;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment proof updated" });
+    }
+
     // ============================================
     // Tournament Reset (for Testing/Dry Run)
     // ============================================
