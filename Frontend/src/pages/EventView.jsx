@@ -590,8 +590,9 @@ export default function EventView() {
                                   // Get team info from first player (all players in team share same joinMethod/isComplete)
                                   const firstPlayer = playersByTeam[teamName][0];
                                   const isComplete = firstPlayer?.isComplete;
-                                  const joinMethod = firstPlayer?.joinMethod || 'Approval';
+                                  const joinMethod = firstPlayer?.joinMethod || 'Open';
                                   const isFriendsOnly = joinMethod === 'FriendsOnly';
+                                  const isOpen = joinMethod === 'Open';
                                   const players = playersByTeam[teamName];
 
                                   return (
@@ -600,9 +601,11 @@ export default function EventView() {
                                       className={`bg-white rounded-lg border p-2 ${
                                         isComplete
                                           ? 'border-green-200'
-                                          : isFriendsOnly
-                                            ? 'border-purple-200'
-                                            : 'border-amber-200'
+                                          : isOpen
+                                            ? 'border-green-200'
+                                            : isFriendsOnly
+                                              ? 'border-purple-200'
+                                              : 'border-amber-200'
                                       }`}
                                     >
                                       {/* Team header with join method badge */}
@@ -610,11 +613,13 @@ export default function EventView() {
                                         {!isComplete && (
                                           <span
                                             className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${
-                                              isFriendsOnly
-                                                ? 'bg-purple-100 text-purple-600'
-                                                : 'bg-amber-100 text-amber-600'
+                                              isOpen
+                                                ? 'bg-green-100 text-green-600'
+                                                : isFriendsOnly
+                                                  ? 'bg-purple-100 text-purple-600'
+                                                  : 'bg-amber-100 text-amber-600'
                                             }`}
-                                            title={isFriendsOnly ? 'Friends only' : 'Open to anyone'}
+                                            title={isOpen ? 'Anyone can join' : isFriendsOnly ? 'Friends only' : 'Approval required'}
                                           >
                                             {isFriendsOnly ? (
                                               <Users className="w-2.5 h-2.5" />

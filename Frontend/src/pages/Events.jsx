@@ -1800,7 +1800,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
   const [selectedDivisionForRegistration, setSelectedDivisionForRegistration] = useState(null);
   const [unitsLookingForPartners, setUnitsLookingForPartners] = useState([]);
   const [loadingUnits, setLoadingUnits] = useState(false);
-  const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
+  const [selectedJoinMethod, setSelectedJoinMethod] = useState('Open');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [newJoinCode, setNewJoinCode] = useState(null); // Code to show after registration
@@ -3074,7 +3074,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
     return true;
   };
 
-  const handleRegister = async (divisionId, partnerUserId = null, joinMethod = 'Approval') => {
+  const handleRegister = async (divisionId, partnerUserId = null, joinMethod = 'Open') => {
     if (!isAuthenticated) return;
 
     // Check upfront if user can register
@@ -3093,7 +3093,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
     if (teamSize > 1 && !partnerUserId) {
       setSelectedDivisionForRegistration(division);
       setShowTeamRegistration(true);
-      setSelectedJoinMethod('Approval'); // Reset to default
+      setSelectedJoinMethod('Open'); // Reset to default
       setJoinCodeInput('');
       setNewJoinCode(null);
       // Load units looking for partners
@@ -3108,7 +3108,8 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         eventId: event.id,
         divisionIds: [divisionId],
         partnerUserId: partnerUserId > 0 ? partnerUserId : null,
-        joinMethod: teamSize > 1 ? joinMethod : 'Approval'
+        joinMethod: teamSize > 1 ? joinMethod : 'Approval',
+        autoAcceptMembers: teamSize > 1 && joinMethod === 'Open'
       });
       if (response.success) {
         toast.success('Successfully registered for division!');
@@ -3127,7 +3128,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
           onUpdate();
           setShowTeamRegistration(false);
           setSelectedDivisionForRegistration(null);
-          setSelectedJoinMethod('Approval');
+          setSelectedJoinMethod('Open');
         }
 
         // Refresh event data
@@ -4180,7 +4181,9 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                     <span className="text-gray-500">Who can join:</span>
                                     <button
                                       onClick={async () => {
-                                        const newMethod = reg.joinMethod === 'FriendsOnly' ? 'Approval' : 'FriendsOnly';
+                                        const cycleOrder = ['Open', 'FriendsOnly', 'Approval'];
+                                        const currentIdx = cycleOrder.indexOf(reg.joinMethod || 'Open');
+                                        const newMethod = cycleOrder[(currentIdx + 1) % cycleOrder.length];
                                         try {
                                           const response = await tournamentApi.updateJoinMethod(reg.unitId, newMethod);
                                           if (response.success) {
@@ -4202,13 +4205,20 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                       className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
                                         reg.joinMethod === 'FriendsOnly'
                                           ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                                          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                          : reg.joinMethod === 'Approval'
+                                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                          : 'bg-green-100 text-green-700 hover:bg-green-200'
                                       }`}
                                     >
                                       {reg.joinMethod === 'FriendsOnly' ? (
                                         <span className="flex items-center gap-1">
                                           <Users className="w-3 h-3" />
                                           Friends only
+                                        </span>
+                                      ) : reg.joinMethod === 'Approval' ? (
+                                        <span className="flex items-center gap-1">
+                                          <UserPlus className="w-3 h-3" />
+                                          Approval required
                                         </span>
                                       ) : (
                                         <span className="flex items-center gap-1">
@@ -6016,7 +6026,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                 onClick={() => {
                   setShowTeamRegistration(false);
                   setSelectedDivisionForRegistration(null);
-                  setSelectedJoinMethod('Approval');
+                  setSelectedJoinMethod('Open');
                   setJoinCodeInput('');
                   setNewJoinCode(null);
                 }}
@@ -6063,7 +6073,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                       setNewJoinCode(null);
                       setShowTeamRegistration(false);
                       setSelectedDivisionForRegistration(null);
-                      setSelectedJoinMethod('Approval');
+                      setSelectedJoinMethod('Open');
                       onUpdate();
                     }}
                     className="w-full mt-2 px-4 py-2 border border-green-300 text-green-700 rounded-lg font-medium hover:bg-green-50 transition-colors"
@@ -6073,73 +6083,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                 </div>
               )}
 
-              {/* Create New Team/Pair Option - hide if showing join code */}
-              {!newJoinCode && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Let Teammate Join' : 'Create New Team'}
-                  </h4>
-                  <p className="text-sm text-gray-600 mb-3">
-                    {selectedDivisionForRegistration.teamSize === 2
-                      ? 'Register now and find or invite a partner later.'
-                      : 'Register as team captain and find or invite players later.'}
-                  </p>
-
-                  {/* Join Method Selection */}
-                  <div className="mb-4 space-y-2">
-                    <p className="text-sm font-medium text-gray-700">How will your partner join?</p>
-                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="joinMethod"
-                        value="Approval"
-                        checked={selectedJoinMethod === 'Approval'}
-                        onChange={() => setSelectedJoinMethod('Approval')}
-                        className="w-4 h-4 text-orange-600 focus:ring-orange-500"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">I will approve join requests</div>
-                        <div className="text-sm text-gray-500">Others can find you and request to join</div>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="joinMethod"
-                        value="Code"
-                        checked={selectedJoinMethod === 'Code'}
-                        onChange={() => setSelectedJoinMethod('Code')}
-                        className="w-4 h-4 text-orange-600 focus:ring-orange-500"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">I will send my partner a join code</div>
-                        <div className="text-sm text-gray-500">Get a code to share directly with your partner</div>
-                      </div>
-                    </label>
-                  </div>
-
-                  <button
-                    onClick={() => handleRegister(selectedDivisionForRegistration.id, -1, selectedJoinMethod)}
-                    disabled={registeringDivision === selectedDivisionForRegistration.id}
-                    className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {registeringDivision === selectedDivisionForRegistration.id ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Registering...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-4 h-4" />
-                        {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Let Teammate Join Later' : 'Create Team & Find Players Later'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Join Existing Team/Pair - hide if showing join code */}
+              {/* Join Existing Team/Pair - shown first, hide if showing join code */}
               {!newJoinCode && (
               <div>
                 <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -6185,8 +6129,12 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {unitsLookingForPartners.map(unit => (
-                      <div key={unit.id} className="border rounded-lg p-3 hover:border-orange-300 transition-colors">
+                    {unitsLookingForPartners.map(unit => {
+                      const isOpenJoin = unit.joinMethod === 'Open';
+                      const isFriendAutoAccept = unit.joinMethod === 'FriendsOnly' && unit.isFriend;
+                      const canJoinInstantly = isOpenJoin || isFriendAutoAccept;
+                      return (
+                      <div key={unit.id} className={`border rounded-lg p-3 transition-colors ${canJoinInstantly ? 'border-green-200 bg-green-50 hover:border-green-400' : 'hover:border-orange-300'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             {unit.captainProfileImageUrl ? (
@@ -6196,7 +6144,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                 className="w-10 h-10 rounded-full object-cover"
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-medium">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${canJoinInstantly ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                                 {unit.captainName?.charAt(0) || '?'}
                               </div>
                             )}
@@ -6205,20 +6153,20 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                 <>
                                   <div className="font-medium text-gray-900 flex items-center gap-2">
                                     {unit.captainName || 'Unknown'}
-                                    {unit.joinMethod === 'Code' && (
-                                      <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Code</span>
+                                    {unit.isFriend && (
+                                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Friend</span>
                                     )}
                                   </div>
                                   <div className="text-sm text-gray-500">
-                                    {unit.joinMethod === 'Code' ? 'Has join code' : 'Looking for partner'}
+                                    {isOpenJoin ? 'Open - join instantly' : isFriendAutoAccept ? 'Friend - join instantly' : 'Looking for partner'}
                                   </div>
                                 </>
                               ) : (
                                 <>
                                   <div className="font-medium text-gray-900 flex items-center gap-2">
                                     {unit.name}
-                                    {unit.joinMethod === 'Code' && (
-                                      <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Code</span>
+                                    {unit.isFriend && (
+                                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Friend</span>
                                     )}
                                   </div>
                                   <div className="text-sm text-gray-500">
@@ -6234,17 +6182,98 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                           {unit.joinMethod !== 'Code' && (
                             <button
                               onClick={() => handleJoinUnit(unit.id)}
-                              className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200 transition-colors"
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${canJoinInstantly ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}
                             >
-                              Request to Join
+                              {canJoinInstantly ? 'Join' : 'Request to Join'}
                             </button>
                           )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
+              )}
+
+              {/* Create New Team/Pair Option - hide if showing join code */}
+              {!newJoinCode && (
+                <div className="border-t pt-6">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    {selectedDivisionForRegistration.teamSize === 2 ? 'Start a New Team' : 'Create New Team'}
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    {selectedDivisionForRegistration.teamSize === 2
+                      ? 'Register now and let a partner find and join you.'
+                      : 'Register as team captain and find players later.'}
+                  </p>
+
+                  {/* Join Privacy Selection */}
+                  <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Who can join your team?</p>
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${selectedJoinMethod === 'Open' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                      <input
+                        type="radio"
+                        name="joinMethod"
+                        value="Open"
+                        checked={selectedJoinMethod === 'Open'}
+                        onChange={() => setSelectedJoinMethod('Open')}
+                        className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">Anyone can join</div>
+                        <div className="text-sm text-gray-500">Anyone can join your team instantly without approval</div>
+                      </div>
+                    </label>
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${selectedJoinMethod === 'FriendsOnly' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                      <input
+                        type="radio"
+                        name="joinMethod"
+                        value="FriendsOnly"
+                        checked={selectedJoinMethod === 'FriendsOnly'}
+                        onChange={() => setSelectedJoinMethod('FriendsOnly')}
+                        className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">Only friends can join</div>
+                        <div className="text-sm text-gray-500">Only your friends can see and join your team</div>
+                      </div>
+                    </label>
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${selectedJoinMethod === 'Approval' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                      <input
+                        type="radio"
+                        name="joinMethod"
+                        value="Approval"
+                        checked={selectedJoinMethod === 'Approval'}
+                        onChange={() => setSelectedJoinMethod('Approval')}
+                        className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">I will approve later</div>
+                        <div className="text-sm text-gray-500">Others can request to join and you approve or decline</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={() => handleRegister(selectedDivisionForRegistration.id, -1, selectedJoinMethod)}
+                    disabled={registeringDivision === selectedDivisionForRegistration.id}
+                    className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {registeringDivision === selectedDivisionForRegistration.id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Registering...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        {selectedDivisionForRegistration.teamSize === 2 ? 'Register & Let Teammate Join Later' : 'Create Team & Find Players Later'}
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
 
             </div>
@@ -6254,7 +6283,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                 onClick={() => {
                   setShowTeamRegistration(false);
                   setSelectedDivisionForRegistration(null);
-                  setSelectedJoinMethod('Approval');
+                  setSelectedJoinMethod('Open');
                   setJoinCodeInput('');
                   setNewJoinCode(null);
                 }}

@@ -799,9 +799,9 @@ public class EventRegistrationRequest
     public string? PartnerName { get; set; } // For finding partner
     public int? PartnerUserId { get; set; } // If already have partner
     /// <summary>
-    /// How partners can join: "Approval" (default) or "Code"
+    /// How partners can join: "Open" (anyone joins instantly, default), "FriendsOnly" (only friends), or "Approval" (captain approves)
     /// </summary>
-    public string JoinMethod { get; set; } = "Approval";
+    public string JoinMethod { get; set; } = "Open";
     /// <summary>
     /// When true, join requests will be automatically accepted without captain approval
     /// </summary>

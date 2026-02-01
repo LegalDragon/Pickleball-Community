@@ -448,12 +448,14 @@ public class TournamentController : EventControllerBase
                 : $"{user.FirstName}'s Team";
 
             // For team divisions, use the requested join method
-            var joinMethod = isSingles ? "Approval" : (request.JoinMethod ?? "Approval");
+            var joinMethod = isSingles ? "Approval" : (request.JoinMethod ?? "Open");
             string? joinCode = null;
             if (joinMethod == "Code" && !isSingles)
             {
                 joinCode = GenerateJoinCode();
             }
+            // "Open" join method means anyone can join instantly (auto-accept)
+            var autoAccept = !isSingles && (joinMethod == "Open" || request.AutoAcceptMembers);
 
             var unit = new EventUnit
             {
@@ -465,7 +467,7 @@ public class TournamentController : EventControllerBase
                 CaptainUserId = userId.Value,
                 JoinMethod = joinMethod,
                 JoinCode = joinCode,
-                AutoAcceptMembers = !isSingles && request.AutoAcceptMembers,
+                AutoAcceptMembers = autoAccept,
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
             };
@@ -1808,17 +1810,19 @@ public class TournamentController : EventControllerBase
         }
 
         // Validate join method value
-        var validMethods = new[] { "Approval", "FriendsOnly" };
+        var validMethods = new[] { "Open", "Approval", "FriendsOnly" };
         if (!validMethods.Contains(request.JoinMethod))
         {
             return BadRequest(new ApiResponse<EventUnitDto>
             {
                 Success = false,
-                Message = "Invalid join method. Must be 'Approval' or 'FriendsOnly'"
+                Message = "Invalid join method. Must be 'Open', 'Approval', or 'FriendsOnly'"
             });
         }
 
         unit.JoinMethod = request.JoinMethod;
+        // "Open" means anyone can join instantly (auto-accept enabled)
+        unit.AutoAcceptMembers = request.JoinMethod == "Open";
         unit.UpdatedAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
@@ -1831,7 +1835,7 @@ public class TournamentController : EventControllerBase
             .Include(u => u.Captain)
             .FirstOrDefaultAsync(u => u.Id == unitId);
 
-        var methodDescription = request.JoinMethod == "FriendsOnly" ? "Friends only (auto-accept)" : "Open to anyone";
+        var methodDescription = request.JoinMethod == "Open" ? "Anyone can join" : request.JoinMethod == "FriendsOnly" ? "Friends only" : "Approval required";
         return Ok(new ApiResponse<EventUnitDto>
         {
             Success = true,
@@ -8962,10 +8966,14 @@ public class TournamentController : EventControllerBase
             .OrderBy(u => u.CreatedAt)
             .ToListAsync();
 
-        // Filter: Show units with "Approval" (open to anyone) or "FriendsOnly" if user is a friend
+        // Filter: Show units based on join method
+        // "Open" - visible to everyone (anyone can join instantly)
+        // "Approval" - visible to everyone (requires captain approval)
+        // "FriendsOnly" - only visible to friends of the captain
         var filteredUnits = units.Where(u =>
         {
             var method = u.JoinMethod ?? "Approval";
+            if (method == "Open") return true;
             if (method == "Approval") return true;
             if (method == "FriendsOnly") return friendIdSet.Contains(u.CaptainUserId);
             return false; // Don't show "Code" method units (legacy)

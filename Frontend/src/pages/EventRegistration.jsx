@@ -65,7 +65,7 @@ export default function EventRegistration() {
   const [selectedDivisions, setSelectedDivisions] = useState([]); // Multi-division selection
   const [divisionFeeSelections, setDivisionFeeSelections] = useState({}); // { divisionId: feeId }
   const [selectedFeeId, setSelectedFeeId] = useState(null);
-  const [selectedJoinMethod, setSelectedJoinMethod] = useState('Approval');
+  const [selectedJoinMethod, setSelectedJoinMethod] = useState('Open');
   const [autoAcceptMembers, setAutoAcceptMembers] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
@@ -561,12 +561,13 @@ export default function EventRegistration() {
       // For single division, use the selected fee. For multiple, the backend handles per-division fees
       const primaryFeeId = divisionFeeSelections[divisionsToRegister[0].id] || selectedFeeId || null;
 
+      const joinMethod = teamSize > 1 ? selectedJoinMethod : 'Approval';
       const response = await tournamentApi.registerForEvent(event.id, {
         eventId: event.id,
         divisionIds: divisionIds,
         partnerUserId: partnerUserId > 0 ? partnerUserId : null,
-        joinMethod: teamSize > 1 ? selectedJoinMethod : 'Approval',
-        autoAcceptMembers: teamSize > 1 && autoAcceptMembers,
+        joinMethod: joinMethod,
+        autoAcceptMembers: teamSize > 1 && (joinMethod === 'Open' || autoAcceptMembers),
         selectedFeeId: primaryFeeId
       });
 
@@ -663,7 +664,7 @@ export default function EventRegistration() {
     setSelectedDivisions([]);
     setSelectedFeeId(null);
     setDivisionFeeSelections({});
-    setSelectedJoinMethod('Approval');
+    setSelectedJoinMethod('Open');
     setAutoAcceptMembers(false);
     setRegistrationResult(null);
     setCurrentStep(1);
@@ -1585,7 +1586,7 @@ export default function EventRegistration() {
                     setSelectedDivisions([]);
                     setDivisionFeeSelections({});
                     setSelectedFeeId(null);
-                    setSelectedJoinMethod('Approval');
+                    setSelectedJoinMethod('Open');
                     setAutoAcceptMembers(false);
                   }}
                   className="text-sm text-orange-600 hover:text-orange-700"
@@ -1636,87 +1637,8 @@ export default function EventRegistration() {
                 </div>
               )}
 
-              {/* Create New Team Option */}
+              {/* Join an Existing Team - shown first */}
                   <div className="mb-6">
-                    <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                      <Plus className="w-4 h-4" />
-                      {getTeamSize(selectedDivision) === 2 ? 'Register & Let Teammate Join' : 'Create New Team'}
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      {getTeamSize(selectedDivision) === 2
-                        ? 'Register now and find or invite a partner later.'
-                        : 'Register as team captain and find players later.'}
-                    </p>
-
-                    {/* Join Method Selection */}
-                    <div className="space-y-2 mb-4">
-                      <p className="text-sm font-medium text-gray-700">Who can join as your partner?</p>
-                      <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input
-                          type="radio"
-                          name="joinMethod"
-                          value="Approval"
-                          checked={selectedJoinMethod === 'Approval'}
-                          onChange={() => setSelectedJoinMethod('Approval')}
-                          className="w-4 h-4 text-orange-600"
-                        />
-                        <div>
-                          <div className="font-medium text-gray-900">Anyone, I will approve later</div>
-                          <div className="text-sm text-gray-500">Others can find you and request to join</div>
-                        </div>
-                      </label>
-                      <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input
-                          type="radio"
-                          name="joinMethod"
-                          value="FriendsOnly"
-                          checked={selectedJoinMethod === 'FriendsOnly'}
-                          onChange={() => setSelectedJoinMethod('FriendsOnly')}
-                          className="w-4 h-4 text-orange-600"
-                        />
-                        <div>
-                          <div className="font-medium text-gray-900">Only my friends</div>
-                          <div className="text-sm text-gray-500">Auto accepted when a friend joins</div>
-                        </div>
-                      </label>
-
-                      {/* Auto-accept checkbox - only show when Approval method is selected */}
-                      {selectedJoinMethod === 'Approval' && (
-                        <label className="flex items-start gap-3 p-3 border border-blue-200 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 mt-2">
-                          <input
-                            type="checkbox"
-                            checked={autoAcceptMembers}
-                            onChange={(e) => setAutoAcceptMembers(e.target.checked)}
-                            className="w-4 h-4 text-blue-600 mt-0.5"
-                          />
-                          <div>
-                            <div className="font-medium text-gray-900">Auto-accept partner</div>
-                            <div className="text-sm text-gray-500">First person to join is automatically accepted without your approval</div>
-                          </div>
-                        </label>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => handleRegister(-1)}
-                      disabled={registering}
-                      className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {registering ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Registering...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-4 h-4" />
-                          Register & Let Teammate Join Later
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="border-t pt-6">
                     <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <UserPlus className="w-4 h-4" />
                       Join an Existing Team
@@ -1733,7 +1655,57 @@ export default function EventRegistration() {
                       </p>
                     ) : (
                       <div className="space-y-4">
-                        {/* Friends section - show friends who selected FriendsOnly first */}
+                        {/* Open teams - anyone can join immediately */}
+                        {unitsLookingForPartners.filter(u => u.joinMethod === 'Open').length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-green-700 mb-2">Open teams (join instantly):</p>
+                            <div className="space-y-3">
+                              {unitsLookingForPartners.filter(u => u.joinMethod === 'Open').map(unit => (
+                                <div key={unit.id} className="border border-green-200 bg-green-50 rounded-lg p-3 hover:border-green-400">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      {unit.captainProfileImageUrl ? (
+                                        <img
+                                          src={getSharedAssetUrl(unit.captainProfileImageUrl)}
+                                          alt=""
+                                          className="w-10 h-10 rounded-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-medium">
+                                          {unit.captainName?.charAt(0) || '?'}
+                                        </div>
+                                      )}
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-medium text-gray-900">{unit.captainName}</p>
+                                          {unit.isFriend && (
+                                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Friend</span>
+                                          )}
+                                        </div>
+                                        {unit.captainCity && (
+                                          <p className="text-sm text-gray-500">{unit.captainCity}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleRequestToJoin(unit.id)}
+                                      disabled={requestingToJoin === unit.id}
+                                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                      {requestingToJoin === unit.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        'Join'
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Friends section - show friends who selected FriendsOnly */}
                         {unitsLookingForPartners.filter(u => u.isFriend && u.joinMethod === 'FriendsOnly').length > 0 && (
                           <div>
                             <p className="text-sm font-medium text-green-700 mb-2">Friends (auto-accept):</p>
@@ -1778,10 +1750,10 @@ export default function EventRegistration() {
                           </div>
                         )}
 
-                        {/* Open teams section - anyone who selected Approval */}
+                        {/* Approval-required teams */}
                         {unitsLookingForPartners.filter(u => u.joinMethod === 'Approval').length > 0 && (
                           <div>
-                            <p className="text-sm font-medium text-gray-600 mb-2">Open teams (needs acceptance):</p>
+                            <p className="text-sm font-medium text-gray-600 mb-2">Teams requiring approval:</p>
                             <div className="space-y-3">
                               {unitsLookingForPartners.filter(u => u.joinMethod === 'Approval').map(unit => (
                                 <div key={unit.id} className="border rounded-lg p-3 hover:border-orange-300">
@@ -1829,6 +1801,84 @@ export default function EventRegistration() {
                         )}
                       </div>
                     )}
+                  </div>
+
+                  {/* Create New Team Option */}
+                  <div className="border-t pt-6">
+                    <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                      <Plus className="w-4 h-4" />
+                      {getTeamSize(selectedDivision) === 2 ? 'Start a New Team' : 'Create New Team'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      {getTeamSize(selectedDivision) === 2
+                        ? 'Register now and let a partner find and join you.'
+                        : 'Register as team captain and find players later.'}
+                    </p>
+
+                    {/* Join Privacy Selection */}
+                    <div className="space-y-2 mb-4">
+                      <p className="text-sm font-medium text-gray-700">Who can join your team?</p>
+                      <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${selectedJoinMethod === 'Open' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                        <input
+                          type="radio"
+                          name="joinMethod"
+                          value="Open"
+                          checked={selectedJoinMethod === 'Open'}
+                          onChange={() => setSelectedJoinMethod('Open')}
+                          className="w-4 h-4 text-orange-600"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">Anyone can join</div>
+                          <div className="text-sm text-gray-500">Anyone can join your team instantly without approval</div>
+                        </div>
+                      </label>
+                      <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${selectedJoinMethod === 'FriendsOnly' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                        <input
+                          type="radio"
+                          name="joinMethod"
+                          value="FriendsOnly"
+                          checked={selectedJoinMethod === 'FriendsOnly'}
+                          onChange={() => setSelectedJoinMethod('FriendsOnly')}
+                          className="w-4 h-4 text-orange-600"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">Only friends can join</div>
+                          <div className="text-sm text-gray-500">Only your friends can see and join your team</div>
+                        </div>
+                      </label>
+                      <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${selectedJoinMethod === 'Approval' ? 'border-orange-500 bg-orange-50' : ''}`}>
+                        <input
+                          type="radio"
+                          name="joinMethod"
+                          value="Approval"
+                          checked={selectedJoinMethod === 'Approval'}
+                          onChange={() => setSelectedJoinMethod('Approval')}
+                          className="w-4 h-4 text-orange-600"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">I will approve later</div>
+                          <div className="text-sm text-gray-500">Others can request to join and you approve or decline</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={() => handleRegister(-1)}
+                      disabled={registering}
+                      className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {registering ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Registering...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" />
+                          Register & Let Teammate Join Later
+                        </>
+                      )}
+                    </button>
                   </div>
             </div>
           </div>

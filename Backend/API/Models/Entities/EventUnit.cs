@@ -65,7 +65,7 @@ public class EventUnit
     public int CaptainUserId { get; set; }
 
     /// <summary>
-    /// How partners can join this unit: "Approval" (captain approves requests) or "Code" (join with code)
+    /// How partners can join this unit: "Open" (anyone can join instantly), "FriendsOnly" (only friends), "Approval" (captain approves), or "Code" (join with code, legacy)
     /// </summary>
     [MaxLength(20)]
     public string JoinMethod { get; set; } = "Approval";
