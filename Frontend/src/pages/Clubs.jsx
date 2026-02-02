@@ -20,6 +20,7 @@ import VenuePicker from '../components/ui/VenuePicker';
 import ShareLink from '../components/ui/ShareLink';
 import HelpIcon from '../components/ui/HelpIcon';
 import AddressInput from '../components/ui/AddressInput';
+import ClubRoom from '../components/club/ClubRoom';
 
 export default function Clubs() {
   const { user, isAuthenticated } = useAuth();
@@ -2357,6 +2358,16 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
                     Share this link or QR code to invite friends to join the club
                   </p>
                 </div>
+              )}
+
+              {/* Club Video Room */}
+              {isMember && (
+                <ClubRoom
+                  clubId={club.id}
+                  clubName={club.name}
+                  isMember={isMember}
+                  isAdmin={isAdmin}
+                />
               )}
 
               {/* Description */}

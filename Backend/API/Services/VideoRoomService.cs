@@ -17,6 +17,8 @@ public interface IVideoRoomService
     Task<bool> LockRoomAsync(string roomCode, int? userId, bool locked);
     string HashPasscode(string passcode);
     bool VerifyPasscode(string passcode, string hash);
+    Task<VideoRoomDto> GetOrCreateClubRoomAsync(int clubId, int? userId, string? userName, string baseUrl);
+    Task<bool> IsClubMemberAsync(int clubId, int userId);
 }
 
 public class VideoRoomService : IVideoRoomService
@@ -56,6 +58,8 @@ public class VideoRoomService : IVideoRoomService
             CreatorName = userName,
             MaxParticipants = request.MaxParticipants > 0 ? request.MaxParticipants : 6,
             IsActive = true,
+            ClubId = request.ClubId,
+            IsClubRoom = request.ClubId.HasValue,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -79,6 +83,7 @@ public class VideoRoomService : IVideoRoomService
     public async Task<VideoRoomDto?> GetRoomByCodeAsync(string roomCode)
     {
         var room = await _context.VideoRooms
+            .Include(r => r.Club)
             .FirstOrDefaultAsync(r => r.RoomCode == roomCode && r.IsActive);
 
         if (room == null) return null;
@@ -93,13 +98,17 @@ public class VideoRoomService : IVideoRoomService
             IsActive = room.IsActive,
             IsLocked = room.IsLocked,
             ParticipantCount = 0, // Will be filled from hub tracking
-            CreatedAt = room.CreatedAt
+            CreatedAt = room.CreatedAt,
+            ClubId = room.ClubId,
+            ClubName = room.Club?.Name,
+            IsClubRoom = room.IsClubRoom
         };
     }
 
     public async Task<List<VideoRoomDto>> GetActiveRoomsAsync()
     {
         return await _context.VideoRooms
+            .Include(r => r.Club)
             .Where(r => r.IsActive)
             .OrderByDescending(r => r.CreatedAt)
             .Select(r => new VideoRoomDto
@@ -112,7 +121,10 @@ public class VideoRoomService : IVideoRoomService
                 IsActive = r.IsActive,
                 IsLocked = r.IsLocked,
                 ParticipantCount = 0,
-                CreatedAt = r.CreatedAt
+                CreatedAt = r.CreatedAt,
+                ClubId = r.ClubId,
+                ClubName = r.Club != null ? r.Club.Name : null,
+                IsClubRoom = r.IsClubRoom
             })
             .ToListAsync();
     }
@@ -120,6 +132,7 @@ public class VideoRoomService : IVideoRoomService
     public async Task<JoinVideoRoomResponse> ValidateJoinAsync(string roomCode, JoinVideoRoomRequest request)
     {
         var room = await _context.VideoRooms
+            .Include(r => r.Club)
             .FirstOrDefaultAsync(r => r.RoomCode == roomCode);
 
         if (room == null)
@@ -154,7 +167,10 @@ public class VideoRoomService : IVideoRoomService
                 MaxParticipants = room.MaxParticipants,
                 IsActive = room.IsActive,
                 IsLocked = room.IsLocked,
-                CreatedAt = room.CreatedAt
+                CreatedAt = room.CreatedAt,
+                ClubId = room.ClubId,
+                ClubName = room.Club?.Name,
+                IsClubRoom = room.IsClubRoom
             }
         };
     }
@@ -232,5 +248,89 @@ public class VideoRoomService : IVideoRoomService
         random.GetBytes(bytes);
         var num = BitConverter.ToUInt32(bytes, 0) % 1000000;
         return num.ToString("D6");
+    }
+
+    public async Task<VideoRoomDto> GetOrCreateClubRoomAsync(int clubId, int? userId, string? userName, string baseUrl)
+    {
+        // Look for existing active club room
+        var existingRoom = await _context.VideoRooms
+            .Include(r => r.Club)
+            .FirstOrDefaultAsync(r => r.ClubId == clubId && r.IsClubRoom && r.IsActive);
+
+        if (existingRoom != null)
+        {
+            return new VideoRoomDto
+            {
+                RoomId = existingRoom.RoomId,
+                RoomCode = existingRoom.RoomCode,
+                Name = existingRoom.Name,
+                CreatorName = existingRoom.CreatorName,
+                MaxParticipants = existingRoom.MaxParticipants,
+                IsActive = existingRoom.IsActive,
+                IsLocked = existingRoom.IsLocked,
+                ParticipantCount = 0,
+                CreatedAt = existingRoom.CreatedAt,
+                ClubId = existingRoom.ClubId,
+                ClubName = existingRoom.Club?.Name,
+                IsClubRoom = existingRoom.IsClubRoom
+            };
+        }
+
+        // Get club name
+        var club = await _context.Clubs.FindAsync(clubId);
+        if (club == null)
+        {
+            throw new InvalidOperationException("Club not found");
+        }
+
+        // Create new persistent club room
+        var roomCode = GenerateRoomCode();
+        while (await _context.VideoRooms.AnyAsync(r => r.RoomCode == roomCode))
+        {
+            roomCode = GenerateRoomCode();
+        }
+
+        var passcode = GeneratePasscode();
+
+        var room = new VideoRoom
+        {
+            RoomCode = roomCode,
+            Name = $"{club.Name}'s Room",
+            PasscodeHash = HashPasscode(passcode),
+            CreatedBy = userId,
+            CreatorName = userName,
+            MaxParticipants = 0, // Unlimited for club rooms
+            IsActive = true,
+            IsClubRoom = true,
+            ClubId = clubId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.VideoRooms.Add(room);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Club video room created: {RoomCode} for club {ClubId}", roomCode, clubId);
+
+        return new VideoRoomDto
+        {
+            RoomId = room.RoomId,
+            RoomCode = room.RoomCode,
+            Name = room.Name,
+            CreatorName = room.CreatorName,
+            MaxParticipants = room.MaxParticipants,
+            IsActive = room.IsActive,
+            IsLocked = room.IsLocked,
+            ParticipantCount = 0,
+            CreatedAt = room.CreatedAt,
+            ClubId = room.ClubId,
+            ClubName = club.Name,
+            IsClubRoom = room.IsClubRoom
+        };
+    }
+
+    public async Task<bool> IsClubMemberAsync(int clubId, int userId)
+    {
+        return await _context.ClubMembers
+            .AnyAsync(m => m.ClubId == clubId && m.UserId == userId && m.IsActive);
     }
 }

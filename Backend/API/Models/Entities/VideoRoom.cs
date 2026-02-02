@@ -59,7 +59,20 @@ public class VideoRoom
 
     public DateTime? EndedAt { get; set; }
 
+    /// <summary>
+    /// Optional club association for persistent club rooms
+    /// </summary>
+    public int? ClubId { get; set; }
+
+    /// <summary>
+    /// Whether this is a persistent club room (doesn't auto-expire)
+    /// </summary>
+    public bool IsClubRoom { get; set; } = false;
+
     // Navigation
     [ForeignKey("CreatedBy")]
     public virtual User? Creator { get; set; }
+
+    [ForeignKey("ClubId")]
+    public virtual Club? Club { get; set; }
 }

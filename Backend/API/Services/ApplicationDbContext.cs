@@ -2148,6 +2148,14 @@ public class ApplicationDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(r => r.CreatedBy)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.Club)
+                  .WithMany()
+                  .HasForeignKey(r => r.ClubId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(r => r.ClubId)
+                  .HasFilter("[ClubId] IS NOT NULL");
         });
     }
 }

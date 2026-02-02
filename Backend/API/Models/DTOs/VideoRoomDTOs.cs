@@ -6,6 +6,7 @@ public class CreateVideoRoomRequest
     public string Name { get; set; } = string.Empty;
     public string? Passcode { get; set; } // If null, auto-generate
     public int MaxParticipants { get; set; } = 6;
+    public int? ClubId { get; set; }
 }
 
 // Response after creating a room
@@ -32,6 +33,9 @@ public class VideoRoomDto
     public bool IsLocked { get; set; }
     public int ParticipantCount { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int? ClubId { get; set; }
+    public string? ClubName { get; set; }
+    public bool IsClubRoom { get; set; }
 }
 
 // Request to join a room
@@ -90,4 +94,18 @@ public class WebRtcIceCandidate
     public string Candidate { get; set; } = string.Empty;
     public string? SdpMid { get; set; }
     public int? SdpMLineIndex { get; set; }
+}
+
+// Club Room DTOs
+public class ClubRoomInviteRequest
+{
+    public List<int> UserIds { get; set; } = new();
+    public string? Message { get; set; }
+}
+
+public class ClubRoomInviteResponse
+{
+    public bool Success { get; set; }
+    public int InvitesSent { get; set; }
+    public string? ShareLink { get; set; }
 }

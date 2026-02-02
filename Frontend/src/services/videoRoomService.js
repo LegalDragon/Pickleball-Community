@@ -26,6 +26,11 @@ export const videoRoomApi = {
   getParticipants: (roomCode) => api.get(`/VideoRoom/${roomCode}/participants`),
   endRoom: (roomCode) => api.post(`/VideoRoom/${roomCode}/end`),
   lockRoom: (roomCode, locked) => api.post(`/VideoRoom/${roomCode}/lock?locked=${locked}`),
+
+  // Club Video Rooms
+  getClubRoom: (clubId) => api.get(`/VideoRoom/club/${clubId}`),
+  inviteToClubRoom: (clubId, data) => api.post(`/VideoRoom/club/${clubId}/invite`, data),
+  joinClubRoom: (roomCode) => api.post(`/VideoRoom/${roomCode}/join-club`),
 }
 
 // SignalR connection for video room
