@@ -786,6 +786,10 @@ export const venuesApi = {
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    if (params.minLat != null) queryParams.append('minLat', params.minLat);
+    if (params.maxLat != null) queryParams.append('maxLat', params.maxLat);
+    if (params.minLng != null) queryParams.append('minLng', params.minLng);
+    if (params.maxLng != null) queryParams.append('maxLng', params.maxLng);
     return api.get(`/venues/search?${queryParams.toString()}`);
   },
 
@@ -1051,6 +1055,10 @@ export const clubsApi = {
     if (params.radiusMiles) queryParams.append('radiusMiles', params.radiusMiles);
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    if (params.minLat != null) queryParams.append('minLat', params.minLat);
+    if (params.maxLat != null) queryParams.append('maxLat', params.maxLat);
+    if (params.minLng != null) queryParams.append('minLng', params.minLng);
+    if (params.maxLng != null) queryParams.append('maxLng', params.maxLng);
     return api.get(`/clubs/search?${queryParams.toString()}`);
   },
 
