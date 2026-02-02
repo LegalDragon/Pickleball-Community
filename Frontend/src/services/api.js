@@ -2629,6 +2629,9 @@ export const encounterApi = {
   // Encounter management
   getEncounter: (encounterId) => api.get(`/encounters/${encounterId}`),
   createEncounter: (eventId, data) => api.post(`/encounters/events/${eventId}`, data),
+  updateEncounter: (encounterId, data) => api.put(`/encounters/${encounterId}`, data),
+  startEncounter: (encounterId) => api.post(`/encounters/${encounterId}/start`),
+  completeEncounter: (encounterId) => api.post(`/encounters/${encounterId}/complete`),
 
   // Match player assignment
   getMatchPlayers: (matchId) => api.get(`/encounters/matches/${matchId}/players`),
