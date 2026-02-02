@@ -7,7 +7,7 @@ import {
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
   CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
   Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3,
-  Hammer, BookOpen, Phone, EyeOff, Edit3, Map as MapIcon, Mail, Image
+  Hammer, BookOpen, Phone, EyeOff, Edit3, Map as MapIcon, Mail, Image, Zap
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -17,6 +17,7 @@ import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import MatchFormatEditor from '../components/MatchFormatEditor';
 import PhaseManager from '../components/tournament/PhaseManager';
+import ScheduleGridInline from '../components/tournament/ScheduleGridInline';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -237,6 +238,7 @@ export default function TournamentManage() {
   const [schedulingRespectOverlap, setSchedulingRespectOverlap] = useState(true);
   const [advancementPhaseId, setAdvancementPhaseId] = useState(null); // phase for advancement config
   const [generatingAdvancement, setGeneratingAdvancement] = useState(false);
+  const [autoScheduling, setAutoScheduling] = useState(false); // one-click auto-schedule in progress
 
   useEffect(() => {
     if (eventId) {
@@ -1190,6 +1192,157 @@ export default function TournamentManage() {
       toast.error('Failed to generate advancement rules');
     } finally {
       setGeneratingAdvancement(false);
+    }
+  };
+
+  // ========================================================
+  // One-Click Auto-Schedule All
+  // ========================================================
+  const handleAutoScheduleAll = async () => {
+    setAutoScheduling(true);
+    setSchedulingResults(null);
+    try {
+      // 1) Load current grid state
+      const gridRes = await tournamentApi.schedulingGetGrid(parseInt(eventId));
+      if (!gridRes.success) {
+        toast.error(gridRes.message || 'Failed to load grid data');
+        return;
+      }
+      const grid = gridRes.data;
+
+      // Figure out event date for time block generation
+      const eventDate = grid.eventDate || event?.startDate?.split('T')[0] || new Date().toISOString().split('T')[0];
+      const startHour = grid.gridStartTime
+        ? new Date(grid.gridStartTime).toISOString()
+        : `${eventDate}T08:00:00`;
+      const endHour = grid.gridEndTime
+        ? new Date(grid.gridEndTime).toISOString()
+        : `${eventDate}T18:00:00`;
+
+      // 2) Build auto-allocate blocks per division
+      const divisions = grid.divisions || [];
+      const allCourts = grid.courts || [];
+      const blocks = [];
+
+      for (const div of divisions) {
+        // Count unscheduled for this division
+        const divEncounters = (grid.encounters || []).filter(e => e.divisionId === div.id);
+        const unscheduled = divEncounters.filter(e => !e.courtId || !e.startTime);
+        if (unscheduled.length === 0) continue;
+
+        // Get available courts for this division (falls back to all event courts)
+        let courtIds = allCourts.map(c => c.id);
+        try {
+          const courtsRes = await tournamentApi.schedulingGetAvailableCourts(div.id);
+          if (courtsRes.success && courtsRes.data?.length > 0) {
+            courtIds = courtsRes.data.map(c => c.id || c.courtId || c);
+          }
+        } catch (e) { /* use all courts */ }
+
+        blocks.push({
+          divisionId: div.id,
+          phaseId: null,
+          courtIds,
+          courtGroupId: null,
+          startTime: startHour,
+          endTime: endHour,
+        });
+      }
+
+      if (blocks.length === 0) {
+        toast.info('All encounters are already scheduled!');
+        handleLoadScheduleGrid();
+        return;
+      }
+
+      // 3) Call auto-allocate
+      const res = await tournamentApi.schedulingAutoAllocate({
+        eventId: parseInt(eventId),
+        blocks,
+        clearExisting: false,
+        respectPlayerOverlap: true,
+      });
+
+      if (res.success) {
+        const totalAssigned = res.data?.totalAssigned || 0;
+        const totalSkipped = res.data?.totalSkipped || 0;
+        setSchedulingResults({
+          message: `Auto-scheduled ${totalAssigned} matches${totalSkipped > 0 ? `, ${totalSkipped} could not be placed` : ''}`,
+          assignedCount: totalAssigned,
+          unassignedCount: totalSkipped,
+          conflictCount: res.data?.conflicts?.length || 0,
+          conflicts: res.data?.conflicts || [],
+        });
+        toast.success(`Auto-scheduled ${totalAssigned} matches`);
+        if (totalSkipped > 0) {
+          toast.warn(`${totalSkipped} matches could not be scheduled within time blocks`);
+        }
+      } else {
+        toast.error(res.message || 'Auto-scheduling failed');
+        setSchedulingResults({ error: res.message || 'Auto-scheduling failed' });
+      }
+
+      // 4) Refresh grid
+      handleLoadScheduleGrid();
+      if (planningDivisionId) {
+        loadDivisionPhases(parseInt(planningDivisionId));
+      }
+    } catch (err) {
+      console.error('Error auto-scheduling:', err);
+      toast.error('Auto-scheduling failed');
+      setSchedulingResults({ error: err.message });
+    } finally {
+      setAutoScheduling(false);
+    }
+  };
+
+  // Handle move encounter from drag-and-drop grid
+  const handleMoveEncounterInGrid = async (encounterId, data) => {
+    try {
+      const res = await tournamentApi.schedulingMoveEncounter(encounterId, data);
+      if (res.success) {
+        if (res.data?.hasConflicts) {
+          toast.warn(res.message || 'Match moved with conflicts');
+        } else {
+          toast.success('Match moved');
+        }
+      } else {
+        toast.error(res.message || 'Failed to move match');
+      }
+    } catch (err) {
+      console.error('Error moving encounter:', err);
+      toast.error('Failed to move match');
+    }
+  };
+
+  // Generate schedule for a specific division (one-click per division)
+  const handleGenerateScheduleForDivision = async (division) => {
+    setBackendScheduling(true);
+    setSchedulingResults(null);
+    try {
+      const response = await tournamentApi.schedulingGenerate({
+        eventId: parseInt(eventId),
+        divisionId: division.id,
+        clearExisting: true,
+        respectPlayerOverlap: true,
+      });
+      if (response.success) {
+        setSchedulingResults(response.data);
+        toast.success(response.data?.message || `Schedule generated for ${division.name}`);
+        handleLoadScheduleGrid();
+        if (planningDivisionId) {
+          loadDivisionPhases(parseInt(planningDivisionId));
+        }
+        handleLoadValidation(division.id);
+      } else {
+        toast.error(response.message || 'Failed to generate schedule');
+        setSchedulingResults({ error: response.message });
+      }
+    } catch (err) {
+      console.error('Error generating schedule for division:', err);
+      toast.error('Failed to generate schedule');
+    } finally {
+      setBackendScheduling(false);
     }
   };
 
@@ -7409,12 +7562,24 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Scheduling & Planning</h2>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAutoScheduleAll}
+                  disabled={autoScheduling || backendScheduling}
+                  className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:from-yellow-600 hover:to-orange-600 disabled:opacity-50 flex items-center gap-2 text-sm font-semibold shadow-sm"
+                >
+                  {autoScheduling ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Zap className="w-4 h-4" />
+                  )}
+                  Auto-Schedule All
+                </button>
                 <Link
                   to={`/event/${eventId}/auto-scheduler`}
                   className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm font-medium"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Advanced Scheduler
+                  Advanced
                 </Link>
                 <button
                   onClick={() => {
@@ -7432,30 +7597,42 @@ export default function TournamentManage() {
               </div>
             </div>
 
-            {/* Division selector */}
+            {/* Division selector with per-division Generate button */}
             {(() => {
               const divisionsWithRegs = dashboard?.divisions?.filter(d => d.registeredUnits > 0) || [];
               return divisionsWithRegs.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
+                <div className="flex gap-2 overflow-x-auto pb-2 items-center">
                   {divisionsWithRegs.map(div => (
-                    <button
-                      key={div.id}
-                      onClick={() => {
-                        setPlanningDivisionId(String(div.id));
-                        setSelectedPlanningPhaseId('');
-                        loadDivisionPhases(div.id);
-                        setSchedulingResults(null);
-                        setValidationData(null);
-                      }}
-                      className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
-                        planningDivisionId === String(div.id)
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border'
-                      }`}
-                    >
-                      {div.name}
-                      <span className="ml-1.5 text-xs opacity-75">({div.registeredUnits})</span>
-                    </button>
+                    <div key={div.id} className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setPlanningDivisionId(String(div.id));
+                          setSelectedPlanningPhaseId('');
+                          loadDivisionPhases(div.id);
+                          setSchedulingResults(null);
+                          setValidationData(null);
+                        }}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                          planningDivisionId === String(div.id)
+                            ? 'bg-orange-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border'
+                        }`}
+                      >
+                        {div.name}
+                        <span className="ml-1.5 text-xs opacity-75">({div.registeredUnits})</span>
+                      </button>
+                      {planningDivisionId === String(div.id) && (
+                        <button
+                          onClick={() => handleGenerateScheduleForDivision(div)}
+                          disabled={backendScheduling}
+                          className="px-2.5 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 disabled:opacity-50 text-xs font-medium flex items-center gap-1 whitespace-nowrap"
+                          title={`Generate schedule for ${div.name}`}
+                        >
+                          {backendScheduling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shuffle className="w-3 h-3" />}
+                          Generate
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               );
@@ -7913,12 +8090,12 @@ export default function TournamentManage() {
                   </div>
                 </div>
 
-                {/* Section 4: Schedule Preview & Validation */}
+                {/* Section 4: Visual Schedule Grid & Validation */}
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-violet-50 border-b flex items-center justify-between">
                     <h3 className="font-medium text-gray-900 flex items-center gap-2">
                       <Eye className="w-5 h-5 text-purple-500" />
-                      Schedule Preview & Validation
+                      Visual Schedule Grid
                     </h3>
                     <div className="flex items-center gap-2">
                       <button
@@ -7935,7 +8112,7 @@ export default function TournamentManage() {
                         className="px-3 py-1.5 text-sm bg-white text-purple-700 rounded-lg hover:bg-purple-50 border border-purple-200 flex items-center gap-1"
                       >
                         {loadingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LayoutGrid className="w-3.5 h-3.5" />}
-                        Load Grid
+                        {scheduleGrid ? 'Refresh Grid' : 'Load Grid'}
                       </button>
                     </div>
                   </div>
@@ -8008,119 +8185,13 @@ export default function TournamentManage() {
                       </div>
                     )}
 
-                    {/* Schedule Grid */}
-                    {loadingGrid ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
-                        <span className="ml-2 text-gray-500 text-sm">Loading schedule grid...</span>
-                      </div>
-                    ) : scheduleGrid ? (
-                      <div>
-                        {/* Grid summary */}
-                        {scheduleGrid.courts?.length > 0 && (
-                          <div className="overflow-x-auto border rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 sticky left-0 bg-gray-50">Time</th>
-                                  {(scheduleGrid.courts || []).map(court => (
-                                    <th key={court.id || court.courtId} className="px-3 py-2 text-center text-xs font-medium text-gray-500 min-w-[120px]">
-                                      {court.label || court.courtLabel || `Court ${court.id || court.courtId}`}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200">
-                                {(scheduleGrid.timeSlots || scheduleGrid.rows || []).map((slot, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                    <td className="px-3 py-2 text-xs font-medium text-gray-700 whitespace-nowrap sticky left-0 bg-white">
-                                      {slot.time ? new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : slot.label || `Slot ${idx + 1}`}
-                                    </td>
-                                    {(scheduleGrid.courts || []).map(court => {
-                                      const cell = slot.cells?.find(c => (c.courtId || c.id) === (court.id || court.courtId))
-                                        || slot.encounters?.find(e => e.courtId === (court.id || court.courtId));
-                                      return (
-                                        <td key={court.id || court.courtId} className="px-2 py-1.5 text-center">
-                                          {cell ? (
-                                            <div className={`px-2 py-1 rounded text-xs ${
-                                              cell.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                                              cell.status === 'InProgress' ? 'bg-blue-100 text-blue-800' :
-                                              'bg-orange-100 text-orange-800'
-                                            }`}>
-                                              <div className="font-medium truncate">
-                                                {cell.unit1Name && cell.unit2Name
-                                                  ? `${cell.unit1Name?.split(' ')[0]} vs ${cell.unit2Name?.split(' ')[0]}`
-                                                  : cell.label || cell.encounterLabel || `#${cell.encounterId}`}
-                                              </div>
-                                              {cell.divisionName && (
-                                                <div className="text-[10px] opacity-75 truncate">{cell.divisionName}</div>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="text-gray-300">—</span>
-                                          )}
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Fallback: flat list of encounters */}
-                        {!scheduleGrid.courts?.length && scheduleGrid.encounters?.length > 0 && (
-                          <div className="border rounded-lg overflow-hidden">
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Time</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Court</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Division</th>
-                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Match</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200">
-                                {scheduleGrid.encounters
-                                  .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
-                                  .map((enc, i) => (
-                                    <tr key={enc.id || i} className="hover:bg-gray-50">
-                                      <td className="px-3 py-2 text-sm">
-                                        {enc.scheduledTime
-                                          ? new Date(enc.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                          : '—'}
-                                      </td>
-                                      <td className="px-3 py-2 text-sm">
-                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                                          {enc.courtLabel || `Court ${enc.courtId}`}
-                                        </span>
-                                      </td>
-                                      <td className="px-3 py-2 text-sm text-gray-600">{enc.divisionName}</td>
-                                      <td className="px-3 py-2 text-sm">
-                                        {enc.unit1Name && enc.unit2Name
-                                          ? `${enc.unit1Name} vs ${enc.unit2Name}`
-                                          : enc.encounterLabel || `Match #${enc.encounterId || enc.id}`}
-                                      </td>
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {/* Empty state */}
-                        {!scheduleGrid.courts?.length && !scheduleGrid.encounters?.length && (
-                          <div className="text-center py-6 text-gray-500 text-sm">
-                            No scheduled matches yet. Generate a schedule above.
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 text-gray-400 text-sm">
-                        Click "Load Grid" or "Validate" to view the schedule preview.
-                      </div>
-                    )}
+                    {/* Drag-and-Drop Schedule Grid */}
+                    <ScheduleGridInline
+                      gridData={scheduleGrid}
+                      loading={loadingGrid}
+                      onMoveEncounter={handleMoveEncounterInGrid}
+                      onRefresh={handleLoadScheduleGrid}
+                    />
                   </div>
                 </div>
               </>
