@@ -16,6 +16,7 @@ import { tournamentApi, gameDayApi, eventsApi, objectAssetsApi, checkInApi, shar
 import ScheduleConfigModal from '../components/ScheduleConfigModal';
 import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import MatchFormatEditor from '../components/MatchFormatEditor';
+import PhaseManager from '../components/tournament/PhaseManager';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -212,6 +213,30 @@ export default function TournamentManage() {
   const [courtTimeAllocations, setCourtTimeAllocations] = useState([]); // All saved allocations for timeline
   const [savingPlan, setSavingPlan] = useState(false);
   const [planningErrors, setPlanningErrors] = useState([]);
+
+  // Backend scheduling integration state
+  const [planningDivisionPhases, setPlanningDivisionPhases] = useState([]); // Phases for selected division
+  const [loadingPhases, setLoadingPhases] = useState(false);
+  const [showPhaseManager, setShowPhaseManager] = useState(false);
+  const [generatingPhaseEncounters, setGeneratingPhaseEncounters] = useState(null); // phaseId being generated
+  const [backendScheduling, setBackendScheduling] = useState(false); // scheduling in progress
+  const [schedulingResults, setSchedulingResults] = useState(null); // results from last generate
+  const [validationData, setValidationData] = useState(null); // validation results
+  const [loadingScheduleValidation, setLoadingScheduleValidation] = useState(false);
+  const [scheduleGrid, setScheduleGrid] = useState(null); // grid data from schedulingGetGrid
+  const [loadingGrid, setLoadingGrid] = useState(false);
+  const [clearingSchedule, setClearingSchedule] = useState(false);
+  const [selectedPlanningPhaseId, setSelectedPlanningPhaseId] = useState(''); // Phase filter for scheduling
+  const [courtAssignmentMode, setCourtAssignmentMode] = useState(false); // toggle court assignment UI
+  const [selectedCourtGroupsForAssignment, setSelectedCourtGroupsForAssignment] = useState([]);
+  const [assigningCourts, setAssigningCourts] = useState(false);
+  const [courtAssignmentTimeFrom, setCourtAssignmentTimeFrom] = useState('');
+  const [courtAssignmentTimeTo, setCourtAssignmentTimeTo] = useState('');
+  const [schedulingStartTime, setSchedulingStartTime] = useState('');
+  const [schedulingClearExisting, setSchedulingClearExisting] = useState(true);
+  const [schedulingRespectOverlap, setSchedulingRespectOverlap] = useState(true);
+  const [advancementPhaseId, setAdvancementPhaseId] = useState(null); // phase for advancement config
+  const [generatingAdvancement, setGeneratingAdvancement] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -947,6 +972,225 @@ export default function TournamentManage() {
 
   const clearSelection = () => {
     setSelectedEncountersForPlanning([]);
+  };
+
+  // ========================================================
+  // Backend Scheduling Integration Functions
+  // ========================================================
+
+  const loadDivisionPhases = async (divisionId) => {
+    if (!divisionId) {
+      setPlanningDivisionPhases([]);
+      return;
+    }
+    setLoadingPhases(true);
+    try {
+      const response = await tournamentApi.getDivisionPhases(divisionId);
+      if (response.success) {
+        setPlanningDivisionPhases(response.data || []);
+      } else {
+        toast.error(response.message || 'Failed to load phases');
+      }
+    } catch (err) {
+      console.error('Error loading phases:', err);
+      toast.error('Failed to load division phases');
+    } finally {
+      setLoadingPhases(false);
+    }
+  };
+
+  const handleGeneratePhaseEncounters = async (phaseId) => {
+    setGeneratingPhaseEncounters(phaseId);
+    try {
+      const response = await tournamentApi.generatePhaseSchedule(phaseId);
+      if (response.success) {
+        toast.success(response.message || 'Encounters generated successfully');
+        // Reload phases to get updated counts
+        if (planningDivisionId) {
+          await loadDivisionPhases(parseInt(planningDivisionId));
+        }
+      } else {
+        toast.error(response.message || 'Failed to generate encounters');
+      }
+    } catch (err) {
+      console.error('Error generating phase encounters:', err);
+      toast.error('Failed to generate encounters');
+    } finally {
+      setGeneratingPhaseEncounters(null);
+    }
+  };
+
+  const handleBackendScheduleGenerate = async () => {
+    const divId = planningDivisionId ? parseInt(planningDivisionId) : null;
+    const phId = selectedPlanningPhaseId ? parseInt(selectedPlanningPhaseId) : null;
+
+    if (!divId) {
+      toast.error('Please select a division');
+      return;
+    }
+
+    // Get division settings for duration/rest
+    const div = dashboard?.divisions?.find(d => d.id === divId);
+    const matchDuration = div?.estimatedMatchDurationMinutes || planningConfig.gameDurationMinutes || 15;
+    const restTime = div?.minRestTimeMinutes || planningConfig.waitTimeMinutes || 5;
+
+    // Build start time from event date + time input
+    let startTime = null;
+    if (schedulingStartTime) {
+      const eventDate = event?.startDate || dashboard?.event?.startDate;
+      if (eventDate) {
+        const d = new Date(eventDate);
+        const [h, m] = schedulingStartTime.split(':').map(Number);
+        d.setHours(h, m, 0, 0);
+        startTime = d.toISOString();
+      }
+    }
+
+    setBackendScheduling(true);
+    setSchedulingResults(null);
+    try {
+      const response = await tournamentApi.schedulingGenerate({
+        eventId: parseInt(eventId),
+        divisionId: divId,
+        phaseId: phId,
+        startTime,
+        matchDurationMinutes: matchDuration,
+        restTimeMinutes: restTime,
+        clearExisting: schedulingClearExisting,
+        respectPlayerOverlap: schedulingRespectOverlap,
+      });
+      if (response.success) {
+        setSchedulingResults(response.data);
+        toast.success(response.data?.message || `Schedule generated: ${response.data?.assignedCount || 0} matches assigned`);
+        // Auto-load validation and grid
+        handleLoadValidation(divId);
+        handleLoadScheduleGrid();
+        // Refresh phases
+        loadDivisionPhases(divId);
+      } else {
+        toast.error(response.message || 'Failed to generate schedule');
+        setSchedulingResults({ error: response.message });
+      }
+    } catch (err) {
+      console.error('Error generating schedule:', err);
+      toast.error('Failed to generate schedule');
+      setSchedulingResults({ error: err.message });
+    } finally {
+      setBackendScheduling(false);
+    }
+  };
+
+  const handleLoadValidation = async (divId) => {
+    const divisionId = divId || (planningDivisionId ? parseInt(planningDivisionId) : null);
+    setLoadingScheduleValidation(true);
+    try {
+      const response = await tournamentApi.schedulingValidate(parseInt(eventId), divisionId);
+      if (response.success) {
+        setValidationData(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading validation:', err);
+    } finally {
+      setLoadingScheduleValidation(false);
+    }
+  };
+
+  const handleLoadScheduleGrid = async () => {
+    setLoadingGrid(true);
+    try {
+      const response = await tournamentApi.schedulingGetGrid(parseInt(eventId));
+      if (response.success) {
+        setScheduleGrid(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading schedule grid:', err);
+    } finally {
+      setLoadingGrid(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    const divId = planningDivisionId ? parseInt(planningDivisionId) : null;
+    const phId = selectedPlanningPhaseId ? parseInt(selectedPlanningPhaseId) : null;
+
+    if (!divId) {
+      toast.error('Please select a division');
+      return;
+    }
+
+    if (!confirm('Clear all scheduled times for this division/phase? This cannot be undone.')) return;
+
+    setClearingSchedule(true);
+    try {
+      const response = await tournamentApi.schedulingClear(divId, phId);
+      if (response.success) {
+        toast.success(response.message || 'Schedule cleared');
+        setSchedulingResults(null);
+        setValidationData(null);
+        setScheduleGrid(null);
+        loadDivisionPhases(divId);
+        handleLoadScheduleGrid();
+      } else {
+        toast.error(response.message || 'Failed to clear schedule');
+      }
+    } catch (err) {
+      console.error('Error clearing schedule:', err);
+      toast.error('Failed to clear schedule');
+    } finally {
+      setClearingSchedule(false);
+    }
+  };
+
+  const handleAssignCourtGroupsToDivision = async () => {
+    const divId = planningDivisionId ? parseInt(planningDivisionId) : null;
+    if (!divId || selectedCourtGroupsForAssignment.length === 0) {
+      toast.error('Select a division and at least one court group');
+      return;
+    }
+
+    setAssigningCourts(true);
+    try {
+      const response = await tournamentApi.assignCourtGroupsToDivision(
+        divId,
+        selectedCourtGroupsForAssignment,
+        courtAssignmentTimeFrom || null,
+        courtAssignmentTimeTo || null
+      );
+      if (response.success) {
+        toast.success('Court groups assigned to division');
+        setSelectedCourtGroupsForAssignment([]);
+        setCourtAssignmentMode(false);
+        // Reload data
+        loadDivisionPhases(divId);
+      } else {
+        toast.error(response.message || 'Failed to assign courts');
+      }
+    } catch (err) {
+      console.error('Error assigning courts:', err);
+      toast.error('Failed to assign court groups');
+    } finally {
+      setAssigningCourts(false);
+    }
+  };
+
+  const handleGenerateAdvancementRules = async (targetPhaseId, sourcePhaseId) => {
+    setGeneratingAdvancement(true);
+    try {
+      const response = await tournamentApi.generateAdvancementRules(targetPhaseId, sourcePhaseId);
+      if (response.success) {
+        toast.success('Advancement rules generated');
+        if (planningDivisionId) {
+          loadDivisionPhases(parseInt(planningDivisionId));
+        }
+      } else {
+        toast.error(response.message || 'Failed to generate advancement rules');
+      }
+    } catch (err) {
+      console.error('Error generating advancement rules:', err);
+      toast.error('Failed to generate advancement rules');
+    } finally {
+      setGeneratingAdvancement(false);
+    }
   };
 
   const handleCreateCourtGroup = async () => {
@@ -7163,696 +7407,727 @@ export default function TournamentManage() {
           <div className="space-y-6">
             {/* Header with actions */}
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Court & Time Planning</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Scheduling & Planning</h2>
               <div className="flex items-center gap-2">
                 <Link
                   to={`/event/${eventId}/auto-scheduler`}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+                  className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm font-medium"
                 >
-                  ⚡ Auto Scheduler
+                  <ExternalLink className="w-4 h-4" />
+                  Advanced Scheduler
                 </Link>
-                {courtTimeAllocations.some(a => a.isNew) && (
-                  <button
-                    onClick={savePlanningData}
-                    disabled={savingPlan}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Plan
-                  </button>
-                )}
                 <button
                   onClick={() => {
-                    loadPlanningData();
                     loadCourtGroups();
+                    if (planningDivisionId) {
+                      loadDivisionPhases(parseInt(planningDivisionId));
+                    }
+                    handleLoadScheduleGrid();
                   }}
-                  disabled={loadingPlanningData}
+                  disabled={loadingPhases || loadingGrid}
                   className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                 >
-                  <RefreshCw className={`w-5 h-5 ${loadingPlanningData ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-5 h-5 ${(loadingPhases || loadingGrid) ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>
 
-            {/* Load Planning Data prompt */}
-            {!planningData && !loadingPlanningData && (
+            {/* Division selector */}
+            {(() => {
+              const divisionsWithRegs = dashboard?.divisions?.filter(d => d.registeredUnits > 0) || [];
+              return divisionsWithRegs.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {divisionsWithRegs.map(div => (
+                    <button
+                      key={div.id}
+                      onClick={() => {
+                        setPlanningDivisionId(String(div.id));
+                        setSelectedPlanningPhaseId('');
+                        loadDivisionPhases(div.id);
+                        setSchedulingResults(null);
+                        setValidationData(null);
+                      }}
+                      className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                        planningDivisionId === String(div.id)
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border'
+                      }`}
+                    >
+                      {div.name}
+                      <span className="ml-1.5 text-xs opacity-75">({div.registeredUnits})</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {!planningDivisionId && (
               <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 mb-4">Load planning data to start scheduling matches</p>
-                <button
-                  onClick={loadPlanningData}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                >
-                  Load Planning Data
-                </button>
+                <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">Select a division above to start scheduling</p>
               </div>
             )}
 
-            {loadingPlanningData && (
-              <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-3" />
-                <p className="text-gray-500">Loading planning data...</p>
-              </div>
-            )}
-
-            {planningData && (
+            {planningDivisionId && (
               <>
-                {/* Step 1: Select Matches */}
+                {/* Section 1: Division Phase Overview */}
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b">
+                  <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b flex items-center justify-between">
                     <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                      <Target className="w-5 h-5 text-blue-500" />
-                      Step 1: Select Matches to Schedule
+                      <Layers className="w-5 h-5 text-blue-500" />
+                      Division Phases
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowPhaseManager(!showPhaseManager)}
+                        className="px-3 py-1.5 text-sm bg-white text-blue-700 rounded-lg hover:bg-blue-50 border border-blue-200 flex items-center gap-1"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        Configure Phases
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PhaseManager modal-like section */}
+                  {showPhaseManager && (
+                    <div className="border-b bg-gray-50 p-4">
+                      <PhaseManager
+                        divisionId={parseInt(planningDivisionId)}
+                        eventId={parseInt(eventId)}
+                        unitCount={dashboard?.divisions?.find(d => d.id === parseInt(planningDivisionId))?.registeredUnits || 8}
+                      />
+                    </div>
+                  )}
+
+                  <div className="p-4">
+                    {loadingPhases ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                        <span className="ml-2 text-gray-500 text-sm">Loading phases...</span>
+                      </div>
+                    ) : planningDivisionPhases.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Layers className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm mb-3">No phases configured for this division</p>
+                        <button
+                          onClick={() => setShowPhaseManager(true)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Add Phases
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {planningDivisionPhases.map(phase => {
+                          const totalEncounters = phase.encounterCount || phase.encounters?.length || 0;
+                          const scheduledCount = phase.scheduledCount || 0;
+                          const unscheduledCount = totalEncounters - scheduledCount;
+                          const isCompleted = phase.status === 'Completed';
+                          const statusColors = {
+                            Pending: 'bg-gray-100 text-gray-700',
+                            InProgress: 'bg-blue-100 text-blue-700',
+                            Completed: 'bg-green-100 text-green-700',
+                            Locked: 'bg-purple-100 text-purple-700',
+                          };
+
+                          return (
+                            <div key={phase.id} className={`p-4 rounded-lg border ${
+                              selectedPlanningPhaseId === String(phase.id) ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={() => setSelectedPlanningPhaseId(
+                                      selectedPlanningPhaseId === String(phase.id) ? '' : String(phase.id)
+                                    )}
+                                    className="text-left"
+                                  >
+                                    <div className="font-medium text-gray-900">{phase.name}</div>
+                                    <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                                      <span>{phase.phaseType}</span>
+                                      <span>•</span>
+                                      <span>{totalEncounters} encounters</span>
+                                      {totalEncounters > 0 && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="text-green-600">{scheduledCount} scheduled</span>
+                                          {unscheduledCount > 0 && (
+                                            <>
+                                              <span>•</span>
+                                              <span className="text-yellow-600">{unscheduledCount} unscheduled</span>
+                                            </>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  </button>
+                                  <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusColors[phase.status] || 'bg-gray-100 text-gray-700'}`}>
+                                    {phase.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {totalEncounters === 0 && (
+                                    <button
+                                      onClick={() => handleGeneratePhaseEncounters(phase.id)}
+                                      disabled={generatingPhaseEncounters === phase.id}
+                                      className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                                    >
+                                      {generatingPhaseEncounters === phase.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Play className="w-3.5 h-3.5" />
+                                      )}
+                                      Generate Encounters
+                                    </button>
+                                  )}
+                                  {isCompleted && (
+                                    <button
+                                      onClick={() => setAdvancementPhaseId(advancementPhaseId === phase.id ? null : phase.id)}
+                                      className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-1"
+                                    >
+                                      <Award className="w-3.5 h-3.5" />
+                                      Advance Winners
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Phase Advancement Config */}
+                              {advancementPhaseId === phase.id && (
+                                <div className="mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                                  <h4 className="text-sm font-medium text-purple-800 mb-2">Phase Advancement</h4>
+                                  <p className="text-xs text-purple-600 mb-3">
+                                    Auto-generate advancement rules to move winners to the next phase.
+                                  </p>
+                                  {planningDivisionPhases.filter(p => p.sortOrder > phase.sortOrder).length > 0 ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-gray-700">Advance to:</span>
+                                      {planningDivisionPhases
+                                        .filter(p => p.sortOrder > phase.sortOrder)
+                                        .map(targetPhase => (
+                                          <button
+                                            key={targetPhase.id}
+                                            onClick={() => handleGenerateAdvancementRules(targetPhase.id, phase.id)}
+                                            disabled={generatingAdvancement}
+                                            className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                                          >
+                                            {generatingAdvancement ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                                            {targetPhase.name}
+                                          </button>
+                                        ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-500">No subsequent phases to advance to.</p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Progress bar */}
+                              {totalEncounters > 0 && (
+                                <div className="mt-2">
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div
+                                      className="bg-green-500 h-1.5 rounded-full transition-all"
+                                      style={{ width: `${totalEncounters > 0 ? (scheduledCount / totalEncounters) * 100 : 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 2: Court Group Assignment */}
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Grid3X3 className="w-5 h-5 text-green-500" />
+                      Court Assignment
+                      <span className="text-xs text-gray-500 font-normal">({courtGroups.length} groups)</span>
+                    </h3>
+                    <button
+                      onClick={() => setCourtAssignmentMode(!courtAssignmentMode)}
+                      className={`px-3 py-1.5 text-sm rounded-lg flex items-center gap-1 ${
+                        courtAssignmentMode
+                          ? 'bg-green-600 text-white hover:bg-green-700'
+                          : 'bg-white text-green-700 hover:bg-green-50 border border-green-200'
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      {courtAssignmentMode ? 'Close' : 'Assign Courts'}
+                    </button>
+                  </div>
+
+                  {courtAssignmentMode && (
+                    <div className="p-4 space-y-4">
+                      {courtGroups.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-gray-500 mb-2">No court groups configured.</p>
+                          <button
+                            onClick={() => setActiveTab('courts')}
+                            className="text-sm text-orange-600 hover:underline"
+                          >
+                            Go to Courts tab to create groups →
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {courtGroups.map(group => (
+                              <button
+                                key={group.id}
+                                onClick={() => {
+                                  setSelectedCourtGroupsForAssignment(prev =>
+                                    prev.includes(group.id)
+                                      ? prev.filter(id => id !== group.id)
+                                      : [...prev, group.id]
+                                  );
+                                }}
+                                className={`p-3 rounded-lg border text-left transition-colors ${
+                                  selectedCourtGroupsForAssignment.includes(group.id)
+                                    ? 'border-green-400 bg-green-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <div className="font-medium text-sm">{group.groupName}</div>
+                                <div className="text-xs text-gray-500">{group.courtCount || group.courts?.length || 0} courts</div>
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex flex-wrap items-end gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Valid From (optional)</label>
+                              <input
+                                type="time"
+                                value={courtAssignmentTimeFrom}
+                                onChange={(e) => setCourtAssignmentTimeFrom(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Valid To (optional)</label>
+                              <input
+                                type="time"
+                                value={courtAssignmentTimeTo}
+                                onChange={(e) => setCourtAssignmentTimeTo(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                              />
+                            </div>
+                            <button
+                              onClick={handleAssignCourtGroupsToDivision}
+                              disabled={assigningCourts || selectedCourtGroupsForAssignment.length === 0}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm flex items-center gap-1"
+                            >
+                              {assigningCourts ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              Assign Selected Groups
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Current court summary */}
+                  {!courtAssignmentMode && courtGroups.length > 0 && (
+                    <div className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        {courtGroups.map(group => (
+                          <span key={group.id} className="px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                            {group.groupName}: {group.courtCount || group.courts?.length || 0} courts
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 3: Auto-Schedule */}
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-orange-50 to-amber-50 border-b">
+                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-orange-500" />
+                      Generate Schedule
                     </h3>
                   </div>
                   <div className="p-4 space-y-4">
-                    {/* Filters */}
-                    <div className="flex flex-wrap gap-4">
+                    {/* Division info from settings */}
+                    {(() => {
+                      const div = dashboard?.divisions?.find(d => d.id === parseInt(planningDivisionId));
+                      return div && (
+                        <div className="flex flex-wrap gap-4 p-3 bg-gray-50 rounded-lg text-sm">
+                          <div>
+                            <span className="text-gray-500">Match Duration:</span>{' '}
+                            <span className="font-medium">{div.estimatedMatchDurationMinutes || 15} min</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Rest Time:</span>{' '}
+                            <span className="font-medium">{div.minRestTimeMinutes || 5} min</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Teams:</span>{' '}
+                            <span className="font-medium">{div.registeredUnits}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Phase filter */}
+                    {planningDivisionPhases.length > 0 && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Phase (optional)</label>
                         <select
-                          value={planningDivisionId}
-                          onChange={(e) => {
-                            setPlanningDivisionId(e.target.value);
-                            setPlanningPoolId('all');
-                            setSelectedEncountersForPlanning([]);
-                          }}
+                          value={selectedPlanningPhaseId}
+                          onChange={(e) => setSelectedPlanningPhaseId(e.target.value)}
                           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
                         >
-                          <option value="">All Divisions</option>
-                          {planningData.divisions?.map(div => (
-                            <option key={div.id} value={div.id}>
-                              {div.name} ({div.encounterCount} matches)
+                          <option value="">All Phases</option>
+                          {planningDivisionPhases.map(phase => (
+                            <option key={phase.id} value={phase.id}>
+                              {phase.name} ({phase.encounterCount || 0} encounters)
                             </option>
                           ))}
                         </select>
                       </div>
-                      {planningDivisionId && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Pool/Round</label>
-                          <select
-                            value={planningPoolId}
-                            onChange={(e) => {
-                              setPlanningPoolId(e.target.value);
-                              setSelectedEncountersForPlanning([]);
-                            }}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-                          >
-                            <option value="all">All Rounds</option>
-                            {/* Group by phases if available */}
-                            {planningData.divisions?.find(d => d.id === parseInt(planningDivisionId))?.phases?.map(phase => (
-                              <option key={`phase_${phase.id}`} value={`phase_${phase.id}`}>
-                                {phase.name} ({phase.encounterCount} matches)
-                              </option>
-                            ))}
-                            {/* Also show by round number */}
-                            {[...new Set(getFilteredEncounters().map(e => e.roundNumber))].sort((a,b) => a-b).map(round => (
-                              <option key={`round_${round}`} value={`round_${round}`}>
-                                Round {round}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Summary stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <div className="text-2xl font-bold text-gray-900">{getFilteredEncounters().length}</div>
-                        <div className="text-xs text-gray-500">Total Matches</div>
-                      </div>
-                      <div className="p-3 bg-yellow-50 rounded-lg">
-                        <div className="text-2xl font-bold text-yellow-700">{getUnscheduledEncounters().length}</div>
-                        <div className="text-xs text-yellow-600">Unscheduled</div>
-                      </div>
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-700">{getScheduledEncounters().length}</div>
-                        <div className="text-xs text-green-600">Scheduled</div>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-700">{selectedEncountersForPlanning.length}</div>
-                        <div className="text-xs text-blue-600">Selected</div>
-                      </div>
-                    </div>
-
-                    {/* Match selection actions */}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={selectAllUnscheduled}
-                        className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-                      >
-                        Select All Unscheduled
-                      </button>
-                      {selectedEncountersForPlanning.length > 0 && (
-                        <button
-                          onClick={clearSelection}
-                          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                        >
-                          Clear Selection ({selectedEncountersForPlanning.length})
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Match list */}
-                    {getUnscheduledEncounters().length > 0 && (
-                      <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50 sticky top-0">
-                            <tr>
-                              <th className="w-10 px-3 py-2"></th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Match</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Round</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Teams</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200 bg-white">
-                            {getUnscheduledEncounters().map(encounter => (
-                              <tr
-                                key={encounter.id}
-                                onClick={() => toggleEncounterSelection(encounter.id)}
-                                className={`cursor-pointer hover:bg-gray-50 ${
-                                  selectedEncountersForPlanning.includes(encounter.id) ? 'bg-blue-50' : ''
-                                }`}
-                              >
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedEncountersForPlanning.includes(encounter.id)}
-                                    onChange={() => {}}
-                                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                                  />
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  <span className="font-medium">{encounter.encounterLabel || `#${encounter.encounterNumber}`}</span>
-                                  {!planningDivisionId && (
-                                    <span className="ml-2 text-xs text-gray-500">{encounter.divisionName}</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-600">
-                                  {encounter.roundName || `Round ${encounter.roundNumber}`}
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  {encounter.unit1Name && encounter.unit2Name ? (
-                                    <>{encounter.unit1Name} vs {encounter.unit2Name}</>
-                                  ) : (
-                                    <span className="text-gray-500 italic">
-                                      Match {encounter.encounterLabel || `#${encounter.encounterNumber}`}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Step 2: Time Configuration */}
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b">
-                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-purple-500" />
-                      Step 2: Time Configuration
-                    </h3>
-                  </div>
-                  <div className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Game Duration (min)</label>
-                        <input
-                          type="number"
-                          min="5"
-                          max="60"
-                          value={planningConfig.gameDurationMinutes}
-                          onChange={(e) => setPlanningConfig(prev => ({ ...prev, gameDurationMinutes: parseInt(e.target.value) || 15 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Wait Time (min)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="30"
-                          value={planningConfig.waitTimeMinutes}
-                          onChange={(e) => setPlanningConfig(prev => ({ ...prev, waitTimeMinutes: parseInt(e.target.value) || 5 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Courts to Use</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={planningConfig.courtCount}
-                          onChange={(e) => setPlanningConfig(prev => ({ ...prev, courtCount: parseInt(e.target.value) || 4 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <div className="p-3 bg-purple-50 rounded-lg w-full">
-                          <div className="text-sm font-medium text-purple-700">
-                            {(() => {
-                              const est = calculateTimeEstimate();
-                              return `${est.matchCount} matches = ~${est.hours}h ${est.minutes}m`;
-                            })()}
-                          </div>
-                          <div className="text-xs text-purple-600">Estimated total time</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 3: Court Selection */}
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b">
-                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                      <Grid3X3 className="w-5 h-5 text-green-500" />
-                      Step 3: Court Selection & Start Time
-                    </h3>
-                  </div>
-                  <div className="p-4 space-y-4">
-                    <div className="flex flex-wrap gap-4">
-                      {/* Court selection mode */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Selection Mode</label>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setPlanningCourtSelection('group')}
-                            className={`px-3 py-2 text-sm rounded-lg border ${
-                              planningCourtSelection === 'group'
-                                ? 'bg-orange-100 border-orange-300 text-orange-700'
-                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            Court Group
-                          </button>
-                          <button
-                            onClick={() => setPlanningCourtSelection('individual')}
-                            className={`px-3 py-2 text-sm rounded-lg border ${
-                              planningCourtSelection === 'individual'
-                                ? 'bg-orange-100 border-orange-300 text-orange-700'
-                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                            }`}
-                          >
-                            Individual Courts
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Court group selection */}
-                      {planningCourtSelection === 'group' && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Court Group</label>
-                          <select
-                            value={selectedCourtGroupForPlanning}
-                            onChange={(e) => setSelectedCourtGroupForPlanning(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
-                          >
-                            <option value="">Select a group...</option>
-                            {planningData.courtGroups?.map(group => (
-                              <option key={group.id} value={group.id}>
-                                {group.groupName} ({group.courtCount} courts)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Individual court selection */}
-                      {planningCourtSelection === 'individual' && (
-                        <div className="flex-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Select Courts</label>
-                          <div className="flex flex-wrap gap-2">
-                            {/* Courts from court groups */}
-                            {planningData.courtGroups?.flatMap(group =>
-                              group.courts?.map(court => (
-                                <button
-                                  key={court.id}
-                                  onClick={() => {
-                                    setSelectedCourtsForPlanning(prev =>
-                                      prev.includes(court.id)
-                                        ? prev.filter(id => id !== court.id)
-                                        : [...prev, court.id]
-                                    );
-                                  }}
-                                  className={`px-3 py-1.5 text-sm rounded-lg border ${
-                                    selectedCourtsForPlanning.includes(court.id)
-                                      ? 'bg-green-100 border-green-300 text-green-700'
-                                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  {court.courtLabel}
-                                </button>
-                              ))
-                            )}
-                            {/* Unassigned courts */}
-                            {planningData.unassignedCourts?.map(court => (
-                              <button
-                                key={court.id}
-                                onClick={() => {
-                                  setSelectedCourtsForPlanning(prev =>
-                                    prev.includes(court.id)
-                                      ? prev.filter(id => id !== court.id)
-                                      : [...prev, court.id]
-                                  );
-                                }}
-                                className={`px-3 py-1.5 text-sm rounded-lg border ${
-                                  selectedCourtsForPlanning.includes(court.id)
-                                    ? 'bg-green-100 border-green-300 text-green-700'
-                                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                }`}
-                              >
-                                {court.courtLabel}
-                              </button>
-                            ))}
-                          </div>
-                          {(planningData.courtGroups?.flatMap(g => g.courts || []).length || 0) + (planningData.unassignedCourts?.length || 0) === 0 && (
-                            <p className="text-sm text-gray-500 mt-2">No courts configured. Add courts in the Courts tab first.</p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Start time */}
+                    {/* Schedule options */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
                         <input
                           type="time"
-                          value={planningStartTime}
-                          onChange={(e) => setPlanningStartTime(e.target.value)}
-                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                          value={schedulingStartTime}
+                          onChange={(e) => setSchedulingStartTime(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
                         />
                       </div>
-
-                      {/* Generate button */}
-                      <div className="flex items-end">
+                      <div className="flex items-center gap-4 pt-6">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={schedulingClearExisting}
+                            onChange={(e) => setSchedulingClearExisting(e.target.checked)}
+                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                          />
+                          Clear existing
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={schedulingRespectOverlap}
+                            onChange={(e) => setSchedulingRespectOverlap(e.target.checked)}
+                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                          />
+                          Avoid player overlap
+                        </label>
+                      </div>
+                      <div className="flex items-end gap-2">
                         <button
-                          onClick={generateScheduleForSelection}
-                          disabled={!planningStartTime || (planningCourtSelection === 'group' && !selectedCourtGroupForPlanning) ||
-                            (planningCourtSelection === 'individual' && selectedCourtsForPlanning.length === 0)}
-                          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          onClick={handleBackendScheduleGenerate}
+                          disabled={backendScheduling || !planningDivisionId}
+                          className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
                         >
-                          <Calendar className="w-4 h-4" />
+                          {backendScheduling ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Shuffle className="w-4 h-4" />
+                          )}
                           Generate Schedule
+                        </button>
+                        <button
+                          onClick={handleClearSchedule}
+                          disabled={clearingSchedule || !planningDivisionId}
+                          className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 disabled:opacity-50 flex items-center gap-1"
+                          title="Clear schedule"
+                        >
+                          {clearingSchedule ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Selected courts summary */}
-                    {getAvailableCourtsForPlanning().length > 0 && (
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <div className="text-sm text-green-700">
-                          <span className="font-medium">Selected courts:</span>{' '}
-                          {getAvailableCourtsForPlanning().map(c => c.courtLabel).join(', ')}
-                        </div>
+                    {/* Scheduling Results */}
+                    {schedulingResults && (
+                      <div className={`p-4 rounded-lg ${schedulingResults.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                        {schedulingResults.error ? (
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <div className="font-medium text-red-800">Scheduling failed</div>
+                              <div className="text-sm text-red-600 mt-1">{schedulingResults.error}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-2">
+                            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <div className="font-medium text-green-800">
+                                {schedulingResults.message || 'Schedule generated successfully'}
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+                                {schedulingResults.assignedCount !== undefined && (
+                                  <div className="text-sm">
+                                    <span className="text-gray-500">Assigned:</span>{' '}
+                                    <span className="font-medium text-green-700">{schedulingResults.assignedCount}</span>
+                                  </div>
+                                )}
+                                {schedulingResults.unassignedCount !== undefined && schedulingResults.unassignedCount > 0 && (
+                                  <div className="text-sm">
+                                    <span className="text-gray-500">Unassigned:</span>{' '}
+                                    <span className="font-medium text-yellow-700">{schedulingResults.unassignedCount}</span>
+                                  </div>
+                                )}
+                                {schedulingResults.courtsUsed !== undefined && (
+                                  <div className="text-sm">
+                                    <span className="text-gray-500">Courts used:</span>{' '}
+                                    <span className="font-medium">{schedulingResults.courtsUsed}</span>
+                                  </div>
+                                )}
+                                {schedulingResults.conflictCount !== undefined && schedulingResults.conflictCount > 0 && (
+                                  <div className="text-sm">
+                                    <span className="text-gray-500">Conflicts:</span>{' '}
+                                    <span className="font-medium text-red-600">{schedulingResults.conflictCount}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {schedulingResults.conflicts?.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {schedulingResults.conflicts.slice(0, 5).map((c, i) => (
+                                    <div key={i} className="text-xs text-red-600">⚠ {c.message || c}</div>
+                                  ))}
+                                  {schedulingResults.conflicts.length > 5 && (
+                                    <div className="text-xs text-gray-500">...and {schedulingResults.conflicts.length - 5} more</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Generated Schedule Preview */}
-                {generatedSchedule.length > 0 && (
-                  <div className="bg-white rounded-xl shadow-sm overflow-hidden border-2 border-orange-200">
-                    <div className="px-4 py-3 bg-orange-50 border-b flex items-center justify-between">
-                      <h3 className="font-medium text-orange-800 flex items-center gap-2">
-                        <Calendar className="w-5 h-5" />
-                        Generated Schedule Preview ({generatedSchedule.length} matches)
-                      </h3>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setGeneratedSchedule([])}
-                          className="px-3 py-1.5 text-sm bg-white text-gray-700 rounded-lg hover:bg-gray-100 border"
-                        >
-                          Discard
-                        </button>
-                        <button
-                          onClick={applyGeneratedSchedule}
-                          className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                        >
-                          Apply Schedule
-                        </button>
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      {planningErrors.length > 0 && (
-                        <div className="mb-4 p-3 bg-red-50 rounded-lg">
-                          <div className="text-sm font-medium text-red-700 mb-1">Conflicts detected:</div>
-                          {planningErrors.map((err, i) => (
-                            <div key={i} className="text-sm text-red-600">{err}</div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Time</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Court</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Match</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Teams</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {generatedSchedule.sort((a, b) => a.scheduledTime - b.scheduledTime).map(slot => (
-                              <tr key={slot.encounterId} className="hover:bg-gray-50">
-                                <td className="px-3 py-2 text-sm font-medium">
-                                  {slot.scheduledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                                    {slot.courtLabel}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  {slot.encounterLabel || `R${slot.roundNumber}`}
-                                  <span className="ml-2 text-xs text-gray-500">{slot.divisionName}</span>
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  {slot.unit1Name && slot.unit2Name ? (
-                                    <>{slot.unit1Name} vs {slot.unit2Name}</>
-                                  ) : (
-                                    <span className="text-gray-500 italic">
-                                      Match {slot.encounterLabel || `#${slot.encounterId}`}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <button
-                                    onClick={() => removeAllocation(slot.encounterId)}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                {/* Section 4: Schedule Preview & Validation */}
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-violet-50 border-b flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-purple-500" />
+                      Schedule Preview & Validation
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleLoadValidation()}
+                        disabled={loadingScheduleValidation}
+                        className="px-3 py-1.5 text-sm bg-white text-purple-700 rounded-lg hover:bg-purple-50 border border-purple-200 flex items-center gap-1"
+                      >
+                        {loadingScheduleValidation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                        Validate
+                      </button>
+                      <button
+                        onClick={handleLoadScheduleGrid}
+                        disabled={loadingGrid}
+                        className="px-3 py-1.5 text-sm bg-white text-purple-700 rounded-lg hover:bg-purple-50 border border-purple-200 flex items-center gap-1"
+                      >
+                        {loadingGrid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+                        Load Grid
+                      </button>
                     </div>
                   </div>
-                )}
 
-                {/* Visual Timeline */}
-                {courtTimeAllocations.length > 0 && (
-                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                        <LayoutGrid className="w-5 h-5 text-indigo-500" />
-                        Court Timeline ({courtTimeAllocations.length} scheduled)
-                      </h3>
-                      {courtTimeAllocations.some(a => a.isNew) && (
-                        <span className="text-sm text-orange-600">
-                          {courtTimeAllocations.filter(a => a.isNew).length} unsaved changes
-                        </span>
-                      )}
-                    </div>
-                    <div className="p-4 overflow-x-auto">
-                      {(() => {
-                        // Get unique courts and time range
-                        const courts = [...new Set(courtTimeAllocations.map(a => a.courtId))]
-                          .map(courtId => {
-                            const alloc = courtTimeAllocations.find(a => a.courtId === courtId);
-                            return { id: courtId, label: alloc?.courtLabel || `Court ${courtId}` };
-                          });
+                  <div className="p-4 space-y-4">
+                    {/* Validation results */}
+                    {validationData && (
+                      <div className={`p-4 rounded-lg ${
+                        (validationData.conflicts?.length || 0) === 0 && (validationData.warnings?.length || 0) === 0
+                          ? 'bg-green-50 border border-green-200'
+                          : 'bg-yellow-50 border border-yellow-200'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {(validationData.conflicts?.length || 0) === 0 && (validationData.warnings?.length || 0) === 0 ? (
+                            <>
+                              <CheckCircle className="w-5 h-5 text-green-500" />
+                              <span className="font-medium text-green-800">Schedule is valid — no conflicts found</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-5 h-5 text-yellow-500" />
+                              <span className="font-medium text-yellow-800">
+                                {validationData.conflicts?.length || 0} conflict(s), {validationData.warnings?.length || 0} warning(s)
+                              </span>
+                            </>
+                          )}
+                        </div>
 
-                        const allTimes = courtTimeAllocations.flatMap(a => [a.scheduledTime.getTime(), a.endTime.getTime()]);
-                        const minTime = Math.min(...allTimes);
-                        const maxTime = Math.max(...allTimes);
-                        const totalMinutes = (maxTime - minTime) / 60000;
-                        const pixelsPerMinute = 4;
+                        {validationData.conflicts?.length > 0 && (
+                          <div className="space-y-1 mt-2">
+                            <div className="text-xs font-medium text-red-700 uppercase tracking-wider">Conflicts</div>
+                            {validationData.conflicts.map((c, i) => (
+                              <div key={i} className="text-sm text-red-600 flex items-start gap-1.5">
+                                <XCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <span>{c.message || c.description || JSON.stringify(c)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                        // Generate time markers (every 30 minutes)
-                        const timeMarkers = [];
-                        for (let t = minTime; t <= maxTime; t += 30 * 60000) {
-                          timeMarkers.push(new Date(t));
-                        }
+                        {validationData.warnings?.length > 0 && (
+                          <div className="space-y-1 mt-2">
+                            <div className="text-xs font-medium text-yellow-700 uppercase tracking-wider">Warnings</div>
+                            {validationData.warnings.map((w, i) => (
+                              <div key={i} className="text-sm text-yellow-700 flex items-start gap-1.5">
+                                <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <span>{w.message || w.description || JSON.stringify(w)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                        return (
-                          <div className="relative" style={{ minWidth: `${totalMinutes * pixelsPerMinute + 120}px` }}>
-                            {/* Time header */}
-                            <div className="flex mb-2 ml-20">
-                              {timeMarkers.map((time, i) => (
-                                <div
-                                  key={i}
-                                  className="text-xs text-gray-500"
-                                  style={{ width: `${30 * pixelsPerMinute}px` }}
-                                >
-                                  {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              ))}
-                            </div>
+                        {/* Summary stats */}
+                        {(validationData.totalScheduled !== undefined || validationData.totalUnscheduled !== undefined) && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-200">
+                            {validationData.totalScheduled !== undefined && (
+                              <div className="text-sm">
+                                <span className="text-gray-500">Scheduled:</span>{' '}
+                                <span className="font-medium text-green-700">{validationData.totalScheduled}</span>
+                              </div>
+                            )}
+                            {validationData.totalUnscheduled !== undefined && (
+                              <div className="text-sm">
+                                <span className="text-gray-500">Unscheduled:</span>{' '}
+                                <span className="font-medium text-yellow-700">{validationData.totalUnscheduled}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                            {/* Court rows */}
-                            {courts.map(court => (
-                              <div key={court.id} className="flex items-center mb-2">
-                                <div className="w-20 text-sm font-medium text-gray-700 pr-2 flex-shrink-0">
-                                  {court.label}
-                                </div>
-                                <div
-                                  className="relative h-10 bg-gray-100 rounded"
-                                  style={{ width: `${totalMinutes * pixelsPerMinute}px` }}
-                                >
-                                  {/* Time grid lines */}
-                                  {timeMarkers.map((time, i) => (
-                                    <div
-                                      key={i}
-                                      className="absolute top-0 bottom-0 border-l border-gray-200"
-                                      style={{ left: `${((time.getTime() - minTime) / 60000) * pixelsPerMinute}px` }}
-                                    />
+                    {/* Schedule Grid */}
+                    {loadingGrid ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                        <span className="ml-2 text-gray-500 text-sm">Loading schedule grid...</span>
+                      </div>
+                    ) : scheduleGrid ? (
+                      <div>
+                        {/* Grid summary */}
+                        {scheduleGrid.courts?.length > 0 && (
+                          <div className="overflow-x-auto border rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 sticky left-0 bg-gray-50">Time</th>
+                                  {(scheduleGrid.courts || []).map(court => (
+                                    <th key={court.id || court.courtId} className="px-3 py-2 text-center text-xs font-medium text-gray-500 min-w-[120px]">
+                                      {court.label || court.courtLabel || `Court ${court.id || court.courtId}`}
+                                    </th>
                                   ))}
-
-                                  {/* Allocations for this court */}
-                                  {courtTimeAllocations
-                                    .filter(a => a.courtId === court.id)
-                                    .map(alloc => {
-                                      const left = ((alloc.scheduledTime.getTime() - minTime) / 60000) * pixelsPerMinute;
-                                      const width = ((alloc.endTime.getTime() - alloc.scheduledTime.getTime()) / 60000) * pixelsPerMinute;
-                                      const colors = {
-                                        new: 'bg-orange-200 border-orange-400',
-                                        saved: 'bg-blue-200 border-blue-400',
-                                      };
-                                      const colorClass = alloc.isNew ? colors.new : colors.saved;
-
-                                      const displayText = alloc.unit1Name && alloc.unit2Name
-                                        ? `${alloc.unit1Name?.split(' ')[0]} vs ${alloc.unit2Name?.split(' ')[0]}`
-                                        : `Match ${alloc.encounterLabel || alloc.encounterId}`;
-                                      const tooltipText = alloc.unit1Name && alloc.unit2Name
-                                        ? `${alloc.unit1Name} vs ${alloc.unit2Name}\n${alloc.scheduledTime.toLocaleTimeString()}`
-                                        : `Match ${alloc.encounterLabel || alloc.encounterId}\n${alloc.scheduledTime.toLocaleTimeString()}`;
-
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {(scheduleGrid.timeSlots || scheduleGrid.rows || []).map((slot, idx) => (
+                                  <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 text-xs font-medium text-gray-700 whitespace-nowrap sticky left-0 bg-white">
+                                      {slot.time ? new Date(slot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : slot.label || `Slot ${idx + 1}`}
+                                    </td>
+                                    {(scheduleGrid.courts || []).map(court => {
+                                      const cell = slot.cells?.find(c => (c.courtId || c.id) === (court.id || court.courtId))
+                                        || slot.encounters?.find(e => e.courtId === (court.id || court.courtId));
                                       return (
-                                        <div
-                                          key={alloc.encounterId}
-                                          className={`absolute top-1 bottom-1 rounded border text-xs overflow-hidden ${colorClass}`}
-                                          style={{ left: `${left}px`, width: `${width}px` }}
-                                          title={tooltipText}
-                                        >
-                                          <div className="px-1 truncate font-medium">
-                                            {displayText}
-                                          </div>
-                                        </div>
+                                        <td key={court.id || court.courtId} className="px-2 py-1.5 text-center">
+                                          {cell ? (
+                                            <div className={`px-2 py-1 rounded text-xs ${
+                                              cell.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                              cell.status === 'InProgress' ? 'bg-blue-100 text-blue-800' :
+                                              'bg-orange-100 text-orange-800'
+                                            }`}>
+                                              <div className="font-medium truncate">
+                                                {cell.unit1Name && cell.unit2Name
+                                                  ? `${cell.unit1Name?.split(' ')[0]} vs ${cell.unit2Name?.split(' ')[0]}`
+                                                  : cell.label || cell.encounterLabel || `#${cell.encounterId}`}
+                                              </div>
+                                              {cell.divisionName && (
+                                                <div className="text-[10px] opacity-75 truncate">{cell.divisionName}</div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <span className="text-gray-300">—</span>
+                                          )}
+                                        </td>
                                       );
                                     })}
-                                </div>
-                              </div>
-                            ))}
-
-                            {/* Legend */}
-                            <div className="flex gap-4 mt-4 text-xs">
-                              <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 bg-orange-200 border border-orange-400 rounded"></div>
-                                <span>New (unsaved)</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 bg-blue-200 border border-blue-400 rounded"></div>
-                                <span>Saved</span>
-                              </div>
-                            </div>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
+                        )}
 
-                {/* Scheduled Matches Table */}
-                {courtTimeAllocations.length > 0 && (
-                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b">
-                      <h3 className="font-medium text-gray-900 flex items-center gap-2">
-                        <ClipboardList className="w-5 h-5 text-teal-500" />
-                        Scheduled Matches
-                      </h3>
-                    </div>
-                    <div className="p-4 overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Time</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Court</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Division</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Teams</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {courtTimeAllocations
-                            .sort((a, b) => a.scheduledTime - b.scheduledTime)
-                            .map(alloc => (
-                              <tr key={alloc.encounterId} className={`hover:bg-gray-50 ${alloc.isNew ? 'bg-orange-50' : ''}`}>
-                                <td className="px-3 py-2 text-sm font-medium">
-                                  {alloc.scheduledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                                    {alloc.courtLabel}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-600">{alloc.divisionName}</td>
-                                <td className="px-3 py-2 text-sm">
-                                  {alloc.unit1Name && alloc.unit2Name ? (
-                                    <>{alloc.unit1Name} vs {alloc.unit2Name}</>
-                                  ) : (
-                                    <span className="text-gray-500 italic">
-                                      Match {alloc.encounterLabel || `#${alloc.encounterId}`}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-sm">
-                                  {alloc.isNew ? (
-                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">Unsaved</span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Saved</span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <button
-                                    onClick={() => removeAllocation(alloc.encounterId)}
-                                    className="text-red-600 hover:text-red-800"
-                                    title="Remove from schedule"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        {/* Fallback: flat list of encounters */}
+                        {!scheduleGrid.courts?.length && scheduleGrid.encounters?.length > 0 && (
+                          <div className="border rounded-lg overflow-hidden">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Time</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Court</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Division</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Match</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {scheduleGrid.encounters
+                                  .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
+                                  .map((enc, i) => (
+                                    <tr key={enc.id || i} className="hover:bg-gray-50">
+                                      <td className="px-3 py-2 text-sm">
+                                        {enc.scheduledTime
+                                          ? new Date(enc.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                          : '—'}
+                                      </td>
+                                      <td className="px-3 py-2 text-sm">
+                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                          {enc.courtLabel || `Court ${enc.courtId}`}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2 text-sm text-gray-600">{enc.divisionName}</td>
+                                      <td className="px-3 py-2 text-sm">
+                                        {enc.unit1Name && enc.unit2Name
+                                          ? `${enc.unit1Name} vs ${enc.unit2Name}`
+                                          : enc.encounterLabel || `Match #${enc.encounterId || enc.id}`}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Empty state */}
+                        {!scheduleGrid.courts?.length && !scheduleGrid.encounters?.length && (
+                          <div className="text-center py-6 text-gray-500 text-sm">
+                            No scheduled matches yet. Generate a schedule above.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-gray-400 text-sm">
+                        Click "Load Grid" or "Validate" to view the schedule preview.
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </>
             )}
           </div>
         )}
+
 
         {/* Scoring Tab - merged into Overview, keeping for backwards compatibility */}
         {activeTab === 'scoring' && (
