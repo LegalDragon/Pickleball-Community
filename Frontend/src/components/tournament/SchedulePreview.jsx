@@ -278,14 +278,19 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
       {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'list' && (
         <div className="space-y-6">
           {groupEncountersByRound().map(group => (
-            <RoundGroup key={`${group.poolName}-${group.roundNumber}`} group={group} allEncounters={schedule.encounters} />
+            <RoundGroup
+              key={`${group.poolName}-${group.roundNumber}`}
+              group={group}
+              allEncounters={schedule.encounters}
+              onEncounterClick={(encounterId) => setSelectedEncounterId(encounterId)}
+            />
           ))}
         </div>
       )}
 
       {/* Bracket View */}
       {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'bracket' && (
-        <BracketView encounters={getFilteredEncounters()} />
+        <BracketView encounters={getFilteredEncounters()} onEncounterClick={(encounterId) => setSelectedEncounterId(encounterId)} />
       )}
 
       {/* Encounter Detail Modal */}
@@ -389,7 +394,7 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
   );
 }
 
-function RoundGroup({ group, allEncounters }) {
+function RoundGroup({ group, allEncounters, onEncounterClick }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Build lookup: encounter DB id → display match number
@@ -424,7 +429,7 @@ function RoundGroup({ group, allEncounters }) {
       {isExpanded && (
         <div className="divide-y divide-gray-100">
           {group.encounters.map(encounter => (
-            <EncounterRow key={encounter.id} encounter={encounter} matchNumberById={matchNumberById} />
+            <EncounterRow key={encounter.id} encounter={encounter} matchNumberById={matchNumberById} onEncounterClick={onEncounterClick} />
           ))}
         </div>
       )}
@@ -432,7 +437,7 @@ function RoundGroup({ group, allEncounters }) {
   );
 }
 
-function EncounterRow({ encounter, matchNumberById = {} }) {
+function EncounterRow({ encounter, matchNumberById = {}, onEncounterClick }) {
   const statusColors = {
     Scheduled: 'bg-gray-100 text-gray-700',
     Ready: 'bg-yellow-100 text-yellow-700',
@@ -442,7 +447,7 @@ function EncounterRow({ encounter, matchNumberById = {} }) {
   };
 
   return (
-    <div className="px-4 py-3 hover:bg-gray-50 transition-colors">
+    <div className={`px-4 py-3 hover:bg-blue-50 transition-colors ${onEncounterClick ? 'cursor-pointer' : ''}`} onClick={() => onEncounterClick?.(encounter.id)}>
       <div className="flex items-center justify-between">
         {/* Match Info */}
         <div className="flex items-center gap-4">
@@ -517,7 +522,7 @@ function UnitDisplay({ unit, isWinner }) {
   );
 }
 
-function BracketView({ encounters }) {
+function BracketView({ encounters, onEncounterClick }) {
   // Group encounters by round for bracket display
   const roundGroups = {};
   encounters.forEach(e => {
@@ -544,7 +549,7 @@ function BracketView({ encounters }) {
             </h4>
             <div className="flex flex-col gap-4 justify-around h-full">
               {roundGroups[round].map(encounter => (
-                <BracketMatch key={encounter.id} encounter={encounter} />
+                <BracketMatch key={encounter.id} encounter={encounter} onEncounterClick={onEncounterClick} />
               ))}
             </div>
           </div>
@@ -554,7 +559,7 @@ function BracketView({ encounters }) {
   );
 }
 
-function BracketMatch({ encounter }) {
+function BracketMatch({ encounter, onEncounterClick }) {
   const statusColors = {
     Completed: 'border-green-500',
     InProgress: 'border-blue-500',
@@ -565,7 +570,7 @@ function BracketMatch({ encounter }) {
   const borderColor = statusColors[encounter.status] || statusColors.default;
 
   return (
-    <div className={`bg-white border-2 ${borderColor} rounded-lg shadow-sm w-56`}>
+    <div className={`bg-white border-2 ${borderColor} rounded-lg shadow-sm w-56 ${onEncounterClick ? 'cursor-pointer hover:shadow-md hover:border-blue-400 transition-all' : ''}`} onClick={() => onEncounterClick?.(encounter.id)}>
       <div className="p-2 border-b border-gray-100">
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-500">{encounter.encounterLabel}</span>
