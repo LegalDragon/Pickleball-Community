@@ -266,7 +266,7 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
       {!loading && !error && schedule?.encounters?.length > 0 && viewMode === 'list' && (
         <div className="space-y-6">
           {groupEncountersByRound().map(group => (
-            <RoundGroup key={`${group.poolName}-${group.roundNumber}`} group={group} />
+            <RoundGroup key={`${group.poolName}-${group.roundNumber}`} group={group} allEncounters={schedule.encounters} />
           ))}
         </div>
       )}
@@ -303,8 +303,17 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
   );
 }
 
-function RoundGroup({ group }) {
+function RoundGroup({ group, allEncounters }) {
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // Build lookup: encounter DB id → display match number
+  const matchNumberById = {};
+  if (allEncounters) {
+    allEncounters.forEach((enc) => {
+      const num = enc.divisionMatchNumber || enc.encounterNumber || enc.encounterLabel;
+      if (num) matchNumberById[enc.id] = num;
+    });
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -329,7 +338,7 @@ function RoundGroup({ group }) {
       {isExpanded && (
         <div className="divide-y divide-gray-100">
           {group.encounters.map(encounter => (
-            <EncounterRow key={encounter.id} encounter={encounter} />
+            <EncounterRow key={encounter.id} encounter={encounter} matchNumberById={matchNumberById} />
           ))}
         </div>
       )}
@@ -337,7 +346,7 @@ function RoundGroup({ group }) {
   );
 }
 
-function EncounterRow({ encounter }) {
+function EncounterRow({ encounter, matchNumberById = {} }) {
   const statusColors = {
     Scheduled: 'bg-gray-100 text-gray-700',
     Ready: 'bg-yellow-100 text-yellow-700',
@@ -393,10 +402,10 @@ function EncounterRow({ encounter }) {
       {(encounter.winnerNextEncounterId || encounter.loserNextEncounterId) && (
         <div className="mt-2 text-xs text-gray-500 pl-20">
           {encounter.winnerNextEncounterId && (
-            <span className="mr-4">Winner → Match #{encounter.winnerNextEncounterId}</span>
+            <span className="mr-4 text-green-600">Winner → Match {matchNumberById[encounter.winnerNextEncounterId] || encounter.winnerNextEncounterId}</span>
           )}
           {encounter.loserNextEncounterId && (
-            <span>Loser → Match #{encounter.loserNextEncounterId}</span>
+            <span className="text-orange-600">Loser → Match {matchNumberById[encounter.loserNextEncounterId] || encounter.loserNextEncounterId}</span>
           )}
         </div>
       )}
@@ -517,6 +526,13 @@ function TableView({ encounters, phaseName, onEncounterClick }) {
     Bye: 'bg-purple-100 text-purple-700',
   };
 
+  // Build lookup: encounter DB id → display match number
+  const matchNumberById = {};
+  encounters.forEach((enc) => {
+    const num = enc.divisionMatchNumber || enc.encounterNumber || enc.encounterLabel;
+    if (num) matchNumberById[enc.id] = num;
+  });
+
   // Format unit source for display
   const formatUnitSource = (unit) => {
     if (!unit) return { name: 'BYE', source: '', isBye: true };
@@ -625,13 +641,13 @@ function TableView({ encounters, phaseName, onEncounterClick }) {
                     {encounter.winnerNextEncounterId && (
                       <span className="flex items-center gap-1 text-green-600">
                         <ArrowRight className="w-3 h-3" />
-                        Winner → M{encounter.winnerNextEncounterId}
+                        Winner → Match {matchNumberById[encounter.winnerNextEncounterId] || encounter.winnerNextEncounterId}
                       </span>
                     )}
                     {encounter.loserNextEncounterId && (
                       <span className="flex items-center gap-1 text-orange-600">
                         <ArrowRight className="w-3 h-3" />
-                        Loser → M{encounter.loserNextEncounterId}
+                        Loser → Match {matchNumberById[encounter.loserNextEncounterId] || encounter.loserNextEncounterId}
                       </span>
                     )}
                     {!encounter.winnerNextEncounterId && !encounter.loserNextEncounterId && (
