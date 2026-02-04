@@ -803,17 +803,20 @@ function getLayoutedElements(nodes, edges) {
   return { nodes: layoutedNodes, edges }
 }
 
-// Custom Phase Node
+// Custom Phase Node — expands to show advancement rules when selected
 const PhaseNode = memo(({ data, selected }) => {
   const colors = PHASE_TYPE_COLORS[data.phaseType] || PHASE_TYPE_COLORS.SingleElimination
   const Icon = PHASE_TYPE_ICONS[data.phaseType] || GitBranch
+  const incomingRules = data.incomingRules || []
+  const outgoingRules = data.outgoingRules || []
+  const phaseNames = data.phaseNames || {}
 
   return (
     <div
       className={`rounded-lg shadow-md border-2 overflow-hidden transition-all ${
         selected ? 'ring-2 ring-purple-400 ring-offset-2' : ''
       } ${colors.border}`}
-      style={{ width: NODE_WIDTH }}
+      style={{ width: selected && (incomingRules.length > 0 || outgoingRules.length > 0) ? 280 : NODE_WIDTH }}
     >
       <Handle type="target" position={Position.Top} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
       <div className={`${colors.bg} px-3 py-1.5 flex items-center gap-2`}>
@@ -832,6 +835,43 @@ const PhaseNode = memo(({ data, selected }) => {
           <div className="text-[10px] text-gray-400 mt-0.5">{data.poolCount} pools</div>
         )}
       </div>
+      {/* Expanded advancement rules when selected */}
+      {selected && (incomingRules.length > 0 || outgoingRules.length > 0) && (
+        <div className="bg-white border-t px-2.5 py-2 space-y-1.5" style={{ maxHeight: 160, overflowY: 'auto' }}>
+          {incomingRules.length > 0 && (
+            <div>
+              <div className="text-[9px] font-semibold text-green-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <ArrowRight className="w-2.5 h-2.5 rotate-180" /> Incoming ({incomingRules.length})
+              </div>
+              {incomingRules.map((r, i) => (
+                <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
+                  <span className="text-green-500">←</span>
+                  <span className="font-medium text-gray-700">{phaseNames[r.sourcePhaseOrder] || `Phase ${r.sourcePhaseOrder}`}</span>
+                  <span className="text-gray-400">
+                    {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {outgoingRules.length > 0 && (
+            <div>
+              <div className="text-[9px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <ArrowRight className="w-2.5 h-2.5" /> Outgoing ({outgoingRules.length})
+              </div>
+              {outgoingRules.map((r, i) => (
+                <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
+                  <span className="text-blue-500">→</span>
+                  <span className="font-medium text-gray-700">{phaseNames[r.targetPhaseOrder] || `Phase ${r.targetPhaseOrder}`}</span>
+                  <span className="text-gray-400">
+                    {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
     </div>
   )
@@ -1164,7 +1204,20 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
     const nodes = buildNodes(vs.phases)
     const edges = buildEdges(vs.advancementRules, vs.phases)
     const { nodes: layoutedNodes } = getLayoutedElements(nodes, edges)
-    return layoutedNodes
+    const phaseNames = {}
+    vs.phases.forEach((p, i) => { phaseNames[i + 1] = p.name })
+    return layoutedNodes.map((node, idx) => {
+      const order = idx + 1
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
+          outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
+          phaseNames,
+        }
+      }
+    })
   }, []) // Only on mount
 
   const initialEdges = useMemo(() => {
@@ -1183,6 +1236,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
     const newLen = vs.phases.length
     vsRef.current = vs
 
+    // Build phase name lookup for rules display
+    const phaseNames = {}
+    vs.phases.forEach((p, i) => { phaseNames[i + 1] = p.name })
+
     // Always update node data to reflect current phase state
     setNodes(prev => {
       if (prev.length !== newLen) {
@@ -1191,21 +1248,36 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         const newEdges = buildEdges(vs.advancementRules, vs.phases)
         const { nodes: layoutedNodes } = getLayoutedElements(newNodes, newEdges)
         setEdges(newEdges)
-        return layoutedNodes
+        return layoutedNodes.map((node, idx) => {
+          const order = idx + 1
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
+              outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
+              phaseNames,
+            }
+          }
+        })
       }
       // Just update data on existing nodes
       return prev.map((node, idx) => {
         const phase = vs.phases[idx]
         if (!phase) return node
+        const order = idx + 1
         return {
           ...node,
           data: {
             label: phase.name,
             phaseType: phase.phaseType,
-            sortOrder: idx + 1,
+            sortOrder: order,
             incomingSlotCount: phase.incomingSlotCount,
             advancingSlotCount: phase.advancingSlotCount,
             poolCount: phase.poolCount,
+            incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
+            outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
+            phaseNames,
           }
         }
       })
