@@ -130,7 +130,7 @@ const Navigation = () => {
     { name: t('events'), href: '/events', icon: Calendar },
     { name: t('venues'), href: '/venues', icon: MapPin },
     { name: t('clubs'), href: '/clubs', icon: Users },
-    { name: 'Video Rooms', href: '/rooms', icon: Video },
+    { name: t('videoRooms'), href: '/rooms', icon: Video },
   ];
 
   // Secondary navigation - less frequently used
@@ -208,7 +208,7 @@ const Navigation = () => {
       href: `/event-dashboard/${event.eventId}`,
       icon: Trophy,
       isRunningEvent: true,
-      badge: !event.isCheckedIn ? 'Check In' : 'Live'
+      badge: !event.isCheckedIn ? t('checkIn') : t('live')
     })) : []),
     {
       name: t('dashboard'),
@@ -430,7 +430,7 @@ const Navigation = () => {
                               )}
                               {item.badge && (
                                 <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-                                  item.badge === 'Live'
+                                  item.badge === t('live')
                                     ? 'bg-green-100 text-green-700'
                                     : 'bg-yellow-100 text-yellow-700'
                                 }`}>
@@ -639,7 +639,7 @@ const Navigation = () => {
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-green-100 text-green-700'
                         }`}>
-                          {!event.isCheckedIn ? 'Check In' : 'Live'}
+                          {!event.isCheckedIn ? t('checkIn') : t('live')}
                         </span>
                       </Link>
                     ))}
