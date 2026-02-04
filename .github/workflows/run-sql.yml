@@ -1,0 +1,32 @@
+name: Run SQL
+
+on:
+  workflow_dispatch:
+    inputs:
+      sql:
+        description: 'SQL to execute'
+        required: true
+      database:
+        description: 'Database name'
+        required: false
+        default: 'PickleballCommunity'
+
+jobs:
+  run:
+    name: Run SQL
+    runs-on: [self-hosted, windows, iis]
+    steps:
+      - name: Execute SQL
+        shell: powershell
+        run: |
+          $db = "${{ github.event.inputs.database }}"
+          $sql = "${{ github.event.inputs.sql }}"
+          Write-Host "Running SQL on [$db]..."
+          try {
+            $result = Invoke-Sqlcmd -Query $sql -Database $db -ServerInstance "localhost" -TrustServerCertificate -QueryTimeout 300
+            if ($result) { $result | Format-Table -AutoSize | Out-String | Write-Host }
+            Write-Host "SQL executed successfully."
+          } catch {
+            Write-Host "SQL Error: $($_.Exception.Message)"
+            exit 1
+          }
