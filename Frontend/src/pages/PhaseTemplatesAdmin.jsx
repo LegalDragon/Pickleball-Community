@@ -1364,7 +1364,6 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
   const isPools = sourcePhase.phaseType === 'Pools' && (parseInt(sourcePhase.poolCount) || 0) > 1
   const poolCount = parseInt(sourcePhase.poolCount) || 1
   const [pendingSource, setPendingSource] = useState(null) // source slot being connected
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Build source exit slots
   const exitSlots = useMemo(() => {
@@ -1417,6 +1416,28 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
     return m
   }, [mappings])
 
+  // Slots taken by OTHER edges (not this connection)
+  const takenExitSlots = useMemo(() => {
+    const taken = new Set()
+    rules.forEach(r => {
+      if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder !== tgtOrder) {
+        const srcId = r.sourcePoolIndex != null ? `${r.sourcePoolIndex}-${r.finishPosition}` : `${r.finishPosition}`
+        taken.add(srcId)
+      }
+    })
+    return taken
+  }, [rules, srcOrder, tgtOrder])
+
+  const takenInSlots = useMemo(() => {
+    const taken = new Set()
+    rules.forEach(r => {
+      if (r.targetPhaseOrder === tgtOrder && r.sourcePhaseOrder !== srcOrder) {
+        taken.add(r.targetSlotNumber)
+      }
+    })
+    return taken
+  }, [rules, srcOrder, tgtOrder])
+
   const updateRules = (newMappings) => {
     const otherRules = rules.filter(r => !(r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder))
     const newConnectionRules = []
@@ -1466,6 +1487,7 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
 
   // Click source slot: select it for connecting
   const handleSourceClick = (slotId) => {
+    if (takenExitSlots.has(slotId)) return
     if (pendingSource === slotId) {
       setPendingSource(null) // deselect
     } else {
@@ -1476,6 +1498,7 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
   // Click target slot: connect pending source to it
   const handleTargetClick = (slotNumber) => {
     if (!pendingSource) return
+    if (takenInSlots.has(slotNumber)) return
     const newMap = new Map(mappings)
     // Remove any existing connection TO this target
     for (const [src, tgt] of newMap) {
@@ -1514,9 +1537,8 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
         </button>
       </div>
 
-      <div className="bg-purple-50 rounded-lg p-2 text-[11px] text-purple-700 space-y-0.5">
-        <div className="font-medium">{sourcePhase.name} → {targetPhase.name}</div>
-        <div>{exitSlots.length} exit → {inSlots.length} incoming</div>
+      <div className="bg-purple-50 rounded-lg px-2 py-1.5 text-[11px] text-purple-700">
+        <span className="font-medium">{sourcePhase.name}</span> → <span className="font-medium">{targetPhase.name}</span>
       </div>
 
       {/* Preset buttons */}
@@ -1579,16 +1601,20 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
             const y = padding + i * dotSpacing + dotR
             const isConnected = mappings.has(slot.id)
             const isSelected = pendingSource === slot.id
+            const isTaken = takenExitSlots.has(slot.id)
             return (
-              <g key={`src-${slot.id}`} onClick={() => handleSourceClick(slot.id)} className="cursor-pointer">
+              <g key={`src-${slot.id}`} onClick={() => handleSourceClick(slot.id)} className={isTaken ? 'cursor-not-allowed' : 'cursor-pointer'}>
                 <circle cx={leftX} cy={y} r={dotR + 2} fill="transparent" />
                 <circle cx={leftX} cy={y} r={dotR}
-                  fill={isSelected ? '#7c3aed' : slot.isLoser ? (isConnected ? '#f87171' : '#fee2e2') : (isConnected ? '#818cf8' : '#e5e7eb')}
-                  stroke={isSelected ? '#5b21b6' : slot.isLoser ? (isConnected ? '#dc2626' : '#f87171') : (isConnected ? '#6366f1' : '#9ca3af')}
+                  fill={isTaken ? '#f3f4f6' : isSelected ? '#7c3aed' : slot.isLoser ? (isConnected ? '#f87171' : '#fee2e2') : (isConnected ? '#818cf8' : '#e5e7eb')}
+                  stroke={isTaken ? '#d1d5db' : isSelected ? '#5b21b6' : slot.isLoser ? (isConnected ? '#dc2626' : '#f87171') : (isConnected ? '#6366f1' : '#9ca3af')}
                   strokeWidth={isSelected ? 2.5 : 1.5}
-                  className="transition-all" />
+                  className={`transition-all ${isTaken ? 'cursor-not-allowed' : 'cursor-pointer'}`} />
                 <text x={leftX} y={y + 1} textAnchor="middle" fontSize="8" fontWeight="700" fontFamily="ui-monospace,monospace"
-                  fill={isSelected || isConnected ? 'white' : '#6b7280'}>{slot.label.length > 3 ? slot.label.slice(0,3) : slot.label}</text>
+                  fill={isTaken ? '#d1d5db' : isSelected || isConnected ? 'white' : '#6b7280'}>{slot.label.length > 3 ? slot.label.slice(0,3) : slot.label}</text>
+                {isTaken && (
+                  <line x1={leftX - dotR + 2} y1={y} x2={leftX + dotR - 2} y2={y} stroke="#9ca3af" strokeWidth={1.5} />
+                )}
               </g>
             )
           })}
@@ -1598,17 +1624,21 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
             const y = padding + i * dotSpacing + dotR
             const isConnected = reverseMappings.has(slot.slotNumber)
             const isTarget = pendingSource != null
+            const isTaken = takenInSlots.has(slot.slotNumber)
             return (
               <g key={`tgt-${slot.id}`} onClick={() => handleTargetClick(slot.slotNumber)}
-                className={isTarget ? 'cursor-pointer' : ''}>
+                className={isTaken ? 'cursor-not-allowed' : isTarget ? 'cursor-pointer' : ''}>
                 <circle cx={rightX} cy={y} r={dotR + 2} fill="transparent" />
                 <circle cx={rightX} cy={y} r={dotR}
-                  fill={isConnected ? '#4ade80' : isTarget ? '#fef3c7' : '#e5e7eb'}
-                  stroke={isConnected ? '#16a34a' : isTarget ? '#f59e0b' : '#9ca3af'}
+                  fill={isTaken ? '#f3f4f6' : isConnected ? '#4ade80' : isTarget ? '#fef3c7' : '#e5e7eb'}
+                  stroke={isTaken ? '#d1d5db' : isConnected ? '#16a34a' : isTarget ? '#f59e0b' : '#9ca3af'}
                   strokeWidth={isTarget && !isConnected ? 2 : 1.5}
-                  className="transition-all" />
+                  className={`transition-all ${isTaken ? 'cursor-not-allowed' : ''}`} />
                 <text x={rightX} y={y + 1} textAnchor="middle" fontSize="9" fontWeight="700" fontFamily="ui-monospace,monospace"
-                  fill={isConnected ? 'white' : '#6b7280'}>{slot.label}</text>
+                  fill={isTaken ? '#d1d5db' : isConnected ? 'white' : '#6b7280'}>{slot.label}</text>
+                {isTaken && (
+                  <line x1={rightX - dotR + 2} y1={y} x2={rightX + dotR - 2} y2={y} stroke="#9ca3af" strokeWidth={1.5} />
+                )}
               </g>
             )
           })}
@@ -1633,92 +1663,6 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
         </div>
       )}
 
-      {/* Advanced: numerical editor (collapsible) */}
-      <div className="border-t pt-2">
-        <button onClick={() => setShowAdvanced(v => !v)}
-          className="text-[10px] text-gray-400 hover:text-gray-600 flex items-center gap-0.5">
-          {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Advanced: Edit by numbers ({connectionRules.length})
-        </button>
-        {showAdvanced && (
-          <div className="mt-2 space-y-1.5">
-            {connectionRules.length === 0 ? (
-              <div className="text-[11px] text-gray-400 text-center py-2">No rules defined.</div>
-            ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {connectionRules.map((rule, idx) => (
-                  <div key={idx} className="flex items-center gap-1 bg-white border rounded p-1.5 text-[11px]">
-                    {isPools && (
-                      <div className="flex flex-col">
-                        <span className="text-[9px] text-gray-400">Pool</span>
-                        <input type="number" min={0} value={rule.sourcePoolIndex ?? 0}
-                          onChange={e => {
-                            let count = 0
-                            const newRules = rules.map(r => {
-                              if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
-                                if (count === idx) { count++; return { ...r, sourcePoolIndex: parseInt(e.target.value) || 0 } }
-                                count++
-                              }
-                              return r
-                            })
-                            onRulesChange(newRules)
-                          }}
-                          className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
-                      </div>
-                    )}
-                    <div className="flex flex-col">
-                      <span className="text-[9px] text-gray-400">Finish</span>
-                      <input type="number" min={1} value={rule.finishPosition}
-                        onChange={e => {
-                          let count = 0
-                          const newRules = rules.map(r => {
-                            if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
-                              if (count === idx) { count++; return { ...r, finishPosition: parseInt(e.target.value) || 1 } }
-                              count++
-                            }
-                            return r
-                          })
-                          onRulesChange(newRules)
-                        }}
-                        className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
-                    </div>
-                    <ArrowRight className="w-3 h-3 text-gray-300 flex-shrink-0 mt-3" />
-                    <div className="flex flex-col">
-                      <span className="text-[9px] text-gray-400">Slot</span>
-                      <input type="number" min={1} value={rule.targetSlotNumber}
-                        onChange={e => {
-                          let count = 0
-                          const newRules = rules.map(r => {
-                            if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
-                              if (count === idx) { count++; return { ...r, targetSlotNumber: parseInt(e.target.value) || 1 } }
-                              count++
-                            }
-                            return r
-                          })
-                          onRulesChange(newRules)
-                        }}
-                        className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
-                    </div>
-                    <button onClick={() => {
-                      let count = 0
-                      const newRules = rules.filter(r => {
-                        if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
-                          if (count === idx) { count++; return false }
-                          count++
-                        }
-                        return true
-                      })
-                      onRulesChange(newRules)
-                    }} className="ml-auto p-0.5 text-red-400 hover:text-red-600 mt-3">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -1849,7 +1793,7 @@ const NodeConfigPanel = ({ phase, phaseIndex, onChange, onDelete }) => {
 const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   const vs = visualState
   const reactFlowWrapper = useRef(null)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedEdgeKey, setSelectedEdgeKey] = useState(null) // "srcIdx-tgtIdx"
 
@@ -2420,7 +2364,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
       </div>
 
       {/* Center Canvas */}
-      <div className="flex-1" ref={reactFlowWrapper}>
+      <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -2470,29 +2414,52 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
               </div>
             </Panel>
           )}
-          {/* Floating edge slot mapper — inline on canvas */}
-          {selectedEdgeKey && (() => {
-            const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
-            const srcPhase = vs.phases[srcIdx]
-            const tgtPhase = vs.phases[tgtIdx]
-            if (!srcPhase || !tgtPhase) return null
-            return (
-              <Panel position="top-right" className="!m-2">
-                <div className="w-72 bg-white rounded-xl shadow-xl border border-gray-200 max-h-[80vh] overflow-y-auto">
-                  <EdgeConfigPanel
-                    sourcePhase={srcPhase}
-                    targetPhase={tgtPhase}
-                    sourceIdx={srcIdx}
-                    targetIdx={tgtIdx}
-                    rules={vs.advancementRules}
-                    onRulesChange={(newRules) => onChange({ ...vs, advancementRules: newRules })}
-                    onClose={() => setSelectedEdgeKey(null)}
-                  />
-                </div>
-              </Panel>
-            )
-          })()}
         </ReactFlow>
+        {/* Inline edge slot mapper — positioned near edge */}
+        {selectedEdgeKey && (() => {
+          const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
+          const srcPhase = vs.phases[srcIdx]
+          const tgtPhase = vs.phases[tgtIdx]
+          if (!srcPhase || !tgtPhase) return null
+
+          // Position near the edge midpoint
+          const srcNode = nodes.find(n => n.id === `phase-${srcIdx}`)
+          const tgtNode = nodes.find(n => n.id === `phase-${tgtIdx}`)
+          let popoverStyle = { position: 'absolute', top: '8px', right: '8px', zIndex: 50 }
+          if (srcNode && tgtNode && reactFlowWrapper.current) {
+            const midFlowX = (srcNode.position.x + tgtNode.position.x) / 2 + 240
+            const midFlowY = (srcNode.position.y + tgtNode.position.y) / 2
+            const screenPos = flowToScreenPosition({ x: midFlowX, y: midFlowY })
+            const wrapperRect = reactFlowWrapper.current.getBoundingClientRect()
+            const relX = screenPos.x - wrapperRect.left
+            const relY = screenPos.y - wrapperRect.top
+            // Clamp to stay within wrapper bounds
+            const clampedX = Math.max(8, Math.min(relX, wrapperRect.width - 296))
+            const clampedY = Math.max(8, Math.min(relY - 100, wrapperRect.height - 400))
+            popoverStyle = {
+              position: 'absolute',
+              left: `${clampedX}px`,
+              top: `${clampedY}px`,
+              zIndex: 50,
+            }
+          }
+
+          return (
+            <div style={popoverStyle}>
+              <div className="w-72 bg-white rounded-xl shadow-xl border border-gray-200 max-h-[70vh] overflow-y-auto">
+                <EdgeConfigPanel
+                  sourcePhase={srcPhase}
+                  targetPhase={tgtPhase}
+                  sourceIdx={srcIdx}
+                  targetIdx={tgtIdx}
+                  rules={vs.advancementRules}
+                  onRulesChange={(newRules) => onChange({ ...vs, advancementRules: newRules })}
+                  onClose={() => setSelectedEdgeKey(null)}
+                />
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Right Config Panel — phase config only */}
