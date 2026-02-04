@@ -1205,28 +1205,31 @@ function getLayoutedElements(nodes, edges) {
   return { nodes: layoutedNodes, edges }
 }
 
-// Custom Phase Node — expands to show mini phase diagram + collapsible rules when selected
+// Custom Phase Node — compact by default, expand on button click
 const PhaseNode = memo(({ data, selected }) => {
-  const [showRules, setShowRules] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const colors = PHASE_TYPE_COLORS[data.phaseType] || PHASE_TYPE_COLORS.SingleElimination
   const Icon = PHASE_TYPE_ICONS[data.phaseType] || GitBranch
-  const incomingRules = data.incomingRules || []
-  const outgoingRules = data.outgoingRules || []
-  const phaseNames = data.phaseNames || {}
-  const hasRules = incomingRules.length > 0 || outgoingRules.length > 0
 
   return (
     <div
       className={`rounded-lg shadow-md border-2 overflow-hidden transition-all ${
         selected ? 'ring-2 ring-purple-400 ring-offset-2' : ''
       } ${colors.border}`}
-      style={{ width: selected ? 280 : NODE_WIDTH }}
+      style={{ width: expanded ? 280 : NODE_WIDTH }}
     >
       <Handle type="target" position={Position.Top} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
       <div className={`${colors.bg} px-3 py-1.5 flex items-center gap-2`}>
         <Icon className="w-3.5 h-3.5 text-white" />
         <span className="text-white text-xs font-semibold truncate flex-1">{data.label}</span>
-        <span className="text-white/70 text-[10px]">#{data.sortOrder}</span>
+        <span className="text-white/70 text-[10px] mr-1">#{data.sortOrder}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(v => !v) }}
+          className="text-white/60 hover:text-white transition-colors p-0.5 rounded"
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </button>
       </div>
       <div className={`${colors.light} px-3 py-2`}>
         <div className="flex items-center justify-between">
@@ -1239,8 +1242,8 @@ const PhaseNode = memo(({ data, selected }) => {
           <div className="text-[10px] text-gray-400 mt-0.5">{data.poolCount} pools</div>
         )}
       </div>
-      {/* Mini phase diagram when selected */}
-      {selected && (
+      {/* Mini phase diagram — only when explicitly expanded */}
+      {expanded && (
         <div className="bg-white border-t px-2 py-2">
           <PhaseInternalDiagram
             phaseType={data.phaseType}
@@ -1250,54 +1253,6 @@ const PhaseNode = memo(({ data, selected }) => {
             bestOf={data.bestOf}
             includeConsolation={data.includeConsolation}
           />
-          {/* Collapsible rules detail */}
-          {hasRules && (
-            <div className="mt-1.5">
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowRules(v => !v) }}
-                className="text-[9px] text-gray-400 hover:text-gray-600 flex items-center gap-0.5 transition-colors"
-              >
-                {showRules ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
-                Show rules detail ({incomingRules.length + outgoingRules.length})
-              </button>
-              {showRules && (
-                <div className="mt-1 space-y-1.5" style={{ maxHeight: 120, overflowY: 'auto' }}>
-                  {incomingRules.length > 0 && (
-                    <div>
-                      <div className="text-[9px] font-semibold text-green-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                        <ArrowRight className="w-2.5 h-2.5 rotate-180" /> Incoming ({incomingRules.length})
-                      </div>
-                      {incomingRules.map((r, i) => (
-                        <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
-                          <span className="text-green-500">←</span>
-                          <span className="font-medium text-gray-700">{phaseNames[r.sourcePhaseOrder] || `Phase ${r.sourcePhaseOrder}`}</span>
-                          <span className="text-gray-400">
-                            {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {outgoingRules.length > 0 && (
-                    <div>
-                      <div className="text-[9px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                        <ArrowRight className="w-2.5 h-2.5" /> Outgoing ({outgoingRules.length})
-                      </div>
-                      {outgoingRules.map((r, i) => (
-                        <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
-                          <span className="text-blue-500">→</span>
-                          <span className="font-medium text-gray-700">{phaseNames[r.targetPhaseOrder] || `Phase ${r.targetPhaseOrder}`}</span>
-                          <span className="text-gray-400">
-                            {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
@@ -2300,33 +2255,40 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
               </div>
             </Panel>
           )}
+          {/* Floating edge slot mapper — inline on canvas */}
+          {selectedEdgeKey && (() => {
+            const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
+            const srcPhase = vs.phases[srcIdx]
+            const tgtPhase = vs.phases[tgtIdx]
+            if (!srcPhase || !tgtPhase) return null
+            return (
+              <Panel position="top-right" className="!m-2">
+                <div className="w-72 bg-white rounded-xl shadow-xl border border-gray-200 max-h-[80vh] overflow-y-auto">
+                  <EdgeConfigPanel
+                    sourcePhase={srcPhase}
+                    targetPhase={tgtPhase}
+                    sourceIdx={srcIdx}
+                    targetIdx={tgtIdx}
+                    rules={vs.advancementRules}
+                    onRulesChange={(newRules) => onChange({ ...vs, advancementRules: newRules })}
+                    onClose={() => setSelectedEdgeKey(null)}
+                  />
+                </div>
+              </Panel>
+            )
+          })()}
         </ReactFlow>
       </div>
 
-      {/* Right Config Panel — shows phase config OR edge/advancement config */}
-      {(selectedPhase || selectedEdgeKey) && (
+      {/* Right Config Panel — phase config only */}
+      {selectedPhase && (
         <div className="w-72 border-l bg-gray-50 overflow-y-auto flex-shrink-0">
-          {selectedPhase ? (
-            <NodeConfigPanel
-              phase={selectedPhase}
-              phaseIndex={selectedPhaseIdx}
-              onChange={handlePhaseUpdate}
-              onDelete={handleDeletePhase}
-            />
-          ) : selectedEdgeKey ? (() => {
-            const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
-            return (
-              <EdgeConfigPanel
-                sourcePhase={vs.phases[srcIdx]}
-                targetPhase={vs.phases[tgtIdx]}
-                sourceIdx={srcIdx}
-                targetIdx={tgtIdx}
-                rules={vs.advancementRules}
-                onRulesChange={(newRules) => onChange({ ...vs, advancementRules: newRules })}
-                onClose={() => setSelectedEdgeKey(null)}
-              />
-            )
-          })() : null}
+          <NodeConfigPanel
+            phase={selectedPhase}
+            phaseIndex={selectedPhaseIdx}
+            onChange={handlePhaseUpdate}
+            onDelete={handleDeletePhase}
+          />
         </div>
       )}
     </div>
