@@ -827,13 +827,11 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
           const poolH = 22
           return (
             <g key={pi}>
-              {/* Incoming slots with snake-order numbers */}
+              {/* Incoming slots with round-robin numbers (1→A, 2→B, 3→C, 4→D, 5→A...) */}
               {Array.from({ length: Math.min(perPool, 4) }, (_, si) => {
                 const slotY = cy - (Math.min(perPool, 4) - 1) * 5 + si * 10
-                // Snake draft: even pools (0,2,4..) go forward, odd pools (1,3,5..) go reverse
-                const slotNum = pi % 2 === 0
-                  ? pi * perPool + si + 1
-                  : (pi + 1) * perPool - si
+                // Sequential round-robin: slot si in pool pi = si * poolCount + pi + 1
+                const slotNum = si * pc + pi + 1
                 return (
                   <g key={`in-${si}`}>
                     <InSlot x={22} y={slotY} num={slotNum} />
