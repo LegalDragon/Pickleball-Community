@@ -4,7 +4,8 @@ import {
   Layers, Plus, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle,
   Copy, ChevronDown, ChevronUp, Eye, Code, FileJson, Save, GitBranch,
   Trophy, Users, Hash, ArrowRight, Clock, Zap, Settings, Award, Move,
-  LayoutGrid, List, Shuffle, Repeat, Grid3X3, Swords, Target, GripVertical
+  LayoutGrid, List, Shuffle, Repeat, Grid3X3, Swords, Target, GripVertical,
+  ArrowLeft, Info, Lightbulb, MousePointer, Link, ChevronRight
 } from 'lucide-react'
 import {
   ReactFlow,
@@ -1284,7 +1285,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   const selectedPhase = selectedPhaseIdx !== null ? vs.phases[selectedPhaseIdx] : null
 
   return (
-    <div className="flex border rounded-lg overflow-hidden bg-white" style={{ height: 500 }}>
+    <div className="flex border rounded-lg overflow-hidden bg-white h-full">
       {/* Left Palette */}
       <div className="w-48 border-r bg-gray-50 p-3 flex flex-col gap-2 flex-shrink-0 overflow-y-auto">
         <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Phase Types</h4>
@@ -1376,6 +1377,124 @@ const CanvasPhaseEditor = ({ visualState, onChange }) => {
 
 
 // ══════════════════════════════════════════
+// Dynamic Instructions Component
+// ══════════════════════════════════════════
+const DynamicInstructions = ({ visualState, editorMode, visualSubMode, selectedNodeCount }) => {
+  const phaseCount = visualState?.phases?.length || 0
+  const ruleCount = visualState?.advancementRules?.length || 0
+  const hasFlexible = visualState?.isFlexible
+
+  const getInstructions = () => {
+    if (editorMode === 'json') {
+      return {
+        icon: Code,
+        title: 'Raw JSON Mode',
+        tips: [
+          'Edit the JSON structure directly',
+          'Switch to Visual Editor to use the drag-and-drop canvas',
+          'JSON is validated on save — invalid JSON will be rejected'
+        ]
+      }
+    }
+    if (visualSubMode === 'list') {
+      return {
+        icon: List,
+        title: 'List Editor',
+        tips: [
+          'Click "+ Add Phase" to add phases sequentially',
+          'Use arrows to reorder phases, click phases to expand settings',
+          'Switch to Canvas view for a visual drag-and-drop experience'
+        ]
+      }
+    }
+    // Canvas mode
+    if (hasFlexible) {
+      return {
+        icon: Zap,
+        title: 'Flexible Template',
+        tips: [
+          'Flexible templates auto-generate brackets based on team count',
+          'Uncheck "Flexible Template" to build a fixed structure with phases'
+        ]
+      }
+    }
+    if (phaseCount === 0) {
+      return {
+        icon: MousePointer,
+        title: 'Get Started',
+        color: 'blue',
+        tips: [
+          '👈 Drag a phase block from the left palette onto the canvas',
+          'Start with your first phase (e.g., Pool Play or Round Robin)',
+          'You can add more phases and connect them together'
+        ]
+      }
+    }
+    if (phaseCount === 1 && ruleCount === 0) {
+      return {
+        icon: Plus,
+        title: 'Add More Phases',
+        color: 'green',
+        tips: [
+          'Drag another phase block from the palette to create a multi-phase tournament',
+          'Connect phases by dragging from the bottom handle (●) of one phase to the top handle of another',
+          'Click a phase to configure its settings in the right panel'
+        ]
+      }
+    }
+    if (phaseCount >= 2 && ruleCount === 0) {
+      return {
+        icon: Link,
+        title: 'Connect Your Phases',
+        color: 'amber',
+        tips: [
+          '⚡ Drag from the bottom handle of a phase to the top handle of the next phase to connect them',
+          'Connections define how teams advance between phases',
+          'Use "Auto-layout" to arrange phases neatly'
+        ]
+      }
+    }
+    // Has phases and connections
+    return {
+      icon: Lightbulb,
+      title: 'Tips',
+      color: 'purple',
+      tips: [
+        `${phaseCount} phase${phaseCount > 1 ? 's' : ''}, ${ruleCount} connection${ruleCount > 1 ? 's' : ''} configured`,
+        'Click any phase to edit its settings • Delete edges by clicking them',
+        'Use "Sync Order" to update phase ordering from the canvas layout',
+        phaseCount >= 3 ? 'Use "Auto-layout" to re-arrange phases neatly' : 'Drag phases to reposition them on the canvas'
+      ]
+    }
+  }
+
+  const info = getInstructions()
+  const colors = {
+    blue: 'bg-blue-50 border-blue-200 text-blue-800',
+    green: 'bg-green-50 border-green-200 text-green-800',
+    amber: 'bg-amber-50 border-amber-200 text-amber-800',
+    purple: 'bg-purple-50 border-purple-200 text-purple-800',
+  }
+  const colorClass = colors[info.color] || colors.purple
+
+  return (
+    <div className={`border rounded-lg px-3 py-2 text-sm ${colorClass}`}>
+      <div className="flex items-start gap-2">
+        <info.icon className="w-4 h-4 mt-0.5 flex-shrink-0 opacity-70" />
+        <div className="flex-1 min-w-0">
+          <span className="font-medium">{info.title}:</span>{' '}
+          {info.tips.map((tip, i) => (
+            <span key={i}>
+              {i > 0 && ' • '}{tip}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════
 // Main PhaseTemplatesAdmin component
 // ══════════════════════════════════════════
 const PhaseTemplatesAdmin = ({ embedded = false }) => {
@@ -1385,6 +1504,7 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showJsonPreview, setShowJsonPreview] = useState(false)
+  const [showBasicInfo, setShowBasicInfo] = useState(true)
   const [saving, setSaving] = useState(false)
   const [expandedTemplates, setExpandedTemplates] = useState({})
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -1930,274 +2050,219 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
         </div>
       </div>
 
-      {/* Create/Edit Modal */}
+      {/* Full-Page Editor */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                {editingTemplate ? 'Edit Template' : 'Create New Template'}
-              </h3>
+        <div className="fixed inset-0 bg-gray-50 z-50 flex flex-col overflow-hidden">
+          {/* ── Top Bar ── */}
+          <div className="bg-white border-b px-4 py-2 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back</span>
+              </button>
+              <div className="h-5 w-px bg-gray-300" />
+              <h2 className="text-base font-semibold text-gray-800">
+                {editingTemplate ? 'Edit Template' : 'Create New Template'}
+              </h2>
+              {formData.name && (
+                <span className="text-sm text-gray-500">— {formData.name}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {editorMode === 'visual' && (
+                <button
+                  type="button"
+                  onClick={() => setShowJsonPreview(!showJsonPreview)}
+                  className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-purple-50"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  {showJsonPreview ? 'Hide Preview' : 'Preview'}
+                </button>
+              )}
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+              >
+                {saving ? (
+                  <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="w-3.5 h-3.5" /> {editingTemplate ? 'Update' : 'Create'}</>
+                )}
               </button>
             </div>
+          </div>
 
-            <div className="p-4 overflow-y-auto flex-1 space-y-4">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Template Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., 8-Team Single Elimination"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* ── Collapsible Basic Info ── */}
+          <div className="bg-white border-b flex-shrink-0">
+            <button
+              onClick={() => setShowBasicInfo(!showBasicInfo)}
+              className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5" />
+                <span className="font-medium">Template Settings</span>
+                {!showBasicInfo && formData.name && (
+                  <span className="text-gray-400 ml-2">
+                    {formData.name} • {CATEGORIES.find(c => c.value === formData.category)?.label} • {formData.minUnits}-{formData.maxUnits} teams
+                  </span>
+                )}
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of this tournament format..."
-                  rows={2}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-
-              {/* Unit Count Range */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Min Teams
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.minUnits}
-                    onChange={e => setFormData({ ...formData, minUnits: e.target.value })}
-                    min={2}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Max Teams
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.maxUnits}
-                    onChange={e => setFormData({ ...formData, maxUnits: e.target.value })}
-                    min={2}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Default Teams
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.defaultUnits}
-                    onChange={e => setFormData({ ...formData, defaultUnits: e.target.value })}
-                    min={2}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                </div>
-              </div>
-
-              {/* Diagram and Tags */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Diagram Text
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.diagramText}
-                    onChange={e => setFormData({ ...formData, diagramText: e.target.value })}
-                    placeholder="e.g., QF -> SF -> F"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Visual representation shown to TDs</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tags
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tags}
-                    onChange={e => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="e.g., bracket, elimination, popular"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Comma-separated for search</p>
-                </div>
-              </div>
-
-              {/* ═══ Structure Editor with Visual/JSON toggle ═══ */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Structure *
-                  </label>
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => { if (editorMode !== 'visual') handleToggleMode() }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        editorMode === 'visual'
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:text-gray-800'
-                      }`}
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                      Visual Editor
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { if (editorMode !== 'json') handleToggleMode() }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        editorMode === 'json'
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:text-gray-800'
-                      }`}
-                    >
-                      <Code className="w-3.5 h-3.5" />
-                      Raw JSON
-                    </button>
-                  </div>
-                </div>
-
-                {editorMode === 'visual' && visualState ? (
-                  <div className="space-y-3">
-                    {/* Canvas / List sub-toggle */}
-                    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
-                      <button
-                        type="button"
-                        onClick={() => setVisualSubMode('canvas')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                          visualSubMode === 'canvas'
-                            ? 'bg-white text-purple-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        <LayoutGrid className="w-3 h-3" /> Canvas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setVisualSubMode('list')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                          visualSubMode === 'list'
-                            ? 'bg-white text-purple-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                      >
-                        <List className="w-3 h-3" /> List
-                      </button>
-                    </div>
-                    {visualSubMode === 'canvas' ? (
-                      <CanvasPhaseEditor
-                        visualState={visualState}
-                        onChange={handleVisualChange}
-                      />
-                    ) : (
-                      <div className="border rounded-lg p-4 bg-gray-50 space-y-4">
-                        <ListPhaseEditor
-                          visualState={visualState}
-                          onChange={handleVisualChange}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
+              {showBasicInfo ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {showBasicInfo && (
+              <div className="px-4 pb-3 space-y-3 border-t">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
                   <div>
-                    <textarea
-                      value={formData.structureJson}
-                      onChange={e => setFormData({ ...formData, structureJson: e.target.value })}
-                      rows={16}
-                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      placeholder='{"phases": [...], "advancementRules": [...]}'
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Edit raw JSON directly. Switch to Visual Editor to parse and edit visually.
-                    </p>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Template Name *</label>
+                    <input type="text" value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., 8-Team Single Elimination"
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" />
                   </div>
-                )}
-
-                {showJsonPreview && editorMode === 'visual' && (
-                  <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Preview</h4>
-                    {renderStructurePreview({ structureJson: formData.structureJson })}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Category *</label>
+                    <select value={formData.category}
+                      onChange={e => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                      {CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
+                    </select>
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Min / Max / Default Teams</label>
+                    <div className="flex gap-1">
+                      <input type="number" value={formData.minUnits} min={2}
+                        onChange={e => setFormData({ ...formData, minUnits: e.target.value })}
+                        className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="Min" />
+                      <input type="number" value={formData.maxUnits} min={2}
+                        onChange={e => setFormData({ ...formData, maxUnits: e.target.value })}
+                        className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="Max" />
+                      <input type="number" value={formData.defaultUnits} min={2}
+                        onChange={e => setFormData({ ...formData, defaultUnits: e.target.value })}
+                        className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="Def" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Tags</label>
+                    <input type="text" value={formData.tags}
+                      onChange={e => setFormData({ ...formData, tags: e.target.value })}
+                      placeholder="bracket, elimination, popular"
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                    <input type="text" value={formData.description}
+                      onChange={e => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Brief description of this tournament format..."
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Diagram Text</label>
+                    <input type="text" value={formData.diagramText}
+                      onChange={e => setFormData({ ...formData, diagramText: e.target.value })}
+                      placeholder="e.g., QF → SF → F"
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500" />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="p-4 border-t flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {editorMode === 'visual' && (
-                  <button
-                    type="button"
-                    onClick={() => setShowJsonPreview(!showJsonPreview)}
-                    className="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1"
-                  >
-                    <Eye className="w-4 h-4" />
-                    {showJsonPreview ? 'Hide Preview' : 'Preview'}
+          {/* ── Editor Mode Toolbar + Instructions ── */}
+          <div className="bg-white border-b px-4 py-2 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                <button type="button"
+                  onClick={() => { if (editorMode !== 'visual') handleToggleMode() }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    editorMode === 'visual' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                  }`}>
+                  <Settings className="w-3.5 h-3.5" /> Visual Editor
+                </button>
+                <button type="button"
+                  onClick={() => { if (editorMode !== 'json') handleToggleMode() }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    editorMode === 'json' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                  }`}>
+                  <Code className="w-3.5 h-3.5" /> Raw JSON
+                </button>
+              </div>
+              {editorMode === 'visual' && (
+                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                  <button type="button" onClick={() => setVisualSubMode('canvas')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                      visualSubMode === 'canvas' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}>
+                    <LayoutGrid className="w-3 h-3" /> Canvas
                   </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      {editingTemplate ? 'Update Template' : 'Create Template'}
-                    </>
-                  )}
-                </button>
-              </div>
+                  <button type="button" onClick={() => setVisualSubMode('list')}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                      visualSubMode === 'list' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}>
+                    <List className="w-3 h-3" /> List
+                  </button>
+                </div>
+              )}
             </div>
+            <div className="flex-1 ml-4 max-w-2xl">
+              <DynamicInstructions
+                visualState={visualState}
+                editorMode={editorMode}
+                visualSubMode={visualSubMode}
+              />
+            </div>
+          </div>
+
+          {/* ── Main Editor Area (fills remaining space) ── */}
+          <div className="flex-1 overflow-hidden">
+            {editorMode === 'visual' && visualState ? (
+              visualSubMode === 'canvas' ? (
+                <div className="h-full">
+                  <CanvasPhaseEditor
+                    visualState={visualState}
+                    onChange={handleVisualChange}
+                  />
+                </div>
+              ) : (
+                <div className="h-full overflow-y-auto p-4">
+                  <div className="max-w-4xl mx-auto border rounded-lg p-4 bg-white shadow-sm space-y-4">
+                    <ListPhaseEditor
+                      visualState={visualState}
+                      onChange={handleVisualChange}
+                    />
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="h-full overflow-y-auto p-4">
+                <div className="max-w-4xl mx-auto">
+                  <textarea
+                    value={formData.structureJson}
+                    onChange={e => setFormData({ ...formData, structureJson: e.target.value })}
+                    className="w-full h-[calc(100vh-300px)] px-3 py-2 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder='{"phases": [...], "advancementRules": [...]}'
+                  />
+                </div>
+              </div>
+            )}
+
+            {showJsonPreview && editorMode === 'visual' && (
+              <div className="absolute bottom-4 right-4 w-96 max-h-64 overflow-y-auto p-3 bg-white rounded-lg border shadow-lg z-10">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">JSON Preview</h4>
+                {renderStructurePreview({ structureJson: formData.structureJson })}
+              </div>
+            )}
           </div>
         </div>
       )}
