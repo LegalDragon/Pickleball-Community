@@ -5,6 +5,7 @@ using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Controllers.Base;
 using Pickleball.Community.Hubs;
+using Pickleball.Community.Services;
 
 namespace Pickleball.Community.API.Controllers;
 
@@ -18,12 +19,18 @@ public class GameDayController : EventControllerBase
 {
     private readonly ILogger<GameDayController> _logger;
     private readonly IScoreBroadcaster _scoreBroadcaster;
+    private readonly IGameDayPlayerStatusService _playerStatusService;
 
-    public GameDayController(ApplicationDbContext context, ILogger<GameDayController> logger, IScoreBroadcaster scoreBroadcaster)
+    public GameDayController(
+        ApplicationDbContext context,
+        ILogger<GameDayController> logger,
+        IScoreBroadcaster scoreBroadcaster,
+        IGameDayPlayerStatusService playerStatusService)
         : base(context)
     {
         _logger = logger;
         _scoreBroadcaster = scoreBroadcaster;
+        _playerStatusService = playerStatusService;
     }
 
     // ==========================================
@@ -517,8 +524,8 @@ public class GameDayController : EventControllerBase
         var match = await _context.EventEncounters
             .Include(m => m.Matches).ThenInclude(match => match.Games)
             .Include(m => m.TournamentCourt)
-            .Include(m => m.Unit1)
-            .Include(m => m.Unit2)
+            .Include(m => m.Unit1).ThenInclude(u => u!.Members)
+            .Include(m => m.Unit2).ThenInclude(u => u!.Members)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null)
@@ -563,7 +570,7 @@ public class GameDayController : EventControllerBase
                 match.WinnerUnitId = unit1Wins >= winsNeeded ? match.Unit1Id : match.Unit2Id;
                 match.CompletedAt = now;
 
-                // Free up the court
+                // Free up the court (auto-release)
                 if (match.TournamentCourt != null)
                 {
                     match.TournamentCourt.Status = "Available";
@@ -591,6 +598,22 @@ public class GameDayController : EventControllerBase
                     match.Unit1.GamesLost += unit2Wins;
                     match.Unit2.GamesWon += unit2Wins;
                     match.Unit2.GamesLost += unit1Wins;
+                }
+
+                // Mark players as available in the fairness tracker
+                try
+                {
+                    var playerIds = new List<int>();
+                    if (match.Unit1 != null)
+                        playerIds.AddRange(match.Unit1.Members?.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId) ?? Enumerable.Empty<int>());
+                    if (match.Unit2 != null)
+                        playerIds.AddRange(match.Unit2.Members?.Where(m => m.InviteStatus == "Accepted").Select(m => m.UserId) ?? Enumerable.Empty<int>());
+                    if (playerIds.Count > 0)
+                        await _playerStatusService.MarkPlayersAvailableAsync(match.EventId, playerIds);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to update player statuses on game completion for match {MatchId}", matchId);
                 }
             }
         }
@@ -630,9 +653,12 @@ public class GameDayController : EventControllerBase
                 UpdatedAt = DateTime.UtcNow
             });
 
-            // If match completed, also broadcast match completion
+            // If match completed, also broadcast match completion + Game Day game completed
             if (match.Status == "Completed" && match.WinnerUnitId.HasValue)
             {
+                var winnerName = match.WinnerUnitId == match.Unit1Id ? match.Unit1?.Name : match.Unit2?.Name;
+                var loserName = match.WinnerUnitId == match.Unit1Id ? match.Unit2?.Name : match.Unit1?.Name;
+
                 await _scoreBroadcaster.BroadcastMatchCompleted(match.EventId, match.DivisionId, new MatchCompletedDto
                 {
                     EncounterId = match.Id,
@@ -644,11 +670,40 @@ public class GameDayController : EventControllerBase
                     Unit2Id = match.Unit2Id,
                     Unit2Name = match.Unit2?.Name,
                     WinnerUnitId = match.WinnerUnitId,
-                    WinnerName = match.WinnerUnitId == match.Unit1Id ? match.Unit1?.Name : match.Unit2?.Name,
+                    WinnerName = winnerName,
                     Score = $"{game.Unit1Score}-{game.Unit2Score}",
                     CompletedAt = DateTime.UtcNow
                 });
                 await _scoreBroadcaster.BroadcastScheduleRefresh(match.EventId, match.DivisionId);
+
+                // Broadcast Game Day specific game completed event
+                await _scoreBroadcaster.BroadcastGameDayGameCompleted(match.EventId, new GameDayGameCompletedDto
+                {
+                    EventId = match.EventId,
+                    EncounterId = match.Id,
+                    CourtId = match.TournamentCourtId,
+                    CourtLabel = match.TournamentCourt?.CourtLabel,
+                    WinnerName = winnerName,
+                    LoserName = loserName,
+                    Score = $"{game.Unit1Score}-{game.Unit2Score}",
+                    CompletedAt = DateTime.UtcNow
+                });
+
+                // Broadcast updated queue
+                await _scoreBroadcaster.BroadcastGameDayQueueUpdated(match.EventId, await BuildQueueUpdateDto(match.EventId));
+
+                // Court auto-released above, broadcast court status
+                if (match.TournamentCourt != null)
+                {
+                    await _scoreBroadcaster.BroadcastCourtStatusChanged(match.EventId, new CourtStatusDto
+                    {
+                        CourtId = match.TournamentCourt.Id,
+                        CourtLabel = match.TournamentCourt.CourtLabel,
+                        Status = "Available",
+                        CurrentGameId = null,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
             }
         }
         catch (Exception ex)
@@ -966,9 +1021,33 @@ public class GameDayController : EventControllerBase
         if (allPlayers.Count < playersPerGame)
             return BadRequest(new { success = false, message = $"Not enough players. Need at least {playersPerGame} for a game." });
 
-        // Shuffle players for random assignment
+        // Initialize player statuses from checked-in members if needed
+        await _playerStatusService.InitializeFromCheckedInAsync(eventId);
+
+        // Get fairness-prioritized player order (longest sitting first)
+        var maxConsecutive = dto.MaxConsecutiveGames ?? 3; // Default: 3 consecutive games max
+        var prioritizedPlayerIds = await _playerStatusService.GetAvailablePlayerIdsByPriorityAsync(
+            eventId, maxConsecutive > 0 ? maxConsecutive : (int?)null);
+
+        // Filter to only players in our allPlayers list (checked-in + division-filtered)
+        var allPlayerUserIds = allPlayers.Select(p => p.UserId).ToHashSet();
+        var fairnessOrderedIds = prioritizedPlayerIds
+            .Where(id => allPlayerUserIds.Contains(id))
+            .ToList();
+
+        // For players not yet tracked, append them in random order
         var random = new Random();
-        var shuffledPlayers = allPlayers.OrderBy(_ => random.Next()).ToList();
+        var untrackedPlayerIds = allPlayers
+            .Where(p => !fairnessOrderedIds.Contains(p.UserId))
+            .Select(p => p.UserId)
+            .OrderBy(_ => random.Next())
+            .ToList();
+        fairnessOrderedIds.AddRange(untrackedPlayerIds);
+
+        // Use fairness-ordered list instead of random shuffle
+        var shuffledPlayers = fairnessOrderedIds
+            .Select(id => allPlayers.First(p => p.UserId == id))
+            .ToList();
 
         // Create temporary units for ad-hoc games
         var createdMatches = new List<EventEncounter>();
@@ -1147,10 +1226,33 @@ public class GameDayController : EventControllerBase
             .Where(m => matchIdSet.Contains(m.Id))
             .ToList();
 
+        // Update player statuses for fairness tracking
+        try
+        {
+            if (usedPlayerIds.Count > 0)
+            {
+                await _playerStatusService.MarkPlayersPlayingAsync(eventId, usedPlayerIds);
+                await _playerStatusService.IncrementSitOutCountAsync(eventId, usedPlayerIds);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update player statuses for event {EventId}", eventId);
+        }
+
         // Broadcast real-time updates
         try
         {
             await _scoreBroadcaster.BroadcastScheduleRefresh(eventId, divisionId);
+            await _scoreBroadcaster.BroadcastGameDayRoundGenerated(eventId, new GameDayRoundGeneratedDto
+            {
+                EventId = eventId,
+                GamesCreated = createdMatches.Count,
+                PlayersAssigned = usedPlayerIds.Count,
+                Method = dto.Method,
+                GeneratedAt = DateTime.UtcNow
+            });
+            await _scoreBroadcaster.BroadcastGameDayQueueUpdated(eventId, await BuildQueueUpdateDto(eventId));
         }
         catch (Exception ex)
         {
@@ -1748,8 +1850,261 @@ public class GameDayController : EventControllerBase
     }
 
     // ==========================================
+    // Player Status & Queue (ported from InstaGame)
+    // ==========================================
+
+    /// <summary>
+    /// Update a player's status for Game Day scheduling
+    /// </summary>
+    [HttpPost("events/{eventId}/player-status")]
+    public async Task<IActionResult> UpdatePlayerStatus(int eventId, [FromBody] UpdateGameDayPlayerStatusDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        // Allow organizers to update any player, or players to update their own status
+        var isOrganizer = await IsEventOrganizerAsync(eventId, userId.Value);
+        if (!isOrganizer && dto.UserId != userId.Value)
+            return Forbid();
+
+        // Don't allow setting to "Playing" directly — that's managed by the system
+        if (dto.Status == GameDayPlayerStatusValues.Playing)
+            return BadRequest(new { success = false, message = "Cannot manually set status to Playing. Use GenerateRound instead." });
+
+        var oldStatus = (await _context.GameDayPlayerStatuses
+            .FirstOrDefaultAsync(s => s.EventId == eventId && s.UserId == dto.UserId))?.Status ?? "Unknown";
+
+        var result = await _playerStatusService.UpdateStatusAsync(eventId, dto.UserId, dto.Status);
+        if (result == null)
+            return BadRequest(new { success = false, message = "Invalid status. Must be: Available, Resting, or SittingOut" });
+
+        // Broadcast player status change
+        try
+        {
+            var user = await _context.Users.FindAsync(dto.UserId);
+            await _scoreBroadcaster.BroadcastGameDayPlayerStatusChanged(eventId, new GameDayPlayerStatusChangedDto
+            {
+                EventId = eventId,
+                UserId = dto.UserId,
+                PlayerName = Utility.FormatName(user?.LastName, user?.FirstName),
+                OldStatus = oldStatus,
+                NewStatus = dto.Status,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await _scoreBroadcaster.BroadcastGameDayQueueUpdated(eventId, await BuildQueueUpdateDto(eventId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to broadcast player status change for event {EventId}", eventId);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                userId = result.UserId,
+                status = result.Status,
+                gamesSinceLastPlay = result.GamesSinceLastPlay,
+                consecutiveGames = result.ConsecutiveGames,
+                totalGamesPlayed = result.TotalGamesPlayed,
+                lastPlayedAt = result.LastPlayedAt
+            }
+        });
+    }
+
+    /// <summary>
+    /// Get the player queue with fairness metrics (games-since-last-play, wait time)
+    /// </summary>
+    [HttpGet("events/{eventId}/player-queue")]
+    public async Task<IActionResult> GetPlayerQueue(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        // Initialize from checked-in players if no statuses exist
+        await _playerStatusService.InitializeFromCheckedInAsync(eventId);
+
+        var queue = await _playerStatusService.GetPlayerQueueAsync(eventId);
+
+        return Ok(new
+        {
+            success = true,
+            data = queue,
+            summary = new
+            {
+                total = queue.Count,
+                available = queue.Count(q => q.Status == GameDayPlayerStatusValues.Available),
+                playing = queue.Count(q => q.Status == GameDayPlayerStatusValues.Playing),
+                resting = queue.Count(q => q.Status == GameDayPlayerStatusValues.Resting),
+                sittingOut = queue.Count(q => q.Status == GameDayPlayerStatusValues.SittingOut)
+            }
+        });
+    }
+
+    // ==========================================
+    // Score Confirmation (ported from InstaGame)
+    // ==========================================
+
+    /// <summary>
+    /// Confirm a game's score (both teams must confirm before score is final)
+    /// </summary>
+    [HttpPost("events/{eventId}/games/{gameId}/confirm-score")]
+    public async Task<IActionResult> ConfirmScore(int eventId, int gameId, [FromBody] ConfirmScoreDto dto)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        // Load the game with its encounter and units
+        var game = await _context.EventGames
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(em => em!.Encounter)
+                    .ThenInclude(e => e!.Unit1)
+                        .ThenInclude(u => u!.Members)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(em => em!.Encounter)
+                    .ThenInclude(e => e!.Unit2)
+                        .ThenInclude(u => u!.Members)
+            .FirstOrDefaultAsync(g => g.Id == gameId);
+
+        if (game == null)
+            return NotFound(new { success = false, message = "Game not found" });
+
+        var encounter = game.EncounterMatch?.Encounter;
+        if (encounter == null || encounter.EventId != eventId)
+            return NotFound(new { success = false, message = "Game not found in this event" });
+
+        // Check if score has been submitted
+        if (game.Unit1Score == 0 && game.Unit2Score == 0)
+            return BadRequest(new { success = false, message = "No score to confirm yet" });
+
+        // Determine which team the confirming player is on
+        int team;
+        if (dto.Team.HasValue)
+        {
+            team = dto.Team.Value;
+        }
+        else
+        {
+            // Auto-detect from unit membership
+            var isTeam1 = encounter.Unit1?.Members?.Any(m => m.UserId == userId.Value && m.InviteStatus == "Accepted") ?? false;
+            var isTeam2 = encounter.Unit2?.Members?.Any(m => m.UserId == userId.Value && m.InviteStatus == "Accepted") ?? false;
+
+            // Also allow organizers to confirm
+            var isOrganizer = await IsEventOrganizerAsync(eventId, userId.Value);
+
+            if (!isTeam1 && !isTeam2 && !isOrganizer)
+                return Forbid();
+
+            if (isOrganizer && !isTeam1 && !isTeam2)
+            {
+                // Organizer can confirm for either team — confirm whichever isn't confirmed yet
+                if (!game.Team1ScoreConfirmed)
+                    team = 1;
+                else if (!game.Team2ScoreConfirmed)
+                    team = 2;
+                else
+                    return Ok(new { success = true, message = "Score already fully confirmed" });
+            }
+            else
+            {
+                team = isTeam1 ? 1 : 2;
+            }
+        }
+
+        // Apply confirmation
+        if (team == 1)
+        {
+            if (game.Team1ScoreConfirmed)
+                return Ok(new { success = true, message = "Team 1 already confirmed" });
+            game.Team1ScoreConfirmed = true;
+        }
+        else if (team == 2)
+        {
+            if (game.Team2ScoreConfirmed)
+                return Ok(new { success = true, message = "Team 2 already confirmed" });
+            game.Team2ScoreConfirmed = true;
+        }
+        else
+        {
+            return BadRequest(new { success = false, message = "Team must be 1 or 2" });
+        }
+
+        game.UpdatedAt = DateTime.Now;
+
+        // If both teams confirmed, mark score as final
+        var bothConfirmed = game.Team1ScoreConfirmed && game.Team2ScoreConfirmed;
+        if (bothConfirmed)
+        {
+            game.ScoreConfirmedAt = DateTime.Now;
+            _logger.LogInformation("Score fully confirmed for game {GameId} in event {EventId}", gameId, eventId);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Broadcast score update
+        try
+        {
+            await _scoreBroadcaster.BroadcastGameScoreUpdated(eventId, encounter.DivisionId, new GameScoreUpdateDto
+            {
+                GameId = game.Id,
+                EncounterId = encounter.Id,
+                DivisionId = encounter.DivisionId,
+                GameNumber = game.GameNumber,
+                Unit1Score = game.Unit1Score,
+                Unit2Score = game.Unit2Score,
+                WinnerUnitId = game.WinnerUnitId,
+                Status = bothConfirmed ? "Confirmed" : game.Status,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to broadcast score confirmation for game {GameId}", gameId);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                gameId = game.Id,
+                team1Confirmed = game.Team1ScoreConfirmed,
+                team2Confirmed = game.Team2ScoreConfirmed,
+                bothConfirmed,
+                unit1Score = game.Unit1Score,
+                unit2Score = game.Unit2Score
+            },
+            message = bothConfirmed ? "Score confirmed by both teams!" : $"Team {team} confirmed. Waiting for other team."
+        });
+    }
+
+    // ==========================================
     // Helper Methods
     // ==========================================
+
+    /// <summary>
+    /// Build a queue update DTO from current player statuses
+    /// </summary>
+    private async Task<GameDayQueueUpdatedDto> BuildQueueUpdateDto(int eventId)
+    {
+        var statuses = await _context.GameDayPlayerStatuses
+            .Where(s => s.EventId == eventId)
+            .ToListAsync();
+
+        return new GameDayQueueUpdatedDto
+        {
+            EventId = eventId,
+            TotalPlayersInQueue = statuses.Count(),
+            AvailablePlayers = statuses.Count(s => s.Status == GameDayPlayerStatusValues.Available),
+            PlayingPlayers = statuses.Count(s => s.Status == GameDayPlayerStatusValues.Playing),
+            RestingPlayers = statuses.Count(s => s.Status == GameDayPlayerStatusValues.Resting),
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
 
     private GameDayGameDto MapToGameDto(EventEncounter m)
     {
@@ -2010,6 +2365,11 @@ public class GenerateRoundDto
     /// Best of N games per match
     /// </summary>
     public int? BestOf { get; set; }
+
+    /// <summary>
+    /// Max consecutive games before a player must rest (null = no limit, default 3)
+    /// </summary>
+    public int? MaxConsecutiveGames { get; set; } = 3;
 }
 
 public class CreateManualGameDto

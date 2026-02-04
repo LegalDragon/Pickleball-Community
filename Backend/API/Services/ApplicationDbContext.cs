@@ -197,6 +197,9 @@ public class ApplicationDbContext : DbContext
     // Video Chat Rooms
     public DbSet<VideoRoom> VideoRooms { get; set; }
 
+    // Game Day Player Status Tracking
+    public DbSet<GameDayPlayerStatus> GameDayPlayerStatuses { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>

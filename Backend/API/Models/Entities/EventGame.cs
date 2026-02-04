@@ -92,6 +92,16 @@ public class EventGame
     [MaxLength(500)]
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Team 1 has confirmed the score
+    /// </summary>
+    public bool Team1ScoreConfirmed { get; set; } = false;
+
+    /// <summary>
+    /// Team 2 has confirmed the score
+    /// </summary>
+    public bool Team2ScoreConfirmed { get; set; } = false;
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 

@@ -81,6 +81,28 @@ public class ScoreHub : Hub
             Context.ConnectionId, eventId);
     }
 
+    /// <summary>
+    /// Join Game Day updates for an event (player queue, status changes, round generation)
+    /// </summary>
+    public async Task JoinGameDay(int eventId)
+    {
+        var groupName = GetGameDayGroupName(eventId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("Connection {ConnectionId} joined Game Day updates for event {EventId}",
+            Context.ConnectionId, eventId);
+    }
+
+    /// <summary>
+    /// Leave Game Day updates for an event
+    /// </summary>
+    public async Task LeaveGameDay(int eventId)
+    {
+        var groupName = GetGameDayGroupName(eventId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("Connection {ConnectionId} left Game Day updates for event {EventId}",
+            Context.ConnectionId, eventId);
+    }
+
     public override Task OnDisconnectedAsync(Exception? exception)
     {
         _logger.LogDebug("Connection {ConnectionId} disconnected from ScoreHub", Context.ConnectionId);
@@ -90,6 +112,7 @@ public class ScoreHub : Hub
     public static string GetEventGroupName(int eventId) => $"score_event_{eventId}";
     public static string GetDivisionGroupName(int divisionId) => $"score_division_{divisionId}";
     public static string GetCourtGroupName(int eventId) => $"courts_{eventId}";
+    public static string GetGameDayGroupName(int eventId) => $"gameday_{eventId}";
 }
 
 /// <summary>
@@ -131,6 +154,26 @@ public interface IScoreBroadcaster
     /// Broadcast that a new game is ready/queued (for TD dashboard refresh)
     /// </summary>
     Task BroadcastGameStatusChanged(int eventId, int divisionId, GameStatusChangeDto update);
+
+    /// <summary>
+    /// Broadcast that a Game Day round was generated (new games created)
+    /// </summary>
+    Task BroadcastGameDayRoundGenerated(int eventId, GameDayRoundGeneratedDto update);
+
+    /// <summary>
+    /// Broadcast a game completion in Game Day (triggers court release notification)
+    /// </summary>
+    Task BroadcastGameDayGameCompleted(int eventId, GameDayGameCompletedDto update);
+
+    /// <summary>
+    /// Broadcast a player status change in Game Day
+    /// </summary>
+    Task BroadcastGameDayPlayerStatusChanged(int eventId, GameDayPlayerStatusChangedDto update);
+
+    /// <summary>
+    /// Broadcast a queue update in Game Day (player priorities changed)
+    /// </summary>
+    Task BroadcastGameDayQueueUpdated(int eventId, GameDayQueueUpdatedDto update);
 }
 
 public class ScoreBroadcaster : IScoreBroadcaster
@@ -246,9 +289,59 @@ public class ScoreBroadcaster : IScoreBroadcaster
         _logger.LogDebug("Broadcasted game status change: Game {GameId} = {NewStatus}",
             update.GameId, update.NewStatus);
     }
+
+    public async Task BroadcastGameDayRoundGenerated(int eventId, GameDayRoundGeneratedDto update)
+    {
+        var eventGroup = ScoreHub.GetEventGroupName(eventId);
+        var gameDayGroup = ScoreHub.GetGameDayGroupName(eventId);
+
+        await Task.WhenAll(
+            _hubContext.Clients.Group(eventGroup).SendAsync("GameDayRoundGenerated", update),
+            _hubContext.Clients.Group(gameDayGroup).SendAsync("GameDayRoundGenerated", update)
+        );
+
+        _logger.LogInformation("Broadcasted Game Day round generated for event {EventId}: {GamesCreated} games",
+            eventId, update.GamesCreated);
+    }
+
+    public async Task BroadcastGameDayGameCompleted(int eventId, GameDayGameCompletedDto update)
+    {
+        var eventGroup = ScoreHub.GetEventGroupName(eventId);
+        var gameDayGroup = ScoreHub.GetGameDayGroupName(eventId);
+
+        await Task.WhenAll(
+            _hubContext.Clients.Group(eventGroup).SendAsync("GameDayGameCompleted", update),
+            _hubContext.Clients.Group(gameDayGroup).SendAsync("GameDayGameCompleted", update)
+        );
+
+        _logger.LogInformation("Broadcasted Game Day game completed for event {EventId}, court {CourtLabel} released",
+            eventId, update.CourtLabel);
+    }
+
+    public async Task BroadcastGameDayPlayerStatusChanged(int eventId, GameDayPlayerStatusChangedDto update)
+    {
+        var gameDayGroup = ScoreHub.GetGameDayGroupName(eventId);
+
+        await _hubContext.Clients.Group(gameDayGroup).SendAsync("GameDayPlayerStatusChanged", update);
+
+        _logger.LogDebug("Broadcasted Game Day player status change for event {EventId}: user {UserId} = {Status}",
+            eventId, update.UserId, update.NewStatus);
+    }
+
+    public async Task BroadcastGameDayQueueUpdated(int eventId, GameDayQueueUpdatedDto update)
+    {
+        var gameDayGroup = ScoreHub.GetGameDayGroupName(eventId);
+
+        await _hubContext.Clients.Group(gameDayGroup).SendAsync("GameDayQueueUpdated", update);
+
+        _logger.LogDebug("Broadcasted Game Day queue update for event {EventId}: {PlayerCount} players in queue",
+            eventId, update.TotalPlayersInQueue);
+    }
 }
 
+// ==========================================
 // DTOs for score broadcasts
+// ==========================================
 
 public class GameScoreUpdateDto
 {
@@ -311,5 +404,50 @@ public class GameStatusChangeDto
     public string OldStatus { get; set; } = "";
     public string NewStatus { get; set; } = "";
     public int? CourtId { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+// ==========================================
+// Game Day SignalR DTOs
+// ==========================================
+
+public class GameDayRoundGeneratedDto
+{
+    public int EventId { get; set; }
+    public int GamesCreated { get; set; }
+    public int PlayersAssigned { get; set; }
+    public string Method { get; set; } = "";
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class GameDayGameCompletedDto
+{
+    public int EventId { get; set; }
+    public int EncounterId { get; set; }
+    public int? CourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public string? WinnerName { get; set; }
+    public string? LoserName { get; set; }
+    public string Score { get; set; } = "";
+    public DateTime CompletedAt { get; set; }
+}
+
+public class GameDayPlayerStatusChangedDto
+{
+    public int EventId { get; set; }
+    public int UserId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public string OldStatus { get; set; } = "";
+    public string NewStatus { get; set; } = "";
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class GameDayQueueUpdatedDto
+{
+    public int EventId { get; set; }
+    public int TotalPlayersInQueue { get; set; }
+    public int AvailablePlayers { get; set; }
+    public int PlayingPlayers { get; set; }
+    public int RestingPlayers { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
