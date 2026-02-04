@@ -803,6 +803,13 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
       <text x={x} y={y + 3} fontSize="7" fill="white" textAnchor="middle" fontWeight="600" fontFamily="system-ui">{num}</text>
     </g>
   )
+  // Render a loser exit slot (red) with number inside the dot
+  const LoserExitSlot = ({ x, y, num }) => (
+    <g>
+      <circle cx={x} cy={y} r={7} fill="#ef4444" />
+      <text x={x} y={y + 3} fontSize="7" fill="white" textAnchor="middle" fontWeight="600" fontFamily="system-ui">{num}</text>
+    </g>
+  )
 
   if (phaseType === 'Pools') {
     const pc = Math.max(pools, 1)
@@ -1039,17 +1046,16 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
     const svgW = 260
 
     if (isOneRound) {
-      // Simple: one round of matches
       const matchCount = Math.min(matches, 6)
+      const hasLosers = includeConsolation || advancing >= incoming
       const rowH = 24
       const svgH = Math.min(200, matchCount * rowH + 28)
 
       return (
         <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
           <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
-            {incoming} in → {matches} matches → {advancing} advance
+            {incoming} in → {matches} matches → {hasLosers ? `${matches} advance +consolation` : `${advancing} advance`}
             {bo > 1 ? ` (Bo${bo})` : ''}
-            {includeConsolation ? ' +consolation' : ''}
           </text>
           {Array.from({ length: matchCount }, (_, i) => {
             const my = 22 + i * rowH + rowH / 2
@@ -1064,15 +1070,16 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
                 {/* Match box */}
                 <rect x={57} y={my - 8} width={40} height={16} rx={4} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1.2} />
                 <text x={77} y={my + 3} fontSize="8" fill={phaseHex} textAnchor="middle" fontWeight="500" fontFamily="system-ui">M{i + 1}</text>
-                {/* Winner line */}
-                <line x1={97} y1={my} x2={svgW - 38} y2={my} stroke={LINE_GREEN} strokeWidth={1.2} />
-                <polygon points={`${svgW - 40},${my - 3} ${svgW - 34},${my} ${svgW - 40},${my + 3}`} fill={GREEN} />
-                <ExitSlot x={svgW - 28} y={my} num={i + 1} />
-                {/* Consolation loser line */}
-                {includeConsolation && (
+                {/* Winner line → green exit slot */}
+                <line x1={97} y1={my} x2={svgW - 38} y2={my - (hasLosers ? 5 : 0)} stroke={LINE_GREEN} strokeWidth={1.2} />
+                <polygon points={`${svgW - 40},${my - (hasLosers ? 5 : 0) - 3} ${svgW - 34},${my - (hasLosers ? 5 : 0)} ${svgW - 40},${my - (hasLosers ? 5 : 0) + 3}`} fill={GREEN} />
+                <ExitSlot x={svgW - 28} y={my - (hasLosers ? 5 : 0)} num={i + 1} />
+                {/* Loser line → red exit slot */}
+                {hasLosers && (
                   <g>
-                    <line x1={77} y1={my + 8} x2={77} y2={my + 15} stroke="#fca5a5" strokeWidth={0.8} strokeDasharray="2,2" />
-                    <text x={77} y={my + 22} fontSize="6" fill="#ef4444" textAnchor="middle" fontFamily="system-ui">C</text>
+                    <line x1={97} y1={my} x2={svgW - 38} y2={my + 5} stroke="#fca5a5" strokeWidth={1} strokeDasharray="3,2" />
+                    <polygon points={`${svgW - 40},${my + 5 - 3} ${svgW - 34},${my + 5} ${svgW - 40},${my + 5 + 3}`} fill="#ef4444" fillOpacity={0.6} />
+                    <LoserExitSlot x={svgW - 28} y={my + 5} num={matches + i + 1} />
                   </g>
                 )}
               </g>
@@ -1236,6 +1243,11 @@ const PhaseNode = memo(({ data, selected }) => {
           <span className={`text-xs font-medium ${colors.text}`}>{data.phaseType}</span>
           <span className="text-xs text-gray-500">
             {data.incomingSlotCount} in → {data.advancingSlotCount} out
+            {(data.phaseType === 'BracketRound' && (data.includeConsolation || data.advancingSlotCount >= data.incomingSlotCount)) && (
+              <span className="text-[9px] ml-1 text-gray-400">
+                ({Math.floor(data.incomingSlotCount / 2)}W+{Math.floor(data.incomingSlotCount / 2)}L)
+              </span>
+            )}
           </span>
         </div>
         {data.phaseType === 'Pools' && data.poolCount > 0 && (
@@ -1309,7 +1321,19 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
       }
       return slots
     }
-    return Array.from({ length: advancing }, (_, i) => ({ id: `${i + 1}`, label: `#${i + 1}`, poolIndex: null, position: i + 1 }))
+    const isBracketWithLosers = sourcePhase.phaseType === 'BracketRound' && 
+      (sourcePhase.includeConsolation || advancing >= parseInt(sourcePhase.incomingSlotCount))
+    const numMatches = Math.floor(parseInt(sourcePhase.incomingSlotCount) / 2)
+    return Array.from({ length: advancing }, (_, i) => {
+      const isLoser = isBracketWithLosers && i >= numMatches
+      return {
+        id: `${i + 1}`,
+        label: isBracketWithLosers ? (isLoser ? `L${i - numMatches + 1}` : `W${i + 1}`) : `#${i + 1}`,
+        poolIndex: null,
+        position: i + 1,
+        isLoser
+      }
+    })
   }, [sourcePhase, isPools, poolCount])
 
   // Build target incoming slots
@@ -1501,8 +1525,8 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
               <g key={`src-${slot.id}`} onClick={() => handleSourceClick(slot.id)} className="cursor-pointer">
                 <circle cx={leftX} cy={y} r={dotR + 2} fill="transparent" />
                 <circle cx={leftX} cy={y} r={dotR}
-                  fill={isSelected ? '#7c3aed' : isConnected ? '#818cf8' : '#e5e7eb'}
-                  stroke={isSelected ? '#5b21b6' : isConnected ? '#6366f1' : '#9ca3af'}
+                  fill={isSelected ? '#7c3aed' : slot.isLoser ? (isConnected ? '#f87171' : '#fee2e2') : (isConnected ? '#818cf8' : '#e5e7eb')}
+                  stroke={isSelected ? '#5b21b6' : slot.isLoser ? (isConnected ? '#dc2626' : '#f87171') : (isConnected ? '#6366f1' : '#9ca3af')}
                   strokeWidth={isSelected ? 2.5 : 1.5}
                   className="transition-all" />
                 <text x={leftX} y={y + 1} textAnchor="middle" fontSize="8" fontWeight="700" fontFamily="ui-monospace,monospace"
@@ -1789,7 +1813,18 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         return s.targetSlotNumber !== i + 1
       })
 
-      const label = srcPhase ? `Top ${count}` : `${count} slots`
+      // Determine if this edge only maps winners or losers
+      let label
+      if (srcPhase?.phaseType === 'BracketRound') {
+        const numMatches = Math.floor((parseInt(srcPhase.incomingSlotCount) || 0) / 2)
+        const hasWinners = connRules.some(r => r.finishPosition <= numMatches)
+        const hasLosers = connRules.some(r => r.finishPosition > numMatches)
+        if (hasWinners && !hasLosers) label = `${count} Winners`
+        else if (hasLosers && !hasWinners) label = `${count} Losers`
+        else label = srcPhase ? `Top ${count}` : `${count} slots`
+      } else {
+        label = srcPhase ? `Top ${count}` : `${count} slots`
+      }
       const customLabel = isCustom ? '🔀 ' : ''
       const displayLabel = isSelected ? `✏️ ${label}` : `${customLabel}${label}`
 
@@ -1956,8 +1991,47 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         }
       }
     } else {
-      for (let pos = 1; pos <= slotsToAdvance; pos++) {
-        newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+      // For BracketRound with losers, check which slots are already mapped to other targets
+      const isBracketWithLosers = srcPhase?.phaseType === 'BracketRound' && 
+        (srcPhase.includeConsolation || (parseInt(srcPhase.advancingSlotCount) || 0) >= (parseInt(srcPhase.incomingSlotCount) || 0))
+      const numMatches = Math.floor((parseInt(srcPhase?.incomingSlotCount) || 0) / 2)
+      
+      if (isBracketWithLosers && numMatches > 0) {
+        // Check which finish positions are already mapped to OTHER targets
+        const existingMapped = new Set()
+        vs.advancementRules.forEach(r => {
+          if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder !== tgtOrder) {
+            existingMapped.add(r.finishPosition)
+          }
+        })
+        
+        // If winners (1..numMatches) are already mapped, offer losers
+        const winnersAlreadyMapped = Array.from({length: numMatches}, (_, i) => i + 1).every(p => existingMapped.has(p))
+        const losersAlreadyMapped = Array.from({length: numMatches}, (_, i) => numMatches + i + 1).every(p => existingMapped.has(p))
+        
+        let startPos, endPos
+        if (winnersAlreadyMapped && !losersAlreadyMapped) {
+          // Map losers
+          startPos = numMatches + 1
+          endPos = numMatches * 2
+        } else if (!winnersAlreadyMapped) {
+          // Map winners first
+          startPos = 1
+          endPos = numMatches
+        } else {
+          // Both mapped already, map all
+          startPos = 1
+          endPos = slotsToAdvance
+        }
+        
+        let targetSlot = 1
+        for (let pos = startPos; pos <= endPos; pos++) {
+          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: targetSlot++, sourcePoolIndex: null })
+        }
+      } else {
+        for (let pos = 1; pos <= slotsToAdvance; pos++) {
+          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+        }
       }
     }
 
@@ -2106,8 +2180,43 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
           }
         }
       } else {
-        for (let pos = 1; pos <= slotsToAdvance; pos++) {
-          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+        // For BracketRound with losers, check which slots are already mapped to other targets
+        const isBracketWithLosers = prevPhase?.phaseType === 'BracketRound' && 
+          (prevPhase.includeConsolation || (parseInt(prevPhase.advancingSlotCount) || 0) >= (parseInt(prevPhase.incomingSlotCount) || 0))
+        const numMatches = Math.floor((parseInt(prevPhase?.incomingSlotCount) || 0) / 2)
+        
+        if (isBracketWithLosers && numMatches > 0) {
+          // Check which finish positions are already mapped to OTHER targets
+          const existingMapped = new Set()
+          newRules.forEach(r => {
+            if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder !== tgtOrder) {
+              existingMapped.add(r.finishPosition)
+            }
+          })
+          
+          const winnersAlreadyMapped = Array.from({length: numMatches}, (_, i) => i + 1).every(p => existingMapped.has(p))
+          const losersAlreadyMapped = Array.from({length: numMatches}, (_, i) => numMatches + i + 1).every(p => existingMapped.has(p))
+          
+          let startPos, endPos
+          if (winnersAlreadyMapped && !losersAlreadyMapped) {
+            startPos = numMatches + 1
+            endPos = numMatches * 2
+          } else if (!winnersAlreadyMapped) {
+            startPos = 1
+            endPos = numMatches
+          } else {
+            startPos = 1
+            endPos = slotsToAdvance
+          }
+          
+          let targetSlot = 1
+          for (let pos = startPos; pos <= endPos; pos++) {
+            newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: targetSlot++, sourcePoolIndex: null })
+          }
+        } else {
+          for (let pos = 1; pos <= slotsToAdvance; pos++) {
+            newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+          }
         }
       }
     }
