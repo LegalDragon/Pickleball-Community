@@ -774,6 +774,400 @@ const PHASE_TYPE_ICONS = {
 const NODE_WIDTH = 220
 const NODE_HEIGHT = 100
 
+// ── PhaseInternalDiagram: SVG mini-diagram showing internal flow of a phase ──
+const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, poolCount, bestOf, includeConsolation }) => {
+  const incoming = parseInt(incomingSlots) || 4
+  const advancing = parseInt(advancingSlots) || 2
+  const pools = parseInt(poolCount) || 0
+  const bo = parseInt(bestOf) || 1
+  const colors = PHASE_TYPE_COLORS[phaseType] || PHASE_TYPE_COLORS.SingleElimination
+  const phaseHex = colors.hex
+
+  const GRAY = '#6b7280'
+  const GREEN = '#22c55e'
+  const PURPLE = '#8b5cf6'
+  const LINE_GRAY = '#d1d5db'
+  const LINE_GREEN = '#86efac'
+
+  // Render a small circle slot
+  const Slot = ({ x, y, color, label, anchor = 'middle' }) => (
+    <g>
+      <circle cx={x} cy={y} r={5} fill={color} />
+      {label && (
+        <text x={anchor === 'start' ? x + 9 : anchor === 'end' ? x - 9 : x} y={y + 3} fontSize="8" fill={color} textAnchor={anchor} fontFamily="system-ui">{label}</text>
+      )}
+    </g>
+  )
+
+  if (phaseType === 'Pools') {
+    const pc = Math.max(pools, 1)
+    const perPool = Math.max(1, Math.ceil(incoming / pc))
+    const advPerPool = Math.max(1, Math.ceil(advancing / pc))
+    const poolNames = 'ABCDEFGHIJKLMNOP'
+    const svgW = 260
+    const rowH = 32
+    const svgH = Math.min(200, pc * rowH + 30)
+    const poolY0 = 20
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+          {incoming} in → {pc} pools → {advancing} advance
+          {bo > 1 ? ` (Bo${bo})` : ''}
+        </text>
+        {Array.from({ length: pc }, (_, pi) => {
+          const cy = poolY0 + pi * rowH + rowH / 2
+          const poolX = 90
+          const poolW = 80
+          const poolH = 22
+          return (
+            <g key={pi}>
+              {/* Incoming slots */}
+              {Array.from({ length: Math.min(perPool, 4) }, (_, si) => {
+                const slotY = cy - (Math.min(perPool, 4) - 1) * 5 + si * 10
+                return (
+                  <g key={`in-${si}`}>
+                    <circle cx={16} cy={slotY} r={3.5} fill={GRAY} />
+                    <line x1={20} y1={slotY} x2={poolX - 2} y2={cy} stroke={LINE_GRAY} strokeWidth={1} />
+                  </g>
+                )
+              })}
+              {perPool > 4 && (
+                <text x={16} y={cy + (4 * 5) + 10} fontSize="7" fill={GRAY} textAnchor="middle" fontFamily="system-ui">+{perPool - 4}</text>
+              )}
+              {/* Pool box */}
+              <rect x={poolX} y={cy - poolH / 2} width={poolW} height={poolH} rx={6} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1.5} />
+              <text x={poolX + poolW / 2} y={cy + 3.5} fontSize="9" fill={phaseHex} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+                Pool {poolNames[pi] || pi + 1}
+              </text>
+              {/* Advancing slots */}
+              {Array.from({ length: Math.min(advPerPool, 3) }, (_, ai) => {
+                const exitY = cy - (Math.min(advPerPool, 3) - 1) * 5 + ai * 10
+                return (
+                  <g key={`out-${ai}`}>
+                    <line x1={poolX + poolW + 2} y1={cy} x2={svgW - 26} y2={exitY} stroke={LINE_GREEN} strokeWidth={1} />
+                    <circle cx={svgW - 20} cy={exitY} r={3.5} fill={PURPLE} />
+                    <text x={svgW - 12} y={exitY + 3} fontSize="7" fill={GREEN} textAnchor="start" fontFamily="system-ui">#{ai + 1}</text>
+                  </g>
+                )
+              })}
+              {advPerPool > 3 && (
+                <text x={svgW - 20} y={cy + (3 * 5) + 10} fontSize="7" fill={PURPLE} textAnchor="middle" fontFamily="system-ui">+{advPerPool - 3}</text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    )
+  }
+
+  if (phaseType === 'RoundRobin') {
+    const svgW = 260
+    const svgH = Math.min(200, Math.max(80, incoming * 12 + 30))
+    const boxW = 90
+    const boxH = 30
+    const boxX = (svgW - boxW) / 2
+    const boxY = svgH / 2 - boxH / 2
+    const inCount = Math.min(incoming, 8)
+    const outCount = Math.min(advancing, 6)
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+          {incoming} in → Round Robin → Top {advancing}
+          {bo > 1 ? ` (Bo${bo})` : ''}
+        </text>
+        {/* Incoming slots */}
+        {Array.from({ length: inCount }, (_, i) => {
+          const sy = 24 + i * ((svgH - 30) / Math.max(inCount - 1, 1))
+          return (
+            <g key={`in-${i}`}>
+              <circle cx={16} cy={sy} r={3.5} fill={GRAY} />
+              <line x1={20} y1={sy} x2={boxX - 2} y2={svgH / 2} stroke={LINE_GRAY} strokeWidth={0.8} />
+            </g>
+          )
+        })}
+        {incoming > 8 && (
+          <text x={16} y={svgH - 4} fontSize="7" fill={GRAY} textAnchor="middle" fontFamily="system-ui">+{incoming - 8}</text>
+        )}
+        {/* Round Robin box */}
+        <rect x={boxX} y={boxY} width={boxW} height={boxH} rx={8} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1.5} />
+        <text x={boxX + boxW / 2} y={boxY + boxH / 2 + 3.5} fontSize="9" fill={phaseHex} textAnchor="middle" fontWeight="600" fontFamily="system-ui">Round Robin</text>
+        {/* Advancing slots */}
+        {Array.from({ length: outCount }, (_, i) => {
+          const ey = svgH / 2 - (outCount - 1) * 7 + i * 14
+          return (
+            <g key={`out-${i}`}>
+              <line x1={boxX + boxW + 2} y1={svgH / 2} x2={svgW - 26} y2={ey} stroke={LINE_GREEN} strokeWidth={1} />
+              <circle cx={svgW - 20} cy={ey} r={3.5} fill={PURPLE} />
+              <text x={svgW - 12} y={ey + 3} fontSize="7" fill={GREEN} textAnchor="start" fontFamily="system-ui">#{i + 1}</text>
+            </g>
+          )
+        })}
+        {advancing > 6 && (
+          <text x={svgW - 20} y={svgH - 4} fontSize="7" fill={PURPLE} textAnchor="middle" fontFamily="system-ui">+{advancing - 6}</text>
+        )}
+      </svg>
+    )
+  }
+
+  if (phaseType === 'Swiss') {
+    const rounds = Math.max(3, Math.ceil(Math.log2(incoming)))
+    const svgW = 260
+    const svgH = Math.min(200, Math.max(80, incoming * 12 + 30))
+    const boxW = 90
+    const boxH = 38
+    const boxX = (svgW - boxW) / 2
+    const boxY = svgH / 2 - boxH / 2
+    const inCount = Math.min(incoming, 8)
+    const outCount = Math.min(advancing, 6)
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+          {incoming} in → Swiss ({rounds} rounds) → Top {advancing}
+          {bo > 1 ? ` (Bo${bo})` : ''}
+        </text>
+        {/* Incoming slots */}
+        {Array.from({ length: inCount }, (_, i) => {
+          const sy = 24 + i * ((svgH - 30) / Math.max(inCount - 1, 1))
+          return (
+            <g key={`in-${i}`}>
+              <circle cx={16} cy={sy} r={3.5} fill={GRAY} />
+              <line x1={20} y1={sy} x2={boxX - 2} y2={svgH / 2} stroke={LINE_GRAY} strokeWidth={0.8} />
+            </g>
+          )
+        })}
+        {incoming > 8 && (
+          <text x={16} y={svgH - 4} fontSize="7" fill={GRAY} textAnchor="middle" fontFamily="system-ui">+{incoming - 8}</text>
+        )}
+        {/* Swiss box */}
+        <rect x={boxX} y={boxY} width={boxW} height={boxH} rx={8} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1.5} />
+        <text x={boxX + boxW / 2} y={boxY + boxH / 2 - 2} fontSize="9" fill={phaseHex} textAnchor="middle" fontWeight="600" fontFamily="system-ui">Swiss</text>
+        <text x={boxX + boxW / 2} y={boxY + boxH / 2 + 9} fontSize="8" fill={phaseHex} textAnchor="middle" fontFamily="system-ui" fillOpacity={0.7}>{rounds} rounds</text>
+        {/* Advancing slots */}
+        {Array.from({ length: outCount }, (_, i) => {
+          const ey = svgH / 2 - (outCount - 1) * 7 + i * 14
+          return (
+            <g key={`out-${i}`}>
+              <line x1={boxX + boxW + 2} y1={svgH / 2} x2={svgW - 26} y2={ey} stroke={LINE_GREEN} strokeWidth={1} />
+              <circle cx={svgW - 20} cy={ey} r={3.5} fill={PURPLE} />
+              <text x={svgW - 12} y={ey + 3} fontSize="7" fill={GREEN} textAnchor="start" fontFamily="system-ui">#{i + 1}</text>
+            </g>
+          )
+        })}
+        {advancing > 6 && (
+          <text x={svgW - 20} y={svgH - 4} fontSize="7" fill={PURPLE} textAnchor="middle" fontFamily="system-ui">+{advancing - 6}</text>
+        )}
+      </svg>
+    )
+  }
+
+  if (phaseType === 'DoubleElimination') {
+    const matches = Math.floor(incoming / 2)
+    const svgW = 260
+    const svgH = Math.min(200, Math.max(100, matches * 22 + 40))
+    const matchCount = Math.min(matches, 6)
+    const wbH = svgH * 0.52
+    const lbY = wbH + 8
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+          {incoming} in → Double Elim → {advancing} advance
+          {bo > 1 ? ` (Bo${bo})` : ''}
+        </text>
+        {/* Winners Bracket label */}
+        <text x={8} y={28} fontSize="8" fill={GREEN} fontWeight="600" fontFamily="system-ui">W Bracket</text>
+        {/* Winners bracket matches */}
+        {Array.from({ length: Math.min(matchCount, 4) }, (_, i) => {
+          const my = 34 + i * 18
+          return (
+            <g key={`wb-${i}`}>
+              <circle cx={20} cy={my - 4} r={3} fill={GRAY} />
+              <circle cx={20} cy={my + 4} r={3} fill={GRAY} />
+              <line x1={24} y1={my - 4} x2={50} y2={my - 4} stroke={LINE_GRAY} strokeWidth={0.8} />
+              <line x1={24} y1={my + 4} x2={50} y2={my + 4} stroke={LINE_GRAY} strokeWidth={0.8} />
+              <line x1={50} y1={my - 4} x2={50} y2={my + 4} stroke={LINE_GRAY} strokeWidth={0.8} />
+              <rect x={52} y={my - 7} width={36} height={14} rx={3} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1} />
+              <text x={70} y={my + 3} fontSize="7" fill={phaseHex} textAnchor="middle" fontFamily="system-ui">M{i + 1}</text>
+              {/* Winner exits right */}
+              <line x1={88} y1={my} x2={110} y2={my} stroke={LINE_GREEN} strokeWidth={1} />
+              <polygon points={`108,${my - 3} 114,${my} 108,${my + 3}`} fill={GREEN} />
+            </g>
+          )
+        })}
+        {/* Losers Bracket label */}
+        <text x={8} y={lbY + 4} fontSize="8" fill="#ef4444" fontWeight="600" fontFamily="system-ui">L Bracket</text>
+        {/* Losers bracket indication */}
+        {Array.from({ length: Math.min(matchCount, 3) }, (_, i) => {
+          const my = lbY + 12 + i * 16
+          return (
+            <g key={`lb-${i}`}>
+              <rect x={52} y={my - 6} width={36} height={12} rx={3} fill="#fef2f2" stroke="#fca5a5" strokeWidth={1} />
+              <text x={70} y={my + 2.5} fontSize="7" fill="#ef4444" textAnchor="middle" fontFamily="system-ui">L{i + 1}</text>
+              <line x1={88} y1={my} x2={110} y2={my} stroke={LINE_GREEN} strokeWidth={0.8} />
+              <polygon points={`108,${my - 2.5} 113,${my} 108,${my + 2.5}`} fill={GREEN} fillOpacity={0.6} />
+            </g>
+          )
+        })}
+        {/* Exit slots on far right */}
+        {Array.from({ length: Math.min(advancing, 4) }, (_, i) => {
+          const ey = 34 + i * 16
+          return (
+            <g key={`exit-${i}`}>
+              <circle cx={svgW - 28} cy={ey} r={3.5} fill={PURPLE} />
+              <text x={svgW - 20} y={ey + 3} fontSize="7" fill={GREEN} textAnchor="start" fontFamily="system-ui">#{i + 1}</text>
+            </g>
+          )
+        })}
+        {advancing > 4 && (
+          <text x={svgW - 28} y={34 + 4 * 16 + 4} fontSize="7" fill={PURPLE} textAnchor="middle" fontFamily="system-ui">+{advancing - 4}</text>
+        )}
+      </svg>
+    )
+  }
+
+  // SingleElimination / BracketRound — bracket tree
+  {
+    const matches = Math.floor(incoming / 2)
+    const isOneRound = phaseType === 'BracketRound' || advancing === matches
+    const svgW = 260
+
+    if (isOneRound) {
+      // Simple: one round of matches
+      const matchCount = Math.min(matches, 6)
+      const rowH = 24
+      const svgH = Math.min(200, matchCount * rowH + 28)
+
+      return (
+        <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+          <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+            {incoming} in → {matches} matches → {advancing} advance
+            {bo > 1 ? ` (Bo${bo})` : ''}
+            {includeConsolation ? ' +consolation' : ''}
+          </text>
+          {Array.from({ length: matchCount }, (_, i) => {
+            const my = 22 + i * rowH + rowH / 2
+            return (
+              <g key={i}>
+                {/* Two incoming slots */}
+                <circle cx={16} cy={my - 5} r={3.5} fill={GRAY} />
+                <circle cx={16} cy={my + 5} r={3.5} fill={GRAY} />
+                <line x1={20} y1={my - 5} x2={55} y2={my - 5} stroke={LINE_GRAY} strokeWidth={0.8} />
+                <line x1={20} y1={my + 5} x2={55} y2={my + 5} stroke={LINE_GRAY} strokeWidth={0.8} />
+                <line x1={55} y1={my - 5} x2={55} y2={my + 5} stroke={LINE_GRAY} strokeWidth={0.8} />
+                {/* Match box */}
+                <rect x={57} y={my - 8} width={40} height={16} rx={4} fill={phaseHex} fillOpacity={0.12} stroke={phaseHex} strokeWidth={1.2} />
+                <text x={77} y={my + 3} fontSize="8" fill={phaseHex} textAnchor="middle" fontWeight="500" fontFamily="system-ui">M{i + 1}</text>
+                {/* Winner line */}
+                <line x1={97} y1={my} x2={svgW - 34} y2={my} stroke={LINE_GREEN} strokeWidth={1.2} />
+                <polygon points={`${svgW - 36},${my - 3} ${svgW - 30},${my} ${svgW - 36},${my + 3}`} fill={GREEN} />
+                <circle cx={svgW - 24} cy={my} r={3.5} fill={PURPLE} />
+                <text x={svgW - 16} y={my + 3} fontSize="7" fill={GREEN} textAnchor="start" fontFamily="system-ui">W{i + 1}</text>
+                {/* Consolation loser line */}
+                {includeConsolation && (
+                  <g>
+                    <line x1={77} y1={my + 8} x2={77} y2={my + 15} stroke="#fca5a5" strokeWidth={0.8} strokeDasharray="2,2" />
+                    <text x={77} y={my + 22} fontSize="6" fill="#ef4444" textAnchor="middle" fontFamily="system-ui">C</text>
+                  </g>
+                )}
+              </g>
+            )
+          })}
+          {matches > 6 && (
+            <text x={svgW / 2} y={svgH - 4} fontSize="7" fill={GRAY} textAnchor="middle" fontFamily="system-ui">+{matches - 6} more matches</text>
+          )}
+        </svg>
+      )
+    }
+
+    // Multi-round bracket tree (e.g., 8→1 with QF→SF→F)
+    const rounds = Math.ceil(Math.log2(incoming))
+    const maxVisibleRounds = Math.min(rounds, 4)
+    const roundLabels = rounds <= 2 ? ['SF', 'F'] : rounds === 3 ? ['QF', 'SF', 'F'] : ['R1', 'QF', 'SF', 'F']
+    const r1Matches = Math.min(Math.floor(incoming / 2), 8)
+    const svgH = Math.min(200, r1Matches * 20 + 30)
+    const colW = svgW / (maxVisibleRounds + 1.5)
+
+    // Build bracket rounds
+    const bracketRounds = []
+    let mCount = r1Matches
+    for (let r = 0; r < maxVisibleRounds; r++) {
+      bracketRounds.push(Math.min(mCount, r === 0 ? 8 : 4))
+      mCount = Math.ceil(mCount / 2)
+    }
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
+          {incoming} in → {rounds} rounds → {advancing === 1 ? 'Champion' : `Top ${advancing}`}
+          {bo > 1 ? ` (Bo${bo})` : ''}
+          {includeConsolation ? ' +consolation' : ''}
+        </text>
+        {/* Round labels */}
+        {bracketRounds.map((_, ri) => {
+          const lbl = roundLabels.length >= maxVisibleRounds
+            ? roundLabels[roundLabels.length - maxVisibleRounds + ri]
+            : `R${ri + 1}`
+          return (
+            <text key={`lbl-${ri}`} x={30 + ri * colW + colW / 2} y={24} fontSize="8" fill={phaseHex} textAnchor="middle" fontWeight="600" fontFamily="system-ui" fillOpacity={0.6}>
+              {lbl}
+            </text>
+          )
+        })}
+        {/* Draw bracket rounds */}
+        {bracketRounds.map((mc, ri) => {
+          const x = 30 + ri * colW
+          const availH = svgH - 32
+          const spacing = availH / mc
+          return Array.from({ length: mc }, (_, mi) => {
+            const my = 32 + mi * spacing + spacing / 2
+            const bw = Math.min(colW - 10, 36)
+            return (
+              <g key={`r${ri}-m${mi}`}>
+                {ri === 0 && (
+                  <g>
+                    <circle cx={x - 8} cy={my - 4} r={2.5} fill={GRAY} />
+                    <circle cx={x - 8} cy={my + 4} r={2.5} fill={GRAY} />
+                    <line x1={x - 5} y1={my - 4} x2={x + 2} y2={my - 4} stroke={LINE_GRAY} strokeWidth={0.6} />
+                    <line x1={x - 5} y1={my + 4} x2={x + 2} y2={my + 4} stroke={LINE_GRAY} strokeWidth={0.6} />
+                    <line x1={x + 2} y1={my - 4} x2={x + 2} y2={my + 4} stroke={LINE_GRAY} strokeWidth={0.6} />
+                  </g>
+                )}
+                <rect x={x + 4} y={my - 6} width={bw} height={12} rx={3} fill={phaseHex} fillOpacity={ri === maxVisibleRounds - 1 ? 0.25 : 0.1} stroke={phaseHex} strokeWidth={1} />
+                {/* Connect to next round */}
+                {ri < maxVisibleRounds - 1 && (
+                  <line x1={x + 4 + bw} y1={my} x2={30 + (ri + 1) * colW + 4} y2={32 + Math.floor(mi / 2) * (availH / bracketRounds[ri + 1]) + (availH / bracketRounds[ri + 1]) / 2} stroke={LINE_GREEN} strokeWidth={0.8} />
+                )}
+              </g>
+            )
+          })
+        })}
+        {/* Champion / exit */}
+        {(() => {
+          const lastRoundX = 30 + (maxVisibleRounds - 1) * colW
+          const bw = Math.min(colW - 10, 36)
+          const exitX = lastRoundX + bw + 12
+          const exitY = svgH / 2
+          return (
+            <g>
+              <line x1={lastRoundX + 4 + bw} y1={exitY} x2={exitX} y2={exitY} stroke={LINE_GREEN} strokeWidth={1.2} />
+              <circle cx={exitX + 6} cy={exitY} r={4} fill={PURPLE} />
+              <text x={exitX + 14} y={exitY + 3} fontSize="8" fill={GREEN} textAnchor="start" fontWeight="600" fontFamily="system-ui">
+                {advancing === 1 ? '🏆' : `Top ${advancing}`}
+              </text>
+            </g>
+          )
+        })()}
+        {includeConsolation && (
+          <text x={svgW - 10} y={svgH - 6} fontSize="7" fill="#ef4444" textAnchor="end" fontFamily="system-ui">+ consolation bracket</text>
+        )}
+      </svg>
+    )
+  }
+})
+
 // Dagre auto-layout
 function getLayoutedElements(nodes, edges) {
   const g = new dagre.graphlib.Graph()
@@ -803,20 +1197,22 @@ function getLayoutedElements(nodes, edges) {
   return { nodes: layoutedNodes, edges }
 }
 
-// Custom Phase Node — expands to show advancement rules when selected
+// Custom Phase Node — expands to show mini phase diagram + collapsible rules when selected
 const PhaseNode = memo(({ data, selected }) => {
+  const [showRules, setShowRules] = useState(false)
   const colors = PHASE_TYPE_COLORS[data.phaseType] || PHASE_TYPE_COLORS.SingleElimination
   const Icon = PHASE_TYPE_ICONS[data.phaseType] || GitBranch
   const incomingRules = data.incomingRules || []
   const outgoingRules = data.outgoingRules || []
   const phaseNames = data.phaseNames || {}
+  const hasRules = incomingRules.length > 0 || outgoingRules.length > 0
 
   return (
     <div
       className={`rounded-lg shadow-md border-2 overflow-hidden transition-all ${
         selected ? 'ring-2 ring-purple-400 ring-offset-2' : ''
       } ${colors.border}`}
-      style={{ width: selected && (incomingRules.length > 0 || outgoingRules.length > 0) ? 280 : NODE_WIDTH }}
+      style={{ width: selected ? 280 : NODE_WIDTH }}
     >
       <Handle type="target" position={Position.Top} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
       <div className={`${colors.bg} px-3 py-1.5 flex items-center gap-2`}>
@@ -835,39 +1231,63 @@ const PhaseNode = memo(({ data, selected }) => {
           <div className="text-[10px] text-gray-400 mt-0.5">{data.poolCount} pools</div>
         )}
       </div>
-      {/* Expanded advancement rules when selected */}
-      {selected && (incomingRules.length > 0 || outgoingRules.length > 0) && (
-        <div className="bg-white border-t px-2.5 py-2 space-y-1.5" style={{ maxHeight: 160, overflowY: 'auto' }}>
-          {incomingRules.length > 0 && (
-            <div>
-              <div className="text-[9px] font-semibold text-green-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                <ArrowRight className="w-2.5 h-2.5 rotate-180" /> Incoming ({incomingRules.length})
-              </div>
-              {incomingRules.map((r, i) => (
-                <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
-                  <span className="text-green-500">←</span>
-                  <span className="font-medium text-gray-700">{phaseNames[r.sourcePhaseOrder] || `Phase ${r.sourcePhaseOrder}`}</span>
-                  <span className="text-gray-400">
-                    {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
-                  </span>
+      {/* Mini phase diagram when selected */}
+      {selected && (
+        <div className="bg-white border-t px-2 py-2">
+          <PhaseInternalDiagram
+            phaseType={data.phaseType}
+            incomingSlots={data.incomingSlotCount}
+            advancingSlots={data.advancingSlotCount}
+            poolCount={data.poolCount}
+            bestOf={data.bestOf}
+            includeConsolation={data.includeConsolation}
+          />
+          {/* Collapsible rules detail */}
+          {hasRules && (
+            <div className="mt-1.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowRules(v => !v) }}
+                className="text-[9px] text-gray-400 hover:text-gray-600 flex items-center gap-0.5 transition-colors"
+              >
+                {showRules ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                Show rules detail ({incomingRules.length + outgoingRules.length})
+              </button>
+              {showRules && (
+                <div className="mt-1 space-y-1.5" style={{ maxHeight: 120, overflowY: 'auto' }}>
+                  {incomingRules.length > 0 && (
+                    <div>
+                      <div className="text-[9px] font-semibold text-green-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                        <ArrowRight className="w-2.5 h-2.5 rotate-180" /> Incoming ({incomingRules.length})
+                      </div>
+                      {incomingRules.map((r, i) => (
+                        <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
+                          <span className="text-green-500">←</span>
+                          <span className="font-medium text-gray-700">{phaseNames[r.sourcePhaseOrder] || `Phase ${r.sourcePhaseOrder}`}</span>
+                          <span className="text-gray-400">
+                            {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {outgoingRules.length > 0 && (
+                    <div>
+                      <div className="text-[9px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                        <ArrowRight className="w-2.5 h-2.5" /> Outgoing ({outgoingRules.length})
+                      </div>
+                      {outgoingRules.map((r, i) => (
+                        <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
+                          <span className="text-blue-500">→</span>
+                          <span className="font-medium text-gray-700">{phaseNames[r.targetPhaseOrder] || `Phase ${r.targetPhaseOrder}`}</span>
+                          <span className="text-gray-400">
+                            {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-          {outgoingRules.length > 0 && (
-            <div>
-              <div className="text-[9px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                <ArrowRight className="w-2.5 h-2.5" /> Outgoing ({outgoingRules.length})
-              </div>
-              {outgoingRules.map((r, i) => (
-                <div key={i} className="text-[10px] text-gray-600 flex items-center gap-1 py-0.5">
-                  <span className="text-blue-500">→</span>
-                  <span className="font-medium text-gray-700">{phaseNames[r.targetPhaseOrder] || `Phase ${r.targetPhaseOrder}`}</span>
-                  <span className="text-gray-400">
-                    {r.sourcePoolIndex != null ? `P${r.sourcePoolIndex}` : ''} #{r.finishPosition} → slot {r.targetSlotNumber}
-                  </span>
-                </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -1163,6 +1583,8 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         incomingSlotCount: phase.incomingSlotCount,
         advancingSlotCount: phase.advancingSlotCount,
         poolCount: phase.poolCount,
+        bestOf: phase.bestOf,
+        includeConsolation: phase.includeConsolation,
       },
     }))
   }, [])
@@ -1275,6 +1697,8 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
             incomingSlotCount: phase.incomingSlotCount,
             advancingSlotCount: phase.advancingSlotCount,
             poolCount: phase.poolCount,
+            bestOf: phase.bestOf,
+            includeConsolation: phase.includeConsolation,
             incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
             outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
             phaseNames,
