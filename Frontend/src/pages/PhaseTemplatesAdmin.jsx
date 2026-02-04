@@ -22,7 +22,8 @@ import {
   useReactFlow,
   ReactFlowProvider,
   getNodesBounds,
-  getViewportForBounds
+  getViewportForBounds,
+  useUpdateNodeInternals
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
@@ -1797,6 +1798,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   const vs = visualState
   const reactFlowWrapper = useRef(null)
   const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
+  const updateNodeInternals = useUpdateNodeInternals()
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedEdgeKey, setSelectedEdgeKey] = useState(null) // "srcIdx-tgtIdx"
   const [layoutDirection, setLayoutDirection] = useState('TB') // 'TB' | 'LR'
@@ -2293,11 +2295,15 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         data: { ...node.data, layoutDirection: dir }
       }))
       const { nodes: layoutedNodes } = getLayoutedElements(updated, edges, dir)
+      // Force React Flow to recalculate handle positions after render
+      setTimeout(() => {
+        updateNodeInternals(layoutedNodes.map(n => n.id))
+      }, 0)
       return layoutedNodes
     })
     // Force edge rebuild so React Flow recalculates paths for new handle positions
     setEdges(prev => prev.map(e => ({ ...e })))
-  }, [edges, setNodes, setEdges])
+  }, [edges, setNodes, setEdges, updateNodeInternals])
 
   // Compute topological sort order and sync to phases
   const handleSyncSortOrder = useCallback(() => {
