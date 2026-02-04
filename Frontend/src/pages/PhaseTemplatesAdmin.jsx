@@ -1241,10 +1241,10 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
 })
 
 // Dagre auto-layout
-function getLayoutedElements(nodes, edges) {
+function getLayoutedElements(nodes, edges, direction = 'TB') {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80 })
+  g.setGraph({ rankdir: direction, nodesep: direction === 'LR' ? 40 : 60, ranksep: direction === 'LR' ? 100 : 80 })
 
   nodes.forEach((node) => {
     g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
@@ -1283,7 +1283,7 @@ const PhaseNode = memo(({ data, selected }) => {
       style={{ width: expanded ? 280 : NODE_WIDTH }}
     >
       {data.phaseType !== 'Draw' && (
-        <Handle type="target" position={Position.Top} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
+        <Handle type="target" position={data.layoutDirection === 'LR' ? Position.Left : Position.Top} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
       )}
       <div className={`${colors.bg} px-3 py-1.5 flex items-center gap-2`}>
         <Icon className="w-3.5 h-3.5 text-white" />
@@ -1327,7 +1327,7 @@ const PhaseNode = memo(({ data, selected }) => {
         </div>
       )}
       {data.phaseType !== 'Award' && (
-        <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
+        <Handle type="source" position={data.layoutDirection === 'LR' ? Position.Right : Position.Bottom} className="!bg-gray-400 !w-3 !h-3 !border-2 !border-white" />
       )}
     </div>
   )
@@ -1799,9 +1799,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedEdgeKey, setSelectedEdgeKey] = useState(null) // "srcIdx-tgtIdx"
+  const [layoutDirection, setLayoutDirection] = useState('TB') // 'TB' | 'LR'
 
   // Convert visualState phases to React Flow nodes
-  const buildNodes = useCallback((phases) => {
+  const buildNodes = useCallback((phases, dir = 'TB') => {
     return phases.map((phase, idx) => ({
       id: `phase-${idx}`,
       type: 'phaseNode',
@@ -1817,6 +1818,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         includeConsolation: phase.includeConsolation,
         awardType: phase.awardType,
         drawMethod: phase.drawMethod,
+        layoutDirection: dir,
       },
     }))
   }, [])
@@ -1891,9 +1893,9 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
 
   // Initialize nodes/edges from visual state
   const initialNodes = useMemo(() => {
-    const nodes = buildNodes(vs.phases)
+    const nodes = buildNodes(vs.phases, 'TB')
     const edges = buildEdges(vs.advancementRules, vs.phases)
-    const { nodes: layoutedNodes } = getLayoutedElements(nodes, edges)
+    const { nodes: layoutedNodes } = getLayoutedElements(nodes, edges, 'TB')
     const phaseNames = {}
     vs.phases.forEach((p, i) => { phaseNames[i + 1] = p.name })
     return layoutedNodes.map((node, idx) => {
@@ -1934,9 +1936,9 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
     setNodes(prev => {
       if (prev.length !== newLen) {
         // Structural change — full rebuild with layout
-        const newNodes = buildNodes(vs.phases)
+        const newNodes = buildNodes(vs.phases, layoutDirection)
         const newEdges = buildEdges(vs.advancementRules, vs.phases)
-        const { nodes: layoutedNodes } = getLayoutedElements(newNodes, newEdges)
+        const { nodes: layoutedNodes } = getLayoutedElements(newNodes, newEdges, layoutDirection)
         setEdges(newEdges)
         return layoutedNodes.map((node, idx) => {
           const order = idx + 1
@@ -1944,6 +1946,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
             ...node,
             data: {
               ...node.data,
+              layoutDirection,
               incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
               outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
               phaseNames,
@@ -1969,6 +1972,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
             includeConsolation: phase.includeConsolation,
             awardType: phase.awardType,
             drawMethod: phase.drawMethod,
+            layoutDirection,
             incomingRules: vs.advancementRules.filter(r => r.targetPhaseOrder === order),
             outgoingRules: vs.advancementRules.filter(r => r.sourcePhaseOrder === order),
             phaseNames,
@@ -1976,7 +1980,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         }
       })
     })
-  }, [vs, buildNodes, buildEdges, setNodes, setEdges])
+  }, [vs, buildNodes, buildEdges, setNodes, setEdges, layoutDirection])
 
   // Update edge styles when selection changes
   useEffect(() => {
@@ -2185,6 +2189,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         poolCount: newPhase.poolCount,
         awardType: newPhase.awardType,
         drawMethod: newPhase.drawMethod,
+        layoutDirection,
       }
     }])
 
@@ -2274,9 +2279,23 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   // Auto-layout button
   const handleAutoLayout = useCallback(() => {
     const currentEdges = edges
-    const { nodes: layoutedNodes } = getLayoutedElements(nodes, currentEdges)
+    const { nodes: layoutedNodes } = getLayoutedElements(nodes, currentEdges, layoutDirection)
     setNodes(layoutedNodes)
-  }, [nodes, edges, setNodes])
+  }, [nodes, edges, setNodes, layoutDirection])
+
+  // Re-layout when direction changes
+  const handleDirectionChange = useCallback((dir) => {
+    setLayoutDirection(dir)
+    // Update node data with new direction and re-layout
+    setNodes(prev => {
+      const updated = prev.map(node => ({
+        ...node,
+        data: { ...node.data, layoutDirection: dir }
+      }))
+      const { nodes: layoutedNodes } = getLayoutedElements(updated, edges, dir)
+      return layoutedNodes
+    })
+  }, [edges, setNodes])
 
   // Compute topological sort order and sync to phases
   const handleSyncSortOrder = useCallback(() => {
@@ -2446,6 +2465,16 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
               className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
               <Eye className="w-3.5 h-3.5" /> Export PNG
             </button>
+            <div className="flex items-center bg-white border rounded-lg shadow-sm overflow-hidden">
+              <button onClick={() => handleDirectionChange('TB')}
+                className={`px-2.5 py-1.5 text-xs font-medium ${layoutDirection === 'TB' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                ↓ Top-Down
+              </button>
+              <button onClick={() => handleDirectionChange('LR')}
+                className={`px-2.5 py-1.5 text-xs font-medium border-l ${layoutDirection === 'LR' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                → Left-Right
+              </button>
+            </div>
           </Panel>
           {warnings.length > 0 && (
             <Panel position="bottom-left">
