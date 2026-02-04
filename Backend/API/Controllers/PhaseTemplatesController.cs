@@ -949,50 +949,40 @@ public class PhaseTemplatesController : ControllerBase
 
     private async Task CreatePhasePools(int phaseId, int poolCount, int totalSlots)
     {
-        var slotsPerPool = (int)Math.Ceiling((double)totalSlots / poolCount);
         var slots = await _context.PhaseSlots
             .Where(s => s.PhaseId == phaseId && s.SlotType == SlotTypes.Incoming)
             .OrderBy(s => s.SlotNumber)
             .ToListAsync();
 
+        // Create all pools first
+        var pools = new List<PhasePool>();
         for (int p = 0; p < poolCount; p++)
         {
-            var poolName = ((char)('A' + p)).ToString();
+            int poolSlotCount = totalSlots / poolCount + (p < totalSlots % poolCount ? 1 : 0);
             var pool = new PhasePool
             {
                 PhaseId = phaseId,
-                PoolName = poolName,
+                PoolName = ((char)('A' + p)).ToString(),
                 PoolOrder = p + 1,
-                SlotCount = Math.Min(slotsPerPool, totalSlots - p * slotsPerPool)
+                SlotCount = poolSlotCount
             };
             _context.PhasePools.Add(pool);
-            await _context.SaveChangesAsync();
+            pools.Add(pool);
+        }
+        await _context.SaveChangesAsync();
 
-            // Assign slots to pool using snake draft (1-2-3-4, 8-7-6-5, etc.)
-            for (int i = 0; i < pool.SlotCount; i++)
+        // Sequential round-robin fill: 1→A, 2→B, 3→C, 4→A, 5→B, 6→C...
+        for (int i = 0; i < slots.Count; i++)
+        {
+            int poolIndex = i % poolCount;
+            int positionInPool = i / poolCount + 1;
+            var poolSlot = new PhasePoolSlot
             {
-                int slotIndex;
-                if (p % 2 == 0)
-                {
-                    slotIndex = p * slotsPerPool + i;
-                }
-                else
-                {
-                    slotIndex = (p + 1) * slotsPerPool - 1 - i;
-                }
-
-                if (slotIndex < slots.Count)
-                {
-                    var poolSlot = new PhasePoolSlot
-                    {
-                        PoolId = pool.Id,
-                        SlotId = slots[slotIndex].Id,
-                        PoolPosition = i + 1
-                    };
-                    _context.PhasePoolSlots.Add(poolSlot);
-                    // Keep original "Team X" label - pool assignment tracked via PhasePoolSlot
-                }
-            }
+                PoolId = pools[poolIndex].Id,
+                SlotId = slots[i].Id,
+                PoolPosition = positionInPool
+            };
+            _context.PhasePoolSlots.Add(poolSlot);
         }
         await _context.SaveChangesAsync();
     }
