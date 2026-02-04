@@ -1811,28 +1811,53 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
     rules.forEach((rule) => {
       const key = `${rule.sourcePhaseOrder}-${rule.targetPhaseOrder}`
       if (!edgeMap.has(key)) {
-        edgeMap.set(key, { sourcePhaseOrder: rule.sourcePhaseOrder, targetPhaseOrder: rule.targetPhaseOrder, count: 0 })
+        edgeMap.set(key, { sourcePhaseOrder: rule.sourcePhaseOrder, targetPhaseOrder: rule.targetPhaseOrder, count: 0, rules: [] })
       }
-      edgeMap.get(key).count++
+      const entry = edgeMap.get(key)
+      entry.count++
+      entry.rules.push(rule)
     })
 
-    return Array.from(edgeMap.values()).map(({ sourcePhaseOrder, targetPhaseOrder, count }) => {
+    return Array.from(edgeMap.values()).map(({ sourcePhaseOrder, targetPhaseOrder, count, rules: connRules }) => {
       const srcPhase = phases[sourcePhaseOrder - 1]
-      const label = srcPhase ? `Top ${count}` : `${count} slots`
       const edgeKey = `${sourcePhaseOrder - 1}-${targetPhaseOrder - 1}`
       const isSelected = selEdgeKey === edgeKey
+
+      // Check if mapping is custom (not default sequential 1→1, 2→2...)
+      // Default: sequential slot assignment where slot N maps to position N
+      // For pool phases, default is pool-sequential (A1→1, A2→2, B1→3, B2→4...)
+      const isCustom = connRules.some((r, i) => {
+        // Sort rules by their natural order to compare
+        const sorted = [...connRules].sort((a, b) => {
+          if (a.sourcePoolIndex !== b.sourcePoolIndex) return (a.sourcePoolIndex ?? 0) - (b.sourcePoolIndex ?? 0)
+          return a.finishPosition - b.finishPosition
+        })
+        const s = sorted[i]
+        return s.targetSlotNumber !== i + 1
+      })
+
+      const label = srcPhase ? `Top ${count}` : `${count} slots`
+      const customLabel = isCustom ? '🔀 ' : ''
+      const displayLabel = isSelected ? `✏️ ${label}` : `${customLabel}${label}`
+
+      // Custom mappings get orange tint, default gets purple
+      const baseColor = isCustom ? (isSelected ? '#c2410c' : '#f97316') : (isSelected ? '#7c3aed' : '#a78bfa')
+      const bgFill = isCustom ? (isSelected ? '#fff7ed' : '#fffbeb') : (isSelected ? '#ede9fe' : '#f5f3ff')
+      const bgStroke = isCustom ? (isSelected ? '#fb923c' : '#fdba74') : (isSelected ? '#8b5cf6' : '#c4b5fd')
+      const textFill = isCustom ? (isSelected ? '#9a3412' : '#ea580c') : (isSelected ? '#5b21b6' : '#6d28d9')
+
       return {
         id: `e-${sourcePhaseOrder}-${targetPhaseOrder}`,
         source: `phase-${sourcePhaseOrder - 1}`,
         target: `phase-${targetPhaseOrder - 1}`,
         animated: true,
-        label: isSelected ? `✏️ ${label}` : label,
-        style: { stroke: isSelected ? '#7c3aed' : '#a78bfa', strokeWidth: isSelected ? 3 : 2 },
-        labelStyle: { fontSize: 11, fontWeight: 600, fill: isSelected ? '#5b21b6' : '#6d28d9' },
-        labelBgStyle: { fill: isSelected ? '#ede9fe' : '#f5f3ff', stroke: isSelected ? '#8b5cf6' : '#c4b5fd' },
+        label: displayLabel,
+        style: { stroke: baseColor, strokeWidth: isSelected ? 3 : 2 },
+        labelStyle: { fontSize: 11, fontWeight: 600, fill: textFill },
+        labelBgStyle: { fill: bgFill, stroke: bgStroke },
         labelBgPadding: [6, 3],
         labelBgBorderRadius: 4,
-        markerEnd: { type: MarkerType.ArrowClosed, color: isSelected ? '#7c3aed' : '#a78bfa' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: baseColor },
       }
     })
   }, [])
@@ -1926,26 +1951,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
 
   // Update edge styles when selection changes
   useEffect(() => {
-    setEdges(prev => {
-      return prev.map(edge => {
-        const srcIdx = parseInt(edge.source.replace('phase-', ''))
-        const tgtIdx = parseInt(edge.target.replace('phase-', ''))
-        const edgeKey = `${srcIdx}-${tgtIdx}`
-        const isSelected = selectedEdgeKey === edgeKey
-        // Recalculate label from rules
-        const ruleCount = vs.advancementRules.filter(r => r.sourcePhaseOrder === srcIdx + 1 && r.targetPhaseOrder === tgtIdx + 1).length
-        const label = isSelected ? `✏️ Top ${ruleCount}` : `Top ${ruleCount}`
-        return {
-          ...edge,
-          label,
-          style: { stroke: isSelected ? '#7c3aed' : '#a78bfa', strokeWidth: isSelected ? 3 : 2 },
-          labelStyle: { fontSize: 11, fontWeight: 600, fill: isSelected ? '#5b21b6' : '#6d28d9' },
-          labelBgStyle: { fill: isSelected ? '#ede9fe' : '#f5f3ff', stroke: isSelected ? '#8b5cf6' : '#c4b5fd' },
-          markerEnd: { type: MarkerType.ArrowClosed, color: isSelected ? '#7c3aed' : '#a78bfa' },
-        }
-      })
-    })
-  }, [selectedEdgeKey, vs.advancementRules, setEdges])
+    // Rebuild edges fully to pick up custom/default detection + selection styles
+    const newEdges = buildEdges(vs.advancementRules, vs.phases, selectedEdgeKey)
+    setEdges(newEdges)
+  }, [selectedEdgeKey, vs.advancementRules, vs.phases, setEdges, buildEdges])
 
   // When a connection is made, create advancement rules
   const onConnect = useCallback((params) => {
