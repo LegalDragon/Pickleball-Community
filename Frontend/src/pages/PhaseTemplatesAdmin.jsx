@@ -2372,6 +2372,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
       backgroundColor: '#f9fafb',
       width: imageWidth,
       height: imageHeight,
+      pixelRatio: 3,
       style: {
         width: `${imageWidth}px`,
         height: `${imageHeight}px`,
