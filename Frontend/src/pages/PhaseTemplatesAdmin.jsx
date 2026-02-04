@@ -861,6 +861,157 @@ const PaletteItem = ({ phaseType, label }) => {
   )
 }
 
+// Edge Config Panel — visual advancement rule editor
+const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules, onRulesChange, onClose }) => {
+  if (!sourcePhase || !targetPhase) return null
+
+  const srcOrder = sourceIdx + 1
+  const tgtOrder = targetIdx + 1
+  const connectionRules = rules.filter(r => r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder)
+  const isPools = sourcePhase.phaseType === 'Pools' && (parseInt(sourcePhase.poolCount) || 0) > 1
+  const poolCount = parseInt(sourcePhase.poolCount) || 1
+
+  const handleRegenerate = () => {
+    const slotsToAdvance = Math.min(
+      parseInt(sourcePhase.advancingSlotCount) || 1,
+      parseInt(targetPhase.incomingSlotCount) || 1
+    )
+    const newRules = []
+    if (isPools) {
+      const advPerPool = Math.max(1, Math.floor(slotsToAdvance / poolCount))
+      let slot = 1
+      for (let pool = 0; pool < poolCount; pool++) {
+        for (let pos = 1; pos <= advPerPool; pos++) {
+          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: slot++, sourcePoolIndex: pool })
+        }
+      }
+    } else {
+      for (let pos = 1; pos <= slotsToAdvance; pos++) {
+        newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+      }
+    }
+    const otherRules = rules.filter(r => !(r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder))
+    onRulesChange([...otherRules, ...newRules])
+  }
+
+  const handleUpdateRule = (ruleIdx, field, value) => {
+    // Find the actual index in the full rules array
+    let count = 0
+    const newRules = rules.map(r => {
+      if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
+        if (count === ruleIdx) {
+          count++
+          return { ...r, [field]: parseInt(value) || (field === 'sourcePoolIndex' ? null : 0) }
+        }
+        count++
+      }
+      return r
+    })
+    onRulesChange(newRules)
+  }
+
+  const handleAddRule = () => {
+    const maxSlot = connectionRules.reduce((max, r) => Math.max(max, r.targetSlotNumber || 0), 0)
+    const newRule = {
+      sourcePhaseOrder: srcOrder,
+      targetPhaseOrder: tgtOrder,
+      finishPosition: 1,
+      targetSlotNumber: maxSlot + 1,
+      sourcePoolIndex: isPools ? 0 : null
+    }
+    onRulesChange([...rules, newRule])
+  }
+
+  const handleRemoveRule = (ruleIdx) => {
+    let count = 0
+    const newRules = rules.filter(r => {
+      if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder) {
+        if (count === ruleIdx) { count++; return false }
+        count++
+      }
+      return true
+    })
+    onRulesChange(newRules)
+  }
+
+  return (
+    <div className="space-y-3 p-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <ArrowRight className="w-4 h-4 text-purple-600" />
+          Advancement Rules
+        </h4>
+        <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded">
+          <X className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      <div className="bg-purple-50 rounded-lg p-2 text-[11px] text-purple-700 space-y-0.5">
+        <div className="font-medium">{sourcePhase.name} → {targetPhase.name}</div>
+        <div>{sourcePhase.advancingSlotCount} advancing → {targetPhase.incomingSlotCount} incoming slots</div>
+      </div>
+
+      {/* Slot mappings */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium text-gray-500">Slot Mappings ({connectionRules.length})</span>
+          <button onClick={handleRegenerate}
+            className="text-[10px] text-purple-600 hover:text-purple-800 flex items-center gap-0.5">
+            <RefreshCw className="w-3 h-3" /> Regenerate
+          </button>
+        </div>
+
+        {connectionRules.length === 0 ? (
+          <div className="text-[11px] text-gray-400 text-center py-2">No rules. Click "Regenerate" or add manually.</div>
+        ) : (
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {connectionRules.map((rule, idx) => (
+              <div key={idx} className="flex items-center gap-1 bg-white border rounded p-1.5 text-[11px]">
+                {isPools && (
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-gray-400">Pool</span>
+                    <input type="number" min={0} value={rule.sourcePoolIndex ?? 0}
+                      onChange={e => handleUpdateRule(idx, 'sourcePoolIndex', e.target.value)}
+                      className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
+                  </div>
+                )}
+                <div className="flex flex-col">
+                  <span className="text-[9px] text-gray-400">Finish</span>
+                  <input type="number" min={1} value={rule.finishPosition}
+                    onChange={e => handleUpdateRule(idx, 'finishPosition', e.target.value)}
+                    className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
+                </div>
+                <ArrowRight className="w-3 h-3 text-gray-300 flex-shrink-0 mt-3" />
+                <div className="flex flex-col">
+                  <span className="text-[9px] text-gray-400">Slot</span>
+                  <input type="number" min={1} value={rule.targetSlotNumber}
+                    onChange={e => handleUpdateRule(idx, 'targetSlotNumber', e.target.value)}
+                    className="w-10 px-1 py-0.5 border rounded text-center text-[11px]" />
+                </div>
+                <button onClick={() => handleRemoveRule(idx)}
+                  className="ml-auto p-0.5 text-red-400 hover:text-red-600 mt-3">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={handleAddRule}
+          className="w-full flex items-center justify-center gap-1 px-2 py-1 text-[11px] text-purple-600 border border-purple-200 rounded hover:bg-purple-50">
+          <Plus className="w-3 h-3" /> Add Rule
+        </button>
+      </div>
+
+      <div className="text-[10px] text-gray-400 space-y-0.5 border-t pt-2">
+        <div>💡 <strong>Finish #</strong> = position in source phase</div>
+        <div>💡 <strong>Slot #</strong> = seed position in target phase</div>
+        {isPools && <div>💡 <strong>Pool #</strong> = 0-based pool index</div>}
+      </div>
+    </div>
+  )
+}
+
 // Config Panel for selected node
 const NodeConfigPanel = ({ phase, phaseIndex, onChange, onDelete }) => {
   if (!phase) return null
@@ -957,6 +1108,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   const reactFlowWrapper = useRef(null)
   const { screenToFlowPosition } = useReactFlow()
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState(null) // "srcIdx-tgtIdx"
 
   // Convert visualState phases to React Flow nodes
   const buildNodes = useCallback((phases) => {
@@ -976,7 +1128,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   }, [])
 
   // Convert advancement rules to React Flow edges
-  const buildEdges = useCallback((rules, phases) => {
+  const buildEdges = useCallback((rules, phases, selEdgeKey) => {
     const edgeMap = new Map()
     rules.forEach((rule) => {
       const key = `${rule.sourcePhaseOrder}-${rule.targetPhaseOrder}`
@@ -989,18 +1141,20 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
     return Array.from(edgeMap.values()).map(({ sourcePhaseOrder, targetPhaseOrder, count }) => {
       const srcPhase = phases[sourcePhaseOrder - 1]
       const label = srcPhase ? `Top ${count}` : `${count} slots`
+      const edgeKey = `${sourcePhaseOrder - 1}-${targetPhaseOrder - 1}`
+      const isSelected = selEdgeKey === edgeKey
       return {
         id: `e-${sourcePhaseOrder}-${targetPhaseOrder}`,
         source: `phase-${sourcePhaseOrder - 1}`,
         target: `phase-${targetPhaseOrder - 1}`,
         animated: true,
-        label,
-        style: { stroke: '#a78bfa' },
-        labelStyle: { fontSize: 11, fontWeight: 600, fill: '#6d28d9' },
-        labelBgStyle: { fill: '#f5f3ff', stroke: '#c4b5fd' },
+        label: isSelected ? `✏️ ${label}` : label,
+        style: { stroke: isSelected ? '#7c3aed' : '#a78bfa', strokeWidth: isSelected ? 3 : 2 },
+        labelStyle: { fontSize: 11, fontWeight: 600, fill: isSelected ? '#5b21b6' : '#6d28d9' },
+        labelBgStyle: { fill: isSelected ? '#ede9fe' : '#f5f3ff', stroke: isSelected ? '#8b5cf6' : '#c4b5fd' },
         labelBgPadding: [6, 3],
         labelBgBorderRadius: 4,
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#a78bfa' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isSelected ? '#7c3aed' : '#a78bfa' },
       }
     })
   }, [])
@@ -1057,6 +1211,29 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
       })
     })
   }, [vs, buildNodes, buildEdges, setNodes, setEdges])
+
+  // Update edge styles when selection changes
+  useEffect(() => {
+    setEdges(prev => {
+      return prev.map(edge => {
+        const srcIdx = parseInt(edge.source.replace('phase-', ''))
+        const tgtIdx = parseInt(edge.target.replace('phase-', ''))
+        const edgeKey = `${srcIdx}-${tgtIdx}`
+        const isSelected = selectedEdgeKey === edgeKey
+        // Recalculate label from rules
+        const ruleCount = vs.advancementRules.filter(r => r.sourcePhaseOrder === srcIdx + 1 && r.targetPhaseOrder === tgtIdx + 1).length
+        const label = isSelected ? `✏️ Top ${ruleCount}` : `Top ${ruleCount}`
+        return {
+          ...edge,
+          label,
+          style: { stroke: isSelected ? '#7c3aed' : '#a78bfa', strokeWidth: isSelected ? 3 : 2 },
+          labelStyle: { fontSize: 11, fontWeight: 600, fill: isSelected ? '#5b21b6' : '#6d28d9' },
+          labelBgStyle: { fill: isSelected ? '#ede9fe' : '#f5f3ff', stroke: isSelected ? '#8b5cf6' : '#c4b5fd' },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isSelected ? '#7c3aed' : '#a78bfa' },
+        }
+      })
+    })
+  }, [selectedEdgeKey, vs.advancementRules, setEdges])
 
   // When a connection is made, create advancement rules
   const onConnect = useCallback((params) => {
@@ -1132,10 +1309,20 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
   // Node selection
   const onNodeClick = useCallback((_, node) => {
     setSelectedNodeId(node.id)
+    setSelectedEdgeKey(null)
+  }, [])
+
+  // Edge selection — click edge to edit advancement rules
+  const onEdgeClick = useCallback((_, edge) => {
+    const srcIdx = parseInt(edge.source.replace('phase-', ''))
+    const tgtIdx = parseInt(edge.target.replace('phase-', ''))
+    setSelectedEdgeKey(`${srcIdx}-${tgtIdx}`)
+    setSelectedNodeId(null)
   }, [])
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null)
+    setSelectedEdgeKey(null)
   }, [])
 
   // Update phase config from panel
@@ -1206,7 +1393,52 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
       }
     }])
 
-    onChange({ ...vs, phases: [...vs.phases, newPhase] })
+    // Auto-connect to previous phase if one exists
+    const newPhases = [...vs.phases, newPhase]
+    let newRules = [...vs.advancementRules]
+    if (vs.phases.length > 0) {
+      const prevIdx = vs.phases.length - 1
+      const prevPhase = vs.phases[prevIdx]
+      const prevNodeId = `phase-${prevIdx}`
+      const srcOrder = prevIdx + 1
+      const tgtOrder = order
+
+      // Add visual edge
+      setEdges(eds => addEdge({
+        source: prevNodeId,
+        target: newNodeId,
+        animated: true,
+        label: `Top ${parseInt(prevPhase.advancingSlotCount) || 1}`,
+        style: { stroke: '#a78bfa' },
+        labelStyle: { fontSize: 11, fontWeight: 600, fill: '#6d28d9' },
+        labelBgStyle: { fill: '#f5f3ff', stroke: '#c4b5fd' },
+        labelBgPadding: [6, 3],
+        labelBgBorderRadius: 4,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#a78bfa' },
+      }, eds))
+
+      // Generate default advancement rules (slot-matched)
+      const slotsToAdvance = Math.min(
+        parseInt(prevPhase.advancingSlotCount) || 1,
+        parseInt(newPhase.incomingSlotCount) || 1
+      )
+      if (prevPhase.phaseType === 'Pools' && (parseInt(prevPhase.poolCount) || 0) > 1) {
+        const poolCount = parseInt(prevPhase.poolCount)
+        const advPerPool = Math.max(1, Math.floor(slotsToAdvance / poolCount))
+        let slot = 1
+        for (let pool = 0; pool < poolCount; pool++) {
+          for (let pos = 1; pos <= advPerPool; pos++) {
+            newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: slot++, sourcePoolIndex: pool })
+          }
+        }
+      } else {
+        for (let pos = 1; pos <= slotsToAdvance; pos++) {
+          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+        }
+      }
+    }
+
+    onChange({ ...vs, phases: newPhases, advancementRules: newRules })
   }, [vs, onChange, screenToFlowPosition, setNodes])
 
   // Auto-layout button
@@ -1308,6 +1540,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
           onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
           onPaneClick={onPaneClick}
           onDragOver={onDragOver}
           onDrop={onDrop}
@@ -1351,15 +1584,30 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         </ReactFlow>
       </div>
 
-      {/* Right Config Panel */}
-      {selectedPhase && (
-        <div className="w-64 border-l bg-gray-50 overflow-y-auto flex-shrink-0">
-          <NodeConfigPanel
-            phase={selectedPhase}
-            phaseIndex={selectedPhaseIdx}
-            onChange={handlePhaseUpdate}
-            onDelete={handleDeletePhase}
-          />
+      {/* Right Config Panel — shows phase config OR edge/advancement config */}
+      {(selectedPhase || selectedEdgeKey) && (
+        <div className="w-72 border-l bg-gray-50 overflow-y-auto flex-shrink-0">
+          {selectedPhase ? (
+            <NodeConfigPanel
+              phase={selectedPhase}
+              phaseIndex={selectedPhaseIdx}
+              onChange={handlePhaseUpdate}
+              onDelete={handleDeletePhase}
+            />
+          ) : selectedEdgeKey ? (() => {
+            const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
+            return (
+              <EdgeConfigPanel
+                sourcePhase={vs.phases[srcIdx]}
+                targetPhase={vs.phases[tgtIdx]}
+                sourceIdx={srcIdx}
+                targetIdx={tgtIdx}
+                rules={vs.advancementRules}
+                onRulesChange={(newRules) => onChange({ ...vs, advancementRules: newRules })}
+                onClose={() => setSelectedEdgeKey(null)}
+              />
+            )
+          })() : null}
         </div>
       )}
     </div>
