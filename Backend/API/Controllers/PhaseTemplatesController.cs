@@ -347,7 +347,7 @@ public class PhaseTemplatesController : ControllerBase
     }
 
     /// <summary>
-    /// Update a template (owner or Admin, cannot modify system templates)
+    /// Update a template (owner or Admin for user templates, Admin only for system templates)
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
@@ -357,14 +357,17 @@ public class PhaseTemplatesController : ControllerBase
         if (template == null)
             return NotFound("Template not found");
 
-        if (template.IsSystemTemplate)
-            return BadRequest("Cannot modify system templates");
-
         // Check ownership: must be admin or the creator
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole("Admin");
         int.TryParse(userIdClaim, out var currentUserId);
-        if (!isAdmin && template.CreatedByUserId != currentUserId)
+
+        // System templates can only be modified by admins
+        if (template.IsSystemTemplate && !isAdmin)
+            return BadRequest("Only admins can modify system templates");
+
+        // Non-system templates: must be admin or creator
+        if (!template.IsSystemTemplate && !isAdmin && template.CreatedByUserId != currentUserId)
             return Forbid();
 
         // Validate JSON structure
@@ -413,7 +416,7 @@ public class PhaseTemplatesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete (deactivate) a template (owner or Admin, cannot delete system templates)
+    /// Delete (deactivate) a template (owner or Admin for user templates, Admin only for system templates)
     /// </summary>
     [HttpDelete("{id}")]
     [Authorize]
@@ -423,14 +426,17 @@ public class PhaseTemplatesController : ControllerBase
         if (template == null)
             return NotFound("Template not found");
 
-        if (template.IsSystemTemplate)
-            return BadRequest("Cannot delete system templates");
-
         // Check ownership: must be admin or the creator
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole("Admin");
         int.TryParse(userIdClaim, out var currentUserId);
-        if (!isAdmin && template.CreatedByUserId != currentUserId)
+
+        // System templates can only be deleted by admins
+        if (template.IsSystemTemplate && !isAdmin)
+            return BadRequest("Only admins can delete system templates");
+
+        // Non-system templates: must be admin or creator
+        if (!template.IsSystemTemplate && !isAdmin && template.CreatedByUserId != currentUserId)
             return Forbid();
 
         template.IsActive = false;
