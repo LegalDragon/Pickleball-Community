@@ -72,7 +72,7 @@ BEGIN
     WHERE DataQuality = 0
       AND (GPSLat IS NULL OR GPSLng IS NULL
            OR LTRIM(RTRIM(GPSLat)) = '' OR LTRIM(RTRIM(GPSLng)) = ''
-           OR TRY_CAST(GPSLat AS FLOAT) IS NULL OR TRY_CAST(GPSLng AS FLOAT) IS NULL);
+           OR CASE WHEN ISNUMERIC(GPSLat) = 1 THEN CAST(GPSLat AS FLOAT) ELSE NULL END IS NULL OR CASE WHEN ISNUMERIC(GPSLng) = 1 THEN CAST(GPSLng AS FLOAT) ELSE NULL END IS NULL);
     SET @FlaggedCount = @FlaggedCount + @@ROWCOUNT;
 
     -- Flag venues with 0 indoor + 0 outdoor courts
@@ -88,14 +88,14 @@ BEGIN
     UPDATE Venues
     SET DataQuality = 2
     WHERE DataQuality = 0
-      AND TRY_CAST(GPSLat AS FLOAT) IS NOT NULL
-      AND TRY_CAST(GPSLng AS FLOAT) IS NOT NULL
+      AND CASE WHEN ISNUMERIC(GPSLat) = 1 THEN CAST(GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+      AND CASE WHEN ISNUMERIC(GPSLng) = 1 THEN CAST(GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
       AND (
           -- Null Island (0,0)
-          (ABS(TRY_CAST(GPSLat AS FLOAT)) < 0.1 AND ABS(TRY_CAST(GPSLng AS FLOAT)) < 0.1)
+          (ABS(CASE WHEN ISNUMERIC(GPSLat) = 1 THEN CAST(GPSLat AS FLOAT) ELSE NULL END) < 0.1 AND ABS(CASE WHEN ISNUMERIC(GPSLng) = 1 THEN CAST(GPSLng AS FLOAT) ELSE NULL END) < 0.1)
           -- Out of range
-          OR TRY_CAST(GPSLat AS FLOAT) > 90 OR TRY_CAST(GPSLat AS FLOAT) < -90
-          OR TRY_CAST(GPSLng AS FLOAT) > 180 OR TRY_CAST(GPSLng AS FLOAT) < -180
+          OR CASE WHEN ISNUMERIC(GPSLat) = 1 THEN CAST(GPSLat AS FLOAT) ELSE NULL END > 90 OR CASE WHEN ISNUMERIC(GPSLat) = 1 THEN CAST(GPSLat AS FLOAT) ELSE NULL END < -90
+          OR CASE WHEN ISNUMERIC(GPSLng) = 1 THEN CAST(GPSLng AS FLOAT) ELSE NULL END > 180 OR CASE WHEN ISNUMERIC(GPSLng) = 1 THEN CAST(GPSLng AS FLOAT) ELSE NULL END < -180
       );
     SET @FlaggedCount = @FlaggedCount + @@ROWCOUNT;
 
@@ -134,19 +134,19 @@ BEGIN
         v.Indoor_Num AS IndoorNum,
         v.Outdoor_Num AS OutdoorNum,
         CASE WHEN v.Lights = 'Y' THEN 1 ELSE 0 END AS HasLights,
-        TRY_CAST(v.GPSLat AS FLOAT) AS Latitude,
-        TRY_CAST(v.GPSLng AS FLOAT) AS Longitude,
+        CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END AS Latitude,
+        CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END AS Longitude,
         v.DataQuality,
         v.VerificationCount,
         v.LastVerifiedAt,
         CASE
             WHEN @UserLat IS NOT NULL AND @UserLng IS NOT NULL
-                 AND TRY_CAST(v.GPSLat AS FLOAT) IS NOT NULL
-                 AND TRY_CAST(v.GPSLng AS FLOAT) IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
             THEN 3959 * ACOS(
-                COS(RADIANS(@UserLat)) * COS(RADIANS(TRY_CAST(v.GPSLat AS FLOAT))) *
-                COS(RADIANS(TRY_CAST(v.GPSLng AS FLOAT)) - RADIANS(@UserLng)) +
-                SIN(RADIANS(@UserLat)) * SIN(RADIANS(TRY_CAST(v.GPSLat AS FLOAT)))
+                COS(RADIANS(@UserLat)) * COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END)) *
+                COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END) - RADIANS(@UserLng)) +
+                SIN(RADIANS(@UserLat)) * SIN(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END))
             )
             ELSE NULL
         END AS Distance,
@@ -162,26 +162,26 @@ BEGIN
         -- Exclude rejected
         AND v.DataQuality <> 3
         -- Has valid coordinates for distance calc
-        AND TRY_CAST(v.GPSLat AS FLOAT) IS NOT NULL
-        AND TRY_CAST(v.GPSLng AS FLOAT) IS NOT NULL
+        AND CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+        AND CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
         -- Within radius if location provided
         AND (
             @UserLat IS NULL OR @UserLng IS NULL
             OR 3959 * ACOS(
-                COS(RADIANS(@UserLat)) * COS(RADIANS(TRY_CAST(v.GPSLat AS FLOAT))) *
-                COS(RADIANS(TRY_CAST(v.GPSLng AS FLOAT)) - RADIANS(@UserLng)) +
-                SIN(RADIANS(@UserLat)) * SIN(RADIANS(TRY_CAST(v.GPSLat AS FLOAT)))
+                COS(RADIANS(@UserLat)) * COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END)) *
+                COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END) - RADIANS(@UserLng)) +
+                SIN(RADIANS(@UserLat)) * SIN(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END))
             ) <= @RadiusMiles
         )
     ORDER BY
         CASE
             WHEN @UserLat IS NOT NULL AND @UserLng IS NOT NULL
-                 AND TRY_CAST(v.GPSLat AS FLOAT) IS NOT NULL
-                 AND TRY_CAST(v.GPSLng AS FLOAT) IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
             THEN 3959 * ACOS(
-                COS(RADIANS(@UserLat)) * COS(RADIANS(TRY_CAST(v.GPSLat AS FLOAT))) *
-                COS(RADIANS(TRY_CAST(v.GPSLng AS FLOAT)) - RADIANS(@UserLng)) +
-                SIN(RADIANS(@UserLat)) * SIN(RADIANS(TRY_CAST(v.GPSLat AS FLOAT)))
+                COS(RADIANS(@UserLat)) * COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END)) *
+                COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END) - RADIANS(@UserLng)) +
+                SIN(RADIANS(@UserLat)) * SIN(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END))
             )
             ELSE 999999
         END ASC
@@ -242,8 +242,8 @@ BEGIN
             v.Outdoor_Num AS OutdoorNum,
             v.Covered_Num AS CoveredNum,
             CASE WHEN v.Lights = 'Y' THEN 1 ELSE 0 END AS HasLights,
-            TRY_CAST(v.GPSLat AS FLOAT) AS Latitude,
-            TRY_CAST(v.GPSLng AS FLOAT) AS Longitude,
+            CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END AS Latitude,
+            CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END AS Longitude,
             v.VenueTypeId,
             v.DataQuality,
             v.LastVerifiedAt,
@@ -251,12 +251,12 @@ BEGIN
             -- Distance calculation
             CASE
                 WHEN @UserLat IS NOT NULL AND @UserLng IS NOT NULL
-                     AND TRY_CAST(v.GPSLat AS FLOAT) IS NOT NULL
-                     AND TRY_CAST(v.GPSLng AS FLOAT) IS NOT NULL
+                     AND CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+                     AND CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
                 THEN 3959 * ACOS(
-                    COS(RADIANS(@UserLat)) * COS(RADIANS(TRY_CAST(v.GPSLat AS FLOAT))) *
-                    COS(RADIANS(TRY_CAST(v.GPSLng AS FLOAT)) - RADIANS(@UserLng)) +
-                    SIN(RADIANS(@UserLat)) * SIN(RADIANS(TRY_CAST(v.GPSLat AS FLOAT)))
+                    COS(RADIANS(@UserLat)) * COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END)) *
+                    COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END) - RADIANS(@UserLng)) +
+                    SIN(RADIANS(@UserLat)) * SIN(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END))
                 )
                 ELSE NULL
             END AS Distance,
@@ -366,20 +366,20 @@ BEGIN
         v.Outdoor_Num AS OutdoorNum,
         v.Covered_Num AS CoveredNum,
         CASE WHEN v.Lights = 'Y' THEN 1 ELSE 0 END AS HasLights,
-        TRY_CAST(v.GPSLat AS FLOAT) AS Latitude,
-        TRY_CAST(v.GPSLng AS FLOAT) AS Longitude,
+        CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END AS Latitude,
+        CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END AS Longitude,
         v.VenueTypeId,
         v.DataQuality,
         v.LastVerifiedAt,
         v.VerificationCount,
         CASE
             WHEN @UserLat IS NOT NULL AND @UserLng IS NOT NULL
-                 AND TRY_CAST(v.GPSLat AS FLOAT) IS NOT NULL
-                 AND TRY_CAST(v.GPSLng AS FLOAT) IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END IS NOT NULL
+                 AND CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END IS NOT NULL
             THEN 3959 * ACOS(
-                COS(RADIANS(@UserLat)) * COS(RADIANS(TRY_CAST(v.GPSLat AS FLOAT))) *
-                COS(RADIANS(TRY_CAST(v.GPSLng AS FLOAT)) - RADIANS(@UserLng)) +
-                SIN(RADIANS(@UserLat)) * SIN(RADIANS(TRY_CAST(v.GPSLat AS FLOAT)))
+                COS(RADIANS(@UserLat)) * COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END)) *
+                COS(RADIANS(CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END) - RADIANS(@UserLng)) +
+                SIN(RADIANS(@UserLat)) * SIN(RADIANS(CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END))
             )
             ELSE NULL
         END AS Distance
@@ -490,8 +490,8 @@ BEGIN
         v.DataQuality,
         v.VerificationCount,
         v.LastVerifiedAt,
-        TRY_CAST(v.GPSLat AS FLOAT) AS Latitude,
-        TRY_CAST(v.GPSLng AS FLOAT) AS Longitude,
+        CASE WHEN ISNUMERIC(v.GPSLat) = 1 THEN CAST(v.GPSLat AS FLOAT) ELSE NULL END AS Latitude,
+        CASE WHEN ISNUMERIC(v.GPSLng) = 1 THEN CAST(v.GPSLng AS FLOAT) ELSE NULL END AS Longitude,
         ISNULL(agg.NotACourtCount, 0) AS NotACourtCount,
         ISNULL(agg.ConfirmationCount, 0) AS ConfirmationCount,
         (SELECT COUNT(*) FROM Venues WHERE DataQuality = 2) AS TotalCount
