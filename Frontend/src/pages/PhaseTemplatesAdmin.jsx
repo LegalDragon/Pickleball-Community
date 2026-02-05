@@ -2584,6 +2584,165 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
             })
           )}
         </div>
+        </>) : (
+        /* ══ Community Templates Tab ══ */
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-500">
+              Templates created by Tournament Directors. Review and promote to system templates.
+            </p>
+            <button
+              onClick={loadCommunityTemplates}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${communityLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {communityError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertTriangle className="w-5 h-5" />
+              {communityError}
+              <button onClick={loadCommunityTemplates} className="ml-auto text-sm underline">Retry</button>
+            </div>
+          )}
+
+          {communityLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400 mr-2" />
+              <span className="text-gray-500">Loading community templates...</span>
+            </div>
+          ) : communityTemplates.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border">
+              <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-lg font-medium text-gray-700 mb-1">No community templates yet</h3>
+              <p className="text-sm text-gray-500">When Tournament Directors create their own templates, they'll appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {communityTemplates.map(template => {
+                const CategoryIcon = getCategoryIcon(template.category)
+                const isExpanded = expandedCommunity[template.id]
+                const isCopying = copyingId === template.id
+                const justCopied = copySuccess === template.id
+
+                return (
+                  <div key={template.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-lg bg-green-100">
+                            <CategoryIcon className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                                User Template
+                              </span>
+                              {template.copiedToSystemId && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                  Already in System
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              {template.description || 'No description'}
+                            </p>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-500 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <Users className="w-4 h-4" />
+                                {template.minUnits}-{template.maxUnits} teams
+                              </span>
+                              {template.diagramText && (
+                                <span className="flex items-center gap-1">
+                                  <ArrowRight className="w-4 h-4" />
+                                  {template.diagramText}
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-400">
+                                by {template.creatorName || template.createdByUserId || 'Unknown'}
+                              </span>
+                              {template.createdAt && (
+                                <span className="text-xs text-gray-400">
+                                  {new Date(template.createdAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* Copy to System */}
+                          <button
+                            onClick={() => handleCopyToSystem(template)}
+                            disabled={isCopying}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                              justCopied
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                            } disabled:opacity-50`}
+                            title="Copy to system templates"
+                          >
+                            {isCopying ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : justCopied ? (
+                              <Check className="w-3.5 h-3.5" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {justCopied ? 'Copied!' : 'Copy to System'}
+                          </button>
+                          {/* Preview toggle */}
+                          <button
+                            onClick={() => setExpandedCommunity(prev => ({ ...prev, [template.id]: !prev[template.id] }))}
+                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                            title="Preview structure"
+                          >
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Preview */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t bg-gray-50">
+                        <div className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Phase Structure</h4>
+                            {renderStructurePreview(template)}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Raw JSON</h4>
+                            <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded-lg overflow-auto max-h-48">
+                              {typeof template.structureJson === 'string'
+                                ? template.structureJson
+                                : JSON.stringify(template.structureJson, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                        {template.tags && (
+                          <div className="mt-3 pt-3 border-t">
+                            <span className="text-xs text-gray-500">Tags: </span>
+                            {template.tags.split(',').map((tag, i) => (
+                              <span key={i} className="inline-block px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full mr-1">
+                                {tag.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        )}
       </div>
 
       {/* Full-Page Editor */}
