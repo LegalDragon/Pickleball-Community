@@ -39,6 +39,10 @@ public class UserProfileDto
     public bool IsOnline { get; set; }
     public DateTime? LastActiveAt { get; set; }
 
+    // Push notification status (admin only)
+    public bool HasPushSubscription { get; set; }
+    public int PushSubscriptionCount { get; set; }
+
     // Verification status
     public bool EmailVerified { get; set; }
     public bool PhoneVerified { get; set; }

@@ -873,6 +873,13 @@ public class UsersController : ControllerBase
         {
             var connectedUserIds = NotificationHub.GetAllConnectedUserIds();
 
+            // Get push subscription counts per user
+            var pushSubCounts = await _context.PushSubscriptions
+                .Where(ps => ps.IsActive)
+                .GroupBy(ps => ps.UserId)
+                .Select(g => new { UserId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
             var users = await _context.Users
                 .Select(u => new UserProfileDto
                 {
@@ -907,10 +914,12 @@ public class UsersController : ControllerBase
                 })
                 .ToListAsync();
 
-            // Set IsOnline based on SignalR connections (done in-memory since it's static state)
+            // Set IsOnline and push subscription status (done in-memory since it's static/cached state)
             foreach (var user in users)
             {
                 user.IsOnline = connectedUserIds.Contains(user.Id);
+                user.PushSubscriptionCount = pushSubCounts.TryGetValue(user.Id, out var count) ? count : 0;
+                user.HasPushSubscription = user.PushSubscriptionCount > 0;
             }
 
             return Ok(new ApiResponse<List<UserProfileDto>>
