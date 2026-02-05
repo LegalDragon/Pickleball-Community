@@ -7575,6 +7575,13 @@ export default function TournamentManage() {
                   Auto-Schedule All
                 </button>
                 <Link
+                  to={`/tournament/${eventId}/schedule-dashboard`}
+                  className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 flex items-center gap-2 text-sm font-medium"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Schedule Dashboard
+                </Link>
+                <Link
                   to={`/event/${eventId}/auto-scheduler`}
                   className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm font-medium"
                 >

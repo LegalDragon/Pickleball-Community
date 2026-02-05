@@ -27,6 +27,7 @@ import EventRegistration from './pages/EventRegistration'
 import TournamentManage from './pages/TournamentManage'
 import CourtPlanning from './pages/CourtPlanning'
 import AutoScheduler from './pages/AutoScheduler'
+import TournamentScheduleDashboard from './pages/TournamentScheduleDashboard'
 import EventMassNotification from './pages/EventMassNotification'
 import GameDayManage from './pages/GameDayManage'
 import TournamentGameDay from './pages/TournamentGameDay'
@@ -103,6 +104,11 @@ function App() {
       <Route path="/event/:eventId/auto-scheduler" element={
         <ProtectedRoute>
           <AutoScheduler />
+        </ProtectedRoute>
+      } />
+      <Route path="/tournament/:eventId/schedule-dashboard" element={
+        <ProtectedRoute>
+          <TournamentScheduleDashboard />
         </ProtectedRoute>
       } />
       <Route path="/event/:eventId/notifications" element={
