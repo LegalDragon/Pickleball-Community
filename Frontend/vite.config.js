@@ -2,7 +2,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "url";
 import { VitePWA } from 'vite-plugin-pwa';
+import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
 
+// Auto-generate cache-busting hash from push-handler.js content
+const pushHandlerHash = createHash('md5')
+  .update(readFileSync('./public/push-handler.js', 'utf-8'))
+  .digest('hex')
+  .slice(0, 8);
 
 export default defineConfig({
   base: "/",
@@ -23,7 +30,8 @@ export default defineConfig({
       injectRegister: false,
       workbox: {
         // Import push notification handlers into the service worker
-        importScripts: ['/push-handler.js?v=2'],
+        // Hash auto-generated from file content — changes when push-handler.js changes
+        importScripts: [`/push-handler.js?v=${pushHandlerHash}`],
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
