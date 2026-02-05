@@ -1,0 +1,39 @@
+name: Run Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_file:
+        description: 'Migration file path (relative to repo root)'
+        required: true
+        default: 'Backend/API/Scripts/archives/Migration_150_VenueDataQuality.sql'
+      database:
+        description: 'Database name'
+        required: false
+        default: 'PickleballCommunity'
+
+jobs:
+  run:
+    name: Run Migration
+    runs-on: [self-hosted, windows, iis]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Migration File
+        shell: powershell
+        run: |
+          $db = "${{ github.event.inputs.database }}"
+          $file = "${{ github.event.inputs.migration_file }}"
+          Write-Host "Running migration file: $file on database: $db"
+          if (-not (Test-Path $file)) {
+            Write-Host "ERROR: File not found: $file"
+            exit 1
+          }
+          try {
+            Invoke-Sqlcmd -InputFile $file -Database $db -ServerInstance "localhost" -QueryTimeout 600
+            Write-Host "Migration completed successfully."
+          } catch {
+            Write-Host "Migration Error: $($_.Exception.Message)"
+            exit 1
+          }
