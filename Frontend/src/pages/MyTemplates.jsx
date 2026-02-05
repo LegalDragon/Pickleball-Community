@@ -6,7 +6,6 @@ import {
   Code, Save, GitBranch, Trophy, Users, Hash, Tag, FileJson,
   Info, LayoutList, Lightbulb, ArrowLeft, Search, Settings
 } from 'lucide-react'
-import Navigation from '../components/ui/Navigation'
 
 // Import shared constants, helpers, and the reusable editor
 import {
@@ -130,7 +129,7 @@ const MyTemplates = () => {
   // ═══ Editor View ═══
   if (editing) return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation/>
+      
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex items-center justify-between mb-6">
           <button onClick={()=>setEditing(null)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
@@ -189,7 +188,7 @@ const MyTemplates = () => {
   // ═══ List View ═══
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation/>
+      
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div><h1 className="text-2xl font-bold text-gray-900">My Templates</h1>
