@@ -53,6 +53,7 @@ export default function TournamentManage() {
 
   // Schedule generation state
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
+  const [assigningNumbers, setAssigningNumbers] = useState(false);
 
   // Schedule display state
   const [schedule, setSchedule] = useState(null);

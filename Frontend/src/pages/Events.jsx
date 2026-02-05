@@ -336,13 +336,6 @@ export default function Events() {
       const response = await tournamentApi.respondToJoinRequest(requestId, accept);
       if (response.success) {
         loadMyUnits();
-        // Also reload the current event to update myRegistrations
-        if (event?.id) {
-          const updatedEventResponse = await eventsApi.getEvent(event.id);
-          if (updatedEventResponse.success) {
-            setEvent(updatedEventResponse.data);
-          }
-        }
         toast.success(accept ? 'Player added to your team!' : 'Request declined');
         // Display any warnings (e.g., waitlist notification)
         if (response.warnings && response.warnings.length > 0) {
@@ -1619,7 +1612,7 @@ export default function Events() {
   );
 }
 
-function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = false }) {
+function EventCard({ event, formatDate, formatTime, formatPrice, onViewDetails, showManage = false }) {
   return (
     <div
       onClick={onViewDetails}
@@ -1726,6 +1719,7 @@ function EventCard({ event, formatDate, formatTime, onViewDetails, showManage = 
 }
 
 function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user, formatDate, formatTime, formatPrice, teamUnits = [], skillLevels = [], ageGroups = [], onClose, onUpdate }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(false);
   const [registeringDivision, setRegisteringDivision] = useState(null);
@@ -4188,13 +4182,8 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                                           const response = await tournamentApi.updateJoinMethod(reg.unitId, newMethod);
                                           if (response.success) {
                                             toast.success(response.message || 'Join method updated');
-                                            // Update local state
-                                            setEvent(prev => ({
-                                              ...prev,
-                                              myRegistrations: prev.myRegistrations.map(r =>
-                                                r.unitId === reg.unitId ? { ...r, joinMethod: newMethod } : r
-                                              )
-                                            }));
+                                            // Refresh from parent
+                                            onUpdate?.();
                                           } else {
                                             toast.error(response.message || 'Failed to update');
                                           }
@@ -6630,7 +6619,7 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
               <DivisionFeesEditor
                 divisionId={editingDivision.id}
                 divisionFee={editingDivision.divisionFee || 0}
-                onFeesChange={() => loadEventDetails(event.id)}
+                onFeesChange={() => onUpdate?.()}
               />
 
               {/* Schedule Configuration Link */}
@@ -6704,13 +6693,9 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
         }}
         registration={selectedPaymentReg}
         event={selectedPaymentEvent || event}
-        onPaymentUpdated={(paymentInfo) => {
-          // Update the registration in myRegistrations with new payment info
-          onUpdate();
-          // Also refresh my events if payment was from there
-          if (selectedPaymentEvent) {
-            loadMyEvents();
-          }
+        onPaymentUpdated={() => {
+          // Refresh event data after payment
+          onUpdate?.();
         }}
         userId={user?.id}
       />

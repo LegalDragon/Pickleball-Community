@@ -5,7 +5,7 @@ import {
   // Icons that can be assigned to event types
   Trophy, Medal, Award, Crown, Target, Flame, Swords, Shield,
   CalendarDays, CalendarCheck, CalendarClock, Timer,
-  Users2, UserPlus, UserCheck, User,
+  Users2, UserPlus, UserCheck, User, UsersRound,
   BookOpen, GraduationCap, Lightbulb, Sparkles, Star,
   PartyPopper, Heart, ThumbsUp, Smile, Music, Gift, Cake,
   Dumbbell, Activity, Bike, CircleDot, Compass, Mountain, Zap, Rocket,

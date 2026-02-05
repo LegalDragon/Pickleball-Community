@@ -1324,6 +1324,26 @@ function ClubDetailModal({ club, isAuthenticated, currentUserId, onClose, onJoin
   const [searchingVenues, setSearchingVenues] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(null);
 
+  // Geocode a single address using OpenStreetMap Nominatim
+  const geocodeAddress = async (city, state, country) => {
+    if (!city && !state) return null;
+    const addressParts = [city, state, country].filter(Boolean);
+    try {
+      const encodedAddress = encodeURIComponent(addressParts.join(', '));
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1`,
+        { headers: { 'User-Agent': 'PickleballCommunity/1.0' } }
+      );
+      const data = await response.json();
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+    } catch (err) {
+      console.error('Geocoding error:', err);
+    }
+    return null;
+  };
+
   // Sync clubData when club prop changes (important for logo/avatar display)
   useEffect(() => {
     setClubData(club);
