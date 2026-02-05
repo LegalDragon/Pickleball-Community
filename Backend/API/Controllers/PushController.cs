@@ -194,7 +194,7 @@ public class PushController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending test push notification");
-            return StatusCode(500, new { success = false, message = $"Failed to send test notification: {ex.Message}", detail = ex.ToString() });
+            return StatusCode(500, new { success = false, message = "Failed to send test notification" });
         }
     }
     /// <summary>
@@ -231,7 +231,7 @@ public class PushController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending admin push notification");
-            return StatusCode(500, new { success = false, message = $"Failed to send push notification: {ex.Message}", detail = ex.ToString() });
+            return StatusCode(500, new { success = false, message = "Failed to send push notification" });
         }
     }
 
