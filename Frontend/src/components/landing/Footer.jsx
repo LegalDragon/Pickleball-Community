@@ -40,23 +40,23 @@ const Footer = () => {
   };
 
   const footerLinks = {
-    quickLinks: [
-      { key: 'home', href: '/' },
-      { key: 'courses', href: '#' },
-      { key: 'coaches', href: '#' },
-      { key: 'pricing', href: '#' }
+    play: [
+      { key: 'events', href: '/events' },
+      { key: 'venues', href: '/venues' },
+      { key: 'clubs', href: '/clubs' },
+      { key: 'leagues', href: '/leagues' },
+      { key: 'instagame', href: '/instagame' }
     ],
-    resources: [
+    community: [
       { key: 'blog', href: '/blog' },
-      { key: 'trainingVideos', href: '#' },
-      { key: 'drills', href: '#' },
-      { key: 'strategyGuides', href: '#' },
-      { key: 'usaPickleballRules', href: 'https://usapickleball.org/what-is-pickleball/official-rules/', external: true }
+      { key: 'friends', href: '/friends' },
+      { key: 'videoRooms', href: '/rooms' }
     ],
-    contact: [
-      { key: 'support', href: '#' },
-      { key: 'becomeACoach', href: '#' },
-      { key: 'partnerships', href: '#' }
+    support: [
+      { key: 'faq', href: '/faq' },
+      { key: 'features', href: '/features' },
+      { key: 'feedback', href: '/feedback' },
+      { key: 'usaPickleballRules', href: 'https://usapickleball.org/what-is-pickleball/official-rules/', external: true }
     ],
     legal: [
       { key: 'privacyPolicy', href: 'https://shared.funtimepb.com/privacy-policy?site=community', external: true },
@@ -80,46 +80,42 @@ const Footer = () => {
             </div>
           </div>
           <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">{t('footer.quickLinks')}</h3>
+            <h3 className="text-xl font-bold mb-4">{t('footer.play')}</h3>
             <ul>
-              {footerLinks.quickLinks.map((link, index) => (
+              {footerLinks.play.map((link, index) => (
                 <li key={index}>
-                  {link.href !== '#' ? (
-                    <Link to={link.href}>{t(`footer.${link.key}`)}</Link>
-                  ) : (
-                    <a href="#">{t(`footer.${link.key}`)}</a>
-                  )}
+                  <Link to={link.href}>{t(`footer.${link.key}`)}</Link>
                 </li>
               ))}
             </ul>
           </div>
           <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">{t('footer.resources')}</h3>
+            <h3 className="text-xl font-bold mb-4">{t('footer.community')}</h3>
             <ul>
-              {footerLinks.resources.map((resource, index) => (
+              {footerLinks.community.map((link, index) => (
                 <li key={index}>
-                  {resource.external ? (
+                  <Link to={link.href}>{t(`footer.${link.key}`)}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="footer-column">
+            <h3 className="text-xl font-bold mb-4">{t('footer.support')}</h3>
+            <ul>
+              {footerLinks.support.map((link, index) => (
+                <li key={index}>
+                  {link.external ? (
                     <a
-                      href={resource.href}
+                      href={link.href}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {t(`footer.${resource.key}`)}
+                      {t(`footer.${link.key}`)}
                     </a>
-                  ) : resource.href !== '#' ? (
-                    <Link to={resource.href}>{t(`footer.${resource.key}`)}</Link>
                   ) : (
-                    <a href="#">{t(`footer.${resource.key}`)}</a>
+                    <Link to={link.href}>{t(`footer.${link.key}`)}</Link>
                   )}
                 </li>
-              ))}
-            </ul>
-          </div>
-          <div className="footer-column">
-            <h3 className="text-xl font-bold mb-4">{t('footer.contact')}</h3>
-            <ul>
-              {footerLinks.contact.map((contact, index) => (
-                <li key={index}><a href="#">{t(`footer.${contact.key}`)}</a></li>
               ))}
             </ul>
           </div>
