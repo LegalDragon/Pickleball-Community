@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from '
 import { tournamentApi } from '../services/api'
 import {
   Layers, Plus, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle,
-  Copy, ChevronDown, ChevronUp, Eye, Code, FileJson, Save, GitBranch,
+  Copy, ChevronDown, ChevronUp, Eye, EyeOff, Code, FileJson, Save, GitBranch,
   Trophy, Users, Hash, ArrowRight, Clock, Zap, Settings, Award, Move,
   LayoutGrid, List, Shuffle, Repeat, Grid3X3, Swords, Target, GripVertical,
   ArrowLeft, Info, Lightbulb, MousePointer, Link, ChevronRight
@@ -2216,15 +2216,37 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
     }
   }
 
-  // Delete (deactivate)
-  const handleDelete = async (template) => {
-    if (template.isSystemTemplate) {
-      alert('System templates cannot be deleted.')
+  // Toggle active status
+  const handleToggleActive = async (template) => {
+    const newActive = template.isActive === false ? true : false
+    const action = newActive ? 'enable' : 'disable'
+    
+    if (!confirm(`Are you sure you want to ${action} "${template.name}"?`)) {
       return
     }
 
-    if (!confirm(`Are you sure you want to delete "${template.name}"?`)) {
-      return
+    try {
+      await tournamentApi.updatePhaseTemplate(template.id, { isActive: newActive })
+      loadTemplates()
+    } catch (err) {
+      alert(err.message || `Failed to ${action} template`)
+    }
+  }
+
+  // Delete template
+  const handleDelete = async (template) => {
+    const confirmMsg = template.isSystemTemplate
+      ? `⚠️ WARNING: You are about to permanently delete the SYSTEM template "${template.name}".\n\nThis will affect all users. Type DELETE to confirm:`
+      : `Are you sure you want to delete "${template.name}"?`
+
+    if (template.isSystemTemplate) {
+      const input = prompt(confirmMsg)
+      if (input !== 'DELETE') {
+        if (input !== null) alert('Deletion cancelled. You must type DELETE to confirm.')
+        return
+      }
+    } else {
+      if (!confirm(confirmMsg)) return
     }
 
     try {
@@ -2518,7 +2540,24 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
                         >
                           <Copy className="w-4 h-4" />
                         </button>
-                        {!template.isSystemTemplate && (
+                        {template.isSystemTemplate ? (
+                          <>
+                            <button
+                              onClick={() => handleToggleActive(template)}
+                              className={`p-2 rounded-lg ${template.isActive !== false ? 'text-green-500 hover:text-red-600 hover:bg-red-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                              title={template.isActive !== false ? 'Disable template' : 'Enable template'}
+                            >
+                              {template.isActive !== false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(template)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Delete system template"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
                           <>
                             <button
                               onClick={() => handleEdit(template)}
