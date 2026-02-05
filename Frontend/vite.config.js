@@ -23,7 +23,7 @@ export default defineConfig({
       injectRegister: false,
       workbox: {
         // Import push notification handlers into the service worker
-        importScripts: ['/push-handler.js'],
+        importScripts: ['/push-handler.js?v=2'],
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
