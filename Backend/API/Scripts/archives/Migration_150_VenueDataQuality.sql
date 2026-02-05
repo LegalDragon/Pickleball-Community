@@ -48,7 +48,11 @@ GO
 -- Phase 1 & 4: Auto-Flag Stored Procedure
 -- ============================================================
 
-CREATE OR ALTER PROCEDURE sp_AutoFlagVenues
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_AutoFlagVenues')
+    DROP PROCEDURE sp_AutoFlagVenues
+GO
+
+CREATE PROCEDURE sp_AutoFlagVenues
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -107,7 +111,11 @@ GO
 -- Phase 3: Needs Verification Stored Procedure
 -- ============================================================
 
-CREATE OR ALTER PROCEDURE sp_GetNeedsVerification
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetNeedsVerification')
+    DROP PROCEDURE sp_GetNeedsVerification
+GO
+
+CREATE PROCEDURE sp_GetNeedsVerification
     @UserLat FLOAT = NULL,
     @UserLng FLOAT = NULL,
     @RadiusMiles FLOAT = 50,
@@ -459,7 +467,11 @@ GO
 -- Phase 4: Admin Flagged Venues Stored Procedure
 -- ============================================================
 
-CREATE OR ALTER PROCEDURE sp_GetFlaggedVenues
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetFlaggedVenues')
+    DROP PROCEDURE sp_GetFlaggedVenues
+GO
+
+CREATE PROCEDURE sp_GetFlaggedVenues
     @Page INT = 1,
     @PageSize INT = 20
 AS
