@@ -4,7 +4,7 @@ import { tournamentApi } from '../services/api'
 import {
   Layers, Plus, Edit2, Trash2, X, RefreshCw, AlertTriangle, Copy,
   Code, Save, GitBranch, Trophy, Users, Hash, Tag, FileJson,
-  Info, LayoutList, Lightbulb, ArrowLeft, Search, Settings
+  Info, LayoutList, Lightbulb, ArrowLeft, Search, Settings, Grid3X3, List
 } from 'lucide-react'
 
 // Import shared constants, helpers, and the reusable editor
@@ -13,6 +13,7 @@ import {
   parseStructureToVisual, serializeVisualToJson
 } from '../components/tournament/structureEditorConstants'
 import ListPhaseEditor from '../components/tournament/ListPhaseEditor'
+import { CanvasPhaseEditor } from './PhaseTemplatesAdmin'
 
 const DEFAULT_STRUCTURE = JSON.stringify({ phases:[{ name:'Main Bracket', phaseType:'SingleElimination',
   sortOrder:1, incomingSlotCount:8, advancingSlotCount:1, poolCount:0, bestOf:1, matchDurationMinutes:30 }], advancementRules:[] }, null, 2)
@@ -82,6 +83,7 @@ const MyTemplates = () => {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(null) // null | 'new' | template
   const [editorMode, setEditorMode] = useState('visual')
+  const [visualSubMode, setVisualSubMode] = useState('canvas') // 'canvas' | 'list'
   const [visualState, setVisualState] = useState(null)
   const [formData, setFormData] = useState({...EMPTY_FORM})
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -171,8 +173,28 @@ const MyTemplates = () => {
 
         {/* Structure */}
         <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2"><Layers className="w-5 h-5 text-purple-600"/>Structure</h2>
-          {editorMode==='visual'&&visualState?<ListPhaseEditor visualState={visualState} onChange={handleVisualChange}/>:(
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Layers className="w-5 h-5 text-purple-600"/>Structure</h2>
+            {editorMode==='visual'&&(
+              <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-lg">
+                <button onClick={()=>setVisualSubMode('canvas')} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${visualSubMode==='canvas'?'bg-white shadow text-purple-700':'text-gray-600 hover:text-gray-900'}`}>
+                  <Grid3X3 className="w-3.5 h-3.5"/>Canvas
+                </button>
+                <button onClick={()=>setVisualSubMode('list')} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${visualSubMode==='list'?'bg-white shadow text-purple-700':'text-gray-600 hover:text-gray-900'}`}>
+                  <List className="w-3.5 h-3.5"/>List
+                </button>
+              </div>
+            )}
+          </div>
+          {editorMode==='visual'&&visualState?(
+            visualSubMode==='canvas'?(
+              <div className="h-[500px] border rounded-lg overflow-hidden">
+                <CanvasPhaseEditor visualState={visualState} onChange={handleVisualChange}/>
+              </div>
+            ):(
+              <ListPhaseEditor visualState={visualState} onChange={handleVisualChange}/>
+            )
+          ):(
             <div><div className="flex items-center gap-2 mb-2"><FileJson className="w-4 h-4 text-gray-500"/><span className="text-sm text-gray-600">Raw JSON</span></div>
               <textarea value={formData.structureJson} onChange={e=>sf('structureJson',e.target.value)} rows={18}
                 className="w-full px-4 py-3 border rounded-lg font-mono text-sm bg-gray-50 focus:ring-2 focus:ring-purple-500"/></div>)}

@@ -2966,3 +2966,6 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
 }
 
 export default PhaseTemplatesAdmin
+
+// Export canvas components for reuse in MyTemplates
+export { CanvasPhaseEditor }
