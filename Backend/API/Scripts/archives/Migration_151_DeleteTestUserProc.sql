@@ -115,7 +115,8 @@ BEGIN
             UPDATE LeagueClubRequests SET ProcessedByUserId = NULL WHERE ProcessedByUserId = @UserId;
             
             -- Video review requests (accepted by)
-            UPDATE VideoReviewRequests SET AcceptedByCoachId = NULL WHERE AcceptedByCoachId = @UserId;
+            IF OBJECT_ID('VideoReviewRequests', 'U') IS NOT NULL
+                UPDATE VideoReviewRequests SET AcceptedByCoachId = NULL WHERE AcceptedByCoachId = @UserId;
             
             -- Release notes (UpdatedByUserId is nullable, CreatedByUserId is NOT NULL)
             UPDATE ReleaseNotes SET UpdatedByUserId = NULL WHERE UpdatedByUserId = @UserId;
