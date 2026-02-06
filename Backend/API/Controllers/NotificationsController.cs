@@ -359,6 +359,96 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Acknowledge a notification by token (public endpoint - no auth required)
+    /// User clicks this from push notification to confirm receipt
+    /// </summary>
+    [HttpPost("ack/{token}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AcknowledgeNotification(string token)
+    {
+        try
+        {
+            var notification = await _context.Notifications
+                .FirstOrDefaultAsync(n => n.AcknowledgmentToken == token && n.RequiresAcknowledgment);
+
+            if (notification == null)
+                return NotFound(new { success = false, message = "Notification not found or invalid token" });
+
+            if (notification.AcknowledgedAt.HasValue)
+            {
+                return Ok(new {
+                    success = true,
+                    message = "Already acknowledged",
+                    acknowledgedAt = notification.AcknowledgedAt,
+                    notification = new {
+                        id = notification.Id,
+                        title = notification.Title,
+                        message = notification.Message
+                    }
+                });
+            }
+
+            notification.AcknowledgedAt = DateTime.Now;
+            notification.IsRead = true;
+            notification.ReadAt = DateTime.Now;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Notification {Id} acknowledged via token", notification.Id);
+
+            return Ok(new {
+                success = true,
+                message = "Notification acknowledged",
+                acknowledgedAt = notification.AcknowledgedAt,
+                notification = new {
+                    id = notification.Id,
+                    title = notification.Title,
+                    message = notification.Message
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error acknowledging notification");
+            return StatusCode(500, new { success = false, message = "Failed to acknowledge notification" });
+        }
+    }
+
+    /// <summary>
+    /// Get pending acknowledgments for current user
+    /// </summary>
+    [HttpGet("pending-acks")]
+    public async Task<IActionResult> GetPendingAcknowledgments()
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (!userId.HasValue)
+                return Unauthorized(new { success = false, message = "Unauthorized" });
+
+            var pending = await _context.Notifications
+                .Where(n => n.UserId == userId.Value &&
+                           n.RequiresAcknowledgment &&
+                           !n.AcknowledgedAt.HasValue)
+                .OrderByDescending(n => n.CreatedAt)
+                .Select(n => new {
+                    id = n.Id,
+                    title = n.Title,
+                    message = n.Message,
+                    createdAt = n.CreatedAt,
+                    token = n.AcknowledgmentToken
+                })
+                .ToListAsync();
+
+            return Ok(new { success = true, data = pending });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting pending acknowledgments");
+            return StatusCode(500, new { success = false, message = "Failed to get pending acknowledgments" });
+        }
+    }
+
+    /// <summary>
     /// Delete all notifications
     /// </summary>
     [HttpDelete("all")]

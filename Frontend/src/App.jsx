@@ -7,6 +7,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 import ProfileCompletion from './pages/ProfileCompletion'
 import Notifications from './pages/Notifications'
+import NotificationAck from './pages/NotificationAck'
 import PlayerReview from './pages/PlayerReview'
 import MyCertificate from './pages/MyCertificate'
 import CertificationAdmin from './pages/CertificationAdmin'
@@ -365,6 +366,9 @@ function App() {
           <Profile />
         </ProtectedRoute>
       } />
+
+      {/* Public notification acknowledgment page */}
+      <Route path="/notification/ack/:token" element={<NotificationAck />} />
 
       <Route path="/notifications" element={
         <ProtectedRoute>

@@ -49,6 +49,28 @@ public interface IPushNotificationService
     /// Send push notification to all subscribed users
     /// </summary>
     Task<int> BroadcastAsync(string title, string body, string? url = null, string? icon = null);
+
+    /// <summary>
+    /// Send push notification that requires user acknowledgment ("Got it" button)
+    /// Creates a notification record and sends push with acknowledgment URL
+    /// </summary>
+    Task<(int notificationId, int sentCount)> SendWithAcknowledgmentAsync(
+        int userId,
+        string title,
+        string body,
+        string notificationType = "System",
+        string? referenceType = null,
+        int? referenceId = null);
+
+    /// <summary>
+    /// Acknowledge a notification by token
+    /// </summary>
+    Task<bool> AcknowledgeAsync(string token);
+
+    /// <summary>
+    /// Get pending acknowledgments for a user
+    /// </summary>
+    Task<List<Notification>> GetPendingAcknowledgmentsAsync(int userId);
 }
 
 /// <summary>
@@ -282,5 +304,83 @@ public class PushNotificationService : IPushNotificationService
             successCount, subscriptions.Count, title);
 
         return successCount;
+    }
+
+    /// <inheritdoc />
+    public async Task<(int notificationId, int sentCount)> SendWithAcknowledgmentAsync(
+        int userId,
+        string title,
+        string body,
+        string notificationType = "System",
+        string? referenceType = null,
+        int? referenceId = null)
+    {
+        // Generate secure acknowledgment token
+        var token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+
+        // Create notification record
+        var notification = new Notification
+        {
+            UserId = userId,
+            Type = notificationType,
+            Title = title,
+            Message = body,
+            RequiresAcknowledgment = true,
+            AcknowledgmentToken = token,
+            ReferenceType = referenceType,
+            ReferenceId = referenceId,
+            CreatedAt = DateTime.Now
+        };
+
+        _context.Notifications.Add(notification);
+        await _context.SaveChangesAsync();
+
+        // Build acknowledgment URL
+        var baseUrl = _configuration["SharedAuth:BaseUrl"]?.TrimEnd('/') ?? "https://pickleball.community";
+        var ackUrl = $"{baseUrl}/notification/ack/{token}";
+
+        // Send push with acknowledgment URL
+        var sentCount = await SendToUserAsync(userId, title, body, ackUrl);
+
+        _logger.LogInformation("Sent acknowledgment-required notification {Id} to user {UserId}: {Title}",
+            notification.Id, userId, title);
+
+        return (notification.Id, sentCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> AcknowledgeAsync(string token)
+    {
+        var notification = await _context.Notifications
+            .FirstOrDefaultAsync(n => n.AcknowledgmentToken == token && n.RequiresAcknowledgment);
+
+        if (notification == null)
+            return false;
+
+        if (notification.AcknowledgedAt.HasValue)
+        {
+            _logger.LogDebug("Notification {Id} already acknowledged", notification.Id);
+            return true; // Already acknowledged
+        }
+
+        notification.AcknowledgedAt = DateTime.Now;
+        notification.IsRead = true;
+        notification.ReadAt = DateTime.Now;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Notification {Id} acknowledged by user {UserId}", notification.Id, notification.UserId);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Notification>> GetPendingAcknowledgmentsAsync(int userId)
+    {
+        return await _context.Notifications
+            .Where(n => n.UserId == userId &&
+                       n.RequiresAcknowledgment &&
+                       !n.AcknowledgedAt.HasValue)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync();
     }
 }

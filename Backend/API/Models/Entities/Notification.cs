@@ -49,6 +49,22 @@ public class Notification
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
+    /// <summary>
+    /// If true, user must click "Got it" to acknowledge receipt
+    /// </summary>
+    public bool RequiresAcknowledgment { get; set; } = false;
+
+    /// <summary>
+    /// When the user acknowledged the notification
+    /// </summary>
+    public DateTime? AcknowledgedAt { get; set; }
+
+    /// <summary>
+    /// Secure token for acknowledgment URL (prevents spoofing)
+    /// </summary>
+    [MaxLength(64)]
+    public string? AcknowledgmentToken { get; set; }
+
     [ForeignKey("UserId")]
     public User? User { get; set; }
 
