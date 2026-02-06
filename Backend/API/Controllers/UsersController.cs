@@ -1938,6 +1938,101 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Admin: Delete a test user (removes from both PickleballCommunity and FTPBAuth)
+    /// </summary>
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<ApiResponse<DeleteUserResult>>> AdminDeleteUser(int id, [FromQuery] bool dryRun = true)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new ApiResponse<DeleteUserResult>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            // Safety check: Don't allow deleting yourself
+            var currentUserId = GetCurrentUserId();
+            if (currentUserId.HasValue && currentUserId.Value == id)
+            {
+                return BadRequest(new ApiResponse<DeleteUserResult>
+                {
+                    Success = false,
+                    Message = "You cannot delete your own account"
+                });
+            }
+
+            var result = new DeleteUserResult
+            {
+                UserId = id,
+                Email = user.Email,
+                Name = $"{user.FirstName} {user.LastName}".Trim(),
+                DryRun = dryRun
+            };
+
+            // Use raw SQL to call the stored procedure
+            var connection = _context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = "EXEC sp_DeleteTestUser @UserId = @userId, @DryRun = @dryRun, @Verbose = 0";
+                
+                var userIdParam = command.CreateParameter();
+                userIdParam.ParameterName = "@userId";
+                userIdParam.Value = id;
+                command.Parameters.Add(userIdParam);
+                
+                var dryRunParam = command.CreateParameter();
+                dryRunParam.ParameterName = "@dryRun";
+                dryRunParam.Value = dryRun ? 1 : 0;
+                command.Parameters.Add(dryRunParam);
+
+                await command.ExecuteNonQueryAsync();
+
+                result.Deleted = !dryRun;
+                result.Message = dryRun 
+                    ? $"Dry run complete. User '{result.Name}' ({result.Email}) would be deleted. Run with dryRun=false to actually delete."
+                    : $"User '{result.Name}' ({result.Email}) has been deleted from both databases.";
+
+                // Log the action
+                if (!dryRun && currentUserId.HasValue)
+                {
+                    _logger.LogWarning("Admin {AdminId} deleted user {UserId} ({Email})", 
+                        currentUserId.Value, id, user.Email);
+                }
+
+                return Ok(new ApiResponse<DeleteUserResult>
+                {
+                    Success = true,
+                    Message = result.Message,
+                    Data = result
+                });
+            }
+            finally
+            {
+                if (connection.State == System.Data.ConnectionState.Open)
+                    await connection.CloseAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting user {UserId}", id);
+            return StatusCode(500, new ApiResponse<DeleteUserResult>
+            {
+                Success = false,
+                Message = $"An error occurred while deleting user: {ex.Message}"
+            });
+        }
+    }
+
+    /// <summary>
     /// Admin: Update a user's phone number
     /// </summary>
     [HttpPut("{id}/admin-phone")]
@@ -2019,4 +2114,17 @@ public class SharedUserDto
     public string? LastName { get; set; }
     public string? Phone { get; set; }
     public string? ProfileImageUrl { get; set; }
+}
+
+/// <summary>
+/// Result of admin user deletion
+/// </summary>
+public class DeleteUserResult
+{
+    public int UserId { get; set; }
+    public string? Email { get; set; }
+    public string? Name { get; set; }
+    public bool DryRun { get; set; }
+    public bool Deleted { get; set; }
+    public string? Message { get; set; }
 }
