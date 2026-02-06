@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "lint": "eslint src/",
-    "build": "npm run lint || echo 'Lint completed with warnings/errors' && vite build",
+    "build": "npm run lint || echo 'Lint warnings/errors (fix later)' && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
