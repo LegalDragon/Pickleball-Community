@@ -562,6 +562,92 @@ public class EncounterController : ControllerBase
         encounter.Status = "Completed";
         encounter.CompletedAt = DateTime.UtcNow;
         encounter.UpdatedAt = DateTime.UtcNow;
+
+        // Auto-advance winner to next encounter (bracket progression)
+        if (encounter.WinnerUnitId.HasValue && encounter.WinnerNextEncounterId.HasValue && encounter.WinnerSlotPosition.HasValue)
+        {
+            var nextEncounter = await _context.EventEncounters.FindAsync(encounter.WinnerNextEncounterId.Value);
+            if (nextEncounter != null)
+            {
+                if (encounter.WinnerSlotPosition == 1)
+                {
+                    nextEncounter.Unit1Id = encounter.WinnerUnitId;
+                    // Also resolve the slot if it exists
+                    if (nextEncounter.Unit1SlotId.HasValue)
+                    {
+                        var slot = await _context.PhaseSlots.FindAsync(nextEncounter.Unit1SlotId.Value);
+                        if (slot != null)
+                        {
+                            slot.UnitId = encounter.WinnerUnitId;
+                            slot.IsResolved = true;
+                            slot.ResolvedAt = DateTime.UtcNow;
+                        }
+                    }
+                }
+                else
+                {
+                    nextEncounter.Unit2Id = encounter.WinnerUnitId;
+                    if (nextEncounter.Unit2SlotId.HasValue)
+                    {
+                        var slot = await _context.PhaseSlots.FindAsync(nextEncounter.Unit2SlotId.Value);
+                        if (slot != null)
+                        {
+                            slot.UnitId = encounter.WinnerUnitId;
+                            slot.IsResolved = true;
+                            slot.ResolvedAt = DateTime.UtcNow;
+                        }
+                    }
+                }
+                nextEncounter.UpdatedAt = DateTime.UtcNow;
+                _logger.LogInformation("Auto-advanced winner {WinnerId} from encounter {EncounterId} to encounter {NextEncounterId} slot {Slot}",
+                    encounter.WinnerUnitId, encounter.Id, nextEncounter.Id, encounter.WinnerSlotPosition);
+            }
+        }
+
+        // Auto-advance loser for double elimination brackets
+        if (encounter.WinnerUnitId.HasValue && encounter.LoserNextEncounterId.HasValue && encounter.LoserSlotPosition.HasValue)
+        {
+            var loserUnitId = encounter.Unit1Id == encounter.WinnerUnitId ? encounter.Unit2Id : encounter.Unit1Id;
+            if (loserUnitId.HasValue)
+            {
+                var loserNextEncounter = await _context.EventEncounters.FindAsync(encounter.LoserNextEncounterId.Value);
+                if (loserNextEncounter != null)
+                {
+                    if (encounter.LoserSlotPosition == 1)
+                    {
+                        loserNextEncounter.Unit1Id = loserUnitId;
+                        if (loserNextEncounter.Unit1SlotId.HasValue)
+                        {
+                            var slot = await _context.PhaseSlots.FindAsync(loserNextEncounter.Unit1SlotId.Value);
+                            if (slot != null)
+                            {
+                                slot.UnitId = loserUnitId;
+                                slot.IsResolved = true;
+                                slot.ResolvedAt = DateTime.UtcNow;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        loserNextEncounter.Unit2Id = loserUnitId;
+                        if (loserNextEncounter.Unit2SlotId.HasValue)
+                        {
+                            var slot = await _context.PhaseSlots.FindAsync(loserNextEncounter.Unit2SlotId.Value);
+                            if (slot != null)
+                            {
+                                slot.UnitId = loserUnitId;
+                                slot.IsResolved = true;
+                                slot.ResolvedAt = DateTime.UtcNow;
+                            }
+                        }
+                    }
+                    loserNextEncounter.UpdatedAt = DateTime.UtcNow;
+                    _logger.LogInformation("Auto-advanced loser {LoserId} from encounter {EncounterId} to encounter {NextEncounterId} slot {Slot}",
+                        loserUnitId, encounter.Id, loserNextEncounter.Id, encounter.LoserSlotPosition);
+                }
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         // Broadcast match completion

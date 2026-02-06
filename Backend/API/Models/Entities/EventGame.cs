@@ -54,6 +54,25 @@ public class EventGame
     /// </summary>
     public int? TournamentCourtId { get; set; }
 
+    // =====================================================
+    // Scheduling (planned vs actual times)
+    // =====================================================
+
+    /// <summary>
+    /// Planned/scheduled start time for this game
+    /// </summary>
+    public DateTime? ScheduledStartTime { get; set; }
+
+    /// <summary>
+    /// Planned/scheduled end time for this game
+    /// </summary>
+    public DateTime? ScheduledEndTime { get; set; }
+
+    /// <summary>
+    /// Estimated duration in minutes for this game
+    /// </summary>
+    public int? EstimatedDurationMinutes { get; set; }
+
     /// <summary>
     /// When game was assigned to court queue
     /// </summary>

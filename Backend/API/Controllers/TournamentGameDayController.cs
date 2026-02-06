@@ -2314,7 +2314,11 @@ public class TournamentGameDayController : ControllerBase
         // Fetch all encounters for the event in one query
         var allEncounters = await _context.EventEncounters
             .Where(e => e.EventId == eventId && e.Status != "Cancelled")
-            .Select(e => new { e.Id, e.DivisionId, e.PhaseId, e.Status, e.EstimatedStartTime, e.EstimatedEndTime })
+            .Select(e => new { 
+                e.Id, e.DivisionId, e.PhaseId, e.Status, 
+                e.ScheduledTime, e.EstimatedStartTime, e.EstimatedEndTime,
+                e.StartedAt, e.CompletedAt
+            })
             .ToListAsync();
 
         // Get phases
@@ -2363,6 +2367,18 @@ public class TournamentGameDayController : ControllerBase
         var totalEncounters = allEncounters.Count;
         var completedEncounters = allEncounters.Count(e => e.Status == "Completed");
 
+        // Calculate timing statistics
+        var scheduledEncounters = allEncounters.Where(e => e.ScheduledTime.HasValue).ToList();
+        var startedEncounters = allEncounters.Where(e => e.ScheduledTime.HasValue && e.StartedAt.HasValue).ToList();
+        
+        var delays = startedEncounters
+            .Select(e => (e.StartedAt!.Value - e.ScheduledTime!.Value).TotalMinutes)
+            .ToList();
+        
+        var matchesOnTime = delays.Count(d => d >= -5 && d <= 5);  // within 5 minutes
+        var matchesDelayed = delays.Count(d => d > 5);
+        var matchesAhead = delays.Count(d => d < -5);
+
         return Ok(new ApiResponse<EventProgressSummaryDto>
         {
             Success = true,
@@ -2374,7 +2390,17 @@ public class TournamentGameDayController : ControllerBase
                 CompletedEncounters = completedEncounters,
                 OverallCompletionPercentage = totalEncounters > 0
                     ? Math.Round((double)completedEncounters / totalEncounters * 100, 1) : 0,
-                Divisions = divisionSummaries
+                Divisions = divisionSummaries,
+                // Timing progress
+                MatchesWithScheduledTime = scheduledEncounters.Count,
+                MatchesOnTime = matchesOnTime,
+                MatchesDelayed = matchesDelayed,
+                MatchesAhead = matchesAhead,
+                AverageDelayMinutes = delays.Any() ? Math.Round(delays.Average(), 1) : null,
+                MaxDelayMinutes = delays.Any() ? Math.Round(delays.Max(), 1) : null,
+                CurrentTime = DateTime.UtcNow,
+                EarliestScheduledStart = scheduledEncounters.Min(e => e.ScheduledTime),
+                LatestScheduledEnd = allEncounters.Where(e => e.EstimatedEndTime.HasValue).Max(e => e.EstimatedEndTime)
             }
         });
     }
@@ -3070,6 +3096,17 @@ public class EventProgressSummaryDto
     public int CompletedEncounters { get; set; }
     public double OverallCompletionPercentage { get; set; }
     public List<DivisionProgressDto> Divisions { get; set; } = new();
+    
+    // Timing progress
+    public int MatchesWithScheduledTime { get; set; }
+    public int MatchesOnTime { get; set; }
+    public int MatchesDelayed { get; set; }
+    public int MatchesAhead { get; set; }
+    public double? AverageDelayMinutes { get; set; }
+    public double? MaxDelayMinutes { get; set; }
+    public DateTime? CurrentTime { get; set; }
+    public DateTime? EarliestScheduledStart { get; set; }
+    public DateTime? LatestScheduledEnd { get; set; }
 }
 
 public class DivisionProgressDto
