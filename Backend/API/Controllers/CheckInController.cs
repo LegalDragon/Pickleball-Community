@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
 using Pickleball.Community.Models.DTOs;
 using Pickleball.Community.Services;
 using Pickleball.Community.Controllers.Base;
+using Pickleball.Community.Hubs;
 
 namespace Pickleball.Community.Controllers;
 
@@ -18,6 +20,7 @@ public class CheckInController : EventControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly IEmailNotificationService _emailService;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
     public CheckInController(
         ApplicationDbContext context,
@@ -25,7 +28,8 @@ public class CheckInController : EventControllerBase
         IWaiverPdfService waiverPdfService,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        IEmailNotificationService emailService)
+        IEmailNotificationService emailService,
+        IHubContext<NotificationHub> hubContext)
         : base(context)
     {
         _logger = logger;
@@ -33,6 +37,7 @@ public class CheckInController : EventControllerBase
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _emailService = emailService;
+        _hubContext = hubContext;
     }
 
     // Helper to check if file is renderable (md/html)
@@ -821,6 +826,18 @@ public class CheckInController : EventControllerBase
 
             _logger.LogInformation("User {UserId} requested check-in for event {EventId}", userId, eventId);
 
+            // Notify admin dashboard via SignalR
+            var user = await _context.Users.FindAsync(userId.Value);
+            await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+            {
+                Type = "CheckInRequested",
+                EventId = eventId,
+                UserId = userId.Value,
+                PlayerName = $"{user?.FirstName} {user?.LastName}".Trim(),
+                Status = "Requested",
+                Timestamp = DateTime.Now
+            });
+
             return Ok(new ApiResponse<CheckInResultDto>
             {
                 Success = true,
@@ -905,6 +922,19 @@ public class CheckInController : EventControllerBase
 
         _logger.LogInformation("TD {TdUserId} manually checked in user {UserId} to event {EventId}",
             currentUserId, userId, eventId);
+
+        // Notify admin dashboard via SignalR
+        var checkedInUser = await _context.Users.FindAsync(userId);
+        await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+        {
+            Type = "CheckInApproved",
+            EventId = eventId,
+            UserId = userId,
+            PlayerName = $"{checkedInUser?.FirstName} {checkedInUser?.LastName}".Trim(),
+            Status = "CheckedIn",
+            CheckedInAt = DateTime.Now,
+            CheckedInBy = currentUserId
+        });
 
         return Ok(new ApiResponse<CheckInResultDto>
         {

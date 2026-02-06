@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pickleball.Community.Database;
 using Pickleball.Community.Models.Entities;
@@ -22,6 +23,7 @@ public class GameDayController : EventControllerBase
     private readonly IGameDayPlayerStatusService _playerStatusService;
     private readonly IPushNotificationService _pushService;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
     public GameDayController(
         ApplicationDbContext context,
@@ -29,7 +31,8 @@ public class GameDayController : EventControllerBase
         IScoreBroadcaster scoreBroadcaster,
         IGameDayPlayerStatusService playerStatusService,
         IPushNotificationService pushService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHubContext<NotificationHub> hubContext)
         : base(context)
     {
         _logger = logger;
@@ -37,6 +40,7 @@ public class GameDayController : EventControllerBase
         _playerStatusService = playerStatusService;
         _pushService = pushService;
         _configuration = configuration;
+        _hubContext = hubContext;
     }
 
     // ==========================================
@@ -1579,6 +1583,17 @@ public class GameDayController : EventControllerBase
         membership.CheckedInAt = DateTime.Now;
         await _context.SaveChangesAsync();
 
+        // Notify via SignalR
+        await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+        {
+            Type = "CheckInApproved",
+            EventId = eventId,
+            UserId = membership.UserId,
+            PlayerName = Utility.FormatName(membership.User?.LastName, membership.User?.FirstName),
+            Status = "CheckedIn",
+            CheckedInAt = membership.CheckedInAt
+        });
+
         return Ok(new {
             success = true,
             message = $"{Utility.FormatName(membership.User?.LastName, membership.User?.FirstName)} has been checked in",
@@ -1638,6 +1653,17 @@ public class GameDayController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Notify via SignalR for bulk update
+        if (checkedInCount > 0)
+        {
+            await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+            {
+                Type = "BulkCheckIn",
+                EventId = eventId,
+                CheckedInCount = checkedInCount
+            });
+        }
+
         var notFound = dto.UserIds.Count - memberships.Count;
 
         return Ok(new {
@@ -1683,6 +1709,17 @@ public class GameDayController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Notify via SignalR
+        if (memberships.Count > 0)
+        {
+            await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+            {
+                Type = "CheckInAll",
+                EventId = eventId,
+                CheckedInCount = memberships.Count
+            });
+        }
+
         return Ok(new {
             success = true,
             message = $"Checked in {memberships.Count} player(s)",
@@ -1718,6 +1755,15 @@ public class GameDayController : EventControllerBase
         membership.IsCheckedIn = false;
         membership.CheckedInAt = null;
         await _context.SaveChangesAsync();
+
+        // Notify via SignalR
+        await _hubContext.Clients.Group($"event_{eventId}").SendAsync("CheckInUpdate", new
+        {
+            Type = "CheckInUndone",
+            EventId = eventId,
+            UserId = membership.UserId,
+            PlayerName = Utility.FormatName(membership.User?.LastName, membership.User?.FirstName)
+        });
 
         return Ok(new {
             success = true,

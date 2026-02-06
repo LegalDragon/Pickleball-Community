@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Users, LayoutGrid, Play, Settings, Plus, Trash2, ChevronDown, ChevronUp,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api, { scoreMethodsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { getSharedAssetUrl } from '../services/api';
 import HelpIcon from '../components/ui/HelpIcon';
 import GameScoreModal from '../components/ui/GameScoreModal';
@@ -98,6 +99,33 @@ const GameDayManage = () => {
       loadData();
     }
   }, [eventId, isAuthenticated]);
+
+  // SignalR real-time updates for check-ins
+  const { connect, joinEvent, leaveEvent, addListener } = useNotifications();
+
+  useEffect(() => {
+    if (!eventId || !isAuthenticated) return;
+
+    const setupSignalR = async () => {
+      await connect();
+      await joinEvent(eventId);
+    };
+    setupSignalR();
+
+    // Listen for check-in updates
+    const removeListener = addListener((notification) => {
+      if (notification.Type === 'CheckInUpdate' || notification.type === 'CheckInUpdate') {
+        console.log('Check-in update received:', notification);
+        // Refresh player data on any check-in change
+        loadData();
+      }
+    });
+
+    return () => {
+      removeListener?.();
+      leaveEvent?.(eventId);
+    };
+  }, [eventId, isAuthenticated, connect, joinEvent, leaveEvent, addListener]);
 
   // Filtered games
   const filteredGames = useMemo(() => {
