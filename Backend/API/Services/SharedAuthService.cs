@@ -96,6 +96,9 @@ public class SharedAuthService : ISharedAuthService
                 c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone" ||
                 c.Type == ClaimTypes.MobilePhone ||
                 c.Type == "phone" || c.Type == "Phone" || c.Type == "phoneNumber");
+            // Avatar/profile image claim
+            var avatarClaim = claims.FirstOrDefault(c => 
+                c.Type == "avatar" || c.Type == "picture" || c.Type == "profileImageUrl" || c.Type == "ProfileImageUrl");
             // Sites claim contains JSON array of site keys
             var sitesClaim = claims.FirstOrDefault(c => c.Type == "sites");
 
@@ -127,6 +130,7 @@ public class SharedAuthService : ISharedAuthService
                 FirstName = firstNameClaim?.Value,
                 LastName = lastNameClaim?.Value,
                 Phone = phoneClaim?.Value,
+                ProfileImageUrl = avatarClaim?.Value,
                 Sites = sites,
                 IsValid = true
             };
