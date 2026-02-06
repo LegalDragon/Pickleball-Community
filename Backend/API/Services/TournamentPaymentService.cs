@@ -175,6 +175,7 @@ public class TournamentPaymentService : ITournamentPaymentService
                 if (allWaiversSigned)
                 {
                     var playerName = $"{payingUser.FirstName} {payingUser.LastName}".Trim();
+                    var badgeUrl = $"https://pickleball.community/badge/{payingMember.Id}";
                     var emailBody = EmailTemplates.EventRegistrationConfirmation(
                         playerName,
                         unit.Event?.Name ?? "Event",
@@ -184,7 +185,8 @@ public class TournamentPaymentService : ITournamentPaymentService
                         unit.Name,
                         amountDue,
                         waiverSigned: true,
-                        paymentComplete: true
+                        paymentComplete: true,
+                        badgeUrl: badgeUrl
                     );
 
                     await _emailService.SendSimpleAsync(

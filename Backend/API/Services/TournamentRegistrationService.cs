@@ -311,6 +311,12 @@ public class TournamentRegistrationService : ITournamentRegistrationService
                         && a.AssetType != null
                         && a.AssetType.TypeName.ToLower() == "waiver");
 
+                // Get member ID for badge URL
+                var member = unit.Members.FirstOrDefault(m => m.UserId == userId);
+                var badgeUrl = member != null
+                    ? $"https://pickleball.community/badge/{member.Id}"
+                    : null;
+
                 var emailBody = EmailTemplates.EventRegistrationConfirmation(
                     $"{user.FirstName} {user.LastName}".Trim(),
                     evt.Name ?? "Event",
@@ -320,7 +326,8 @@ public class TournamentRegistrationService : ITournamentRegistrationService
                     unit.Name,
                     feeAmount,
                     waiverSigned: waiverCount == 0,
-                    paymentComplete: feeAmount == 0
+                    paymentComplete: feeAmount == 0,
+                    badgeUrl: badgeUrl
                 );
 
                 var subject = feeAmount == 0 && waiverCount == 0

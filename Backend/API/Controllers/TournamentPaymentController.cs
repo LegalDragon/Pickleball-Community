@@ -218,6 +218,7 @@ public class TournamentPaymentController : EventControllerBase
                 {
                     // Both waiver and payment complete - send registration complete email
                     var playerName = $"{payingUser.FirstName} {payingUser.LastName}".Trim();
+                    var badgeUrl = $"https://pickleball.community/badge/{payingMember.Id}";
                     var emailBody = EmailTemplates.EventRegistrationConfirmation(
                         playerName,
                         unit.Event?.Name ?? "Event",
@@ -227,7 +228,8 @@ public class TournamentPaymentController : EventControllerBase
                         unit.Name,
                         amountDue,
                         waiverSigned: true,
-                        paymentComplete: true
+                        paymentComplete: true,
+                        badgeUrl: badgeUrl
                     );
 
                     await _emailService.SendSimpleAsync(

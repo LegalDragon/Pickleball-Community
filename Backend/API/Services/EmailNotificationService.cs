@@ -206,7 +206,8 @@ public static class EmailTemplates
         string? teamName,
         decimal? feeAmount,
         bool waiverSigned,
-        bool paymentComplete)
+        bool paymentComplete,
+        string? badgeUrl = null)
     {
         var statusItems = new List<string>();
         if (waiverSigned) statusItems.Add("<li style='color: #16a34a;'>✓ Waiver signed</li>");
@@ -217,6 +218,13 @@ public static class EmailTemplates
             if (paymentComplete) statusItems.Add("<li style='color: #16a34a;'>✓ Payment complete</li>");
             else statusItems.Add($"<li style='color: #dc2626;'>✗ Payment pending (${feeAmount:F2})</li>");
         }
+
+        var badgeSection = string.IsNullOrEmpty(badgeUrl) ? "" : $@"
+        <div style='margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f97316;'>
+            <p style='margin: 0 0 10px 0; font-weight: 600;'>📱 Your Tournament Badge</p>
+            <p style='margin: 0 0 10px 0; font-size: 14px;'>Save this link for easy check-in on game day:</p>
+            <a href='{badgeUrl}' style='display: inline-block; background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;'>View My Badge</a>
+        </div>";
 
         return $@"
 <!DOCTYPE html>
@@ -247,9 +255,10 @@ public static class EmailTemplates
         <ul style='list-style: none; padding: 0; margin: 0;'>
             {string.Join("\n            ", statusItems)}
         </ul>
+        {badgeSection}
 
         <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;'>
-            <a href='https://pickleball.community/my-events' style='display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;'>View My Events</a>
+            <a href='https://pickleball.community/events?view=my' style='display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;'>View My Events</a>
         </div>
 
         <p style='margin-top: 30px; font-size: 14px; color: #6b7280;'>

@@ -2403,7 +2403,10 @@ export const checkInApi = {
     api.post(`/checkin/payment-override/${eventId}/${userId}`, { hasPaid, amountPaid, notes }),
 
   // Send waiver signing request to player
-  sendWaiverRequest: (eventId, userId) => api.post(`/checkin/send-waiver-request/${eventId}/${userId}`)
+  sendWaiverRequest: (eventId, userId) => api.post(`/checkin/send-waiver-request/${eventId}/${userId}`),
+
+  // Get public player badge (no auth required)
+  getBadge: (memberId) => api.get(`/checkin/badge/${memberId}`)
 }
 
 // Tournament Game Day API

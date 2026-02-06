@@ -39,6 +39,7 @@ import EventRunningAdmin from './pages/EventRunningAdmin'
 import TDGameDayDashboard from './pages/TDGameDayDashboard'
 import PlayerGameDay from './pages/PlayerGameDay'
 import PlayerCheckIn from './pages/PlayerCheckIn'
+import PlayerBadge from './pages/PlayerBadge'
 import EventScoreboard from './pages/EventScoreboard'
 import DrawingMonitor from './pages/DrawingMonitor'
 import DivisionSchedule from './pages/DivisionSchedule'
@@ -166,6 +167,8 @@ function App() {
           <PlayerCheckIn />
         </ProtectedRoute>
       } />
+      {/* Public badge page - no auth required */}
+      <Route path="/badge/:memberId" element={<PlayerBadge />} />
       <Route path="/event/:eventId/scoreboard" element={<EventScoreboard />} />
       <Route path="/event/:eventId/drawing" element={<DrawingMonitor />} />
       <Route path="/tournament/:eventId/schedules" element={

@@ -515,6 +515,7 @@ public class CheckInController : EventControllerBase
                 if (paymentComplete)
                 {
                     // Both waiver and payment complete - send registration complete email
+                    var badgeUrl = $"https://pickleball.community/badge/{firstReg.Id}";
                     var emailBody = EmailTemplates.EventRegistrationConfirmation(
                         playerName,
                         evt.Name,
@@ -524,7 +525,8 @@ public class CheckInController : EventControllerBase
                         unit?.Name,
                         feeAmount,
                         waiverSigned: true,
-                        paymentComplete: true
+                        paymentComplete: true,
+                        badgeUrl: badgeUrl
                     );
 
                     await _emailService.SendSimpleAsync(
@@ -1937,6 +1939,71 @@ public class CheckInController : EventControllerBase
             Message = "Document deleted"
         });
     }
+
+    /// <summary>
+    /// Get public badge information for a registered player (no auth required)
+    /// </summary>
+    [HttpGet("badge/{memberId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<PlayerBadgeDto>>> GetPlayerBadge(int memberId)
+    {
+        var member = await _context.EventUnitMembers
+            .Include(m => m.User)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+                    .ThenInclude(d => d!.TeamUnit)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Event)
+            .FirstOrDefaultAsync(m => m.Id == memberId);
+
+        if (member == null || member.Unit == null || member.User == null)
+            return NotFound(new ApiResponse<PlayerBadgeDto> { Success = false, Message = "Registration not found" });
+
+        var evt = member.Unit.Event;
+        var division = member.Unit.Division;
+
+        // Get waiver status
+        var waiverCount = await _context.ObjectAssets
+            .Include(a => a.AssetType)
+            .CountAsync(a => a.ObjectId == evt!.Id
+                && a.AssetType != null
+                && a.AssetType.TypeName.ToLower() == "waiver");
+
+        var signedWaiverCount = await _context.EventUnitMemberWaivers
+            .CountAsync(w => w.EventUnitMemberId == memberId);
+
+        var waiverSigned = waiverCount == 0 || signedWaiverCount >= waiverCount;
+
+        // Get payment status
+        var hasPaid = member.HasPaid || member.AmountPaid > 0;
+
+        var badge = new PlayerBadgeDto
+        {
+            MemberId = memberId,
+            ReferenceId = member.ReferenceId,
+            PlayerName = $"{member.User.FirstName} {member.User.LastName}".Trim(),
+            ProfileImageUrl = member.User.ProfileImageUrl,
+            EventId = evt!.Id,
+            EventName = evt.Name ?? "Event",
+            EventStartDate = evt.StartDate,
+            EventEndDate = evt.EndDate,
+            VenueName = evt.VenueName,
+            VenueAddress = string.Join(", ", new[] { evt.Address, evt.City, evt.State }.Where(s => !string.IsNullOrEmpty(s))),
+            DivisionId = division?.Id ?? 0,
+            DivisionName = division?.Name ?? "Division",
+            TeamUnitName = division?.TeamUnit?.Name,
+            UnitId = member.Unit.Id,
+            UnitName = member.Unit.Name,
+            IsCheckedIn = member.IsCheckedIn,
+            CheckedInAt = member.CheckedInAt,
+            WaiverSigned = waiverSigned,
+            PaymentComplete = hasPaid,
+            PosterImageUrl = evt.PosterImageUrl,
+            CheckInUrl = $"https://pickleball.community/event/{evt.Id}/check-in"
+        };
+
+        return Ok(new ApiResponse<PlayerBadgeDto> { Success = true, Data = badge });
+    }
 }
 
 // DTOs for Check-In
@@ -2164,4 +2231,32 @@ public class AdminPaymentOverrideRequest
 public class AdminWaiverOverrideRequest
 {
     public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Public badge information for a registered player
+/// </summary>
+public class PlayerBadgeDto
+{
+    public int MemberId { get; set; }
+    public string? ReferenceId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public string? ProfileImageUrl { get; set; }
+    public int EventId { get; set; }
+    public string EventName { get; set; } = string.Empty;
+    public DateTime EventStartDate { get; set; }
+    public DateTime? EventEndDate { get; set; }
+    public string? VenueName { get; set; }
+    public string? VenueAddress { get; set; }
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public string? TeamUnitName { get; set; }
+    public int UnitId { get; set; }
+    public string? UnitName { get; set; }
+    public bool IsCheckedIn { get; set; }
+    public DateTime? CheckedInAt { get; set; }
+    public bool WaiverSigned { get; set; }
+    public bool PaymentComplete { get; set; }
+    public string? PosterImageUrl { get; set; }
+    public string CheckInUrl { get; set; } = string.Empty;
 }
