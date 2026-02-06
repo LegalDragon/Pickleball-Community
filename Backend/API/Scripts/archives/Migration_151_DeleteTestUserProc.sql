@@ -255,13 +255,7 @@ BEGIN
                 SELECT 'Ratings' AS [Table], COUNT(*) AS [ToDelete] FROM Ratings WHERE UserId = @UserId;
         END
 
-        IF OBJECT_ID('ObjectTags', 'U') IS NOT NULL
-        BEGIN
-            IF @DryRun = 0
-                DELETE FROM ObjectTags WHERE UserId = @UserId;
-            ELSE
-                SELECT 'ObjectTags' AS [Table], COUNT(*) AS [ToDelete] FROM ObjectTags WHERE UserId = @UserId;
-        END
+        -- ObjectTags has ON DELETE SET NULL for CreatedByUserId, so nothing to do manually
 
         -- Player certifications and evaluations
         IF OBJECT_ID('PlayerCertifications', 'U') IS NOT NULL
@@ -452,9 +446,9 @@ BEGIN
         IF OBJECT_ID('InstaGames', 'U') IS NOT NULL
         BEGIN
             IF @DryRun = 0
-                DELETE FROM InstaGames WHERE CreatorUserId = @UserId;
+                DELETE FROM InstaGames WHERE CreatorId = @UserId;
             ELSE
-                SELECT 'InstaGames' AS [Table], COUNT(*) AS [ToDelete] FROM InstaGames WHERE CreatorUserId = @UserId;
+                SELECT 'InstaGames' AS [Table], COUNT(*) AS [ToDelete] FROM InstaGames WHERE CreatorId = @UserId;
         END
 
         -- Game queues
