@@ -40,6 +40,10 @@ public class EncounterController : ControllerBase
 
     private async Task<bool> IsEventOrganizer(int eventId, int userId)
     {
+        // Admins can manage any event
+        if (User.IsInRole("Admin"))
+            return true;
+            
         var evt = await _context.Events.FindAsync(eventId);
         return evt != null && evt.OrganizedByUserId == userId;
     }
