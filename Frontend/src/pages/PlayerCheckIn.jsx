@@ -9,6 +9,7 @@ import { useToast } from '../contexts/ToastContext';
 import { checkInApi, eventsApi } from '../services/api';
 import SignatureCanvas from '../components/SignatureCanvas';
 import PaymentModal from '../components/PaymentModal';
+import CheckInConfirmation from '../components/ui/CheckInConfirmation';
 
 export default function PlayerCheckIn() {
   const { eventId } = useParams();
@@ -29,6 +30,8 @@ export default function PlayerCheckIn() {
   const [step, setStep] = useState(1); // 1: Waiver, 2: Payment, 3: Submit
   const [showWaiverModal, setShowWaiverModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationData, setConfirmationData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmPayment, setConfirmPayment] = useState(false);
 
@@ -100,9 +103,27 @@ export default function PlayerCheckIn() {
       const response = await checkInApi.requestCheckIn(eventId, confirmPayment);
 
       if (response.success) {
-        toast.success('Check-in requested! Awaiting admin approval.');
-        // Reload data to show updated status
+        // Reload data to get updated status including memberId
         await loadData();
+
+        // Show confirmation modal with check-in details
+        const registration = checkInStatus?.registration;
+        const member = registration?.members?.find(m =>
+          m.userId === (isAdminMode ? parseInt(targetUserId) : user?.id)
+        );
+
+        setConfirmationData({
+          playerName: checkInStatus?.playerName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+          eventName: event?.name,
+          eventId: eventId,
+          divisionName: registration?.divisionName || checkInStatus?.divisions?.[0]?.divisionName,
+          teamName: registration?.teamUnitName !== 'Singles' ? registration?.teamUnitName : null,
+          venueName: event?.venueName,
+          eventDate: event?.startDate,
+          memberId: member?.id,
+          checkedInAt: new Date().toISOString()
+        });
+        setShowConfirmation(true);
       } else {
         toast.error(response.message || 'Failed to request check-in');
       }
@@ -449,6 +470,26 @@ export default function PlayerCheckIn() {
             loadData();
             setConfirmPayment(true);
           }}
+        />
+      )}
+
+      {/* Check-In Confirmation Modal */}
+      {showConfirmation && confirmationData && (
+        <CheckInConfirmation
+          isOpen={showConfirmation}
+          onClose={() => {
+            setShowConfirmation(false);
+            navigate(`/event/${eventId}/game-day`);
+          }}
+          playerName={confirmationData.playerName}
+          eventName={confirmationData.eventName}
+          eventId={confirmationData.eventId}
+          divisionName={confirmationData.divisionName}
+          teamName={confirmationData.teamName}
+          venueName={confirmationData.venueName}
+          eventDate={confirmationData.eventDate}
+          memberId={confirmationData.memberId}
+          checkedInAt={confirmationData.checkedInAt}
         />
       )}
     </div>
