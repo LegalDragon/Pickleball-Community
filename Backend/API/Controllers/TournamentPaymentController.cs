@@ -284,9 +284,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<PaymentInfoDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can mark as paid
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
@@ -391,9 +390,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<PaymentInfoDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can unmark payment
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
@@ -474,9 +472,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can mark as paid
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var member = unit.Members.FirstOrDefault(m => m.UserId == memberId);
@@ -597,9 +594,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can unmark payment
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var member = unit.Members.FirstOrDefault(m => m.UserId == memberId);
@@ -705,9 +701,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<object> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can apply payment to teammates
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Get the source member (whose payment we're copying)
@@ -807,9 +802,8 @@ public class TournamentPaymentController : EventControllerBase
         if (unit == null)
             return NotFound(new ApiResponse<MemberPaymentDto> { Success = false, Message = "Registration not found" });
 
-        // Only organizer or site admin can update payment info
-        var isAdmin = await IsAdminAsync();
-        if (unit.Event?.OrganizedByUserId != userId.Value && !isAdmin)
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var member = unit.Members.FirstOrDefault(m => m.UserId == memberId);
@@ -920,8 +914,8 @@ public class TournamentPaymentController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = "Event not found" });
 
-        // Check authorization
-        if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+        // Check authorization - allow organizer, admin, or staff with payment permissions
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Get all units with members for this event
@@ -1073,11 +1067,8 @@ public class TournamentPaymentController : EventControllerBase
         // Check authorization - must be event organizer or admin
         if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
         {
-            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
-            if (evt == null)
-                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
-
-            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            // Check authorization - allow organizer, admin, or staff with payment permissions
+            if (!await CanManagePaymentsAsync(payment.RelatedObjectId.Value))
                 return Forbid();
         }
         else if (!await IsAdminAsync())
@@ -1113,14 +1104,10 @@ public class TournamentPaymentController : EventControllerBase
         if (payment == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
 
-        // Check authorization - must be event organizer or admin
+        // Check authorization - allow organizer, admin, or staff with payment permissions
         if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
         {
-            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
-            if (evt == null)
-                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
-
-            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            if (!await CanManagePaymentsAsync(payment.RelatedObjectId.Value))
                 return Forbid();
         }
         else if (!await IsAdminAsync())
@@ -1156,14 +1143,10 @@ public class TournamentPaymentController : EventControllerBase
         if (payment == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Payment not found" });
 
-        // Check authorization - must be event organizer or admin
+        // Check authorization - allow organizer, admin, or staff with payment permissions
         if (payment.PaymentType == PaymentTypes.EventRegistration && payment.RelatedObjectId.HasValue)
         {
-            var evt = await _context.Events.FindAsync(payment.RelatedObjectId.Value);
-            if (evt == null)
-                return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
-
-            if (evt.OrganizedByUserId != userId.Value && !await IsAdminAsync())
+            if (!await CanManagePaymentsAsync(payment.RelatedObjectId.Value))
                 return Forbid();
         }
         else if (!await IsAdminAsync())
