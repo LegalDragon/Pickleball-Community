@@ -461,7 +461,9 @@ public class ClubsController : ControllerBase
 
             // Check if user is site admin (can manage any club)
             var isSiteAdmin = await IsSiteAdminAsync();
-            var isAdmin = membership?.Role == "Admin" || isSiteAdmin;
+            // Treasurer is stored as Title, not Role, but needs admin access for payment approval
+            var isTreasurer = string.Equals(membership?.Title, "Treasurer", StringComparison.OrdinalIgnoreCase);
+            var isAdmin = membership?.Role == "Admin" || isTreasurer || isSiteAdmin;
             var isModerator = membership?.Role == "Moderator";
 
             // Use home venue address if no club address specified
@@ -1416,8 +1418,10 @@ public class ClubsController : ControllerBase
                 .Where(m => m.UserId == userId.Value && m.IsActive && m.Club != null && m.Club.IsActive)
                 .ToListAsync();
 
+            // Treasurer is stored as Title, not Role, but needs management access
             var clubsIManage = memberships
-                .Where(m => m.Role == "Admin" || m.Role == "Moderator")
+                .Where(m => m.Role == "Admin" || m.Role == "Moderator" || 
+                            string.Equals(m.Title, "Treasurer", StringComparison.OrdinalIgnoreCase))
                 .Select(m => new ClubDto
                 {
                     Id = m.Club!.Id,
@@ -1435,8 +1439,10 @@ public class ClubsController : ControllerBase
                 })
                 .ToList();
 
+            // Exclude Treasurers from "belong" since they appear in "manage"
             var clubsIBelong = memberships
-                .Where(m => m.Role == "Member")
+                .Where(m => m.Role == "Member" && 
+                            !string.Equals(m.Title, "Treasurer", StringComparison.OrdinalIgnoreCase))
                 .Select(m => new ClubDto
                 {
                     Id = m.Club!.Id,
