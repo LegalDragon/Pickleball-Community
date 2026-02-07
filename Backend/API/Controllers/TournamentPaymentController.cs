@@ -62,7 +62,7 @@ public class TournamentPaymentController : EventControllerBase
 
         // Check if user is a member of this unit or the event organizer/admin
         var isMember = unit.Members.Any(m => m.UserId == userId.Value);
-        var canManage = await CanManageEventAsync(unit.EventId);
+        var canManage = await CanManagePaymentsAsync(unit.EventId);
 
         if (!isMember && !canManage)
             return Forbid();
@@ -1246,7 +1246,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Division not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(division.EventId))
+        if (!await CanManagePaymentsAsync(division.EventId))
             return Forbid();
 
         // Validate FeeTypeId
@@ -1325,7 +1325,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(fee.EventId))
+        if (!await CanManagePaymentsAsync(fee.EventId))
             return Forbid();
 
         // Validate FeeTypeId if being changed
@@ -1395,7 +1395,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(fee.EventId))
+        if (!await CanManagePaymentsAsync(fee.EventId))
             return Forbid();
 
         // Check if any registrations are using this fee
@@ -1423,7 +1423,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Division not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(division.EventId))
+        if (!await CanManagePaymentsAsync(division.EventId))
             return Forbid();
 
         // Validate all FeeTypeIds
@@ -1547,7 +1547,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Event not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Validate FeeTypeId exists and belongs to this event
@@ -1626,7 +1626,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<DivisionFeeDto> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Validate FeeTypeId if being changed
@@ -1701,7 +1701,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Check if fee is in use by any members
@@ -1728,7 +1728,7 @@ public class TournamentPaymentController : EventControllerBase
             return NotFound(new ApiResponse<List<DivisionFeeDto>> { Success = false, Message = "Event not found" });
 
         // Check authorization
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Validate all FeeTypeIds
@@ -1856,7 +1856,7 @@ public class TournamentPaymentController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<EventFeeTypeDto> { Success = false, Message = "Event not found" });
 
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         var feeType = new EventFeeType
@@ -1897,7 +1897,7 @@ public class TournamentPaymentController : EventControllerBase
         if (feeType == null)
             return NotFound(new ApiResponse<EventFeeTypeDto> { Success = false, Message = "Fee type not found" });
 
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         feeType.Name = request.Name;
@@ -1939,7 +1939,7 @@ public class TournamentPaymentController : EventControllerBase
         if (feeType == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Fee type not found" });
 
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Check if any fees are using this fee type
@@ -1970,7 +1970,7 @@ public class TournamentPaymentController : EventControllerBase
         if (evt == null)
             return NotFound(new ApiResponse<List<EventFeeTypeDto>> { Success = false, Message = "Event not found" });
 
-        if (!await CanManageEventAsync(eventId))
+        if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
         // Get existing fee types

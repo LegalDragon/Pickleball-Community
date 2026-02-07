@@ -109,6 +109,7 @@ public abstract class EventControllerBase : ControllerBase
             "CanManageSchedule" => staff.Role.CanManageSchedule,
             "CanManageLineups" => staff.Role.CanManageLineups,
             "CanViewAllData" => staff.Role.CanViewAllData,
+            "CanManagePayments" => staff.Role.CanManagePayments,
             "CanFullyManageEvent" => staff.Role.CanFullyManageEvent,
             _ => false
         };
@@ -122,6 +123,33 @@ public abstract class EventControllerBase : ControllerBase
         var userId = GetUserId();
         if (!userId.HasValue) return false;
         return await HasStaffPermissionAsync(eventId, userId.Value, permission);
+    }
+
+    /// <summary>
+    /// Checks if the current user can manage payments for an event
+    /// (is admin, organizer, has CanFullyManageEvent, or has CanManagePayments staff permission)
+    /// </summary>
+    protected async Task<bool> CanManagePaymentsAsync(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return false;
+
+        // Admin can manage payments for any event
+        if (await IsAdminAsync()) return true;
+
+        // Organizer can manage payments for their event
+        if (await IsEventOrganizerAsync(eventId, userId.Value)) return true;
+
+        // Staff with CanFullyManageEvent or CanManagePayments permission
+        var staff = await _context.EventStaff
+            .Include(s => s.Role)
+            .FirstOrDefaultAsync(s => s.EventId == eventId
+                                   && s.UserId == userId.Value
+                                   && s.Status == "Active"
+                                   && s.Role != null
+                                   && (s.Role.CanFullyManageEvent || s.Role.CanManagePayments));
+
+        return staff != null;
     }
 
     /// <summary>
