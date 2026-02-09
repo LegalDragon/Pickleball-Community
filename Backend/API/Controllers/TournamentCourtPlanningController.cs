@@ -1193,7 +1193,7 @@ public class TournamentCourtPlanningController : EventControllerBase
             .ThenBy(g => g.EncounterMatch!.Encounter!.PhaseId)
             .ThenBy(g => g.EncounterMatch!.Encounter!.RoundNumber)
             .ThenBy(g => g.EncounterMatch!.Encounter!.EncounterNumber)
-            .ThenBy(g => g.EncounterMatch!.SortOrder)
+            .ThenBy(g => g.EncounterMatch!.MatchOrder)
             .ThenBy(g => g.GameNumber)
             .Select(g => new GameSchedulingDto
             {
@@ -1205,7 +1205,7 @@ public class TournamentCourtPlanningController : EventControllerBase
                 PhaseId = g.EncounterMatch.Encounter.PhaseId,
                 PhaseName = g.EncounterMatch.Encounter.Phase != null ? g.EncounterMatch.Encounter.Phase.Name : null,
                 GameNumber = g.GameNumber,
-                TotalGamesInMatch = g.EncounterMatch.BestOf,
+                TotalGamesInMatch = g.EncounterMatch.Encounter!.BestOf,
                 MatchLabel = g.EncounterMatch.Encounter.EncounterLabel,
                 Unit1Name = g.EncounterMatch.Encounter.Unit1 != null ? g.EncounterMatch.Encounter.Unit1.Name : g.EncounterMatch.Encounter.Unit1SeedLabel,
                 Unit2Name = g.EncounterMatch.Encounter.Unit2 != null ? g.EncounterMatch.Encounter.Unit2.Name : g.EncounterMatch.Encounter.Unit2SeedLabel,
