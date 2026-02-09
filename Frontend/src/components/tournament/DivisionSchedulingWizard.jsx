@@ -143,20 +143,11 @@ export default function DivisionSchedulingWizard({
       courts: { complete: courtsComplete, assignedCount }
     });
 
-    // Auto-resume to first incomplete step (only once on initial load)
+    // Auto-resume is disabled - always start at step 0 unless user navigates
+    // This gives users control over where to start
     if (!hasAutoResumed) {
       setHasAutoResumed(true);
-      if (courtsComplete) {
-        // All done - stay on last step to review
-        setCurrentStep(2);
-      } else if (formatsComplete) {
-        // Step 1 & 2 done - go to step 3
-        setCurrentStep(2);
-      } else if (phasesComplete) {
-        // Step 1 done - go to step 2
-        setCurrentStep(1);
-      }
-      // else stay on step 0
+      // Stay on initialStep (default 0) - user can navigate forward if steps are complete
     }
   }, [divisionId, division, hasAutoResumed]);
 
@@ -423,20 +414,30 @@ export default function DivisionSchedulingWizard({
 
       {/* Footer Navigation */}
       <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between">
-        <button
-          onClick={goPrev}
-          disabled={currentStep === 0}
-          className={`
-            flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors
-            ${currentStep === 0
-              ? 'text-gray-400 cursor-not-allowed'
-              : 'text-gray-700 hover:bg-gray-200'
-            }
-          `}
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Previous
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goPrev}
+            disabled={currentStep === 0}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors
+              ${currentStep === 0
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-gray-700 hover:bg-gray-200'
+              }
+            `}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Previous
+          </button>
+          {currentStep > 0 && (
+            <button
+              onClick={() => setCurrentStep(0)}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Start Over
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 text-sm text-gray-500">
           Step {currentStep + 1} of {STEPS.length}
