@@ -53,6 +53,7 @@ export default function DivisionSchedulingWizard({
   const [phases, setPhases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasAutoResumed, setHasAutoResumed] = useState(false);
   
   // Step completion status
   const [stepStatus, setStepStatus] = useState({
@@ -141,7 +142,23 @@ export default function DivisionSchedulingWizard({
       formats: { complete: formatsComplete, configuredCount },
       courts: { complete: courtsComplete, assignedCount }
     });
-  }, [divisionId, division]);
+
+    // Auto-resume to first incomplete step (only once on initial load)
+    if (!hasAutoResumed) {
+      setHasAutoResumed(true);
+      if (courtsComplete) {
+        // All done - stay on last step to review
+        setCurrentStep(2);
+      } else if (formatsComplete) {
+        // Step 1 & 2 done - go to step 3
+        setCurrentStep(2);
+      } else if (phasesComplete) {
+        // Step 1 done - go to step 2
+        setCurrentStep(1);
+      }
+      // else stay on step 0
+    }
+  }, [divisionId, division, hasAutoResumed]);
 
   const handlePhasesUpdated = useCallback(() => {
     loadDivisionData();
@@ -219,7 +236,13 @@ export default function DivisionSchedulingWizard({
               Schedule: {division?.divisionName || division?.name}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              Division Scheduling Wizard
+              {stepStatus.phases.complete && currentStep > 0 ? (
+                <span className="text-green-600">
+                  Continuing from Step {currentStep + 1}: {STEPS[currentStep].title}
+                </span>
+              ) : (
+                'Division Scheduling Wizard'
+              )}
             </p>
           </div>
           {onClose && (
