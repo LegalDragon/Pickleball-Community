@@ -1155,4 +1155,138 @@ public class TournamentCourtPlanningController : EventControllerBase
         return Ok(new ApiResponse<List<DivisionCourtBlockDto>> { Success = true, Data = blocks });
     }
 
+    // ============================================
+    // Game-Level Scheduling
+    // ============================================
+
+    /// <summary>
+    /// Get all games for scheduling (court time assignment)
+    /// Returns games grouped by division/phase with scheduling info
+    /// </summary>
+    [Authorize]
+    [HttpGet("court-planning/{eventId}/games")]
+    public async Task<ActionResult<ApiResponse<List<GameSchedulingDto>>>> GetGamesForScheduling(int eventId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<List<GameSchedulingDto>> { Success = false, Message = "Unauthorized" });
+
+        if (!await IsAdminAsync() && !await IsEventOrganizerAsync(eventId, userId.Value))
+            return Forbid();
+
+        var games = await _context.EventGames
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Division)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Phase)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit1)
+            .Include(g => g.EncounterMatch)
+                .ThenInclude(m => m!.Encounter)
+                    .ThenInclude(e => e!.Unit2)
+            .Include(g => g.TournamentCourt)
+            .Where(g => g.EncounterMatch!.Encounter!.EventId == eventId)
+            .OrderBy(g => g.EncounterMatch!.Encounter!.DivisionId)
+            .ThenBy(g => g.EncounterMatch!.Encounter!.PhaseId)
+            .ThenBy(g => g.EncounterMatch!.Encounter!.RoundNumber)
+            .ThenBy(g => g.EncounterMatch!.Encounter!.EncounterNumber)
+            .ThenBy(g => g.EncounterMatch!.SortOrder)
+            .ThenBy(g => g.GameNumber)
+            .Select(g => new GameSchedulingDto
+            {
+                Id = g.Id,
+                MatchId = g.EncounterMatchId,
+                EncounterId = g.EncounterMatch!.EncounterId,
+                DivisionId = g.EncounterMatch.Encounter!.DivisionId,
+                DivisionName = g.EncounterMatch.Encounter.Division!.Name,
+                PhaseId = g.EncounterMatch.Encounter.PhaseId,
+                PhaseName = g.EncounterMatch.Encounter.Phase != null ? g.EncounterMatch.Encounter.Phase.Name : null,
+                GameNumber = g.GameNumber,
+                TotalGamesInMatch = g.EncounterMatch.BestOf,
+                MatchLabel = g.EncounterMatch.Encounter.EncounterLabel,
+                Unit1Name = g.EncounterMatch.Encounter.Unit1 != null ? g.EncounterMatch.Encounter.Unit1.Name : g.EncounterMatch.Encounter.Unit1SeedLabel,
+                Unit2Name = g.EncounterMatch.Encounter.Unit2 != null ? g.EncounterMatch.Encounter.Unit2.Name : g.EncounterMatch.Encounter.Unit2SeedLabel,
+                Unit1Id = g.EncounterMatch.Encounter.Unit1Id,
+                Unit2Id = g.EncounterMatch.Encounter.Unit2Id,
+                TournamentCourtId = g.TournamentCourtId,
+                CourtLabel = g.TournamentCourt != null ? g.TournamentCourt.CourtLabel : null,
+                ScheduledStartTime = g.ScheduledStartTime,
+                ScheduledEndTime = g.ScheduledEndTime,
+                EstimatedDurationMinutes = g.EstimatedDurationMinutes ?? g.EncounterMatch.Encounter.Division!.EstimatedMatchDurationMinutes ?? 30,
+                Status = g.Status
+            })
+            .ToListAsync();
+
+        return Ok(new ApiResponse<List<GameSchedulingDto>>
+        {
+            Success = true,
+            Data = games
+        });
+    }
+
+    /// <summary>
+    /// Bulk update court and time assignments for games
+    /// </summary>
+    [Authorize]
+    [HttpPost("court-planning/games/bulk-assign")]
+    public async Task<ActionResult<ApiResponse<object>>> BulkAssignGames([FromBody] BulkGameAssignmentRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (!await IsAdminAsync() && !await IsEventOrganizerAsync(request.EventId, userId.Value))
+            return Forbid();
+
+        if (request.Assignments == null || request.Assignments.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No assignments provided" });
+
+        var now = DateTime.Now;
+        var gameIds = request.Assignments.Select(a => a.GameId).ToList();
+
+        // Load games to update
+        var games = await _context.EventGames
+            .Where(g => gameIds.Contains(g.Id))
+            .ToListAsync();
+
+        foreach (var assignment in request.Assignments)
+        {
+            var game = games.FirstOrDefault(g => g.Id == assignment.GameId);
+            if (game == null) continue;
+
+            if (assignment.CourtId.HasValue)
+                game.TournamentCourtId = assignment.CourtId.Value;
+            else if (assignment.CourtId == null)
+                game.TournamentCourtId = null;
+
+            if (assignment.ScheduledStartTime.HasValue)
+                game.ScheduledStartTime = assignment.ScheduledStartTime;
+
+            if (assignment.ScheduledEndTime.HasValue)
+                game.ScheduledEndTime = assignment.ScheduledEndTime;
+
+            game.UpdatedAt = now;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Message = $"{games.Count} games updated"
+        });
+    }
+
+}
+
+/// <summary>
+/// Request for bulk game court/time assignment
+/// </summary>
+public class BulkGameAssignmentRequest
+{
+    public int EventId { get; set; }
+    public List<GameScheduleAssignmentDto> Assignments { get; set; } = new();
 }

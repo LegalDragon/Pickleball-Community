@@ -301,8 +301,49 @@ public class EncounterMatchGameDto
     public int? ScoreFormatId { get; set; }
     public int? TournamentCourtId { get; set; }
     public string? CourtLabel { get; set; }
+    public DateTime? ScheduledStartTime { get; set; }
+    public DateTime? ScheduledEndTime { get; set; }
+    public int? EstimatedDurationMinutes { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
+}
+
+/// <summary>
+/// DTO for game scheduling (court time assignment)
+/// </summary>
+public class GameSchedulingDto
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public int EncounterId { get; set; }
+    public int DivisionId { get; set; }
+    public string DivisionName { get; set; } = string.Empty;
+    public int? PhaseId { get; set; }
+    public string? PhaseName { get; set; }
+    public int GameNumber { get; set; }
+    public int TotalGamesInMatch { get; set; }
+    public string? MatchLabel { get; set; }
+    public string? Unit1Name { get; set; }
+    public string? Unit2Name { get; set; }
+    public int? Unit1Id { get; set; }
+    public int? Unit2Id { get; set; }
+    public int? TournamentCourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public DateTime? ScheduledStartTime { get; set; }
+    public DateTime? ScheduledEndTime { get; set; }
+    public int EstimatedDurationMinutes { get; set; }
+    public string Status { get; set; } = "New";
+}
+
+/// <summary>
+/// DTO for bulk game court/time assignment
+/// </summary>
+public class GameScheduleAssignmentDto
+{
+    public int GameId { get; set; }
+    public int? CourtId { get; set; }
+    public DateTime? ScheduledStartTime { get; set; }
+    public DateTime? ScheduledEndTime { get; set; }
 }
 
 /// <summary>

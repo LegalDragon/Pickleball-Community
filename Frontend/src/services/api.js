@@ -1787,6 +1787,12 @@ export const tournamentApi = {
   deleteDivisionCourtAssignment: (assignmentId) =>
     api.delete(`/tournament/court-planning/division-assignment/${assignmentId}`),
 
+  // Game-level scheduling
+  getGamesForScheduling: (eventId) =>
+    api.get(`/tournament/court-planning/${eventId}/games`),
+  bulkAssignGames: (eventId, assignments) =>
+    api.post('/tournament/court-planning/games/bulk-assign', { eventId, assignments }),
+
   // =====================================================
   // Server-Side Scheduling (constraint-solving scheduler)
   // =====================================================
