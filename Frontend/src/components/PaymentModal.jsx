@@ -139,11 +139,11 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
       const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       // Response has url directly (not wrapped in data), and it's a relative path
       if (response.success && response.url) {
-        // Convert relative URL to absolute URL using shared auth base
-        const fullUrl = getSharedAssetUrl(response.url);
-        setPaymentProofUrl(fullUrl);
+        // Store raw URL (e.g. /asset/123) - getSharedAssetUrl transforms it when displaying
+        setPaymentProofUrl(response.url);
         if (file.type.startsWith('image/')) {
-          setPreviewImage(fullUrl);
+          // For preview, use transformed URL
+          setPreviewImage(getSharedAssetUrl(response.url));
         } else {
           setPreviewImage(null);
         }
@@ -542,7 +542,7 @@ export default function PaymentModal({ isOpen, onClose, registration, event, onP
                         </div>
                       )}
                       <a
-                        href={paymentProofUrl}
+                        href={getSharedAssetUrl(paymentProofUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1"

@@ -2135,8 +2135,8 @@ export default function TournamentManage() {
       const assetType = file.type === 'application/pdf' ? 'document' : 'image';
       const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       if (response.success && response.url) {
-        const fullUrl = getSharedAssetUrl(response.url);
-        updateEditForm('paymentProofUrl', fullUrl);
+        // Store raw URL (e.g. /asset/123) - getSharedAssetUrl transforms it when displaying
+        updateEditForm('paymentProofUrl', response.url);
         toast.success('File uploaded successfully');
       } else {
         toast.error(response.message || 'Failed to upload file');

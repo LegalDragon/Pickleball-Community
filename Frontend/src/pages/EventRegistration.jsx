@@ -709,10 +709,11 @@ export default function EventRegistration() {
       const assetType = file.type === 'application/pdf' ? 'document' : 'image';
       const response = await sharedAssetApi.uploadViaProxy(file, assetType, 'payment-proof');
       if (response.success && response.url) {
-        const fullUrl = getSharedAssetUrl(response.url);
-        setPaymentProofUrl(fullUrl);
+        // Store raw URL (e.g. /asset/123) - getSharedAssetUrl transforms it when displaying
+        setPaymentProofUrl(response.url);
         if (file.type.startsWith('image/')) {
-          setPreviewImage(fullUrl);
+          // For preview, use transformed URL
+          setPreviewImage(getSharedAssetUrl(response.url));
         } else {
           setPreviewImage(null);
         }
@@ -2459,7 +2460,7 @@ export default function EventRegistration() {
                       <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                       <p className="text-sm text-gray-600">PDF uploaded</p>
                       <a
-                        href={paymentProofUrl}
+                        href={getSharedAssetUrl(paymentProofUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 text-sm hover:underline flex items-center justify-center gap-1 mt-1"
