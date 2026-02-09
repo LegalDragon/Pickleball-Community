@@ -5,10 +5,11 @@ import {
   CheckCircle2, XCircle, ChevronDown, ChevronRight, Grid3X3,
   Play, Move, Eye, EyeOff, Layers, GripVertical, MapPin,
   Calendar, Settings, Info, Maximize2, Minimize2, Filter,
-  RotateCcw, Download, Upload
+  RotateCcw, Download, Upload, LayoutGrid, List
 } from 'lucide-react'
 import { tournamentApi } from '../services/api'
 import { useToast } from '../contexts/ToastContext'
+import PhaseCourtScheduler from '../components/tournament/PhaseCourtScheduler'
 
 // ─── Color palette ──────────────────────────────────
 const COLORS = [
@@ -46,6 +47,9 @@ export default function TournamentScheduleDashboard() {
   const [data, setData] = useState(null)     // court-planning data
   const [timeline, setTimeline] = useState(null) // timeline data
   const [busy, setBusy] = useState(false)
+
+  // View mode
+  const [viewMode, setViewMode] = useState('phase') // 'phase' (new) or 'legacy'
 
   // Interaction
   const [expandedDivisions, setExpandedDivisions] = useState(new Set())
@@ -362,6 +366,28 @@ export default function TournamentScheduleDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* View mode toggle */}
+              <div className="flex items-center bg-gray-100 rounded-lg p-0.5 mr-2">
+                <button
+                  onClick={() => setViewMode('phase')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
+                    viewMode === 'phase' ? 'bg-white shadow text-purple-600' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  Phase View
+                </button>
+                <button
+                  onClick={() => setViewMode('legacy')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
+                    viewMode === 'legacy' ? 'bg-white shadow text-purple-600' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <List className="w-4 h-4" />
+                  Timeline
+                </button>
+              </div>
+
               {/* Quick stats */}
               <div className="hidden sm:flex items-center gap-2 mr-2 text-xs">
                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full font-medium">
@@ -375,8 +401,9 @@ export default function TournamentScheduleDashboard() {
               </div>
               <button
                 onClick={handleAutoAssignAll}
-                disabled={busy}
+                disabled={busy || viewMode === 'phase'}
                 className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5 text-sm font-medium"
+                title={viewMode === 'phase' ? 'Use auto-schedule in Phase View instead' : ''}
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                 Auto-Schedule All
@@ -415,6 +442,19 @@ export default function TournamentScheduleDashboard() {
         </div>
       )}
 
+      {/* ─── Phase Court Scheduler (New View) ─────────── */}
+      {viewMode === 'phase' && (
+        <div className="max-w-full mx-auto px-4 py-4">
+          <PhaseCourtScheduler
+            eventId={eventId}
+            data={data}
+            onUpdate={loadAll}
+          />
+        </div>
+      )}
+
+      {/* ─── Legacy Timeline View ─────────────────────── */}
+      {viewMode === 'legacy' && (
       <div className="max-w-full mx-auto px-4 py-4 space-y-4">
         {/* ─── Quick Controls Bar ───────────────────── */}
         <div className="bg-white rounded-xl border p-3 flex flex-wrap items-center gap-3">
@@ -491,6 +531,7 @@ export default function TournamentScheduleDashboard() {
           />
         )}
       </div>
+      )}
     </div>
   )
 }
