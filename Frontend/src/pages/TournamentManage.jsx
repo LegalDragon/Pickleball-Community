@@ -8503,7 +8503,7 @@ export default function TournamentManage() {
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <div className="flex items-center justify-between">
                       <a
-                        href={editingPayment.form.paymentProofUrl}
+                        href={getSharedAssetUrl(editingPayment.form.paymentProofUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
