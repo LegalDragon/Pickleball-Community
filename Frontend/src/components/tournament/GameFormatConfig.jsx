@@ -248,7 +248,7 @@ export default function GameFormatConfig({
                 </p>
                 <p>
                   Configure game settings for each match type (e.g., Men's Doubles, Women's Doubles, Mixed).
-                  Users will reference matches as <code className="bg-blue-100 px-1 rounded">MD #3</code>, <code className="bg-blue-100 px-1 rounded">WD #3</code>, etc.
+                  Users will reference matches as <code className="bg-blue-100 px-1 rounded">MD #3</code>, <code className="bg-blue-100 px-1 rounded">WD #3</code>, <code className="bg-blue-100 px-1 rounded">XD #3</code>.
                 </p>
               </>
             ) : (

@@ -362,7 +362,7 @@ export default function DivisionSchedulingWizard({
                 Configure how many games are played per match and what scoring format to use.
                 {division?.matchesPerEncounter > 1 && (
                   <span className="block mt-1">
-                    This division has <strong>{division.matchesPerEncounter} matches per encounter</strong> (e.g., MD, WD, MX).
+                    This division has <strong>{division.matchesPerEncounter} matches per encounter</strong> (e.g., MD, WD, XD).
                   </span>
                 )}
               </p>
