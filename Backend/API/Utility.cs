@@ -484,8 +484,8 @@ public static class HttpUtils
 
     public static async Task<string> HttpGetAsync(
         string url,
-        string authToken = null,
-        Dictionary<string, string> headers = null,
+        string? authToken = null,
+        Dictionary<string, string>? headers = null,
         string mediaType = "application/json")
     {
         try
