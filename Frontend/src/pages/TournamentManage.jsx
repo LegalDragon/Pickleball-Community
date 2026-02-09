@@ -19,6 +19,7 @@ import DivisionFeesEditor from '../components/DivisionFeesEditor';
 import MatchFormatEditor from '../components/MatchFormatEditor';
 import PhaseManager from '../components/tournament/PhaseManager';
 import ScheduleGridInline from '../components/tournament/ScheduleGridInline';
+import DivisionSchedulingWizard from '../components/tournament/DivisionSchedulingWizard';
 import PublicProfileModal from '../components/ui/PublicProfileModal';
 import GameScoreModal from '../components/ui/GameScoreModal';
 import VenuePicker from '../components/ui/VenuePicker';
@@ -66,6 +67,7 @@ export default function TournamentManage() {
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
   const [gameSettingsModal, setGameSettingsModal] = useState({ isOpen: false, division: null });
+  const [schedulingWizardModal, setSchedulingWizardModal] = useState({ isOpen: false, division: null });
   const [scheduleDropdownOpen, setScheduleDropdownOpen] = useState(null); // Track which division's schedule dropdown is open
 
   // Add courts modal state
@@ -3860,6 +3862,18 @@ export default function TournamentManage() {
                               {/* Click-away overlay */}
                               <div className="fixed inset-0 z-10" onClick={() => setScheduleDropdownOpen(null)} />
                               <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                              {/* Scheduling Wizard - all-in-one flow */}
+                              <button
+                                onClick={() => {
+                                  setSchedulingWizardModal({ isOpen: true, division: div });
+                                  setScheduleDropdownOpen(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-orange-600 font-medium hover:bg-orange-50 flex items-center gap-2 border-b border-gray-100"
+                              >
+                                <Zap className="w-4 h-4" />
+                                Wizard
+                                <span className="ml-auto text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">New</span>
+                              </button>
                               <button
                                 onClick={() => {
                                   handleOpenScheduleConfig(div);
@@ -8425,6 +8439,22 @@ export default function TournamentManage() {
         eventId={eventId}
         onSave={() => loadDashboard()}
       />
+
+      {/* Division Scheduling Wizard Modal */}
+      {schedulingWizardModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+            <DivisionSchedulingWizard
+              divisionId={schedulingWizardModal.division?.id}
+              eventId={eventId}
+              onClose={() => {
+                setSchedulingWizardModal({ isOpen: false, division: null });
+                loadDashboard();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Public Profile Modal */}
       {profileModalUserId && (
