@@ -20,6 +20,7 @@ const COLORS = [
 // Time slot size in minutes
 const SLOT_SIZE = 15
 const PIXELS_PER_SLOT = 30
+const DEFAULT_GAME_DURATION = 15 // minutes per game
 
 function formatTime(date) {
   if (!date) return '—'
@@ -36,23 +37,23 @@ function getSlotIndex(time, dayStart) {
 }
 
 // ═════════════════════════════════════════════════════
-// Main Component
+// Main Component - Now works at MATCH level
 // ═════════════════════════════════════════════════════
 export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   const toast = useToast()
   
-  // Games data
+  // Raw games data from API
   const [games, setGames] = useState([])
   const [loadingGames, setLoadingGames] = useState(true)
   
-  // Selection state
+  // Selection state (now at match level)
   const [selectedDivision, setSelectedDivision] = useState(null)
   const [selectedPhase, setSelectedPhase] = useState(null)
-  const [selectedGames, setSelectedGames] = useState(new Set())
+  const [selectedMatches, setSelectedMatches] = useState(new Set()) // matchId set
   const [expandedDivisions, setExpandedDivisions] = useState(new Set())
   
-  // Scheduling state
-  const [assignments, setAssignments] = useState({}) // gameId -> { courtId, startTime }
+  // Scheduling state (at match level)
+  const [assignments, setAssignments] = useState({}) // matchId -> { courtId, startTime }
   const [saving, setSaving] = useState(false)
   const [dayStart, setDayStart] = useState(() => {
     const d = new Date(data?.eventStartDate || new Date())
@@ -88,36 +89,81 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     loadGames()
   }, [eventId])
 
-  // ─── Computed Values ──────────────────────────────────
-  
-  // Group games by division and phase
-  const gamesByDivPhase = useMemo(() => {
-    const grouped = {}
+  // ─── Group games into matches ──────────────────────────────────
+  const matches = useMemo(() => {
+    const matchMap = {}
     games.forEach(game => {
-      const divKey = game.divisionId
-      const phaseKey = game.phaseId || 'no-phase'
-      if (!grouped[divKey]) grouped[divKey] = {}
-      if (!grouped[divKey][phaseKey]) grouped[divKey][phaseKey] = []
-      grouped[divKey][phaseKey].push(game)
+      const key = game.matchId || `encounter-${game.encounterId}` // fallback to encounter if no matchId
+      if (!matchMap[key]) {
+        matchMap[key] = {
+          id: key,
+          matchId: game.matchId,
+          encounterId: game.encounterId,
+          divisionId: game.divisionId,
+          divisionName: game.divisionName,
+          phaseId: game.phaseId,
+          phaseName: game.phaseName,
+          matchLabel: game.matchLabel,
+          unit1Name: game.unit1Name,
+          unit2Name: game.unit2Name,
+          unit1Id: game.unit1Id,
+          unit2Id: game.unit2Id,
+          games: [],
+          // Will be updated below
+          totalGames: game.totalGamesInMatch || 1,
+          courtId: null,
+          courtLabel: null,
+          scheduledStartTime: null,
+          scheduledEndTime: null,
+          gameDuration: game.estimatedDurationMinutes || DEFAULT_GAME_DURATION
+        }
+      }
+      matchMap[key].games.push(game)
+      // Use first game's court/time as the match's court/time
+      if (game.tournamentCourtId && !matchMap[key].courtId) {
+        matchMap[key].courtId = game.tournamentCourtId
+        matchMap[key].courtLabel = game.courtLabel
+        matchMap[key].scheduledStartTime = game.scheduledStartTime
+        matchMap[key].scheduledEndTime = game.scheduledEndTime
+      }
     })
-    return grouped
+    // Sort games within each match and calculate duration
+    return Object.values(matchMap).map(match => {
+      match.games.sort((a, b) => a.gameNumber - b.gameNumber)
+      // Match duration = number of games × per-game duration
+      match.duration = match.totalGames * match.gameDuration
+      return match
+    })
   }, [games])
 
-  // Get unique divisions from games
+  // ─── Group matches by division and phase ──────────────────────────────────
+  const matchesByDivPhase = useMemo(() => {
+    const grouped = {}
+    matches.forEach(match => {
+      const divKey = match.divisionId
+      const phaseKey = match.phaseId || 'no-phase'
+      if (!grouped[divKey]) grouped[divKey] = {}
+      if (!grouped[divKey][phaseKey]) grouped[divKey][phaseKey] = []
+      grouped[divKey][phaseKey].push(match)
+    })
+    return grouped
+  }, [matches])
+
+  // Get unique divisions
   const divisions = useMemo(() => {
     const divMap = {}
-    games.forEach(g => {
-      if (!divMap[g.divisionId]) {
-        divMap[g.divisionId] = {
-          id: g.divisionId,
-          name: g.divisionName,
+    matches.forEach(m => {
+      if (!divMap[m.divisionId]) {
+        divMap[m.divisionId] = {
+          id: m.divisionId,
+          name: m.divisionName,
           phases: {}
         }
       }
-      if (g.phaseId && !divMap[g.divisionId].phases[g.phaseId]) {
-        divMap[g.divisionId].phases[g.phaseId] = {
-          id: g.phaseId,
-          name: g.phaseName
+      if (m.phaseId && !divMap[m.divisionId].phases[m.phaseId]) {
+        divMap[m.divisionId].phases[m.phaseId] = {
+          id: m.phaseId,
+          name: m.phaseName
         }
       }
     })
@@ -125,7 +171,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       ...d,
       phases: Object.values(d.phases)
     }))
-  }, [games])
+  }, [matches])
 
   // Get all courts (from data prop)
   const allCourts = useMemo(() => {
@@ -156,36 +202,35 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     return m
   }, [divisions])
 
-  // Currently scheduled games (existing + pending assignments)
-  const scheduledGames = useMemo(() => {
-    return games
-      .map(g => {
-        const assignment = assignments[g.id]
+  // Currently scheduled matches (existing + pending assignments)
+  const scheduledMatches = useMemo(() => {
+    return matches
+      .map(m => {
+        const assignment = assignments[m.id]
         return {
-          ...g,
-          courtId: assignment?.courtId ?? g.tournamentCourtId,
-          startTime: assignment?.startTime ?? g.scheduledStartTime,
-          duration: g.estimatedDurationMinutes || 30
+          ...m,
+          courtId: assignment?.courtId ?? m.courtId,
+          startTime: assignment?.startTime ?? m.scheduledStartTime,
         }
       })
-      .filter(g => g.courtId && g.startTime)
-  }, [games, assignments])
+      .filter(m => m.courtId && m.startTime)
+  }, [matches, assignments])
 
-  // Get team IDs for a game (for stagger logic)
-  const getTeamIds = (game) => {
-    return [game.unit1Id, game.unit2Id].filter(Boolean)
+  // Get team IDs for a match (for stagger logic)
+  const getTeamIds = (match) => {
+    return [match.unit1Id, match.unit2Id].filter(Boolean)
   }
 
-  // Check if scheduling a game at a time would violate back-to-back rule
-  const wouldViolateStagger = useCallback((game, courtId, startTime, proposedAssignments) => {
-    const teams = getTeamIds(game)
+  // Check if scheduling a match at a time would violate back-to-back rule
+  const wouldViolateStagger = useCallback((match, courtId, startTime, proposedAssignments) => {
+    const teams = getTeamIds(match)
     if (teams.length === 0) return false
     
-    const endTime = addMinutes(new Date(startTime), game.estimatedDurationMinutes || 30)
+    const endTime = addMinutes(new Date(startTime), match.duration)
     
-    // Check against all scheduled games
-    for (const other of scheduledGames) {
-      if (other.id === game.id) continue
+    // Check against all scheduled matches
+    for (const other of scheduledMatches) {
+      if (other.id === match.id) continue
       const otherTeams = getTeamIds(other)
       const hasOverlappingTeam = teams.some(t => otherTeams.includes(t))
       if (!hasOverlappingTeam) continue
@@ -202,8 +247,8 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     
     // Also check proposed assignments
     for (const [otherId, assignment] of Object.entries(proposedAssignments)) {
-      if (parseInt(otherId) === game.id) continue
-      const other = games.find(g => g.id === parseInt(otherId))
+      if (otherId === match.id) continue
+      const other = matches.find(m => m.id === otherId)
       if (!other) continue
       
       const otherTeams = getTeamIds(other)
@@ -211,7 +256,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       if (!hasOverlappingTeam) continue
       
       const otherStart = new Date(assignment.startTime)
-      const otherEnd = addMinutes(otherStart, other.estimatedDurationMinutes || 30)
+      const otherEnd = addMinutes(otherStart, other.duration)
       
       const bufferMs = 5 * 60000
       if (startTime < otherEnd.getTime() + bufferMs && endTime.getTime() > otherStart.getTime() - bufferMs) {
@@ -220,12 +265,12 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     }
     
     return false
-  }, [scheduledGames, games])
+  }, [scheduledMatches, matches])
 
-  // ─── Auto-schedule selected games ──────────────────────────────────
+  // ─── Auto-schedule selected matches ──────────────────────────────────
   const autoScheduleSelected = useCallback((courtIds, startTime) => {
-    if (selectedGames.size === 0) {
-      toast.warn('No games selected')
+    if (selectedMatches.size === 0) {
+      toast.warn('No matches selected')
       return
     }
     if (courtIds.length === 0) {
@@ -233,20 +278,19 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       return
     }
 
-    const gameList = games.filter(g => selectedGames.has(g.id))
+    const matchList = matches.filter(m => selectedMatches.has(m.id))
     const newAssignments = { ...assignments }
     let currentTime = new Date(startTime)
     let courtIndex = 0
     
-    // Sort games by match, then game number
-    const sortedGames = [...gameList].sort((a, b) => {
-      if (a.encounterId !== b.encounterId) return a.encounterId - b.encounterId
-      if (a.matchId !== b.matchId) return a.matchId - b.matchId
-      return a.gameNumber - b.gameNumber
+    // Sort matches by division, phase, then match order
+    const sortedMatches = [...matchList].sort((a, b) => {
+      if (a.divisionId !== b.divisionId) return a.divisionId - b.divisionId
+      if (a.phaseId !== b.phaseId) return (a.phaseId || 0) - (b.phaseId || 0)
+      return a.encounterId - b.encounterId
     })
 
-    for (const game of sortedGames) {
-      const duration = game.estimatedDurationMinutes || 30
+    for (const match of sortedMatches) {
       let scheduled = false
       let attempts = 0
       
@@ -255,26 +299,26 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         const courtId = courtIds[courtIndex % courtIds.length]
         
         // Check for conflicts on this court at this time
-        const hasCourtConflict = scheduledGames.some(g => {
-          if (g.courtId !== courtId) return false
-          const gStart = new Date(g.startTime)
-          const gEnd = addMinutes(gStart, g.duration)
-          return currentTime < gEnd && addMinutes(currentTime, duration) > gStart
+        const hasCourtConflict = scheduledMatches.some(m => {
+          if (m.courtId !== courtId) return false
+          const mStart = new Date(m.startTime)
+          const mEnd = addMinutes(mStart, m.duration)
+          return currentTime < mEnd && addMinutes(currentTime, match.duration) > mStart
         }) || Object.entries(newAssignments).some(([id, a]) => {
-          if (parseInt(id) === game.id) return false
+          if (id === match.id) return false
           if (a.courtId !== courtId) return false
           const aStart = new Date(a.startTime)
-          const other = games.find(g => g.id === parseInt(id))
-          const aEnd = addMinutes(aStart, other?.estimatedDurationMinutes || 30)
-          return currentTime < aEnd && addMinutes(currentTime, duration) > aStart
+          const other = matches.find(m => m.id === id)
+          const aEnd = addMinutes(aStart, other?.duration || 30)
+          return currentTime < aEnd && addMinutes(currentTime, match.duration) > aStart
         })
 
         // Check stagger rule
-        const violatesStagger = wouldViolateStagger(game, courtId, currentTime.getTime(), newAssignments)
+        const violatesStagger = wouldViolateStagger(match, courtId, currentTime.getTime(), newAssignments)
         
         if (!hasCourtConflict && !violatesStagger) {
-          const endTime = addMinutes(currentTime, duration)
-          newAssignments[game.id] = {
+          const endTime = addMinutes(currentTime, match.duration)
+          newAssignments[match.id] = {
             courtId,
             startTime: currentTime.toISOString(),
             endTime: endTime.toISOString()
@@ -291,15 +335,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       }
       
       if (!scheduled) {
-        toast.warn(`Could not schedule game ${game.gameNumber} of ${game.unit1Name} vs ${game.unit2Name}`)
+        toast.warn(`Could not schedule ${match.unit1Name} vs ${match.unit2Name}`)
       }
     }
 
     setAssignments(newAssignments)
-    toast.success(`Scheduled ${sortedGames.length} games`)
-  }, [selectedGames, games, assignments, scheduledGames, wouldViolateStagger, toast])
+    toast.success(`Scheduled ${sortedMatches.length} matches`)
+  }, [selectedMatches, matches, assignments, scheduledMatches, wouldViolateStagger, toast])
 
-  // ─── Save assignments ──────────────────────────────────
+  // ─── Save assignments (apply to all games in each match) ──────────────────────────────────
   const saveAssignments = async () => {
     if (Object.keys(assignments).length === 0) {
       toast.warn('No changes to save')
@@ -308,12 +352,24 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
 
     setSaving(true)
     try {
-      const updates = Object.entries(assignments).map(([gameId, { courtId, startTime, endTime }]) => ({
-        gameId: parseInt(gameId),
-        courtId,
-        scheduledStartTime: startTime,
-        scheduledEndTime: endTime
-      }))
+      // Build game-level updates from match assignments
+      const updates = []
+      
+      for (const [matchId, { courtId, startTime, endTime }] of Object.entries(assignments)) {
+        const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+        if (!match) continue
+        
+        // Apply the same court to all games in this match
+        // Each game gets the match start time (games are played sequentially on same court)
+        for (const game of match.games) {
+          updates.push({
+            gameId: game.id,
+            courtId,
+            scheduledStartTime: startTime,
+            scheduledEndTime: endTime
+          })
+        }
+      }
 
       const response = await tournamentApi.bulkAssignGames(eventId, updates)
       if (response.success) {
@@ -347,22 +403,22 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   const selectPhase = (divId, phaseId) => {
     setSelectedDivision(divId)
     setSelectedPhase(phaseId)
-    // Auto-select all games in this phase
-    const phaseGames = gamesByDivPhase[divId]?.[phaseId] || []
-    setSelectedGames(new Set(phaseGames.map(g => g.id)))
+    // Auto-select all matches in this phase
+    const phaseMatches = matchesByDivPhase[divId]?.[phaseId] || []
+    setSelectedMatches(new Set(phaseMatches.map(m => m.id)))
   }
 
-  const toggleGame = (gameId) => {
-    setSelectedGames(prev => {
+  const toggleMatch = (matchId) => {
+    setSelectedMatches(prev => {
       const next = new Set(prev)
-      if (next.has(gameId)) next.delete(gameId)
-      else next.add(gameId)
+      if (next.has(matchId)) next.delete(matchId)
+      else next.add(matchId)
       return next
     })
   }
 
   const clearSelection = () => {
-    setSelectedGames(new Set())
+    setSelectedMatches(new Set())
     setSelectedDivision(null)
     setSelectedPhase(null)
   }
@@ -372,49 +428,49 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-        <span className="ml-2 text-gray-500">Loading games...</span>
+        <span className="ml-2 text-gray-500">Loading matches...</span>
       </div>
     )
   }
 
-  if (games.length === 0) {
+  if (matches.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Calendar className="w-12 h-12 text-gray-300 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Games to Schedule</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No Matches to Schedule</h3>
         <p className="text-sm text-gray-500 max-w-md">
-          Games are created when you configure phases and match formats. 
-          First set up your division phases with game formats (Best of 1/3/5), then come back here to assign court times.
+          Matches are created when you configure phases and brackets. 
+          First set up your division phases, then come back here to assign court times.
         </p>
       </div>
     )
   }
 
-  const selectedGameList = games.filter(g => selectedGames.has(g.id))
-  const totalDuration = selectedGameList.reduce((sum, g) => sum + (g.estimatedDurationMinutes || 30), 0)
+  const selectedMatchList = matches.filter(m => selectedMatches.has(m.id))
+  const totalDuration = selectedMatchList.reduce((sum, m) => sum + m.duration, 0)
 
   return (
     <div className="flex gap-4 h-[calc(100vh-200px)] min-h-[600px]">
-      {/* ─── Left Panel: Phase/Game Selector ─── */}
+      {/* ─── Left Panel: Phase/Match Selector ─── */}
       <div className="w-80 flex-shrink-0 bg-white rounded-xl border overflow-hidden flex flex-col">
         <div className="p-4 border-b bg-gray-50">
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
             <Filter className="w-4 h-4" />
-            Select Games
+            Select Matches
           </h3>
           <p className="text-xs text-gray-500 mt-1">
-            Click a phase to select all its games, or pick individually
+            Click a phase to select all its matches, or pick individually
           </p>
         </div>
         
         <div className="flex-1 overflow-y-auto p-2">
           {divisions.map(div => {
-            const divGames = gamesByDivPhase[div.id] || {}
+            const divMatches = matchesByDivPhase[div.id] || {}
             const phases = div.phases || []
-            const noPhaseGames = divGames['no-phase'] || []
+            const noPhaseMatches = divMatches['no-phase'] || []
             const color = divColors[div.id]
             const isExpanded = expandedDivisions.has(div.id)
-            const totalDivGames = Object.values(divGames).flat().length
+            const totalDivMatches = Object.values(divMatches).flat().length
             
             return (
               <div key={div.id} className="mb-2">
@@ -425,17 +481,17 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                 >
                   {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   <span className={`font-medium ${color?.text}`}>{div.name}</span>
-                  <span className="ml-auto text-xs text-gray-500">{totalDivGames} games</span>
+                  <span className="ml-auto text-xs text-gray-500">{totalDivMatches} matches</span>
                 </button>
                 
                 {/* Phases */}
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-1">
                     {phases.map(phase => {
-                      const phaseGames = divGames[phase.id] || []
+                      const phaseMatches = divMatches[phase.id] || []
                       const isSelected = selectedDivision === div.id && selectedPhase === phase.id
-                      const scheduledCount = phaseGames.filter(g => 
-                        g.tournamentCourtId || assignments[g.id]?.courtId
+                      const scheduledCount = phaseMatches.filter(m => 
+                        m.courtId || assignments[m.id]?.courtId
                       ).length
                       
                       return (
@@ -449,35 +505,37 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                             <Play className="w-3 h-3 text-gray-400" />
                             <span className="flex-1">{phase.name}</span>
                             <span className="text-xs text-gray-500">
-                              {scheduledCount}/{phaseGames.length}
+                              {scheduledCount}/{phaseMatches.length}
                             </span>
                           </button>
                           
-                          {/* Individual games when phase is selected */}
+                          {/* Individual matches when phase is selected */}
                           {isSelected && (
                             <div className="ml-4 mt-1 space-y-0.5 max-h-64 overflow-y-auto">
-                              {phaseGames.map(game => {
-                                const isScheduled = game.tournamentCourtId || assignments[game.id]?.courtId
+                              {phaseMatches.map(match => {
+                                const isScheduled = match.courtId || assignments[match.id]?.courtId
                                 return (
                                   <label
-                                    key={game.id}
+                                    key={match.id}
                                     className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-xs ${
                                       isScheduled ? 'bg-green-50' : ''
                                     }`}
                                   >
                                     <input
                                       type="checkbox"
-                                      checked={selectedGames.has(game.id)}
-                                      onChange={() => toggleGame(game.id)}
+                                      checked={selectedMatches.has(match.id)}
+                                      onChange={() => toggleMatch(match.id)}
                                       className="rounded border-gray-300"
                                     />
                                     <span className="flex-1 truncate">
-                                      <span className="text-gray-400">G{game.gameNumber}</span>{' '}
-                                      {game.unit1Name || 'TBD'} vs {game.unit2Name || 'TBD'}
+                                      {match.unit1Name || 'TBD'} vs {match.unit2Name || 'TBD'}
+                                      <span className="text-gray-400 ml-1">
+                                        (Bo{match.totalGames})
+                                      </span>
                                     </span>
                                     {isScheduled && (
                                       <span className="text-green-600 text-[10px]">
-                                        {game.courtLabel || assignments[game.id]?.courtId}
+                                        {match.courtLabel || assignments[match.id]?.courtId}
                                       </span>
                                     )}
                                   </label>
@@ -489,8 +547,8 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                       )
                     })}
                     
-                    {/* No-phase games */}
-                    {noPhaseGames.length > 0 && (
+                    {/* No-phase matches */}
+                    {noPhaseMatches.length > 0 && (
                       <button
                         onClick={() => selectPhase(div.id, 'no-phase')}
                         className={`w-full px-3 py-2 rounded-lg text-left text-sm flex items-center gap-2 ${
@@ -499,8 +557,8 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                         }`}
                       >
                         <Square className="w-3 h-3 text-gray-400" />
-                        <span className="text-gray-600">Other Games</span>
-                        <span className="ml-auto text-xs text-gray-500">{noPhaseGames.length}</span>
+                        <span className="text-gray-600">Other Matches</span>
+                        <span className="ml-auto text-xs text-gray-500">{noPhaseMatches.length}</span>
                       </button>
                     )}
                   </div>
@@ -511,11 +569,11 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         </div>
 
         {/* Selection summary */}
-        {selectedGames.size > 0 && (
+        {selectedMatches.size > 0 && (
           <div className="p-3 border-t bg-orange-50">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-orange-800">
-                {selectedGames.size} games selected
+                {selectedMatches.size} matches selected
               </span>
               <button onClick={clearSelection} className="text-xs text-orange-600 hover:underline">
                 Clear
@@ -588,10 +646,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         </div>
 
         {/* Quick schedule controls */}
-        {selectedGames.size > 0 && (
+        {selectedMatches.size > 0 && (
           <QuickScheduleBar
             courts={allCourts}
-            selectedCount={selectedGames.size}
+            selectedCount={selectedMatches.size}
             totalDuration={totalDuration}
             dayStart={dayStart}
             onSchedule={autoScheduleSelected}
@@ -628,21 +686,23 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                 court={court}
                 timeSlots={timeSlots}
                 dayStart={dayStart}
-                scheduledGames={scheduledGames.filter(g => g.courtId === court.id)}
+                scheduledMatches={scheduledMatches.filter(m => m.courtId === court.id)}
                 pendingAssignments={Object.entries(assignments)
                   .filter(([_, a]) => a.courtId === court.id)
-                  .map(([id, a]) => ({
-                    ...games.find(g => g.id === parseInt(id)),
-                    ...a
-                  }))}
+                  .map(([id, a]) => {
+                    const match = matches.find(m => m.id === id || m.id === parseInt(id))
+                    return match ? { ...match, ...a } : null
+                  })
+                  .filter(Boolean)}
                 divColors={divColors}
-                onDropGame={(gameId, time) => {
-                  const game = games.find(g => g.id === gameId)
-                  if (game && !wouldViolateStagger(game, court.id, time.getTime(), assignments)) {
-                    const endTime = addMinutes(time, game.estimatedDurationMinutes || 30)
+                matches={matches}
+                onDropMatch={(matchId, time) => {
+                  const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+                  if (match && !wouldViolateStagger(match, court.id, time.getTime(), assignments)) {
+                    const endTime = addMinutes(time, match.duration)
                     setAssignments(prev => ({
                       ...prev,
-                      [gameId]: { 
+                      [matchId]: { 
                         courtId: court.id, 
                         startTime: time.toISOString(),
                         endTime: endTime.toISOString()
@@ -689,7 +749,7 @@ function QuickScheduleBar({ courts, selectedCount, totalDuration, dayStart, onSc
   return (
     <div className="px-4 py-3 border-b bg-orange-50 flex items-center gap-4 flex-wrap">
       <div className="text-sm font-medium text-orange-800">
-        Schedule {selectedCount} games ({Math.floor(totalDuration / 60)}h {totalDuration % 60}m)
+        Schedule {selectedCount} matches ({Math.floor(totalDuration / 60)}h {totalDuration % 60}m)
       </div>
       
       <div className="flex items-center gap-2">
@@ -737,23 +797,23 @@ function QuickScheduleBar({ courts, selectedCount, totalDuration, dayStart, onSc
 }
 
 // ═════════════════════════════════════════════════════
-// Court Row
+// Court Row (now shows matches, not games)
 // ═════════════════════════════════════════════════════
-function CourtRow({ court, timeSlots, dayStart, scheduledGames, pendingAssignments, divColors, onDropGame }) {
+function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignments, divColors, matches, onDropMatch }) {
   const rowRef = useRef(null)
 
   // Handle drop
   const handleDrop = (e) => {
     e.preventDefault()
-    const gameId = parseInt(e.dataTransfer.getData('gameId'))
-    if (!gameId || !rowRef.current) return
+    const matchId = e.dataTransfer.getData('matchId')
+    if (!matchId || !rowRef.current) return
 
     const rect = rowRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left - 96 // account for label width
     const slotIndex = Math.floor(x / PIXELS_PER_SLOT)
     const dropTime = addMinutes(dayStart, slotIndex * SLOT_SIZE)
     
-    onDropGame(gameId, dropTime)
+    onDropMatch(matchId, dropTime)
   }
 
   return (
@@ -782,53 +842,54 @@ function CourtRow({ court, timeSlots, dayStart, scheduledGames, pendingAssignmen
           ))}
         </div>
 
-        {/* Scheduled games */}
-        {scheduledGames.map(game => {
-          const slotIndex = getSlotIndex(new Date(game.startTime), dayStart)
-          const width = Math.ceil(game.duration / SLOT_SIZE) * PIXELS_PER_SLOT
-          const color = divColors[game.divisionId] || COLORS[0]
+        {/* Scheduled matches */}
+        {scheduledMatches.map(match => {
+          const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
+          const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
+          const color = divColors[match.divisionId] || COLORS[0]
           
           return (
             <div
-              key={game.id}
+              key={match.id}
               className={`absolute top-1 bottom-1 rounded ${color.bg} ${color.border} border flex items-center px-2 text-xs overflow-hidden cursor-move`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 30)
+                width: Math.max(width - 2, 50)
               }}
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('gameId', game.id.toString())}
-              title={`G${game.gameNumber}: ${game.unit1Name} vs ${game.unit2Name}`}
+              onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
+              title={`${match.unit1Name} vs ${match.unit2Name} (Bo${match.totalGames}, ${match.duration}min)`}
             >
               <span className={`truncate ${color.text}`}>
-                <span className="opacity-60">G{game.gameNumber}</span> {game.unit1Name || 'TBD'} v {game.unit2Name || 'TBD'}
+                {match.unit1Name || 'TBD'} v {match.unit2Name || 'TBD'}
+                <span className="opacity-50 ml-1">Bo{match.totalGames}</span>
               </span>
             </div>
           )
         })}
 
         {/* Pending assignments (show with dashed border) */}
-        {pendingAssignments.map(game => {
-          if (!game?.startTime) return null
-          const slotIndex = getSlotIndex(new Date(game.startTime), dayStart)
-          const duration = game.estimatedDurationMinutes || 30
-          const width = Math.ceil(duration / SLOT_SIZE) * PIXELS_PER_SLOT
-          const color = divColors[game.divisionId] || COLORS[0]
+        {pendingAssignments.map(match => {
+          if (!match?.startTime) return null
+          const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
+          const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
+          const color = divColors[match.divisionId] || COLORS[0]
           
           return (
             <div
-              key={`pending-${game.id}`}
+              key={`pending-${match.id}`}
               className={`absolute top-1 bottom-1 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center px-2 text-xs overflow-hidden cursor-move opacity-80`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 30)
+                width: Math.max(width - 2, 50)
               }}
               draggable
-              onDragStart={(e) => e.dataTransfer.setData('gameId', game.id.toString())}
-              title={`G${game.gameNumber}: ${game.unit1Name} vs ${game.unit2Name} (pending)`}
+              onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
+              title={`${match.unit1Name} vs ${match.unit2Name} (Bo${match.totalGames}, ${match.duration}min) - pending`}
             >
               <span className={`truncate ${color.text}`}>
-                <span className="opacity-60">G{game.gameNumber}</span> {game.unit1Name || 'TBD'} v {game.unit2Name || 'TBD'}
+                {match.unit1Name || 'TBD'} v {match.unit2Name || 'TBD'}
+                <span className="opacity-50 ml-1">Bo{match.totalGames}</span>
               </span>
             </div>
           )
