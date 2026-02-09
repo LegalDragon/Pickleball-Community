@@ -67,7 +67,7 @@ export default function TournamentManage() {
   // Modal states
   const [scheduleConfigModal, setScheduleConfigModal] = useState({ isOpen: false, division: null });
   const [gameSettingsModal, setGameSettingsModal] = useState({ isOpen: false, division: null });
-  const [schedulingWizardModal, setSchedulingWizardModal] = useState({ isOpen: false, division: null });
+  const [schedulingWizardModal, setSchedulingWizardModal] = useState({ isOpen: false, division: null, initialStep: 0 });
   const [scheduleDropdownOpen, setScheduleDropdownOpen] = useState(null); // Track which division's schedule dropdown is open
 
   // Add courts modal state
@@ -3865,7 +3865,7 @@ export default function TournamentManage() {
                               {/* Scheduling Wizard - all-in-one flow */}
                               <button
                                 onClick={() => {
-                                  setSchedulingWizardModal({ isOpen: true, division: div });
+                                  setSchedulingWizardModal({ isOpen: true, division: div, initialStep: 0 });
                                   setScheduleDropdownOpen(null);
                                 }}
                                 className="w-full px-4 py-2 text-left text-sm text-orange-600 font-medium hover:bg-orange-50 flex items-center gap-2 border-b border-gray-100"
@@ -3876,7 +3876,7 @@ export default function TournamentManage() {
                               </button>
                               <button
                                 onClick={() => {
-                                  handleOpenScheduleConfig(div);
+                                  setSchedulingWizardModal({ isOpen: true, division: div, initialStep: 0 });
                                   setScheduleDropdownOpen(null);
                                 }}
                                 disabled={generatingSchedule}
@@ -3888,7 +3888,7 @@ export default function TournamentManage() {
                               </button>
                               <button
                                 onClick={() => {
-                                  setGameSettingsModal({ isOpen: true, division: div });
+                                  setSchedulingWizardModal({ isOpen: true, division: div, initialStep: 1 });
                                   setScheduleDropdownOpen(null);
                                 }}
                                 disabled={!div.scheduleReady}
@@ -3898,14 +3898,18 @@ export default function TournamentManage() {
                                 Formats
                                 {!div.scheduleReady && <span className="ml-auto text-xs text-gray-400">Need phases</span>}
                               </button>
-                              <Link
-                                to={`/tournament/${eventId}/schedule-dashboard`}
-                                onClick={() => setScheduleDropdownOpen(null)}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              <button
+                                onClick={() => {
+                                  setSchedulingWizardModal({ isOpen: true, division: div, initialStep: 2 });
+                                  setScheduleDropdownOpen(null);
+                                }}
+                                disabled={!div.scheduleReady}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:text-gray-400"
                               >
                                 <Clock className="w-4 h-4" />
                                 Court Time
-                              </Link>
+                                {!div.scheduleReady && <span className="ml-auto text-xs text-gray-400">Need phases</span>}
+                              </button>
                             </div>
                             </>
                           )}
@@ -8447,8 +8451,9 @@ export default function TournamentManage() {
             <DivisionSchedulingWizard
               divisionId={schedulingWizardModal.division?.id}
               eventId={eventId}
+              initialStep={schedulingWizardModal.initialStep || 0}
               onClose={() => {
-                setSchedulingWizardModal({ isOpen: false, division: null });
+                setSchedulingWizardModal({ isOpen: false, division: null, initialStep: 0 });
                 loadDashboard();
               }}
             />
