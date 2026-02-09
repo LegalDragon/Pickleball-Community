@@ -2,44 +2,34 @@ name: Run Migration
 
 on:
   workflow_dispatch:
-    inputs:
-      migration_file:
-        description: 'Migration file path (relative to repo root)'
-        required: true
-        default: 'Backend/API/Scripts/archives/Migration_150_VenueDataQuality.sql'
-      database:
-        description: 'Database name'
-        required: false
-        default: 'PickleballCommunity'
 
 jobs:
-  run:
-    name: Run Migration
-    runs-on: [self-hosted, windows, iis]
+  migrate:
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Migration File
+      - name: Run Phase Timing Columns Migration
         shell: powershell
         run: |
-          $db = "${{ github.event.inputs.database }}"
-          $file = "${{ github.event.inputs.migration_file }}"
-          Write-Host "Running migration file: $file on database: $db"
-          if (-not (Test-Path $file)) {
-            Write-Host "ERROR: File not found: $file"
-            exit 1
-          }
-          # Use sqlcmd which properly handles GO batch separators and CREATE OR ALTER
-          $sqlcmd = "sqlcmd"
-          try {
-            & $sqlcmd -S localhost -d $db -i $file -b -t 600 2>&1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Migration failed with exit code: $LASTEXITCODE"
-              exit 1
-            }
-            Write-Host "Migration completed successfully."
-          } catch {
-            Write-Host "Migration Error: $($_.Exception.Message)"
-            exit 1
-          }
+          $sql = @"
+          IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('DivisionPhases') AND name = 'GameDurationMinutes')
+          BEGIN
+              ALTER TABLE DivisionPhases ADD GameDurationMinutes INT NULL;
+              PRINT 'Added GameDurationMinutes column'
+          END
+
+          IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('DivisionPhases') AND name = 'ChangeoverMinutes')
+          BEGIN
+              ALTER TABLE DivisionPhases ADD ChangeoverMinutes INT NOT NULL DEFAULT 2;
+              PRINT 'Added ChangeoverMinutes column'
+          END
+
+          IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('DivisionPhases') AND name = 'MatchBufferMinutes')
+          BEGIN
+              ALTER TABLE DivisionPhases ADD MatchBufferMinutes INT NOT NULL DEFAULT 5;
+              PRINT 'Added MatchBufferMinutes column'
+          END
+
+          PRINT 'Migration complete'
+"@
+          Invoke-Sqlcmd -Query $sql -ServerInstance "localhost" -Database "PickleballCommunity" -TrustServerCertificate
+          Write-Host "Migration executed successfully"
