@@ -26,12 +26,19 @@ export const getAssetUrl = (path) => {
 export const getSharedAssetUrl = (path) => {
   if (!path) return null
 
-  // Extract asset ID from ANY URL format and always use local proxy
+  // LOCAL ASSETS: If already a local asset URL (/api/assets/123), return as-is
+  // These don't need the shared proxy - they're served directly by our backend
+  const localAssetMatch = path.match(/^\/api\/assets\/(\d+)$/)
+  if (localAssetMatch) {
+    return path // Return as-is, already correct format
+  }
+
+  // SHARED ASSETS: Extract asset ID from external URL formats and route through proxy
   // Handles: /asset/123, https://shared.funtimepb.com/asset/123, /api/assets/shared/123, etc.
   // The proxy adds API key authentication required by Funtime-Shared
-  const assetMatch = path.match(/\/asset[s]?(?:\/shared)?\/(\d+)/)
-  if (assetMatch) {
-    const assetId = assetMatch[1]
+  const sharedAssetMatch = path.match(/\/asset[s]?\/shared\/(\d+)|shared\.funtimepb\.com\/asset\/(\d+)|^\/asset\/(\d+)/)
+  if (sharedAssetMatch) {
+    const assetId = sharedAssetMatch[1] || sharedAssetMatch[2] || sharedAssetMatch[3]
     // In dev mode, API_BASE_URL is full URL (https://localhost:7009) - need absolute URL
     // In production, API_BASE_URL is '/api' - need relative URL with /api prefix
     if (API_BASE_URL && API_BASE_URL.startsWith('http')) {
