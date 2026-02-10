@@ -55,7 +55,7 @@ public class NotificationChannelTemplateDto
     public DateTime? UpdatedAt { get; set; }
 }
 
-public class CreateNotificationTemplateDto
+public class CreateChannelTemplateDto
 {
     public int EventTypeId { get; set; }
     public string Channel { get; set; } = string.Empty;
@@ -67,7 +67,7 @@ public class CreateNotificationTemplateDto
     public bool IsTestMode { get; set; } = true;
 }
 
-public class UpdateNotificationTemplateDto
+public class UpdateChannelTemplateDto
 {
     public string? Name { get; set; }
     public string? FXTaskCode { get; set; }
@@ -184,7 +184,7 @@ public class NotificationSendDetail
 // Preview DTO
 // =====================================================
 
-public class PreviewNotificationRequest
+public class PreviewChannelTemplateRequest
 {
     public int TemplateId { get; set; }
     public Dictionary<string, object?> Context { get; set; } = new();

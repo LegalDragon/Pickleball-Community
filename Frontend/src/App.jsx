@@ -71,6 +71,7 @@ import VideoRoomList from './pages/VideoRooms/VideoRoomList'
 import VideoRoomJoin from './pages/VideoRooms/VideoRoomJoin'
 import VideoRoomCall from './pages/VideoRooms/VideoRoomCall'
 import MyTemplates from './pages/MyTemplates'
+import NotificationSystemAdmin from './pages/NotificationSystemAdmin'
 
 
 function App() {
@@ -350,6 +351,12 @@ function App() {
       <Route path="/admin/asset-types" element={
         <ProtectedRoute role="Admin">
           <ObjectAssetTypesAdmin />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/admin/notification-system" element={
+        <ProtectedRoute role="Admin">
+          <NotificationSystemAdmin />
         </ProtectedRoute>
       } />
 

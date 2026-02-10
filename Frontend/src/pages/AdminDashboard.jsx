@@ -2491,13 +2491,22 @@ const AdminDashboard = () => {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Notification Templates</h2>
-                <button
-                  onClick={handleNewTemplate}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Template
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => navigate('/admin/notification-system')}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+                  >
+                    <Bell className="w-4 h-4 mr-2" />
+                    Unified System
+                  </button>
+                  <button
+                    onClick={handleNewTemplate}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Template
+                  </button>
+                </div>
               </div>
 
               {/* Search and Filters */}

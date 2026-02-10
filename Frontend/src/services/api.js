@@ -2721,4 +2721,55 @@ export const encounterApi = {
   updatePhaseGameSettings: (phaseId, data) => api.put(`/encounters/phases/${phaseId}/game-settings`, data)
 }
 
+// =====================================================
+// Unified Notification System API (Admin)
+// =====================================================
+export const notificationSystemApi = {
+  // Event Types
+  getEventTypes: (category = null) =>
+    api.get(`/notifications/event-types${category ? `?category=${category}` : ''}`),
+  getEventType: (id) => api.get(`/notifications/event-types/${id}`),
+  createEventType: (data) => api.post('/notifications/event-types', data),
+  toggleEventType: (id) => api.post(`/notifications/event-types/${id}/toggle`),
+
+  // Templates
+  getTemplates: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.eventTypeId) queryParams.append('eventTypeId', params.eventTypeId)
+    if (params.channel) queryParams.append('channel', params.channel)
+    const queryString = queryParams.toString()
+    return api.get(`/notifications/templates${queryString ? `?${queryString}` : ''}`)
+  },
+  getTemplate: (id) => api.get(`/notifications/templates/${id}`),
+  createTemplate: (data) => api.post('/notifications/templates', data),
+  updateTemplate: (id, data) => api.put(`/notifications/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/notifications/templates/${id}`),
+  toggleTestMode: (id) => api.post(`/notifications/templates/${id}/toggle-test-mode`),
+  toggleActive: (id) => api.post(`/notifications/templates/${id}/toggle-active`),
+  previewTemplate: (id, context) => api.post(`/notifications/templates/${id}/preview`, context),
+
+  // Send & Test
+  sendNotification: (data) => api.post('/notifications/send', data),
+
+  // Logs
+  getLogs: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.eventTypeKey) queryParams.append('eventTypeKey', params.eventTypeKey)
+    if (params.channel) queryParams.append('channel', params.channel)
+    if (params.status) queryParams.append('status', params.status)
+    if (params.recipientUserId) queryParams.append('recipientUserId', params.recipientUserId)
+    if (params.fromDate) queryParams.append('fromDate', params.fromDate)
+    if (params.toDate) queryParams.append('toDate', params.toDate)
+    if (params.page) queryParams.append('page', params.page)
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize)
+    const queryString = queryParams.toString()
+    return api.get(`/notifications/logs${queryString ? `?${queryString}` : ''}`)
+  },
+  getLog: (id) => api.get(`/notifications/logs/${id}`),
+
+  // Reference data
+  getChannels: () => api.get('/notifications/channels'),
+  getCategories: () => api.get('/notifications/categories')
+}
+
 export default api

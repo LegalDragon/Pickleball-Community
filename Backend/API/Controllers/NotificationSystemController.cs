@@ -269,7 +269,7 @@ public class NotificationSystemController : ControllerBase
     /// </summary>
     [HttpPost("templates")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<NotificationChannelTemplateDto>> CreateTemplate([FromBody] CreateNotificationTemplateDto dto)
+    public async Task<ActionResult<NotificationChannelTemplateDto>> CreateTemplate([FromBody] CreateChannelTemplateDto dto)
     {
         // Validate event type exists
         var eventType = await _context.Set<NotificationEventType>().FindAsync(dto.EventTypeId);
@@ -317,7 +317,7 @@ public class NotificationSystemController : ControllerBase
     /// </summary>
     [HttpPut("templates/{id}")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<NotificationChannelTemplateDto>> UpdateTemplate(int id, [FromBody] UpdateNotificationTemplateDto dto)
+    public async Task<ActionResult<NotificationChannelTemplateDto>> UpdateTemplate(int id, [FromBody] UpdateChannelTemplateDto dto)
     {
         var template = await _context.Set<NotificationChannelTemplate>()
             .Include(t => t.EventType)
