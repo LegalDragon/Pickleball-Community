@@ -15,7 +15,7 @@ import {
   Maximize2, Minimize2, ArrowRightLeft, ArrowDownUp
 } from 'lucide-react';
 import { tournamentApi } from '../services/api';
-import { parseStructureToVisual } from './tournament/structureEditorConstants';
+import { parseStructureToVisual, PHASE_TYPE_COLORS, PHASE_TYPE_ICONS } from './tournament/structureEditorConstants';
 
 // Layout constants
 const NODE_WIDTH = 180;
@@ -648,50 +648,76 @@ function PhaseFlowDiagram({ phases, structureJson }) {
 }
 
 function PhaseNode({ data }) {
-  const getPhaseColor = (type) => {
-    switch (type?.toLowerCase()) {
-      case 'roundrobin':
-      case 'pools':
-        return { bg: 'bg-emerald-500' };
-      case 'singleelimination':
-      case 'bracket':
-      case 'bracketround':
-        return { bg: 'bg-amber-500' };
-      case 'doubleelimination':
-        return { bg: 'bg-purple-500' };
-      default:
-        return { bg: 'bg-blue-500' };
-    }
+  // Map type names to standard keys
+  const getPhaseTypeKey = (type) => {
+    const t = type?.toLowerCase() || '';
+    if (t === 'roundrobin') return 'RoundRobin';
+    if (t === 'pools') return 'Pools';
+    if (t === 'singleelimination' || t === 'bracket') return 'SingleElimination';
+    if (t === 'bracketround') return 'BracketRound';
+    if (t === 'doubleelimination') return 'DoubleElimination';
+    if (t === 'award') return 'Award';
+    if (t === 'draw') return 'Draw';
+    return 'SingleElimination';
   };
 
-  const getPhaseIcon = (type) => {
-    switch (type?.toLowerCase()) {
-      case 'roundrobin':
-        return <RefreshCcw className="w-4 h-4" />;
-      case 'pools':
-        return <Layers className="w-4 h-4" />;
-      default:
-        return <GitBranch className="w-4 h-4" />;
-    }
-  };
-
-  const colors = getPhaseColor(data.type);
+  const phaseTypeKey = getPhaseTypeKey(data.type);
+  const colors = PHASE_TYPE_COLORS[phaseTypeKey] || PHASE_TYPE_COLORS.SingleElimination;
+  const Icon = PHASE_TYPE_ICONS[phaseTypeKey] || GitBranch;
+  const isExpanded = data.isExpanded;
 
   return (
-    <div className="bg-white rounded-lg shadow-md border-2 border-gray-200 min-w-[160px] overflow-hidden">
-      <div className={`${colors.bg} text-white px-3 py-2 flex items-center gap-2`}>
-        {getPhaseIcon(data.type)}
-        <span className="font-medium text-sm truncate">{data.label}</span>
+    <div 
+      className={`bg-white rounded-lg shadow-md border-2 overflow-hidden transition-all ${colors.border}`}
+      style={{ width: isExpanded ? 220 : 180 }}
+    >
+      {/* Header */}
+      <div className={`${colors.bg} text-white px-3 py-1.5 flex items-center gap-2`}>
+        <Icon className="w-3.5 h-3.5" />
+        <span className="font-medium text-xs truncate flex-1">{data.label}</span>
+        <span className="text-white/70 text-[10px]">#{data.order}</span>
       </div>
-      <div className="px-3 py-2 text-xs text-gray-600">
-        <div className="flex justify-between">
-          <span>{data.type}</span>
-          <span>{data.inSlots} in → {data.outSlots} out</span>
+      
+      {/* Content */}
+      <div className={`${colors.light} px-3 py-2`}>
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-medium ${colors.text}`}>{data.type}</span>
+          <span className="text-xs text-gray-500">
+            {data.type?.toLowerCase() === 'award' 
+              ? `${data.inSlots} in → 🏆` 
+              : `${data.inSlots} in → ${data.outSlots} out`}
+          </span>
         </div>
         {data.poolCount > 1 && (
-          <div className="text-purple-600 mt-1">{data.poolCount} pools</div>
+          <div className="text-[10px] text-gray-500 mt-0.5">{data.poolCount} pools</div>
         )}
       </div>
+
+      {/* Expanded details */}
+      {isExpanded && (
+        <div className="bg-white border-t px-3 py-2 text-[10px] text-gray-500 space-y-1">
+          <div className="flex justify-between">
+            <span>Incoming:</span>
+            <span className="font-medium text-gray-700">{data.inSlots} slots</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Advancing:</span>
+            <span className="font-medium text-gray-700">{data.outSlots} slots</span>
+          </div>
+          {data.poolCount > 1 && (
+            <div className="flex justify-between">
+              <span>Pool size:</span>
+              <span className="font-medium text-gray-700">~{Math.ceil(data.inSlots / data.poolCount)} each</span>
+            </div>
+          )}
+          {data.encounterCount > 0 && (
+            <div className="flex justify-between">
+              <span>Matches:</span>
+              <span className="font-medium text-gray-700">~{data.encounterCount}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
