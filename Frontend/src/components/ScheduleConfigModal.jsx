@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,12 +8,57 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import dagre from 'dagre';
 import {
   X, FileText, Check, Loader2, AlertTriangle,
-  Table, Grid3X3, RefreshCcw, GitBranch, Layers, Trophy
+  Table, Grid3X3, RefreshCcw, GitBranch, Layers, Trophy,
+  Maximize2, Minimize2, ArrowRightLeft, ArrowDownUp
 } from 'lucide-react';
 import { tournamentApi } from '../services/api';
 import { parseStructureToVisual } from './tournament/structureEditorConstants';
+
+// Layout constants
+const NODE_WIDTH = 180;
+const NODE_HEIGHT = 80;
+const NODE_WIDTH_EXPANDED = 220;
+const NODE_HEIGHT_EXPANDED = 120;
+
+/**
+ * Use dagre to compute tree layout positions
+ */
+function getLayoutedElements(nodes, edges, direction = 'TB', isExpanded = false) {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  
+  const nodeWidth = isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH;
+  const nodeHeight = isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT;
+  const nodeSep = isExpanded ? (direction === 'LR' ? 60 : 80) : (direction === 'LR' ? 40 : 60);
+  const rankSep = isExpanded ? (direction === 'LR' ? 140 : 120) : (direction === 'LR' ? 100 : 80);
+  
+  g.setGraph({ rankdir: direction, nodesep: nodeSep, ranksep: rankSep });
+
+  nodes.forEach((node) => {
+    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(g);
+
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = g.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges };
+}
 
 /**
  * ScheduleConfigModal - Full-width template selection with visual flow preview
@@ -339,7 +384,7 @@ export default function ScheduleConfigModal({
                     </div>
                   ) : preview?.phases?.length > 0 ? (
                     viewMode === 'visual' ? (
-                      <PhaseFlowDiagram phases={preview.phases} />
+                      <PhaseFlowDiagram phases={preview.phases} structureJson={selectedTemplate?.structureJson} />
                     ) : (
                       <PhaseDataView phases={preview.phases} />
                     )
@@ -433,49 +478,115 @@ export default function ScheduleConfigModal({
 }
 
 /**
- * React Flow diagram for phase visualization
+ * React Flow diagram for phase visualization with tree layout
  */
-function PhaseFlowDiagram({ phases }) {
+function PhaseFlowDiagram({ phases, structureJson }) {
+  const [direction, setDirection] = useState('TB'); // 'TB' or 'LR'
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Parse structure to get advancement rules
+  const structure = useMemo(() => {
+    if (!structureJson) return null;
+    try {
+      return typeof structureJson === 'string' ? JSON.parse(structureJson) : structureJson;
+    } catch {
+      return null;
+    }
+  }, [structureJson]);
+
+  // Build nodes and edges
   const { nodes, edges } = useMemo(() => {
     const nodeList = [];
     const edgeList = [];
     
+    // Build nodes from phases
     phases.forEach((phase, index) => {
-      const x = 200;
-      const y = index * 140 + 50;
-      
+      const order = phase.order || (index + 1);
       nodeList.push({
-        id: `phase-${phase.order || index}`,
+        id: `phase-${order - 1}`,
         type: 'phaseNode',
-        position: { x, y },
+        position: { x: 0, y: 0 }, // Will be set by dagre
         data: {
           label: phase.name,
           type: phase.type,
           inSlots: phase.incomingSlots || phase.inSlots,
           outSlots: phase.exitingSlots || phase.outSlots,
           poolCount: phase.poolCount,
-          encounterCount: phase.encounterCount
+          encounterCount: phase.encounterCount,
+          order: order,
+          isExpanded: isExpanded
         }
       });
-      
-      if (index < phases.length - 1) {
+    });
+
+    // Build edges from advancement rules if available
+    const advancementRules = structure?.advancementRules || [];
+    
+    if (advancementRules.length > 0) {
+      // Group rules by source-target pair
+      const edgeMap = new Map();
+      advancementRules.forEach((rule) => {
+        const key = `${rule.sourcePhaseOrder}-${rule.targetPhaseOrder}`;
+        if (!edgeMap.has(key)) {
+          edgeMap.set(key, { 
+            sourcePhaseOrder: rule.sourcePhaseOrder, 
+            targetPhaseOrder: rule.targetPhaseOrder, 
+            count: 0, 
+            rules: [] 
+          });
+        }
+        const entry = edgeMap.get(key);
+        entry.count++;
+        entry.rules.push(rule);
+      });
+
+      // Create edges from grouped rules
+      edgeMap.forEach(({ sourcePhaseOrder, targetPhaseOrder, count, rules }) => {
+        const sortedByTarget = [...rules].sort((a, b) => a.targetSlotNumber - b.targetSlotNumber);
+        const positions = sortedByTarget.map(r => r.finishPosition);
+        const label = count === 1 ? `${positions[0]}` : positions.join(', ');
+
         edgeList.push({
-          id: `edge-${index}`,
-          source: `phase-${phase.order || index}`,
-          target: `phase-${phases[index + 1].order || index + 1}`,
+          id: `e-${sourcePhaseOrder}-${targetPhaseOrder}`,
+          source: `phase-${sourcePhaseOrder - 1}`,
+          target: `phase-${targetPhaseOrder - 1}`,
           type: 'smoothstep',
           animated: true,
-          style: { stroke: '#a78bfa', strokeWidth: 2 },
+          style: { stroke: '#a78bfa', strokeWidth: 2, strokeDasharray: '5,5' },
           markerEnd: { type: MarkerType.ArrowClosed, color: '#a78bfa' },
-          label: `${phase.exitingSlots || phase.outSlots || '?'}`,
-          labelStyle: { fill: '#7c3aed', fontWeight: 600 },
-          labelBgStyle: { fill: '#f3e8ff' }
+          label: label,
+          labelStyle: { fill: '#7c3aed', fontWeight: 600, fontSize: 12 },
+          labelBgStyle: { fill: '#f3e8ff', stroke: '#c4b5fd' },
+          labelBgPadding: [6, 4],
+          labelBgBorderRadius: 8,
         });
-      }
-    });
+      });
+    } else {
+      // Fallback: sequential edges if no advancement rules
+      phases.forEach((phase, index) => {
+        if (index < phases.length - 1) {
+          const order = phase.order || (index + 1);
+          const nextOrder = phases[index + 1].order || (index + 2);
+          edgeList.push({
+            id: `edge-${index}`,
+            source: `phase-${order - 1}`,
+            target: `phase-${nextOrder - 1}`,
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#a78bfa', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#a78bfa' },
+            label: `${phase.exitingSlots || phase.outSlots || '?'}`,
+            labelStyle: { fill: '#7c3aed', fontWeight: 600 },
+            labelBgStyle: { fill: '#f3e8ff' }
+          });
+        }
+      });
+    }
     
-    return { nodes: nodeList, edges: edgeList };
-  }, [phases]);
+    // Apply dagre layout
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodeList, edgeList, direction, isExpanded);
+    return { nodes: layoutedNodes, edges: layoutedEdges };
+  }, [phases, structure, direction, isExpanded]);
 
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
@@ -488,26 +599,50 @@ function PhaseFlowDiagram({ phases }) {
   const nodeTypes = useMemo(() => ({ phaseNode: PhaseNode }), []);
 
   return (
-    <div className="h-72 border rounded-lg overflow-hidden bg-gradient-to-b from-gray-50 to-white">
-      <ReactFlow
-        nodes={flowNodes}
-        edges={flowEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.3 }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        panOnDrag={true}
-        zoomOnScroll={true}
-        minZoom={0.5}
-        maxZoom={1.5}
-      >
-        <Background color="#e5e7eb" gap={20} />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+    <div className="relative">
+      {/* Layout Controls */}
+      <div className="absolute top-2 left-2 z-10 flex gap-1">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`p-1.5 rounded border text-xs flex items-center gap-1 transition-colors ${
+            isExpanded 
+              ? 'bg-purple-100 border-purple-300 text-purple-700' 
+              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+          }`}
+          title={isExpanded ? 'Collapse nodes' : 'Expand nodes'}
+        >
+          {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+        <button
+          onClick={() => setDirection(d => d === 'TB' ? 'LR' : 'TB')}
+          className="p-1.5 rounded border bg-white border-gray-300 text-gray-600 hover:bg-gray-50 text-xs flex items-center gap-1 transition-colors"
+          title={direction === 'TB' ? 'Switch to horizontal' : 'Switch to vertical'}
+        >
+          {direction === 'TB' ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowDownUp className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
+      <div className="h-80 border rounded-lg overflow-hidden bg-gradient-to-b from-gray-50 to-white">
+        <ReactFlow
+          nodes={flowNodes}
+          edges={flowEdges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag={true}
+          zoomOnScroll={true}
+          minZoom={0.3}
+          maxZoom={2}
+        >
+          <Background color="#e5e7eb" gap={20} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
     </div>
   );
 }
