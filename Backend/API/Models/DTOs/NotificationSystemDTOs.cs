@@ -125,7 +125,7 @@ public class NotificationLogPagedResult
 // Send Request DTOs
 // =====================================================
 
-public class SendNotificationRequest
+public class DispatchNotificationRequest
 {
     /// <summary>
     /// Event type key (e.g., "tournament.registration_confirmed")
@@ -164,7 +164,7 @@ public class SendNotificationRequest
     public List<string>? Channels { get; set; }
 }
 
-public class SendNotificationResult
+public class DispatchNotificationResult
 {
     public bool Success { get; set; }
     public string? Message { get; set; }

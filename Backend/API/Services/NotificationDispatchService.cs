@@ -12,13 +12,13 @@ public interface INotificationDispatchService
     /// <summary>
     /// Send notifications for an event to a user
     /// </summary>
-    Task<SendNotificationResult> SendAsync(string eventKey, int userId, Dictionary<string, object?> context, 
+    Task<DispatchNotificationResult> SendAsync(string eventKey, int userId, Dictionary<string, object?> context, 
         string? relatedObjectType = null, int? relatedObjectId = null, List<string>? channels = null);
     
     /// <summary>
     /// Send notifications for an event to a direct contact (no user record)
     /// </summary>
-    Task<SendNotificationResult> SendDirectAsync(string eventKey, string? email, string? phone, 
+    Task<DispatchNotificationResult> SendDirectAsync(string eventKey, string? email, string? phone, 
         Dictionary<string, object?> context, string? relatedObjectType = null, int? relatedObjectId = null);
     
     /// <summary>
@@ -49,10 +49,10 @@ public class NotificationDispatchService : INotificationDispatchService
         _logger = logger;
     }
 
-    public async Task<SendNotificationResult> SendAsync(string eventKey, int userId, Dictionary<string, object?> context,
+    public async Task<DispatchNotificationResult> SendAsync(string eventKey, int userId, Dictionary<string, object?> context,
         string? relatedObjectType = null, int? relatedObjectId = null, List<string>? channels = null)
     {
-        var result = new SendNotificationResult { Success = true };
+        var result = new DispatchNotificationResult { Success = true };
         
         // Get user
         var user = await _context.Users.FindAsync(userId);
@@ -93,10 +93,10 @@ public class NotificationDispatchService : INotificationDispatchService
         return result;
     }
 
-    public async Task<SendNotificationResult> SendDirectAsync(string eventKey, string? email, string? phone,
+    public async Task<DispatchNotificationResult> SendDirectAsync(string eventKey, string? email, string? phone,
         Dictionary<string, object?> context, string? relatedObjectType = null, int? relatedObjectId = null)
     {
-        var result = new SendNotificationResult { Success = true };
+        var result = new DispatchNotificationResult { Success = true };
         
         if (string.IsNullOrEmpty(email) && string.IsNullOrEmpty(phone))
         {

@@ -57,26 +57,27 @@ public class NotificationSystemController : ControllerBase
         if (!string.IsNullOrEmpty(category))
             query = query.Where(e => e.Category == category);
 
-        var eventTypes = await query
+        var rawEventTypes = await query
             .OrderBy(e => e.Category)
             .ThenBy(e => e.SortOrder)
             .ThenBy(e => e.DisplayName)
-            .Select(e => new NotificationEventTypeDto
-            {
-                Id = e.Id,
-                EventKey = e.EventKey,
-                Category = e.Category,
-                DisplayName = e.DisplayName,
-                Description = e.Description,
-                AvailableMergeFields = string.IsNullOrEmpty(e.AvailableMergeFields) 
-                    ? new List<string>() 
-                    : JsonSerializer.Deserialize<List<string>>(e.AvailableMergeFields) ?? new List<string>(),
-                IsActive = e.IsActive,
-                SortOrder = e.SortOrder,
-                TemplateCount = e.Templates.Count,
-                ActiveTemplateCount = e.Templates.Count(t => t.IsActive)
-            })
             .ToListAsync();
+
+        var eventTypes = rawEventTypes.Select(e => new NotificationEventTypeDto
+        {
+            Id = e.Id,
+            EventKey = e.EventKey,
+            Category = e.Category,
+            DisplayName = e.DisplayName,
+            Description = e.Description,
+            AvailableMergeFields = string.IsNullOrEmpty(e.AvailableMergeFields) 
+                ? new List<string>() 
+                : JsonSerializer.Deserialize<List<string>>(e.AvailableMergeFields) ?? new List<string>(),
+            IsActive = e.IsActive,
+            SortOrder = e.SortOrder,
+            TemplateCount = e.Templates.Count,
+            ActiveTemplateCount = e.Templates.Count(t => t.IsActive)
+        }).ToList();
 
         return Ok(eventTypes);
     }
@@ -435,7 +436,7 @@ public class NotificationSystemController : ControllerBase
     /// </summary>
     [HttpPost("send")]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<SendNotificationResult>> SendNotification([FromBody] SendNotificationRequest request)
+    public async Task<ActionResult<DispatchNotificationResult>> SendNotification([FromBody] DispatchNotificationRequest request)
     {
         SendNotificationResult result;
 
