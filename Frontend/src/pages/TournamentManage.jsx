@@ -7149,8 +7149,9 @@ export default function TournamentManage() {
         {/* Payment Proof Modal */}
         {viewingProofUrl && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto">
-              <div className="p-4 border-b flex items-center justify-between">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
+              {/* Sticky header */}
+              <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
                 <h3 className="font-semibold">Payment Proof</h3>
                 <button
                   onClick={() => setViewingProofUrl(null)}
@@ -7159,14 +7160,16 @@ export default function TournamentManage() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-4">
+              {/* Scrollable image area */}
+              <div className="p-4 overflow-auto flex-1 flex items-center justify-center">
                 <img
                   src={getSharedAssetUrl(viewingProofUrl)}
                   alt="Payment proof"
-                  className="max-w-full h-auto"
+                  className="max-w-full max-h-[60vh] object-contain"
                 />
               </div>
-              <div className="p-4 border-t flex justify-end gap-2">
+              {/* Sticky footer */}
+              <div className="p-4 border-t flex justify-end gap-2 flex-shrink-0">
                 <a
                   href={getSharedAssetUrl(viewingProofUrl)}
                   target="_blank"
