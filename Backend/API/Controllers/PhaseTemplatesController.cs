@@ -731,6 +731,11 @@ public class PhaseTemplatesController : ControllerBase
                 preview.Phases.Add(phasePreview);
             }
         }
+        else
+        {
+            // Fallback: generate basic preview based on template category
+            preview.Phases = GenerateFallbackPreview(template, unitCount);
+        }
 
         // Calculate totals
         preview.TotalEncounters = preview.Phases.Sum(p => p.EncounterCount);
@@ -869,6 +874,89 @@ public class PhaseTemplatesController : ControllerBase
             "DoubleElimination" => (phase.IncomingSlots * 2) - 1,
             _ => phase.IncomingSlots / 2
         };
+    }
+
+    /// <summary>
+    /// Generate a basic preview when template has no explicit phases defined
+    /// Uses template category and unit count to create a sensible default
+    /// </summary>
+    private List<TemplatePhasePreviewDto> GenerateFallbackPreview(PhaseTemplate template, int unitCount)
+    {
+        var phases = new List<TemplatePhasePreviewDto>();
+        var category = template.Category?.ToLower() ?? "";
+
+        if (category.Contains("roundrobin") || category.Contains("round"))
+        {
+            // Simple round robin
+            phases.Add(new TemplatePhasePreviewDto
+            {
+                Order = 1,
+                Name = "Round Robin",
+                Type = "RoundRobin",
+                IncomingSlots = unitCount,
+                ExitingSlots = unitCount,
+                EncounterCount = unitCount * (unitCount - 1) / 2
+            });
+        }
+        else if (category.Contains("double"))
+        {
+            // Double elimination
+            phases.Add(new TemplatePhasePreviewDto
+            {
+                Order = 1,
+                Name = "Double Elimination",
+                Type = "DoubleElimination",
+                IncomingSlots = unitCount,
+                ExitingSlots = 2,
+                EncounterCount = (unitCount * 2) - 1
+            });
+        }
+        else if (category.Contains("single") || category.Contains("bracket") || category.Contains("elimination"))
+        {
+            // Single elimination bracket
+            var bracketSize = 1;
+            while (bracketSize < unitCount) bracketSize *= 2;
+
+            var remaining = bracketSize;
+            var order = 1;
+            while (remaining > 1)
+            {
+                var name = remaining switch
+                {
+                    2 => "Finals",
+                    4 => "Semifinals",
+                    8 => "Quarterfinals",
+                    _ => $"Round of {remaining}"
+                };
+
+                phases.Add(new TemplatePhasePreviewDto
+                {
+                    Order = order++,
+                    Name = name,
+                    Type = "BracketRound",
+                    IncomingSlots = remaining,
+                    ExitingSlots = remaining / 2,
+                    EncounterCount = remaining / 2
+                });
+
+                remaining /= 2;
+            }
+        }
+        else
+        {
+            // Default: simple round robin if category unknown
+            phases.Add(new TemplatePhasePreviewDto
+            {
+                Order = 1,
+                Name = template.Name ?? "Phase 1",
+                Type = "RoundRobin",
+                IncomingSlots = unitCount,
+                ExitingSlots = unitCount,
+                EncounterCount = unitCount * (unitCount - 1) / 2
+            });
+        }
+
+        return phases;
     }
 
     private async Task<ApplyTemplateResultDto> ApplyTemplateToDiv(

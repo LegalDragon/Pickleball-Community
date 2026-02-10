@@ -294,8 +294,10 @@ export default function ScheduleConfigModal({
                       <PhaseDataView phases={preview.phases} />
                     )
                   ) : (
-                    <div className="h-64 flex items-center justify-center text-gray-400">
-                      No preview available
+                    <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+                      <AlertTriangle className="w-8 h-8 mb-2 text-amber-400" />
+                      <p>No preview available</p>
+                      <p className="text-xs mt-1">Template structure may be incomplete</p>
                     </div>
                   )}
 
