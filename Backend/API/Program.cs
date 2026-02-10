@@ -149,6 +149,7 @@ builder.Services.AddScoped<ITournamentManagementService, TournamentManagementSer
 builder.Services.AddScoped<IVideoRoomService, VideoRoomService>();
 builder.Services.AddScoped<IGameDayPlayerStatusService, GameDayPlayerStatusService>();
 builder.Services.AddScoped<IGameNotificationService, GameNotificationService>();
+builder.Services.AddScoped<INotificationDispatchService, NotificationDispatchService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
 

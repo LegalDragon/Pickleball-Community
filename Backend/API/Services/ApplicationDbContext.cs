@@ -201,6 +201,11 @@ public class ApplicationDbContext : DbContext
     // Game Day Player Status Tracking
     public DbSet<GameDayPlayerStatus> GameDayPlayerStatuses { get; set; }
 
+    // Unified Notification System
+    public DbSet<NotificationEventType> NotificationEventTypes { get; set; }
+    public DbSet<NotificationChannelTemplate> NotificationChannelTemplates { get; set; }
+    public DbSet<NotificationLog> NotificationLogs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
