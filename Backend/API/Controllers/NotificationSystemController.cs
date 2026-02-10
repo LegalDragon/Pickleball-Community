@@ -438,7 +438,7 @@ public class NotificationSystemController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<DispatchNotificationResult>> SendNotification([FromBody] DispatchNotificationRequest request)
     {
-        SendNotificationResult result;
+        DispatchNotificationResult result;
 
         if (request.UserId.HasValue)
         {
