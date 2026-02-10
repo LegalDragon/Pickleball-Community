@@ -709,9 +709,9 @@ public class PhaseTemplatesController : ControllerBase
             // Generate dynamic phases based on unit count
             preview.Phases = GenerateFlexiblePhases(root, unitCount);
         }
-        else if (root.TryGetProperty("phases", out var phases))
+        else if (root.TryGetProperty("phases", out var phases) && phases.GetArrayLength() > 0)
         {
-            // Use defined phases
+            // Use defined phases (only if array is non-empty)
             foreach (var phase in phases.EnumerateArray())
             {
                 var phasePreview = new TemplatePhasePreviewDto
@@ -734,6 +734,7 @@ public class PhaseTemplatesController : ControllerBase
         else
         {
             // Fallback: generate basic preview based on template category
+            // Triggers when: no phases property, empty phases array, or no isFlexible
             preview.Phases = GenerateFallbackPreview(template, unitCount);
         }
 
