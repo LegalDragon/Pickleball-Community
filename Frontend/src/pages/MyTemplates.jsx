@@ -274,7 +274,7 @@ const MyTemplates = () => {
         ):(
           <div className="space-y-3">{filteredTemplates.map(t=>{
             const ci=CATEGORIES.find(c=>c.value===t.category), CI=ci?.icon||Layers
-            let pc=0; try{const s=typeof t.structureJson==='string'?JSON.parse(t.structureJson):t.structureJson;pc=s.isFlexible?0:(s.phases?.length||0)}catch{/* ignore parse errors */}
+            let pc=0; try{const s=typeof t.structureJson==='string'?JSON.parse(t.structureJson):t.structureJson;pc=s.isFlexible?0:(s.phases?.filter(p=>p.phaseType!=='Award'&&p.phaseType!=='Draw')?.length||0)}catch{/* ignore parse errors */}
             return(
               <div key={t.id} className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow p-4">
                 <div className="flex items-start justify-between gap-4">

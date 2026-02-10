@@ -122,13 +122,22 @@ export default function TournamentScheduleDashboard() {
       // Encounters with no phase
       const noPhase = divEncs.filter(e => !e.phaseId)
       const totalAssigned = divEncs.filter(e => e.courtId && e.estimatedStartTime).length
+      
+      // Exclude Award and Draw phases from counts (they're just entry/exit points, not playable phases)
+      const playablePhases = phases.filter(ph => ph.phaseType !== 'Award' && ph.phaseType !== 'Draw')
+      const playablePhaseIds = new Set(playablePhases.map(ph => ph.id))
+      // Only count encounters from playable phases
+      const playableEncounters = divEncs.filter(e => !e.phaseId || playablePhaseIds.has(e.phaseId))
+      const playableAssigned = playableEncounters.filter(e => e.courtId && e.estimatedStartTime).length
+      
       return {
         ...div,
         color: divColors[div.id] || COLORS[0],
         phases,
+        playablePhases, // For phase count display
         noPhaseEncounters: noPhase,
-        totalEncounters: divEncs.length,
-        totalAssigned,
+        totalEncounters: playableEncounters.length, // Exclude Award/Draw encounters
+        totalAssigned: playableAssigned,
       }
     })
   }, [data, encounters, divColors])
@@ -585,7 +594,7 @@ function DivisionCard({
           </div>
           <div className="text-xs text-gray-500 flex items-center gap-3 mt-0.5">
             <span>{div.totalEncounters} encounters</span>
-            <span>{div.phases?.length || 0} phase{(div.phases?.length || 0) !== 1 ? 's' : ''}</span>
+            <span>{div.playablePhases?.length || 0} phase{(div.playablePhases?.length || 0) !== 1 ? 's' : ''}</span>
             {div.estimatedMatchDurationMinutes && <span>{div.estimatedMatchDurationMinutes}min/game</span>}
             {firstTime && lastTime && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{firstTime} – {lastTime}</span>}
             {div.assignedCourtGroups?.length > 0 && (

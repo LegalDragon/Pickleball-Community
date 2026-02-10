@@ -609,10 +609,16 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           {divisions.map(div => {
             const divMatches = matchesByDivPhase[div.id] || {}
             const phases = div.phases || []
+            // Filter out Award and Draw phases from counts (they're entry/exit points, not playable)
+            const playablePhases = phases.filter(p => p.phaseType !== 'Award' && p.phaseType !== 'Draw')
+            const playablePhaseIds = new Set(playablePhases.map(p => p.id))
             const noPhaseMatches = divMatches['no-phase'] || []
             const color = divColors[div.id]
             const isExpanded = expandedDivisions.has(div.id)
-            const totalDivMatches = Object.values(divMatches).flat().length
+            // Only count matches from playable phases
+            const totalDivMatches = Object.entries(divMatches)
+              .filter(([phaseId]) => phaseId === 'no-phase' || playablePhaseIds.has(parseInt(phaseId)))
+              .flatMap(([_, matches]) => matches).length
             
             return (
               <div key={div.id} className="mb-2">
