@@ -22,7 +22,7 @@ const STATUS_COLORS = {
   'Failed': 'bg-red-100 text-red-800'
 };
 
-export default function NotificationSystemAdmin() {
+export default function NotificationSystemAdmin({ embedded = false }) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('eventTypes');
   const [loading, setLoading] = useState(true);
@@ -244,31 +244,11 @@ export default function NotificationSystemAdmin() {
     return ch ? ch.color : 'gray';
   };
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <Bell className="w-6 h-6 text-green-600" />
-                  Notification System
-                </h1>
-                <p className="text-sm text-gray-500">Manage event types, templates, and view logs</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+  const content = (
+    <>
       {/* Tabs */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className={embedded ? "bg-white rounded-t-xl" : "bg-white border-b"}>
+        <div className={embedded ? "px-4" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"}>
           <nav className="flex gap-4">
             {[
               { id: 'eventTypes', label: 'Event Types', icon: FileText },
@@ -994,6 +974,35 @@ export default function NotificationSystemAdmin() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/admin" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <Bell className="w-6 h-6 text-green-600" />
+                  Notification System
+                </h1>
+                <p className="text-sm text-gray-500">Manage event types, templates, and view logs</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {content}
     </div>
   );
 }
