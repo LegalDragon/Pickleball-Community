@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Clock, Loader2, ChevronDown, ChevronRight, Check, X,
   GripVertical, MapPin, Calendar, AlertTriangle, Zap,
-  Play, Square, Users, Filter, RotateCcw, Hash
+  Play, Square, Users, Filter, RotateCcw, Hash, Layers, Eye, EyeOff
 } from 'lucide-react'
 import { tournamentApi } from '../../services/api'
 import { useToast } from '../../contexts/ToastContext'
+import { CanvasPhaseEditor } from '../../pages/PhaseTemplatesAdmin'
+import { parseStructureToVisual } from './structureEditorConstants'
 
 // ─── Color palette for divisions/phases ──────────────────────────────────
 const COLORS = [
@@ -59,6 +61,11 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   // Phase timing overrides (edited inline)
   const [phaseTiming, setPhaseTiming] = useState({}) // phaseId -> { gameDurationMinutes, changeoverMinutes, matchBufferMinutes }
   const [savingTiming, setSavingTiming] = useState(false)
+  
+  // Phase diagram view
+  const [showPhaseDiagram, setShowPhaseDiagram] = useState(false)
+  const [divisionStructure, setDivisionStructure] = useState(null) // { divisionId, visualState }
+  const [loadingStructure, setLoadingStructure] = useState(false)
   const [dayStart, setDayStart] = useState(() => {
     const d = new Date(data?.eventStartDate || new Date())
     d.setHours(8, 0, 0, 0)
@@ -466,12 +473,62 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     })
   }
 
+  // Load division structure for phase diagram
+  const loadDivisionStructure = async (divId) => {
+    if (!divId) return
+    setLoadingStructure(true)
+    try {
+      // Get division details which should include the phase template structure
+      const response = await tournamentApi.getDivision(divId)
+      if (response.success && response.data) {
+        const div = response.data
+        // Try to parse the structure from phaseTemplateJson or structureJson
+        const structureJson = div.phaseTemplateJson || div.structureJson
+        if (structureJson) {
+          const parsed = typeof structureJson === 'string' ? JSON.parse(structureJson) : structureJson
+          const visualState = parseStructureToVisual(JSON.stringify(parsed))
+          setDivisionStructure({ divisionId: divId, visualState })
+        } else {
+          // Fallback: build from phases in data
+          const divData = data?.divisions?.find(d => d.id === divId)
+          if (divData?.phases?.length) {
+            const visualState = {
+              isFlexible: false,
+              generateBracket: {},
+              phases: divData.phases.map((p, i) => ({
+                name: p.name,
+                phaseType: p.phaseType || 'SingleElimination',
+                sortOrder: i + 1,
+                incomingSlotCount: p.incomingSlotCount || 8,
+                advancingSlotCount: p.advancingSlotCount || 1,
+                poolCount: p.poolCount || 0,
+                bestOf: p.bestOf || 1,
+                matchDurationMinutes: p.matchDurationMinutes || 15,
+              })),
+              advancementRules: [],
+              exitPositions: []
+            }
+            setDivisionStructure({ divisionId: divId, visualState })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading division structure:', err)
+    } finally {
+      setLoadingStructure(false)
+    }
+  }
+
   const selectPhase = (divId, phaseId) => {
     setSelectedDivision(divId)
     setSelectedPhase(phaseId)
     // Auto-select all matches in this phase
     const phaseMatches = matchesByDivPhase[divId]?.[phaseId] || []
     setSelectedMatches(new Set(phaseMatches.map(m => m.id)))
+    // Load structure if diagram is shown and division changed
+    if (showPhaseDiagram && divisionStructure?.divisionId !== divId) {
+      loadDivisionStructure(divId)
+    }
   }
 
   const toggleMatch = (matchId) => {
@@ -520,10 +577,29 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       {/* ─── Left Panel: Phase/Match Selector ─── */}
       <div className="w-80 flex-shrink-0 bg-white rounded-xl border overflow-hidden flex flex-col">
         <div className="p-4 border-b bg-gray-50">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            Select Matches
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              Select Matches
+            </h3>
+            <button
+              onClick={() => {
+                const newShow = !showPhaseDiagram
+                setShowPhaseDiagram(newShow)
+                if (newShow && selectedDivision && divisionStructure?.divisionId !== selectedDivision) {
+                  loadDivisionStructure(selectedDivision)
+                }
+              }}
+              className={`p-1.5 rounded-lg text-xs flex items-center gap-1 ${
+                showPhaseDiagram 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'text-gray-500 hover:bg-gray-100'
+              }`}
+              title="Toggle phase diagram"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <p className="text-xs text-gray-500 mt-1">
             Click a phase to select all its matches, or pick individually
           </p>
@@ -712,6 +788,53 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
             </div>
             <div className="text-xs text-orange-700">
               Est. duration: {Math.floor(totalDuration / 60)}h {totalDuration % 60}m
+            </div>
+          </div>
+        )}
+
+        {/* Phase Diagram - shown when toggled */}
+        {showPhaseDiagram && (
+          <div className="border-t">
+            <div className="p-2 bg-purple-50 border-b flex items-center justify-between">
+              <span className="text-xs font-medium text-purple-800 flex items-center gap-1">
+                <Layers className="w-3 h-3" />
+                Phase Structure {selectedDivision ? `- ${divisions.find(d => d.id === selectedDivision)?.name || ''}` : ''}
+              </span>
+              <button
+                onClick={() => setShowPhaseDiagram(false)}
+                className="p-1 text-purple-600 hover:bg-purple-100 rounded"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="h-[300px]">
+              {loadingStructure ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                </div>
+              ) : divisionStructure?.visualState ? (
+                <CanvasPhaseEditor
+                  visualState={divisionStructure.visualState}
+                  onChange={() => {}} // No-op for read-only
+                  readOnly={true}
+                />
+              ) : selectedDivision ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <Layers className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="text-xs">No phase structure found</p>
+                  <button
+                    onClick={() => loadDivisionStructure(selectedDivision)}
+                    className="mt-2 text-xs text-purple-600 hover:underline"
+                  >
+                    Reload
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <Layers className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="text-xs">Select a division to view structure</p>
+                </div>
+              )}
             </div>
           </div>
         )}

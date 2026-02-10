@@ -221,7 +221,13 @@ const ListPhaseEditor = ({ visualState, onChange }) => {
                     <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">{idx + 1}</span>
                     <span className="font-medium text-sm text-gray-800">{phase.name}</span>
                     <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded">{phase.phaseType}</span>
-                    <span className="text-xs text-gray-400">{phase.incomingSlotCount} in → {phase.advancingSlotCount} out</span>
+                    <span className="text-xs text-gray-400">
+                      {phase.phaseType === 'Award' 
+                        ? `${phase.incomingSlotCount} in → 🏆` 
+                        : phase.phaseType === 'Draw' 
+                          ? `🎲 → ${phase.advancingSlotCount} out`
+                          : `${phase.incomingSlotCount} in → ${phase.advancingSlotCount} out`}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={e => { e.stopPropagation(); movePhase(idx, -1) }} disabled={idx === 0}

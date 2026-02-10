@@ -1082,7 +1082,7 @@ const NodeConfigPanel = ({ phase, phaseIndex, onChange, onDelete }) => {
 }
 
 // Inner canvas component (needs ReactFlowProvider)
-const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
+const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => {
   const vs = visualState
   const reactFlowWrapper = useRef(null)
   const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
@@ -1704,41 +1704,46 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
 
   return (
     <div className="flex border rounded-lg overflow-hidden bg-white h-full">
-      {/* Left Palette */}
-      <div className="w-48 border-r bg-gray-50 p-3 flex flex-col gap-2 flex-shrink-0 overflow-y-auto">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Phase Types</h4>
-        <p className="text-[10px] text-gray-400 mb-2">Drag onto canvas</p>
-        <PaletteItem phaseType="RoundRobin" label="Round Robin" />
-        <PaletteItem phaseType="SingleElimination" label="Single Elim" />
-        <PaletteItem phaseType="DoubleElimination" label="Double Elim" />
-        <PaletteItem phaseType="Pools" label="Pools" />
-        <PaletteItem phaseType="Swiss" label="Swiss" />
-        <PaletteItem phaseType="BracketRound" label="Bracket Round" />
-        <div className="border-t my-2" />
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Entry</h4>
-        <PaletteItem phaseType="Draw" label="Draw" />
-        <div className="border-t my-2" />
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Awards</h4>
-        <PaletteItem phaseType="Award" label="Award" />
-      </div>
+      {/* Left Palette - hidden in readOnly mode */}
+      {!readOnly && (
+        <div className="w-48 border-r bg-gray-50 p-3 flex flex-col gap-2 flex-shrink-0 overflow-y-auto">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Phase Types</h4>
+          <p className="text-[10px] text-gray-400 mb-2">Drag onto canvas</p>
+          <PaletteItem phaseType="RoundRobin" label="Round Robin" />
+          <PaletteItem phaseType="SingleElimination" label="Single Elim" />
+          <PaletteItem phaseType="DoubleElimination" label="Double Elim" />
+          <PaletteItem phaseType="Pools" label="Pools" />
+          <PaletteItem phaseType="Swiss" label="Swiss" />
+          <PaletteItem phaseType="BracketRound" label="Bracket Round" />
+          <div className="border-t my-2" />
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Entry</h4>
+          <PaletteItem phaseType="Draw" label="Draw" />
+          <div className="border-t my-2" />
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Awards</h4>
+          <PaletteItem phaseType="Award" label="Award" />
+        </div>
+      )}
 
       {/* Center Canvas */}
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          onNodeClick={onNodeClick}
-          onEdgeClick={onEdgeClick}
-          onPaneClick={onPaneClick}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
+          onNodesChange={readOnly ? undefined : onNodesChange}
+          onEdgesChange={readOnly ? undefined : onEdgesChange}
+          onConnect={readOnly ? undefined : onConnect}
+          onEdgesDelete={readOnly ? undefined : onEdgesDelete}
+          onNodeClick={readOnly ? undefined : onNodeClick}
+          onEdgeClick={readOnly ? undefined : onEdgeClick}
+          onPaneClick={readOnly ? undefined : onPaneClick}
+          onDragOver={readOnly ? undefined : onDragOver}
+          onDrop={readOnly ? undefined : onDrop}
           nodeTypes={nodeTypes}
           fitView
-          deleteKeyCode={['Backspace', 'Delete']}
+          deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
           proOptions={{ hideAttribution: true }}
           className="bg-gray-50"
         >
@@ -1751,44 +1756,46 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
             }}
             style={{ height: 80, width: 120 }}
           />
-          <Panel position="top-left" className="flex gap-1.5">
-            <button onClick={handleAutoLayout}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
-              <LayoutGrid className="w-3.5 h-3.5" /> Auto Layout
-            </button>
-            <button onClick={handleSyncSortOrder}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
-              <ArrowRight className="w-3.5 h-3.5" /> Sync Order
-            </button>
-            <button onClick={handleExportImage}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
-              <Eye className="w-3.5 h-3.5" /> Export PNG
-            </button>
-            <button onClick={() => {
-              const newExpand = !expandAll
-              setExpandAll(newExpand)
-              // Rebuild nodes with forceExpand to trigger re-render and re-layout with proper dimensions
-              const newNodes = buildNodes(vs.phases, layoutDirection, newExpand)
-              const edges = buildEdges(vs.advancementRules, vs.phases, selectedEdgeKey)
-              const { nodes: layoutedNodes } = getLayoutedElements(newNodes, edges, layoutDirection, newExpand)
-              setNodes(layoutedNodes)
-            }}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
-              {expandAll ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
-              {expandAll ? 'Collapse All' : 'Expand All'}
-            </button>
-            <div className="flex items-center bg-white border rounded-lg shadow-sm overflow-hidden">
-              <button onClick={() => handleDirectionChange('TB')}
-                className={`px-2.5 py-1.5 text-xs font-medium ${layoutDirection === 'TB' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                ↓ Top-Down
+          {!readOnly && (
+            <Panel position="top-left" className="flex gap-1.5">
+              <button onClick={handleAutoLayout}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
+                <LayoutGrid className="w-3.5 h-3.5" /> Auto Layout
               </button>
-              <button onClick={() => handleDirectionChange('LR')}
-                className={`px-2.5 py-1.5 text-xs font-medium border-l ${layoutDirection === 'LR' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                → Left-Right
+              <button onClick={handleSyncSortOrder}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
+                <ArrowRight className="w-3.5 h-3.5" /> Sync Order
               </button>
-            </div>
-          </Panel>
-          {warnings.length > 0 && (
+              <button onClick={handleExportImage}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
+                <Eye className="w-3.5 h-3.5" /> Export PNG
+              </button>
+              <button onClick={() => {
+                const newExpand = !expandAll
+                setExpandAll(newExpand)
+                // Rebuild nodes with forceExpand to trigger re-render and re-layout with proper dimensions
+                const newNodes = buildNodes(vs.phases, layoutDirection, newExpand)
+                const edges = buildEdges(vs.advancementRules, vs.phases, selectedEdgeKey)
+                const { nodes: layoutedNodes } = getLayoutedElements(newNodes, edges, layoutDirection, newExpand)
+                setNodes(layoutedNodes)
+              }}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
+                {expandAll ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
+                {expandAll ? 'Collapse All' : 'Expand All'}
+              </button>
+              <div className="flex items-center bg-white border rounded-lg shadow-sm overflow-hidden">
+                <button onClick={() => handleDirectionChange('TB')}
+                  className={`px-2.5 py-1.5 text-xs font-medium ${layoutDirection === 'TB' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  ↓ Top-Down
+                </button>
+                <button onClick={() => handleDirectionChange('LR')}
+                  className={`px-2.5 py-1.5 text-xs font-medium border-l ${layoutDirection === 'LR' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  → Left-Right
+                </button>
+              </div>
+            </Panel>
+          )}
+          {!readOnly && warnings.length > 0 && (
             <Panel position="bottom-left">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 max-w-xs">
                 {warnings.map((w, i) => (
@@ -1801,8 +1808,8 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
             </Panel>
           )}
         </ReactFlow>
-        {/* Inline edge slot mapper — positioned near edge */}
-        {selectedEdgeKey && (() => {
+        {/* Inline edge slot mapper — positioned near edge (hidden in readOnly mode) */}
+        {!readOnly && selectedEdgeKey && (() => {
           const [srcIdx, tgtIdx] = selectedEdgeKey.split('-').map(Number)
           const srcPhase = vs.phases[srcIdx]
           const tgtPhase = vs.phases[tgtIdx]
@@ -1848,8 +1855,8 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
         })()}
       </div>
 
-      {/* Right Config Panel — phase config only */}
-      {selectedPhase && (
+      {/* Right Config Panel — phase config only (hidden in readOnly mode) */}
+      {!readOnly && selectedPhase && (
         <div className="w-72 border-l bg-gray-50 overflow-y-auto flex-shrink-0">
           <NodeConfigPanel
             phase={selectedPhase}
@@ -1864,10 +1871,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange }) => {
 }
 
 // Wrapped canvas editor with ReactFlowProvider
-const CanvasPhaseEditor = ({ visualState, onChange }) => {
+const CanvasPhaseEditor = ({ visualState, onChange, readOnly = false }) => {
   return (
     <ReactFlowProvider>
-      <CanvasPhaseEditorInner visualState={visualState} onChange={onChange} />
+      <CanvasPhaseEditorInner visualState={visualState} onChange={onChange} readOnly={readOnly} />
     </ReactFlowProvider>
   )
 }
@@ -2354,7 +2361,11 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
                   </span>
                 )}
                 <span className="text-gray-400">
-                  {incomingSlots} in → {exitingSlots} out
+                  {phaseType === 'Award' 
+                    ? `${incomingSlots} in → 🏆` 
+                    : phaseType === 'Draw' 
+                      ? `🎲 → ${exitingSlots} out`
+                      : `${incomingSlots} in → ${exitingSlots} out`}
                 </span>
               </div>
             )
