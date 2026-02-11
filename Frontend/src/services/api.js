@@ -1704,6 +1704,9 @@ export const tournamentApi = {
 
   // Schedule Generation
   generatePhaseSchedule: (phaseId) => api.post(`/divisionphases/${phaseId}/generate-schedule`),
+  /** Generate encounters for ALL phases in a division, in order (Draw → pools → brackets → final) */
+  generateAllPhaseSchedules: (divisionId, clearExisting = true) => 
+    api.post(`/divisionphases/division/${divisionId}/generate-all?clearExisting=${clearExisting}`),
   getPhaseSchedule: (phaseId) => api.get(`/divisionphases/${phaseId}/schedule`),
   // Create EncounterMatches for phases that don't have them (retroactive fix)
   createMatchesForPhase: (phaseId) => api.post(`/divisionphases/${phaseId}/create-matches`),

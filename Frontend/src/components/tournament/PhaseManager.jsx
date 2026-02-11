@@ -39,6 +39,7 @@ export default function PhaseManager({ divisionId, eventId, unitCount = 8, readO
   const [editingPhase, setEditingPhase] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [generating, setGenerating] = useState(null);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
 
   useEffect(() => {
@@ -126,6 +127,29 @@ export default function PhaseManager({ divisionId, eventId, unitCount = 8, readO
     }
   };
 
+  // Generate encounters for ALL phases in order (Draw → pools → brackets → final)
+  const handleGenerateAllSchedules = async () => {
+    if (!divisionId) return;
+    
+    try {
+      setGeneratingAll(true);
+      const response = await tournamentApi.generateAllPhaseSchedules(divisionId, true);
+      if (response.success) {
+        const { totalEncounters, totalMatches, phasesProcessed } = response.data;
+        alert(`Generated ${totalEncounters} encounters and ${totalMatches} matches across ${phasesProcessed} phases`);
+        await fetchPhases();
+        if (onPhasesUpdated) onPhasesUpdated();
+      } else {
+        alert(response.message || 'Failed to generate schedules');
+      }
+    } catch (err) {
+      console.error('Error generating all schedules:', err);
+      alert('Failed to generate schedules');
+    } finally {
+      setGeneratingAll(false);
+    }
+  };
+
   const handleMovePhase = async (index, direction) => {
     if (direction === 'up' && index === 0) return;
     if (direction === 'down' && index === phases.length - 1) return;
@@ -191,6 +215,21 @@ export default function PhaseManager({ divisionId, eventId, unitCount = 8, readO
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Generate All Schedules Button */}
+      {phases.length > 0 && !readOnly && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleGenerateAllSchedules}
+            disabled={generatingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
+            title="Generate encounters for all phases in order (Draw → pools → brackets)"
+          >
+            {generatingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            Generate All Schedules
+          </button>
         </div>
       )}
 

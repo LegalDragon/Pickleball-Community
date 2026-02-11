@@ -366,6 +366,140 @@ public class DivisionPhasesController : ControllerBase
     }
 
     /// <summary>
+    /// Generate encounters for ALL phases in a division, in logical order.
+    /// Starts from Draw phase (or first phase by PhaseOrder), follows advancement rules.
+    /// This ensures early phases get smaller encounter numbers.
+    /// </summary>
+    [HttpPost("division/{divisionId}/generate-all")]
+    [Authorize(Roles = "Admin,Organizer")]
+    public async Task<IActionResult> GenerateAllSchedules(int divisionId, [FromQuery] bool clearExisting = true)
+    {
+        var division = await _context.EventDivisions
+            .Include(d => d.Phases)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new { success = false, message = "Division not found" });
+
+        // Get phases ordered by PhaseOrder (Draw first, then follow advancement flow)
+        var phases = await _context.DivisionPhases
+            .Include(p => p.Slots)
+            .Include(p => p.Pools)
+            .Include(p => p.Division)
+            .Where(p => p.DivisionId == divisionId)
+            .OrderBy(p => p.PhaseOrder)
+            .ToListAsync();
+
+        if (!phases.Any())
+            return BadRequest(new { success = false, message = "No phases found for this division" });
+
+        // Filter to phases that can generate encounters (not Draw/Award types)
+        var playablePhases = phases
+            .Where(p => p.PhaseType != PhaseTypes.Draw && p.PhaseType != PhaseTypes.Award)
+            .ToList();
+
+        if (!playablePhases.Any())
+            return BadRequest(new { success = false, message = "No playable phases (only Draw/Award phases exist)" });
+
+        // Clear existing encounters if requested
+        if (clearExisting)
+        {
+            var phaseIds = phases.Select(p => p.Id).ToList();
+            var existingEncounters = await _context.EventEncounters
+                .Where(e => e.DivisionId == divisionId)
+                .ToListAsync();
+            _context.EventEncounters.RemoveRange(existingEncounters);
+            await _context.SaveChangesAsync();
+        }
+
+        var totalEncounters = 0;
+        var totalMatches = 0;
+        var phaseResults = new List<object>();
+
+        // Generate encounters for each playable phase in order
+        foreach (var phase in playablePhases)
+        {
+            int encountersCreated = 0;
+
+            try
+            {
+                switch (phase.PhaseType)
+                {
+                    case PhaseTypes.RoundRobin:
+                    case PhaseTypes.Pools:
+                        encountersCreated = await GenerateRoundRobinSchedule(phase);
+                        break;
+
+                    case PhaseTypes.SingleElimination:
+                    case PhaseTypes.Bracket:
+                        encountersCreated = await GenerateSingleEliminationSchedule(phase);
+                        break;
+
+                    case PhaseTypes.DoubleElimination:
+                        encountersCreated = await GenerateDoubleEliminationSchedule(phase);
+                        break;
+
+                    case PhaseTypes.BracketRound:
+                        encountersCreated = await GenerateBracketRoundSchedule(phase);
+                        break;
+
+                    default:
+                        _logger.LogWarning("Skipping unsupported phase type {Type} for phase {PhaseId}", phase.PhaseType, phase.Id);
+                        continue;
+                }
+
+                var matchesCreated = await CreateEncounterMatchesForPhase(phase);
+                totalEncounters += encountersCreated;
+                totalMatches += matchesCreated;
+
+                phaseResults.Add(new
+                {
+                    phaseId = phase.Id,
+                    phaseName = phase.Name,
+                    phaseType = phase.PhaseType,
+                    phaseOrder = phase.PhaseOrder,
+                    encountersCreated,
+                    matchesCreated
+                });
+
+                _logger.LogInformation(
+                    "Generated {Encounters} encounters, {Matches} matches for phase {PhaseId} ({Name}, order {Order})",
+                    encountersCreated, matchesCreated, phase.Id, phase.Name, phase.PhaseOrder);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate schedule for phase {PhaseId}", phase.Id);
+                phaseResults.Add(new
+                {
+                    phaseId = phase.Id,
+                    phaseName = phase.Name,
+                    phaseType = phase.PhaseType,
+                    phaseOrder = phase.PhaseOrder,
+                    error = ex.Message
+                });
+            }
+        }
+
+        // Assign sequential DivisionMatchNumber to all encounters (uses PhaseOrder for ordering)
+        await _context.Database.ExecuteSqlRawAsync(
+            "EXEC sp_AssignDivisionMatchNumbers @DivisionId = {0}",
+            divisionId);
+
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                totalEncounters,
+                totalMatches,
+                phasesProcessed = phaseResults.Count,
+                phases = phaseResults
+            },
+            message = $"Generated {totalEncounters} encounters and {totalMatches} matches across {phaseResults.Count} phases"
+        });
+    }
+
+    /// <summary>
     /// Create EncounterMatches for an existing phase that doesn't have them
     /// Use this to fix phases that were generated before EncounterMatch creation was added
     /// </summary>

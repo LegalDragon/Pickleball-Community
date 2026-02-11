@@ -19,6 +19,14 @@ public static class PhaseTypes
     /// Use this for separate phases like "Semifinal" → "Final" instead of one SingleElimination phase
     /// </summary>
     public const string BracketRound = "BracketRound";
+    /// <summary>
+    /// Draw phase - seeding/entry point, no encounters generated
+    /// </summary>
+    public const string Draw = "Draw";
+    /// <summary>
+    /// Award phase - exit point for placements (1st, 2nd, 3rd...), no encounters generated
+    /// </summary>
+    public const string Award = "Award";
 }
 
 /// <summary>
