@@ -551,8 +551,14 @@ function getLayoutedElements(nodes, edges, direction = 'TB', forceExpand = null)
 // Custom Phase Node — compact by default, expand on button click
 const PhaseNode = memo(({ data, selected }) => {
   const [localExpanded, setLocalExpanded] = useState(false)
-  // forceExpand: null = use local state, true = force expanded, false = force collapsed
-  const expanded = data.forceExpand !== null ? data.forceExpand : localExpanded
+  // Sync from forceExpand when it changes (e.g., Expand All / Collapse All)
+  // After sync, user can still toggle individually via localExpanded
+  useEffect(() => {
+    if (data.forceExpand !== null) {
+      setLocalExpanded(data.forceExpand)
+    }
+  }, [data.forceExpand])
+  const expanded = localExpanded
   const colors = PHASE_TYPE_COLORS[data.phaseType] || PHASE_TYPE_COLORS.SingleElimination
   const Icon = PHASE_TYPE_ICONS[data.phaseType] || GitBranch
 
