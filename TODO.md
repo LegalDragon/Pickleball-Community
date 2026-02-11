@@ -78,6 +78,10 @@ Rec Play Event (Dynamic):
 - [ ] **Waiting list** — Events at capacity → waitlist with auto-promotion
 - [ ] **SignalR for rec play** — GameDayController doesn't broadcast via ScoreHub, no real-time updates for rec play
 
+## 💬 Feature Requests (from users)
+
+- [ ] **Click-to-approve payment icon** (Weihe Gong, 2026-02-11) — Make gray $ icon in TournamentManage.jsx (line 6012) clickable to directly approve payment. `handleOverridePayment` exists, just wire the click.
+
 ## 🔒 Security
 
 - [ ] **Rotate ftsql password** — old one exposed in git history

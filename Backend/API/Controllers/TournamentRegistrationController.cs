@@ -1944,7 +1944,8 @@ public class TournamentRegistrationController : EventControllerBase
             // Only member in the unit - check if we can delete the unit
             if (memberHasPayment && !force)
             {
-                return BadRequest(new ApiResponse<bool>
+                // Return 200 OK with Success=false so frontend can show confirmation dialog
+                return Ok(new ApiResponse<bool>
                 {
                     Success = false,
                     Message = "This player has payment records. Are you sure you want to remove them? This will delete their payment history.",
