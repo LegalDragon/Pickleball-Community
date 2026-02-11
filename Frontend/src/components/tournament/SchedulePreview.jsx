@@ -46,13 +46,16 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
     try {
       const response = await tournamentApi.getDivisionPhases(divisionId);
       if (response.success && response.data?.length > 0) {
-        // Sort by phaseOrder to ensure correct display order
-        const sortedPhases = [...response.data].sort((a, b) => 
-          (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
-        );
-        setPhases(sortedPhases);
-        if (!selectedPhase) {
-          setSelectedPhase(sortedPhases[0].id);
+        // Filter out Draw and Award phases (they have no encounters to display)
+        // and sort by phaseOrder to ensure correct display order
+        const playablePhases = response.data
+          .filter(p => p.phaseType !== 'Draw' && p.phaseType !== 'Award')
+          .sort((a, b) => 
+            (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
+          );
+        setPhases(playablePhases);
+        if (!selectedPhase && playablePhases.length > 0) {
+          setSelectedPhase(playablePhases[0].id);
         }
       }
     } catch (err) {
