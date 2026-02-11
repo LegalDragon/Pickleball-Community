@@ -4127,26 +4127,54 @@ function EventDetailModal({ event, isAuthenticated, isAdmin, currentUserId, user
                             )}
                             {/* Partner info */}
                             {reg.partners?.length > 0 && (
-                              <div className="mt-2 flex items-center gap-2">
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
                                 <span className="text-xs text-gray-500">Partner:</span>
                                 {reg.partners.map(partner => (
-                                  <button
-                                    key={partner.userId}
-                                    onClick={() => setSelectedProfileUserId(partner.userId)}
-                                    className="flex items-center gap-1.5 hover:opacity-80"
-                                  >
-                                    {partner.profileImageUrl ? (
-                                      <img src={getSharedAssetUrl(partner.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
-                                    ) : (
-                                      <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
-                                        {partner.name?.charAt(0) || '?'}
-                                      </div>
+                                  <div key={partner.userId} className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => setSelectedProfileUserId(partner.userId)}
+                                      className="flex items-center gap-1.5 hover:opacity-80"
+                                    >
+                                      {partner.profileImageUrl ? (
+                                        <img src={getSharedAssetUrl(partner.profileImageUrl)} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                      ) : (
+                                        <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
+                                          {partner.name?.charAt(0) || '?'}
+                                        </div>
+                                      )}
+                                      <span className="text-sm text-gray-700">{partner.name}</span>
+                                      {partner.inviteStatus === 'Pending' && (
+                                        <span className="text-xs text-yellow-600">(pending)</span>
+                                      )}
+                                    </button>
+                                    {/* Captain can remove partners */}
+                                    {reg.isCaptain && (
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (!confirm(`Remove ${partner.name} from your team?`)) return;
+                                          try {
+                                            const response = await tournamentApi.removeRegistration(event.id, reg.unitId, partner.userId);
+                                            if (response.success) {
+                                              toast.success(response.message || 'Partner removed');
+                                              const updatedEventResponse = await eventsApi.getEvent(event.id);
+                                              if (updatedEventResponse.success) {
+                                                onUpdate(updatedEventResponse.data);
+                                              }
+                                            } else {
+                                              toast.error(response.message || 'Failed to remove partner');
+                                            }
+                                          } catch (err) {
+                                            toast.error(err?.message || 'Failed to remove partner');
+                                          }
+                                        }}
+                                        className="p-0.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                        title="Remove partner"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
                                     )}
-                                    <span className="text-sm text-gray-700">{partner.name}</span>
-                                    {partner.inviteStatus === 'Pending' && (
-                                      <span className="text-xs text-yellow-600">(pending)</span>
-                                    )}
-                                  </button>
+                                  </div>
                                 ))}
                               </div>
                             )}

@@ -1907,14 +1907,9 @@ public class TournamentRegistrationController : EventControllerBase
         if (!currentUserId.HasValue)
             return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
 
-        // Check if user is organizer or site admin
         var evt = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.IsActive);
         if (evt == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Event not found" });
-
-        var isAdmin = await IsAdminAsync();
-        if (evt.OrganizedByUserId != currentUserId.Value && !isAdmin)
-            return Forbid();
 
         var unit = await _context.EventUnits
             .Include(u => u.Members)
@@ -1927,6 +1922,18 @@ public class TournamentRegistrationController : EventControllerBase
         var member = unit.Members.FirstOrDefault(m => m.UserId == userId);
         if (member == null)
             return NotFound(new ApiResponse<bool> { Success = false, Message = "Member not found in unit" });
+
+        // Authorization: organizer, admin, or captain of the unit (but captain can't remove themselves)
+        var isAdmin = await IsAdminAsync();
+        var isOrganizer = evt.OrganizedByUserId == currentUserId.Value;
+        var isCaptain = unit.CaptainUserId == currentUserId.Value;
+        
+        if (!isOrganizer && !isAdmin && !isCaptain)
+            return Forbid();
+        
+        // Captain cannot remove themselves - they should use "Cancel registration" instead
+        if (isCaptain && !isOrganizer && !isAdmin && userId == currentUserId.Value)
+            return BadRequest(new ApiResponse<bool> { Success = false, Message = "Use 'Cancel registration' to leave your own team" });
 
         var acceptedMembers = unit.Members.Where(m => m.InviteStatus == "Accepted").ToList();
         var isOnlyMember = acceptedMembers.Count <= 1;
