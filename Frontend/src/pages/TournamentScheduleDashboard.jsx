@@ -126,8 +126,13 @@ export default function TournamentScheduleDashboard() {
       const noPhase = divEncs.filter(e => !e.phaseId)
       const totalAssigned = divEncs.filter(e => e.courtId && e.estimatedStartTime).length
       
-      // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points, not playable phases)
-      const playablePhases = phases.filter(ph => (ph.incomingSlotCount || 0) > 0 && (ph.advancingSlotCount || 0) > 0)
+      // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points), and Draw/Award types (no encounters)
+      const playablePhases = phases.filter(ph => 
+        (ph.incomingSlotCount || 0) > 0 && 
+        (ph.advancingSlotCount || 0) > 0 &&
+        ph.phaseType !== 'Draw' && 
+        ph.phaseType !== 'Award'
+      )
       const playablePhaseIds = new Set(playablePhases.map(ph => ph.id))
       // Only count encounters from playable phases
       const playableEncounters = divEncs.filter(e => !e.phaseId || playablePhaseIds.has(e.phaseId))
@@ -637,8 +642,8 @@ function DivisionCard({
             )}
           </div>
 
-          {/* Phases */}
-          {div.phases.map(phase => (
+          {/* Phases (skip Draw/Award types - they have no encounters) */}
+          {div.phases.filter(phase => phase.phaseType !== 'Draw' && phase.phaseType !== 'Award').map(phase => (
             <PhaseSection
               key={phase.id}
               phase={phase}
