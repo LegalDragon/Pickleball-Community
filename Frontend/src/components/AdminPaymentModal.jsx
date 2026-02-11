@@ -651,6 +651,21 @@ export default function AdminPaymentModal({ isOpen, onClose, unit, event, onPaym
                         </a>
                       )}
                     </div>
+                    {/* Quick Verify button right below proof */}
+                    {!member.hasPaid && (
+                      <button
+                        onClick={handleMarkAsPaid}
+                        disabled={isUpdating}
+                        className="w-full py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4" />
+                        )}
+                        Verify Payment
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
