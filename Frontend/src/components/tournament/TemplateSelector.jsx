@@ -471,8 +471,22 @@ function PhaseFlowDiagram({ phases, structureJson }) {
       });
     }
     
-    // Apply dagre layout
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodeList, edgeList, 'TB');
+    // Check if template has saved node positions
+    const savedPositions = structure?.canvasLayout?.nodePositions;
+    const layoutDirection = structure?.canvasLayout?.direction || 'TB';
+    
+    if (savedPositions && Object.keys(savedPositions).length > 0) {
+      // Use saved positions from template
+      const positionedNodes = nodeList.map(node => {
+        const savedPos = savedPositions[node.id];
+        return savedPos ? { ...node, position: savedPos } : node;
+      });
+      // For any nodes without saved positions, they keep (0,0) but that's rare
+      return { nodes: positionedNodes, edges: edgeList };
+    }
+    
+    // Fallback: Apply dagre auto-layout if no saved positions
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodeList, edgeList, layoutDirection);
     return { nodes: layoutedNodes, edges: layoutedEdges };
   }, [phases, structure]);
 
