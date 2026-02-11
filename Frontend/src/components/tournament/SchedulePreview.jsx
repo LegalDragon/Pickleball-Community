@@ -46,9 +46,13 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
     try {
       const response = await tournamentApi.getDivisionPhases(divisionId);
       if (response.success && response.data?.length > 0) {
-        setPhases(response.data);
+        // Sort by phaseOrder to ensure correct display order
+        const sortedPhases = [...response.data].sort((a, b) => 
+          (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
+        );
+        setPhases(sortedPhases);
         if (!selectedPhase) {
-          setSelectedPhase(response.data[0].id);
+          setSelectedPhase(sortedPhases[0].id);
         }
       }
     } catch (err) {

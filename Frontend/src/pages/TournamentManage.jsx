@@ -999,7 +999,11 @@ export default function TournamentManage() {
     try {
       const response = await tournamentApi.getDivisionPhases(divisionId);
       if (response.success) {
-        setPlanningDivisionPhases(response.data || []);
+        // Sort phases by phaseOrder to ensure correct display order
+        const sortedPhases = [...(response.data || [])].sort((a, b) => 
+          (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
+        );
+        setPlanningDivisionPhases(sortedPhases);
       } else {
         toast.error(response.message || 'Failed to load phases');
       }

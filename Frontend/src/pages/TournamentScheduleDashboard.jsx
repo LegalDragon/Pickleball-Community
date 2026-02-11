@@ -114,11 +114,14 @@ export default function TournamentScheduleDashboard() {
     if (!data?.divisions) return []
     return data.divisions.map(div => {
       const divEncs = encounters.filter(e => e.divisionId === div.id)
-      const phases = (div.phases || []).map(ph => {
-        const phEncs = divEncs.filter(e => e.phaseId === ph.id)
-        const assigned = phEncs.filter(e => e.courtId && e.estimatedStartTime).length
-        return { ...ph, encounters: phEncs, assigned, total: phEncs.length }
-      })
+      const phases = (div.phases || [])
+        .map(ph => {
+          const phEncs = divEncs.filter(e => e.phaseId === ph.id)
+          const assigned = phEncs.filter(e => e.courtId && e.estimatedStartTime).length
+          return { ...ph, encounters: phEncs, assigned, total: phEncs.length }
+        })
+        // Sort phases by sortOrder (which is PhaseOrder from backend)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
       // Encounters with no phase
       const noPhase = divEncs.filter(e => !e.phaseId)
       const totalAssigned = divEncs.filter(e => e.courtId && e.estimatedStartTime).length

@@ -188,13 +188,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       if (m.phaseId && !divMap[m.divisionId].phases[m.phaseId]) {
         divMap[m.divisionId].phases[m.phaseId] = {
           id: m.phaseId,
-          name: m.phaseName
+          name: m.phaseName,
+          phaseOrder: m.phaseOrder || m.phaseSortOrder || 0
         }
       }
     })
     return Object.values(divMap).map(d => ({
       ...d,
-      phases: Object.values(d.phases)
+      // Sort phases by phaseOrder
+      phases: Object.values(d.phases).sort((a, b) => (a.phaseOrder || 0) - (b.phaseOrder || 0))
     }))
   }, [matches])
 
@@ -608,7 +610,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         <div className="flex-1 overflow-y-auto p-2">
           {divisions.map(div => {
             const divMatches = matchesByDivPhase[div.id] || {}
-            const phases = div.phases || []
+            // Sort phases by phaseOrder/sortOrder
+            const phases = [...(div.phases || [])].sort((a, b) => 
+              (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
+            )
             // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points, not playable)
             const playablePhases = phases.filter(p => (p.incomingSlotCount || 0) > 0 && (p.advancingSlotCount || 0) > 0)
             const playablePhaseIds = new Set(playablePhases.map(p => p.id))
