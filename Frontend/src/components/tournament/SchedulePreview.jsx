@@ -330,12 +330,17 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 function PhaseAdvancementInfo({ phaseDetails, phases }) {
   const incomingRules = phaseDetails.incomingRules || [];
   const outgoingRules = phaseDetails.outgoingRules || [];
+  const internalRules = phaseDetails.internalRules || [];
 
-  if (incomingRules.length === 0 && outgoingRules.length === 0) return null;
+  if (incomingRules.length === 0 && outgoingRules.length === 0 && internalRules.length === 0) return null;
 
   // Build phase name lookup
   const phaseNameById = {};
   phases.forEach(p => { phaseNameById[p.id] = p.name; });
+
+  // Group internal rules by type (Winner/Loser)
+  const winnerRules = internalRules.filter(r => r.type === 'Winner');
+  const loserRules = internalRules.filter(r => r.type === 'Loser');
 
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -397,6 +402,46 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
           </div>
         )}
       </div>
+
+      {/* Internal advancement rules (bracket progression within phase) */}
+      {internalRules.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-blue-200">
+          <h4 className="text-xs font-medium text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+            <Trophy className="w-3 h-3" />
+            Internal Bracket Progression
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Winner advancement */}
+            {winnerRules.length > 0 && (
+              <div>
+                <span className="text-[10px] text-green-600 font-medium">Winners</span>
+                <div className="space-y-0.5 mt-1">
+                  {winnerRules.map((rule, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-1 h-1 rounded-full bg-green-500 flex-shrink-0" />
+                      <span>{rule.sourceEncounter} → {rule.targetEncounter}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Loser advancement (consolation) */}
+            {loserRules.length > 0 && (
+              <div>
+                <span className="text-[10px] text-orange-600 font-medium">Losers (Consolation)</span>
+                <div className="space-y-0.5 mt-1">
+                  {loserRules.map((rule, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-1 h-1 rounded-full bg-orange-500 flex-shrink-0" />
+                      <span>{rule.sourceEncounter} → {rule.targetEncounter}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

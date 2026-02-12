@@ -89,6 +89,10 @@ public class DivisionPhasesController : ControllerBase
                 .ThenInclude(pl => pl.PoolSlots)
             .Include(p => p.IncomingAdvancementRules)
             .Include(p => p.OutgoingAdvancementRules)
+            .Include(p => p.Encounters)
+                .ThenInclude(e => e.WinnerNextEncounter)
+            .Include(p => p.Encounters)
+                .ThenInclude(e => e.LoserNextEncounter)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (phase == null)
@@ -159,7 +163,32 @@ public class DivisionPhasesController : ControllerBase
                     r.SourceRank,
                     r.TargetSlotNumber,
                     r.Description
-                })
+                }),
+                // Internal advancement rules (within-phase, e.g., bracket progression)
+                InternalRules = phase.Encounters
+                    .Where(e => e.WinnerNextEncounterId != null || e.LoserNextEncounterId != null)
+                    .OrderBy(e => e.RoundNumber).ThenBy(e => e.EncounterNumber)
+                    .SelectMany(e => new[] {
+                        e.WinnerNextEncounterId != null ? new {
+                            SourceEncounterId = e.Id,
+                            SourceEncounter = $"R{e.RoundNumber} M{e.EncounterNumber}",
+                            Type = "Winner",
+                            TargetEncounterId = e.WinnerNextEncounterId,
+                            TargetEncounter = e.WinnerNextEncounter != null 
+                                ? $"R{e.WinnerNextEncounter.RoundNumber} M{e.WinnerNextEncounter.EncounterNumber}"
+                                : null
+                        } : null,
+                        e.LoserNextEncounterId != null ? new {
+                            SourceEncounterId = e.Id,
+                            SourceEncounter = $"R{e.RoundNumber} M{e.EncounterNumber}",
+                            Type = "Loser",
+                            TargetEncounterId = e.LoserNextEncounterId,
+                            TargetEncounter = e.LoserNextEncounter != null 
+                                ? $"R{e.LoserNextEncounter.RoundNumber} M{e.LoserNextEncounter.EncounterNumber}"
+                                : null
+                        } : null
+                    })
+                    .Where(r => r != null)
             }
         });
     }
