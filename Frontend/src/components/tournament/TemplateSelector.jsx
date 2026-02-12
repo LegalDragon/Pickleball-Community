@@ -472,7 +472,7 @@ function PhaseFlowDiagram({ phases, structureJson }) {
     
     // Check if template has saved node positions
     const savedPositions = structure?.canvasLayout?.nodePositions;
-    const layoutDirection = structure?.canvasLayout?.direction || 'TB';
+    const layoutDirection = structure?.canvasLayout?.direction || 'LR';
     
     if (savedPositions && Object.keys(savedPositions).length > 0) {
       // Use saved positions from template
@@ -562,6 +562,19 @@ function PhaseNode({ data }) {
     }
   };
 
+  // Map internal type values to human-readable labels
+  const getPhaseTypeLabel = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'roundrobin': return 'Round Robin';
+      case 'pools': return 'Pool Play';
+      case 'singleelimination': return 'Single Elimination';
+      case 'doubleelimination': return 'Double Elimination';
+      case 'bracket':
+      case 'bracketround': return 'Bracket';
+      default: return type || 'Phase';
+    }
+  };
+
   const colors = getPhaseColor(data.type);
 
   return (
@@ -572,7 +585,7 @@ function PhaseNode({ data }) {
       </div>
       <div className="px-3 py-2 text-xs text-gray-600">
         <div className="flex justify-between">
-          <span>{data.type}</span>
+          <span>{getPhaseTypeLabel(data.type)}</span>
           <span>{data.inSlots} in → {data.outSlots} out</span>
         </div>
         {data.poolCount > 1 && (
