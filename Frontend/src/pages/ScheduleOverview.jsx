@@ -18,7 +18,7 @@ export default function ScheduleOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboard, setDashboard] = useState(null);
-  const [expandedDivisions, setExpandedDivisions] = useState({});
+  const [selectedDivisionId, setSelectedDivisionId] = useState(null);
   const [gameSettingsModal, setGameSettingsModal] = useState({ isOpen: false, division: null });
   const [viewMode, setViewMode] = useState('divisions'); // divisions, timeline
   const [progressData, setProgressData] = useState(null);
@@ -35,14 +35,11 @@ export default function ScheduleOverview() {
       const response = await tournamentApi.getDashboard(eventId);
       if (response.success) {
         setDashboard(response.data);
-        // Auto-expand all divisions that have schedules
-        const expanded = {};
-        response.data?.divisions?.forEach(div => {
-          if (div.scheduleReady) {
-            expanded[div.id] = true;
-          }
-        });
-        setExpandedDivisions(expanded);
+        // Auto-select first division with a schedule
+        const divisionsWithSchedules = response.data?.divisions?.filter(d => d.scheduleReady) || [];
+        if (divisionsWithSchedules.length > 0 && !selectedDivisionId) {
+          setSelectedDivisionId(divisionsWithSchedules[0].id);
+        }
       } else {
         setError('Failed to load event data');
       }
@@ -64,13 +61,6 @@ export default function ScheduleOverview() {
       // Progress data is optional
       console.error('Error fetching progress:', err);
     }
-  };
-
-  const toggleDivision = (divId) => {
-    setExpandedDivisions(prev => ({
-      ...prev,
-      [divId]: !prev[divId]
-    }));
   };
 
   const divisionsWithSchedules = dashboard?.divisions?.filter(d => d.scheduleReady) || [];
@@ -285,107 +275,77 @@ export default function ScheduleOverview() {
           </div>
         )}
 
-        {/* Divisions with schedules */}
-        {divisionsWithSchedules.map(div => (
-          <div key={div.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
-            {/* Division Header */}
-            <div
-              onClick={() => toggleDivision(div.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && toggleDivision(div.id)}
-              className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                {expandedDivisions[div.id] ? (
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                )}
-                <div className="text-left">
-                  <h2 className="text-lg font-semibold text-gray-900">{div.name}</h2>
-                  <div className="flex items-center gap-3 text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />
-                      {div.registeredUnits} teams
-                    </span>
-                    {div.totalMatches > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {div.totalMatches} matches
-                      </span>
-                    )}
-                    {div.completedMatches > 0 && (
-                      <span className="flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" />
-                        {div.completedMatches} completed
-                      </span>
+        {/* Division Selector and Schedule */}
+        {divisionsWithSchedules.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {/* Division Selector Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1">
+                <label className="text-sm font-medium text-gray-700">Division:</label>
+                <select
+                  value={selectedDivisionId || ''}
+                  onChange={(e) => setSelectedDivisionId(Number(e.target.value))}
+                  className="flex-1 max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                >
+                  {divisionsWithSchedules.map(div => (
+                    <option key={div.id} value={div.id}>
+                      {div.name} ({div.registeredUnits} teams, {div.totalMatches} matches)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selected division info */}
+              {(() => {
+                const selectedDiv = divisionsWithSchedules.find(d => d.id === selectedDivisionId);
+                if (!selectedDiv) return null;
+                return (
+                  <div className="flex items-center gap-4">
+                    {/* Game Settings Button */}
+                    <button
+                      onClick={() => setGameSettingsModal({ isOpen: true, division: selectedDiv })}
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Game Settings"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+
+                    {/* Progress bar */}
+                    {selectedDiv.totalMatches > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-orange-500 transition-all"
+                            style={{ width: `${(selectedDiv.completedMatches / selectedDiv.totalMatches) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {Math.round((selectedDiv.completedMatches / selectedDiv.totalMatches) * 100)}%
+                        </span>
+                      </div>
                     )}
                   </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Game Settings Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setGameSettingsModal({ isOpen: true, division: div });
-                  }}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Game Settings"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
-
-                {/* Progress bar */}
-                {div.totalMatches > 0 && (
-                  <>
-                    <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-orange-500 transition-all"
-                        style={{ width: `${(div.completedMatches / div.totalMatches) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-sm text-gray-500 w-16 text-right">
-                      {div.totalMatches > 0 ? Math.round((div.completedMatches / div.totalMatches) * 100) : 0}%
-                    </span>
-                  </>
-                )}
-              </div>
+                );
+              })()}
             </div>
 
-            {/* Schedule Preview */}
-            {expandedDivisions[div.id] && (
-              <div className="border-t border-gray-200 px-6 py-4">
+            {/* Schedule Preview for Selected Division */}
+            {selectedDivisionId && (
+              <div className="px-6 py-4">
                 <SchedulePreview
-                  divisionId={div.id}
+                  key={selectedDivisionId}
+                  divisionId={selectedDivisionId}
                   showFilters={true}
                 />
               </div>
             )}
           </div>
-        ))}
+        )}
 
-        {/* Divisions without schedules */}
+        {/* Note about divisions without schedules */}
         {divisionsWithoutSchedules.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">
-              Divisions Without Schedules
-            </h3>
-            <div className="bg-white rounded-lg shadow-sm divide-y divide-gray-100">
-              {divisionsWithoutSchedules.map(div => (
-                <div key={div.id} className="px-6 py-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">{div.name}</span>
-                    <span className="ml-2 text-xs text-gray-400">
-                      {div.registeredUnits} teams
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-400">No schedule</span>
-                </div>
-              ))}
-            </div>
+          <div className="text-sm text-gray-500 text-center mt-4">
+            {divisionsWithoutSchedules.length} division{divisionsWithoutSchedules.length !== 1 ? 's' : ''} without schedules: {divisionsWithoutSchedules.map(d => d.name).join(', ')}
           </div>
         )}
         </>}
