@@ -648,13 +648,19 @@ const PaletteItem = ({ phaseType, label }) => {
 const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules, onRulesChange, onClose }) => {
   const [pendingSource, setPendingSource] = useState(null) // source slot being connected
 
-  // Compute derived values (safe even if sourcePhase/targetPhase are null)
-  // Use sortOrder from the phase object, NOT array index + 1
+  // Use phase names for rule matching (new format)
+  const srcName = sourcePhase?.name
+  const tgtName = targetPhase?.name
+  // Also keep sortOrder for backward compat with old templates
   const srcOrder = sourcePhase?.sortOrder || (sourceIdx + 1)
   const tgtOrder = targetPhase?.sortOrder || (targetIdx + 1)
   const connectionRules = useMemo(() => 
-    rules.filter(r => r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder),
-    [rules, srcOrder, tgtOrder]
+    rules.filter(r => 
+      // Match by name (new format) or sortOrder (old format)
+      (r.sourcePhase === srcName && r.targetPhase === tgtName) ||
+      (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder)
+    ),
+    [rules, srcName, tgtName, srcOrder, tgtOrder]
   )
   const isPools = sourcePhase?.phaseType === 'Pools' && (parseInt(sourcePhase?.poolCount) || 0) > 1
   const poolCount = parseInt(sourcePhase?.poolCount) || 1
@@ -738,14 +744,19 @@ const EdgeConfigPanel = ({ sourcePhase, targetPhase, sourceIdx, targetIdx, rules
   if (!sourcePhase || !targetPhase) return null
 
   const updateRules = (newMappings) => {
-    const otherRules = rules.filter(r => !(r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder))
+    // Filter out rules for this connection (match by name or sortOrder for backward compat)
+    const otherRules = rules.filter(r => !(
+      (r.sourcePhase === srcName && r.targetPhase === tgtName) ||
+      (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder)
+    ))
     const newConnectionRules = []
     newMappings.forEach((targetSlot, srcId) => {
       const slot = exitSlots.find(s => s.id === srcId)
       if (!slot) return
       newConnectionRules.push({
-        sourcePhaseOrder: srcOrder,
-        targetPhaseOrder: tgtOrder,
+        // Use phase names (new format)
+        sourcePhase: srcName,
+        targetPhase: tgtName,
         finishPosition: slot.position,
         targetSlotNumber: targetSlot,
         sourcePoolIndex: slot.poolIndex,
@@ -1115,7 +1126,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
 
   // Convert advancement rules to React Flow edges
   const buildEdges = useCallback((rules, phases, selEdgeKey) => {
-    // Build sortOrder -> array index lookup
+    // Build name -> array index lookup (for new format)
+    const nameToIdx = {}
+    phases.forEach((p, idx) => { nameToIdx[p.name] = idx })
+    // Build sortOrder -> array index lookup (for old format backward compat)
     const sortOrderToIdx = {}
     phases.forEach((p, idx) => {
       const so = p.sortOrder || (idx + 1)
@@ -1124,19 +1138,29 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     
     const edgeMap = new Map()
     rules.forEach((rule) => {
-      const key = `${rule.sourcePhaseOrder}-${rule.targetPhaseOrder}`
+      // Support both name-based (new) and sortOrder-based (old) rule formats
+      let srcIdx, tgtIdx
+      if (rule.sourcePhase && rule.targetPhase) {
+        // New format: use phase names
+        srcIdx = nameToIdx[rule.sourcePhase]
+        tgtIdx = nameToIdx[rule.targetPhase]
+      } else {
+        // Old format: use sortOrder
+        srcIdx = sortOrderToIdx[rule.sourcePhaseOrder] ?? (rule.sourcePhaseOrder - 1)
+        tgtIdx = sortOrderToIdx[rule.targetPhaseOrder] ?? (rule.targetPhaseOrder - 1)
+      }
+      if (srcIdx === undefined || tgtIdx === undefined) return // Skip invalid rules
+      
+      const key = `${srcIdx}-${tgtIdx}`
       if (!edgeMap.has(key)) {
-        edgeMap.set(key, { sourcePhaseOrder: rule.sourcePhaseOrder, targetPhaseOrder: rule.targetPhaseOrder, count: 0, rules: [] })
+        edgeMap.set(key, { srcIdx, tgtIdx, count: 0, rules: [] })
       }
       const entry = edgeMap.get(key)
       entry.count++
       entry.rules.push(rule)
     })
 
-    return Array.from(edgeMap.values()).map(({ sourcePhaseOrder, targetPhaseOrder, count, rules: connRules }) => {
-      // Find array indices by sortOrder (not assuming sortOrder = idx + 1)
-      const srcIdx = sortOrderToIdx[sourcePhaseOrder] ?? (sourcePhaseOrder - 1)
-      const tgtIdx = sortOrderToIdx[targetPhaseOrder] ?? (targetPhaseOrder - 1)
+    return Array.from(edgeMap.values()).map(({ srcIdx, tgtIdx, count, rules: connRules }) => {
       const srcPhase = phases[srcIdx]
       const edgeKey = `${srcIdx}-${tgtIdx}`
       const isSelected = selEdgeKey === edgeKey
@@ -1334,9 +1358,9 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     // Generate advancement rules for this connection
     const srcPhase = vs.phases[sourceIdx]
     const tgtPhase = vs.phases[targetIdx]
-    // Use sortOrder from phase, NOT array index + 1
-    const srcOrder = srcPhase?.sortOrder || (sourceIdx + 1)
-    const tgtOrder = tgtPhase?.sortOrder || (targetIdx + 1)
+    // Use phase names for rules (new format)
+    const srcName = srcPhase?.name
+    const tgtName = tgtPhase?.name
     const slotsToAdvance = Math.min(
       parseInt(srcPhase?.advancingSlotCount) || 1,
       parseInt(tgtPhase?.incomingSlotCount) || 1
@@ -1349,7 +1373,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
       let slot = 1
       for (let pool = 0; pool < poolCount; pool++) {
         for (let pos = 1; pos <= advPerPool; pos++) {
-          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: slot++, sourcePoolIndex: pool })
+          newRules.push({ sourcePhase: srcName, targetPhase: tgtName, finishPosition: pos, targetSlotNumber: slot++, sourcePoolIndex: pool })
         }
       }
     } else {
@@ -1362,7 +1386,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
         // Check which finish positions are already mapped to OTHER targets
         const existingMapped = new Set()
         vs.advancementRules.forEach(r => {
-          if (r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder !== tgtOrder) {
+          if (r.sourcePhase === srcName && r.targetPhase !== tgtName) {
             existingMapped.add(r.finishPosition)
           }
         })
@@ -1388,18 +1412,19 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
         
         let targetSlot = 1
         for (let pos = startPos; pos <= endPos; pos++) {
-          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: targetSlot++, sourcePoolIndex: null })
+          newRules.push({ sourcePhase: srcName, targetPhase: tgtName, finishPosition: pos, targetSlotNumber: targetSlot++, sourcePoolIndex: null })
         }
       } else {
         for (let pos = 1; pos <= slotsToAdvance; pos++) {
-          newRules.push({ sourcePhaseOrder: srcOrder, targetPhaseOrder: tgtOrder, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
+          newRules.push({ sourcePhase: srcName, targetPhase: tgtName, finishPosition: pos, targetSlotNumber: pos, sourcePoolIndex: null })
         }
       }
     }
 
     // Remove existing rules for this connection, then add new ones
+    // Match by name (new format) or check legacy sortOrder format
     const filteredRules = vs.advancementRules.filter(
-      r => !(r.sourcePhaseOrder === srcOrder && r.targetPhaseOrder === tgtOrder)
+      r => !(r.sourcePhase === srcName && r.targetPhase === tgtName)
     )
     onChange({ ...vs, advancementRules: [...filteredRules, ...newRules] })
   }, [vs, onChange, setEdges])
@@ -1409,13 +1434,11 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     const pairsToRemove = deletedEdges.map(e => {
       const srcIdx = parseInt(e.source.replace('phase-', ''))
       const tgtIdx = parseInt(e.target.replace('phase-', ''))
-      // Use sortOrder from phase, not index + 1
-      const srcOrder = vs.phases[srcIdx]?.sortOrder || (srcIdx + 1)
-      const tgtOrder = vs.phases[tgtIdx]?.sortOrder || (tgtIdx + 1)
-      return { src: srcOrder, tgt: tgtOrder }
+      // Use phase names (new format)
+      return { srcName: vs.phases[srcIdx]?.name, tgtName: vs.phases[tgtIdx]?.name }
     })
     const filteredRules = vs.advancementRules.filter(r =>
-      !pairsToRemove.some(p => p.src === r.sourcePhaseOrder && p.tgt === r.targetPhaseOrder)
+      !pairsToRemove.some(p => r.sourcePhase === p.srcName && r.targetPhase === p.tgtName)
     )
     onChange({ ...vs, advancementRules: filteredRules })
   }, [vs, onChange])
@@ -1442,7 +1465,30 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
   // Update phase config from panel
   const handlePhaseUpdate = useCallback((phaseIdx, field, value) => {
     const phases = [...vs.phases]
-    phases[phaseIdx] = { ...phases[phaseIdx], [field]: value }
+    const oldPhase = phases[phaseIdx]
+    
+    // If changing name, update rules that reference this phase
+    if (field === 'name' && oldPhase.name !== value) {
+      // Check for duplicate names
+      const isDuplicate = phases.some((p, i) => i !== phaseIdx && p.name === value)
+      if (isDuplicate) {
+        alert(`Phase name "${value}" already exists. Please use a unique name.`)
+        return
+      }
+      
+      // Update rules to use new name
+      const oldName = oldPhase.name
+      const updatedRules = vs.advancementRules.map(r => ({
+        ...r,
+        sourcePhase: r.sourcePhase === oldName ? value : r.sourcePhase,
+        targetPhase: r.targetPhase === oldName ? value : r.targetPhase,
+      }))
+      phases[phaseIdx] = { ...oldPhase, [field]: value }
+      onChange({ ...vs, phases, advancementRules: updatedRules })
+      return
+    }
+    
+    phases[phaseIdx] = { ...oldPhase, [field]: value }
     onChange({ ...vs, phases })
   }, [vs, onChange])
 
@@ -1452,17 +1498,14 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     const idx = parseInt(selectedNodeId.replace('phase-', ''))
     if (vs.phases.length <= 1) return
 
-    // Get the sortOrder of the phase being deleted (for rule filtering)
-    const deletedSortOrder = vs.phases[idx]?.sortOrder || (idx + 1)
+    // Get the name of the phase being deleted (for rule filtering)
+    const deletedName = vs.phases[idx]?.name
     
     const phases = vs.phases.filter((_, i) => i !== idx).map((p, i) => ({ ...p, sortOrder: i + 1 }))
+    // Remove rules that reference the deleted phase by name
     const rules = vs.advancementRules.filter(r =>
-      r.sourcePhaseOrder !== deletedSortOrder && r.targetPhaseOrder !== deletedSortOrder
-    ).map(r => ({
-      ...r,
-      sourcePhaseOrder: r.sourcePhaseOrder > deletedSortOrder ? r.sourcePhaseOrder - 1 : r.sourcePhaseOrder,
-      targetPhaseOrder: r.targetPhaseOrder > deletedSortOrder ? r.targetPhaseOrder - 1 : r.targetPhaseOrder
-    }))
+      r.sourcePhase !== deletedName && r.targetPhase !== deletedName
+    )
 
     setSelectedNodeId(null)
     onChange({ ...vs, phases, advancementRules: rules })
@@ -1683,19 +1726,9 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
       return { ...phases[oldIdx], sortOrder: newIdx + 1 }
     })
 
-    // Remap advancement rules
-    const idxMap = new Map()
-    order.forEach((nodeId, newIdx) => {
-      const oldIdx = parseInt(nodeId.replace('phase-', ''))
-      idxMap.set(oldIdx + 1, newIdx + 1)
-    })
-    const remappedRules = vs.advancementRules.map(r => ({
-      ...r,
-      sourcePhaseOrder: idxMap.get(r.sourcePhaseOrder) || r.sourcePhaseOrder,
-      targetPhaseOrder: idxMap.get(r.targetPhaseOrder) || r.targetPhaseOrder,
-    }))
-
-    onChange({ ...vs, phases: reordered, advancementRules: remappedRules })
+    // With name-based rules, we don't need to remap - names stay the same
+    // Just update the phases array order
+    onChange({ ...vs, phases: reordered })
   }, [nodes, edges, vs, onChange])
 
   // Export canvas as PNG image

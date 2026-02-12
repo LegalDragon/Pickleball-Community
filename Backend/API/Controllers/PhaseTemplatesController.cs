@@ -1048,6 +1048,9 @@ public class PhaseTemplatesController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Build name-based lookup for new rule format
+        var phasesByName = createdPhases.Values.ToDictionary(p => p.Name ?? "", p => p);
+
         // Create advancement rules
         if (root.TryGetProperty("advancementRules", out var rules) && rules.ValueKind == JsonValueKind.Array)
         {
@@ -1060,7 +1063,7 @@ public class PhaseTemplatesController : ControllerBase
                 }
                 else
                 {
-                    await CreateAdvancementRuleFromJson(ruleJson, createdPhases);
+                    await CreateAdvancementRuleFromJson(ruleJson, createdPhases, phasesByName);
                 }
             }
             // Count advancement rules using direct query on division phases (avoids Contains() OPENJSON issue)
@@ -1271,22 +1274,45 @@ public class PhaseTemplatesController : ControllerBase
         await _context.SaveChangesAsync();
     }
 
-    private async Task CreateAdvancementRuleFromJson(JsonElement ruleJson, Dictionary<int, DivisionPhase> phases)
+    private async Task CreateAdvancementRuleFromJson(
+        JsonElement ruleJson, 
+        Dictionary<int, DivisionPhase> phasesByOrder,
+        Dictionary<string, DivisionPhase> phasesByName)
     {
-        // Support both old format (fromPhase/toPhase) and new visual editor format (sourcePhaseOrder/targetPhaseOrder)
-        var fromPhaseOrder = ruleJson.TryGetProperty("sourcePhaseOrder", out var spo) ? spo.GetInt32()
-            : ruleJson.TryGetProperty("fromPhase", out var fp) ? fp.GetInt32() : 0;
-        var toPhaseOrder = ruleJson.TryGetProperty("targetPhaseOrder", out var tpo) ? tpo.GetInt32()
-            : ruleJson.TryGetProperty("toPhase", out var tp) ? tp.GetInt32() : 0;
+        DivisionPhase? fromPhase = null;
+        DivisionPhase? toPhase = null;
+        
+        // New format: lookup by phase name (sourcePhase/targetPhase)
+        if (ruleJson.TryGetProperty("sourcePhase", out var srcName) && srcName.ValueKind == JsonValueKind.String &&
+            ruleJson.TryGetProperty("targetPhase", out var tgtName) && tgtName.ValueKind == JsonValueKind.String)
+        {
+            var srcNameStr = srcName.GetString() ?? "";
+            var tgtNameStr = tgtName.GetString() ?? "";
+            phasesByName.TryGetValue(srcNameStr, out fromPhase);
+            phasesByName.TryGetValue(tgtNameStr, out toPhase);
+            
+            _logger.LogInformation("CreateAdvancementRule (by name): src={Src}, tgt={Tgt}, foundSrc={FoundSrc}, foundTgt={FoundTgt}", 
+                srcNameStr, tgtNameStr, fromPhase != null, toPhase != null);
+        }
+        // Old format: lookup by sortOrder (sourcePhaseOrder/targetPhaseOrder or fromPhase/toPhase)
+        else
+        {
+            var fromPhaseOrder = ruleJson.TryGetProperty("sourcePhaseOrder", out var spo) ? spo.GetInt32()
+                : ruleJson.TryGetProperty("fromPhase", out var fp) ? fp.GetInt32() : 0;
+            var toPhaseOrder = ruleJson.TryGetProperty("targetPhaseOrder", out var tpo) ? tpo.GetInt32()
+                : ruleJson.TryGetProperty("toPhase", out var tp) ? tp.GetInt32() : 0;
 
-        _logger.LogInformation("CreateAdvancementRule: from={From}, to={To}, ruleJson={Json}, phaseKeys=[{Keys}]", 
-            fromPhaseOrder, toPhaseOrder, ruleJson.GetRawText(), string.Join(",", phases.Keys));
+            _logger.LogInformation("CreateAdvancementRule (by order): from={From}, to={To}, phaseKeys=[{Keys}]", 
+                fromPhaseOrder, toPhaseOrder, string.Join(",", phasesByOrder.Keys));
 
-        if (!phases.TryGetValue(fromPhaseOrder, out var fromPhase) ||
-            !phases.TryGetValue(toPhaseOrder, out var toPhase))
+            phasesByOrder.TryGetValue(fromPhaseOrder, out fromPhase);
+            phasesByOrder.TryGetValue(toPhaseOrder, out toPhase);
+        }
+
+        if (fromPhase == null || toPhase == null)
         {
             _logger.LogWarning("CreateAdvancementRule: SKIPPED - fromPhase={FromFound}, toPhase={ToFound}", 
-                phases.ContainsKey(fromPhaseOrder), phases.ContainsKey(toPhaseOrder));
+                fromPhase != null, toPhase != null);
             return; // Skip invalid rules
         }
         

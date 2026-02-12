@@ -107,8 +107,12 @@ export function parseStructureToVisual(jsonStr) {
         drawMethod: p.drawMethod || null
       })) : [],
       advancementRules: Array.isArray(s.advancementRules) ? s.advancementRules.map(r => ({
-        sourcePhaseOrder: r.sourcePhaseOrder ?? r.fromPhase ?? 1,
-        targetPhaseOrder: r.targetPhaseOrder ?? r.toPhase ?? 2,
+        // New format uses phase names; old format used sortOrder
+        sourcePhase: r.sourcePhase ?? null,
+        targetPhase: r.targetPhase ?? null,
+        // Keep old format for backward compatibility during transition
+        sourcePhaseOrder: r.sourcePhaseOrder ?? r.fromPhase ?? null,
+        targetPhaseOrder: r.targetPhaseOrder ?? r.toPhase ?? null,
         finishPosition: r.finishPosition ?? r.fromRank ?? 1,
         targetSlotNumber: r.targetSlotNumber ?? r.toSlot ?? 1,
         sourcePoolIndex: r.sourcePoolIndex ?? null
@@ -153,7 +157,13 @@ export function serializeVisualToJson(vs) {
       ...(p.phaseType === 'Award' && p.awardType ? { awardType: p.awardType } : {}),
       ...(p.phaseType === 'Draw' && p.drawMethod ? { drawMethod: p.drawMethod } : {})
     })),
-    advancementRules: vs.advancementRules,
+    advancementRules: vs.advancementRules.map(r => ({
+      sourcePhase: r.sourcePhase,
+      targetPhase: r.targetPhase,
+      finishPosition: r.finishPosition,
+      targetSlotNumber: r.targetSlotNumber,
+      sourcePoolIndex: r.sourcePoolIndex
+    })),
     ...(vs.exitPositions.length > 0 ? { exitPositions: vs.exitPositions } : {}),
     // Save canvas layout (node positions and direction) if present
     ...(vs.canvasLayout ? { canvasLayout: vs.canvasLayout } : {})
@@ -167,9 +177,6 @@ export function autoGenerateRules(phases) {
   for (let i = 0; i < phases.length - 1; i++) {
     const src = phases[i]
     const tgt = phases[i + 1]
-    // Use sortOrder from phase, NOT array index + 1
-    const srcOrder = src.sortOrder || (i + 1)
-    const tgtOrder = tgt.sortOrder || (i + 2)
     const slotsToAdvance = Math.min(
       parseInt(src.advancingSlotCount) || 0,
       parseInt(tgt.incomingSlotCount) || 0
@@ -181,8 +188,8 @@ export function autoGenerateRules(phases) {
       for (let pool = 0; pool < poolCount; pool++) {
         for (let pos = 1; pos <= advPerPool; pos++) {
           rules.push({
-            sourcePhaseOrder: srcOrder,
-            targetPhaseOrder: tgtOrder,
+            sourcePhase: src.name,
+            targetPhase: tgt.name,
             finishPosition: pos,
             targetSlotNumber: slot++,
             sourcePoolIndex: pool
@@ -192,8 +199,8 @@ export function autoGenerateRules(phases) {
     } else {
       for (let pos = 1; pos <= slotsToAdvance; pos++) {
         rules.push({
-          sourcePhaseOrder: srcOrder,
-          targetPhaseOrder: tgtOrder,
+          sourcePhase: src.name,
+          targetPhase: tgt.name,
           finishPosition: pos,
           targetSlotNumber: pos,
           sourcePoolIndex: null
