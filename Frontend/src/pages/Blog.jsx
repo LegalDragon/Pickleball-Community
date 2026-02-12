@@ -63,6 +63,7 @@ export default function Blog() {
       const currentPage = reset ? 1 : page;
       const response = await blogApi.getPosts({
         categoryId: selectedCategoryId || undefined,
+        postType: selectedPostType || undefined,
         status: 'Published',
         page: currentPage,
         pageSize: 10
@@ -83,11 +84,29 @@ export default function Blog() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategoryId, page]);
+  }, [selectedCategoryId, selectedPostType, page]);
+
+  // Load post from URL param (?post=slug)
+  useEffect(() => {
+    const postSlug = searchParams.get('post');
+    if (postSlug) {
+      const loadPostFromUrl = async () => {
+        try {
+          const response = await blogApi.getPost(postSlug);
+          if (response?.success) {
+            setSelectedPost(response.data);
+          }
+        } catch (err) {
+          console.error('Error loading post from URL:', err);
+        }
+      };
+      loadPostFromUrl();
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadPosts(true);
-  }, [selectedCategoryId]);
+  }, [selectedCategoryId, selectedPostType]);
 
   // Handle category filter change
   const handleCategoryChange = (categoryId) => {
@@ -224,6 +243,29 @@ export default function Blog() {
                     {cat.name}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            {/* Post Type Filter */}
+            <div className="flex items-center gap-2">
+              <Video className="w-5 h-5 text-gray-500" />
+              <select
+                value={selectedPostType}
+                onChange={(e) => {
+                  setSelectedPostType(e.target.value);
+                  const newParams = new URLSearchParams(searchParams);
+                  if (e.target.value) {
+                    newParams.set('type', e.target.value);
+                  } else {
+                    newParams.delete('type');
+                  }
+                  setSearchParams(newParams);
+                }}
+                className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+              >
+                <option value="">All Types</option>
+                <option value="Blog">📝 Blog Posts</option>
+                <option value="Vlog">🎬 Vlogs</option>
               </select>
             </div>
           </div>

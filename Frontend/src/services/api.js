@@ -1303,6 +1303,7 @@ export const blogApi = {
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
     if (params.authorId) queryParams.append('authorId', params.authorId);
     if (params.status) queryParams.append('status', params.status);
+    if (params.postType) queryParams.append('postType', params.postType);
     if (params.page) queryParams.append('page', params.page);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     return api.get(`/blog/posts?${queryParams.toString()}`);

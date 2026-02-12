@@ -4,6 +4,7 @@ import RecentPlayers from '../components/landing/RecentPlayers';
 import Stats from '../components/landing/Stats';
 import Features from '../components/landing/Features';
 import FeaturedEvents from '../components/landing/FeaturedEvents';
+import VlogGallery from '../components/landing/VlogGallery';
 import CTA from '../components/landing/CTA';
 import Footer from '../components/landing/Footer';
 
@@ -13,6 +14,7 @@ const Home = () => {
       <Header />
       <RecentPlayers />
       <FeaturedEvents />
+      <VlogGallery />
       <Stats />
       <Features />
       <CTA />
