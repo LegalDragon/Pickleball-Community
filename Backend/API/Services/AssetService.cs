@@ -249,12 +249,12 @@ public class AssetService : IAssetService
     public string? GetAssetFilePath(int fileId)
     {
         var asset = _context.Assets.Find(fileId);
-        if (asset == null || string.IsNullOrEmpty(asset.FilePath))
+        if (asset == null || string.IsNullOrEmpty(asset.StoragePath))
             return null;
 
-        // FilePath contains the relative path like "videos/2026-02/123.mp4"
-        var basePath = Path.Combine(AppContext.BaseDirectory, _options.LocalUploadPath ?? "uploads");
-        var fullPath = Path.Combine(basePath, asset.FilePath);
+        // StoragePath contains the relative path like "uploads/videos/2026-02/123.mp4"
+        var basePath = _options.GetUploadsPath();
+        var fullPath = Path.Combine(AppContext.BaseDirectory, asset.StoragePath);
         
         return File.Exists(fullPath) ? fullPath : null;
     }
