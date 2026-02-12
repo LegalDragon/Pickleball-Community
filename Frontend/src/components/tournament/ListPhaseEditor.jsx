@@ -208,7 +208,11 @@ const ListPhaseEditor = ({ visualState, onChange }) => {
             </button>
           </div>
 
-          {vs.phases.map((phase, idx) => {
+          {[...vs.phases]
+            .map((phase, origIdx) => ({ ...phase, origIdx }))
+            .sort((a, b) => (a.sortOrder || a.origIdx + 1) - (b.sortOrder || b.origIdx + 1))
+            .map((phase) => {
+            const idx = phase.origIdx
             const collapsed = collapsedPhases.has(idx)
             const isBracket = BRACKET_TYPES.includes(phase.phaseType)
             const isPools = phase.phaseType === 'Pools'
@@ -218,7 +222,7 @@ const ListPhaseEditor = ({ visualState, onChange }) => {
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b cursor-pointer"
                   onClick={() => toggleCollapse(idx)}>
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">{idx + 1}</span>
+                    <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">{phase.sortOrder || (idx + 1)}</span>
                     <span className="font-medium text-sm text-gray-800">{phase.name}</span>
                     <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded">{phase.phaseType}</span>
                     <span className="text-xs text-gray-400">
@@ -284,19 +288,9 @@ const ListPhaseEditor = ({ visualState, onChange }) => {
                         </div>
                       )}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Best Of</label>
-                        <select value={phase.bestOf}
-                          onChange={e => updatePhase(idx, 'bestOf', parseInt(e.target.value))}
-                          className="w-full px-2 py-1.5 border rounded text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
-                          <option value={1}>1</option>
-                          <option value={3}>3</option>
-                          <option value={5}>5</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
-                        <input type="number" min={1} value={phase.matchDurationMinutes}
-                          onChange={e => updatePhase(idx, 'matchDurationMinutes', parseInt(e.target.value) || 0)}
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Phase Order</label>
+                        <input type="number" min={1} value={phase.sortOrder || (idx + 1)}
+                          onChange={e => updatePhase(idx, 'sortOrder', parseInt(e.target.value) || 1)}
                           className="w-full px-2 py-1.5 border rounded text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500" />
                       </div>
                       <div>
