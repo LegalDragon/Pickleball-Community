@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight, FolderOpen, Video, Upload, PlayCircle } from 'lucide-react';
+import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight, FolderOpen, Video, Upload, PlayCircle, RefreshCw, Image } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { blogApi, ratingApi, getSharedAssetUrl } from '../services/api';
 
@@ -459,6 +459,43 @@ function WritePostModal({ post, categories, onClose, onSave }) {
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isEditingVideo, setIsEditingVideo] = useState(false);
+  const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
+
+  // Generate thumbnail from uploaded video
+  const handleGenerateThumbnail = async () => {
+    if (!formData.videoAssetId) {
+      alert('Thumbnail generation only works for uploaded videos');
+      return;
+    }
+
+    setGeneratingThumbnail(true);
+    try {
+      const response = await fetch(`/api/assets/${formData.videoAssetId}/thumbnail?seekSeconds=1`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('jwtToken')}`
+        }
+      });
+
+      const result = await response.json();
+      if (result.success && result.data?.assetId) {
+        // Set the generated thumbnail as featured image
+        setFormData(prev => ({
+          ...prev,
+          featuredImageUrl: `/api/assets/${result.data.assetId}`
+        }));
+        alert('Thumbnail generated successfully!');
+      } else {
+        alert(result.message || 'Failed to generate thumbnail');
+      }
+    } catch (err) {
+      console.error('Thumbnail generation error:', err);
+      alert('Failed to generate thumbnail. Make sure ffmpeg is installed on the server.');
+    } finally {
+      setGeneratingThumbnail(false);
+    }
+  };
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -607,7 +644,7 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                 Video Source *
               </label>
               
-              {formData.videoUrl ? (
+              {formData.videoUrl && !isEditingVideo ? (
                 <div className="space-y-3">
                   {/* Show video preview - handle YouTube/Vimeo embeds vs direct videos */}
                   {formData.videoUrl.includes('youtube.com') || formData.videoUrl.includes('youtu.be') ? (
@@ -633,16 +670,65 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       className="w-full max-h-64 rounded-lg bg-black"
                     />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, videoUrl: '', videoAssetId: null })}
-                    className="text-sm text-red-600 hover:text-red-700"
-                  >
-                    Remove video
-                  </button>
+                  
+                  {/* Video URL display */}
+                  <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded truncate">
+                    {formData.videoUrl}
+                  </div>
+                  
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingVideo(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Change Video
+                    </button>
+                    
+                    {/* Thumbnail generation - only for uploaded videos */}
+                    {formData.videoAssetId && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateThumbnail}
+                        disabled={generatingThumbnail}
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50"
+                      >
+                        {generatingThumbnail ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Image className="w-3 h-3" />
+                        )}
+                        {generatingThumbnail ? 'Generating...' : 'Generate Thumbnail'}
+                      </button>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, videoUrl: '', videoAssetId: null })}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Cancel editing button */}
+                  {isEditingVideo && formData.videoUrl && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingVideo(false)}
+                        className="text-sm text-gray-500 hover:text-gray-700"
+                      >
+                        ← Cancel, keep current video
+                      </button>
+                    </div>
+                  )}
+                  
                   {/* External URL input */}
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">External Video URL (YouTube, Vimeo, or direct link)</label>
@@ -650,6 +736,7 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       <input
                         type="url"
                         placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
+                        defaultValue={isEditingVideo ? formData.videoUrl : ''}
                         className="flex-1 border border-gray-300 rounded-lg p-2 text-sm focus:ring-red-500 focus:border-red-500"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -657,6 +744,7 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                             const url = e.target.value.trim();
                             if (url) {
                               setFormData({ ...formData, videoUrl: url, videoAssetId: null });
+                              setIsEditingVideo(false);
                             }
                           }
                         }}
@@ -664,15 +752,16 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       <button
                         type="button"
                         onClick={(e) => {
-                          const input = e.target.previousElementSibling;
+                          const input = e.target.closest('.flex').querySelector('input');
                           const url = input.value.trim();
                           if (url) {
                             setFormData({ ...formData, videoUrl: url, videoAssetId: null });
+                            setIsEditingVideo(false);
                           }
                         }}
                         className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                       >
-                        Add
+                        {isEditingVideo ? 'Update' : 'Add'}
                       </button>
                     </div>
                   </div>
@@ -691,7 +780,10 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       <input
                         type="file"
                         accept="video/*"
-                        onChange={handleVideoUpload}
+                        onChange={(e) => {
+                          handleVideoUpload(e);
+                          setIsEditingVideo(false);
+                        }}
                         disabled={uploading}
                         className="hidden"
                       />
