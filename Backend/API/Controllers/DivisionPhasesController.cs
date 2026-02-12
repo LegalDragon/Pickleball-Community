@@ -1098,50 +1098,79 @@ public class DivisionPhasesController : ControllerBase
         int created = 0;
         int n = slots.Count;
 
-        // Circle method for round robin
-        // For n teams, we need n-1 rounds (or n rounds if odd)
-        int rounds = n % 2 == 0 ? n - 1 : n;
+        if (n < 2)
+            return (0, encounterNumber);
 
-        for (int round = 1; round <= rounds; round++)
+        // Simple all-pairs approach for round robin: each team plays every other team once
+        // Total matches = n * (n-1) / 2
+        // Organize into rounds where each team plays at most once per round
+        
+        // For scheduling into rounds, use circle method with virtual team for odd counts
+        int virtualN = n % 2 == 0 ? n : n + 1; // Add phantom team if odd
+        int rounds = virtualN - 1;
+        int matchesPerRound = virtualN / 2;
+
+        for (int round = 0; round < rounds; round++)
         {
-            for (int i = 0; i < n / 2; i++)
+            for (int match = 0; match < matchesPerRound; match++)
             {
-                int home = (round + i) % (n - 1);
-                int away = (n - 1 - i + round) % (n - 1);
-
-                // Last team stays fixed for even numbers
-                if (i == 0 && n % 2 == 0)
+                int home, away;
+                
+                if (match == 0)
                 {
-                    away = n - 1;
+                    // First match: team 0 vs rotating team
+                    home = 0;
+                    away = virtualN - 1 - round;
+                    if (away == 0) away = virtualN - 1;
+                }
+                else
+                {
+                    // Circle rotation for other matches
+                    home = 1 + ((round + match - 1) % (virtualN - 1));
+                    away = 1 + ((round + virtualN - 1 - match) % (virtualN - 1));
                 }
 
-                if (home < n && away < n && home != away)
+                // Skip if either team is the phantom (index >= n means bye)
+                if (home >= n || away >= n)
+                    continue;
+
+                // Skip invalid or duplicate
+                if (home == away || home < 0 || away < 0)
+                    continue;
+
+                var encounter = new EventEncounter
                 {
-                    var encounter = new EventEncounter
-                    {
-                        EventId = phase.Division!.EventId,
-                        DivisionId = phase.DivisionId,
-                        PhaseId = phase.Id,
-                        PoolId = poolId,
-                        RoundType = "Pool",
-                        RoundNumber = round,
-                        RoundName = poolId != null ? $"Round {round}" : $"Round {round}",
-                        EncounterNumber = encounterNumber++,
-                        EncounterLabel = $"M{encounterNumber - 1}",
-                        Unit1SlotId = slots[home].Id,
-                        Unit2SlotId = slots[away].Id,
-                        Unit1SeedLabel = slots[home].PlaceholderLabel,
-                        Unit2SeedLabel = slots[away].PlaceholderLabel,
-                        BestOf = phase.BestOf ?? 1,
-                        Status = "Scheduled"
-                    };
-                    _context.EventEncounters.Add(encounter);
-                    created++;
-                }
+                    EventId = phase.Division!.EventId,
+                    DivisionId = phase.DivisionId,
+                    PhaseId = phase.Id,
+                    PoolId = poolId,
+                    RoundType = "Pool",
+                    RoundNumber = round + 1,
+                    RoundName = poolId != null ? $"Round {round + 1}" : $"Round {round + 1}",
+                    EncounterNumber = encounterNumber++,
+                    EncounterLabel = $"M{encounterNumber - 1}",
+                    Unit1SlotId = slots[home].Id,
+                    Unit2SlotId = slots[away].Id,
+                    Unit1SeedLabel = slots[home].PlaceholderLabel,
+                    Unit2SeedLabel = slots[away].PlaceholderLabel,
+                    BestOf = phase.BestOf ?? 1,
+                    Status = "Scheduled"
+                };
+                _context.EventEncounters.Add(encounter);
+                created++;
             }
         }
 
         await _context.SaveChangesAsync();
+        
+        // Verify: for n teams, should have exactly n*(n-1)/2 matches
+        int expected = n * (n - 1) / 2;
+        if (created != expected)
+        {
+            _logger.LogWarning("Round robin generated {Created} matches but expected {Expected} for {N} teams", 
+                created, expected, n);
+        }
+
         return (created, encounterNumber);
     }
 
