@@ -1770,17 +1770,57 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     })
   }, [nodes])
 
-  // Validation warnings
-  const warnings = useMemo(() => {
+  // Validation warnings/errors
+  const { warnings, errors } = useMemo(() => {
     const w = []
+    const e = []
+    
+    // Check required phases
+    const hasDrawPhase = vs.phases.some(p => p.phaseType === 'Draw')
+    const hasAwardPhase = vs.phases.some(p => p.phaseType === 'Award')
+    if (!hasDrawPhase && vs.phases.length > 0) {
+      e.push('Template must have a Draw phase')
+    }
+    if (!hasAwardPhase && vs.phases.length > 0) {
+      e.push('Template must have at least one Award phase')
+    }
+    
+    // Check for duplicate phase names
+    const nameCount = {}
+    vs.phases.forEach(p => { nameCount[p.name] = (nameCount[p.name] || 0) + 1 })
+    Object.entries(nameCount).forEach(([name, count]) => {
+      if (count > 1) e.push(`Duplicate phase name: "${name}" (${count} phases)`)
+    })
+    
+    // Check connectivity
     nodes.forEach((node, idx) => {
-      if (idx === 0 && nodes.length > 0) return // First phase doesn't need incoming
-      const hasIncoming = edges.some(e => e.target === node.id)
-      if (!hasIncoming && nodes.length > 1) {
-        w.push(`"${vs.phases[idx]?.name || node.id}" has no incoming connection`)
+      const phase = vs.phases[idx]
+      if (!phase) return
+      
+      // Draw phase should have no incoming, others should
+      if (phase.phaseType === 'Draw') {
+        const hasIncoming = edges.some(e => e.target === node.id)
+        if (hasIncoming) w.push(`"${phase.name}" (Draw) should not have incoming connections`)
+      } else {
+        const hasIncoming = edges.some(e => e.target === node.id)
+        if (!hasIncoming && nodes.length > 1) {
+          e.push(`"${phase.name}" has no incoming connection (orphaned)`)
+        }
+      }
+      
+      // Award phase should have no outgoing, others should (except last phase)
+      if (phase.phaseType === 'Award') {
+        const hasOutgoing = edges.some(e => e.source === node.id)
+        if (hasOutgoing) w.push(`"${phase.name}" (Award) should not have outgoing connections`)
+      } else if (phase.phaseType !== 'Draw' || vs.phases.length > 1) {
+        const hasOutgoing = edges.some(e => e.source === node.id)
+        if (!hasOutgoing && nodes.length > 1) {
+          w.push(`"${phase.name}" has no outgoing connection`)
+        }
       }
     })
-    return w
+    
+    return { warnings: w, errors: e }
   }, [nodes, edges, vs.phases])
 
   const selectedPhaseIdx = selectedNodeId ? parseInt(selectedNodeId.replace('phase-', '')) : null
@@ -1894,15 +1934,29 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
               </div>
             </Panel>
           )}
-          {!readOnly && warnings.length > 0 && (
+          {!readOnly && (errors.length > 0 || warnings.length > 0) && (
             <Panel position="bottom-left">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 max-w-xs">
-                {warnings.map((w, i) => (
-                  <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-700">
-                    <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span>{w}</span>
+              <div className="max-w-xs space-y-2">
+                {errors.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-2">
+                    {errors.map((err, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-red-700">
+                        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        <span>{err}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                {warnings.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                    {warnings.map((w, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-700">
+                        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        <span>{w}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Panel>
           )}
@@ -2308,13 +2362,65 @@ const PhaseTemplatesAdmin = ({ embedded = false }) => {
     }
   }
 
+  // Validate template structure
+  const validateTemplate = (jsonStr) => {
+    const errors = []
+    try {
+      const data = JSON.parse(jsonStr)
+      if (!data.phases || !Array.isArray(data.phases)) {
+        errors.push('Template must have phases array')
+        return errors
+      }
+      
+      // Check required phase types
+      const hasDrawPhase = data.phases.some(p => p.phaseType === 'Draw')
+      const hasAwardPhase = data.phases.some(p => p.phaseType === 'Award')
+      if (!hasDrawPhase && data.phases.length > 0) {
+        errors.push('Template must have a Draw phase')
+      }
+      if (!hasAwardPhase && data.phases.length > 0) {
+        errors.push('Template must have at least one Award phase')
+      }
+      
+      // Check for duplicate phase names
+      const names = data.phases.map(p => p.name)
+      const duplicates = names.filter((name, i) => names.indexOf(name) !== i)
+      if (duplicates.length > 0) {
+        errors.push(`Duplicate phase names: ${[...new Set(duplicates)].join(', ')}`)
+      }
+      
+      // Check rules reference valid phase names
+      if (data.advancementRules && Array.isArray(data.advancementRules)) {
+        const validNames = new Set(names)
+        data.advancementRules.forEach((r, i) => {
+          if (r.sourcePhase && !validNames.has(r.sourcePhase)) {
+            errors.push(`Rule ${i + 1}: sourcePhase "${r.sourcePhase}" not found`)
+          }
+          if (r.targetPhase && !validNames.has(r.targetPhase)) {
+            errors.push(`Rule ${i + 1}: targetPhase "${r.targetPhase}" not found`)
+          }
+        })
+      }
+    } catch (e) {
+      errors.push('Invalid JSON syntax')
+    }
+    return errors
+  }
+
   // Save (create or update)
   const handleSave = async () => {
-    // Validate JSON
+    // Validate JSON syntax
     try {
       JSON.parse(formData.structureJson)
     } catch (e) {
       alert('Invalid JSON in structure. Please fix the JSON syntax.')
+      return
+    }
+
+    // Validate template structure
+    const validationErrors = validateTemplate(formData.structureJson)
+    if (validationErrors.length > 0) {
+      alert('Template validation failed:\n\n' + validationErrors.join('\n'))
       return
     }
 
