@@ -1200,7 +1200,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
       const textFill = isCustom ? (isSelected ? '#9a3412' : '#ea580c') : (isSelected ? '#5b21b6' : '#6d28d9')
 
       return {
-        id: `e-${sourcePhaseOrder}-${targetPhaseOrder}`,
+        id: `e-${srcIdx}-${tgtIdx}`,
         source: `phase-${srcIdx}`,
         target: `phase-${tgtIdx}`,
         animated: true,
