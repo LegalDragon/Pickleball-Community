@@ -342,6 +342,7 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 }
 
 function PhaseAdvancementInfo({ phaseDetails, phases }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const incomingRules = phaseDetails.incomingRules || [];
   const outgoingRules = phaseDetails.outgoingRules || [];
   const exitPositions = phaseDetails.exitPositionMapping || [];
@@ -359,12 +360,24 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
   phases.forEach(p => { phaseNameById[p.id] = p.name; });
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-      <div className="flex items-center gap-2 mb-3">
-        <GitBranch className="w-4 h-4 text-blue-600" />
-        <span className="text-sm font-semibold text-blue-800">Phase Advancement</span>
-      </div>
+    <div className="bg-blue-50 border border-blue-200 rounded-lg mb-4">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between p-3 hover:bg-blue-100 transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-blue-800">Phase Advancement</span>
+        </div>
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4 text-blue-600" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-blue-600" />
+        )}
+      </button>
 
+      {isExpanded && (
+      <div className="px-4 pb-4">
       {/* 3-column horizontal layout */}
       <div className="flex flex-col md:flex-row md:gap-6">
         {/* Column 1: Incoming From */}
@@ -485,6 +498,8 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
           </div>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }
