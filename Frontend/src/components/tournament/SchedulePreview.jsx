@@ -344,35 +344,43 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 function PhaseAdvancementInfo({ phaseDetails, phases }) {
   const incomingRules = phaseDetails.incomingRules || [];
   const outgoingRules = phaseDetails.outgoingRules || [];
-  const internalRules = phaseDetails.internalRules || [];
-  const exitPositions = phaseDetails.exitPositionMapping || [];
+  const phaseType = phaseDetails.phaseType || phaseDetails.type;
 
-  if (incomingRules.length === 0 && outgoingRules.length === 0 && internalRules.length === 0 && exitPositions.length === 0) return null;
+  // Human-readable phase type labels
+  const phaseTypeLabels = {
+    'RoundRobin': 'Round Robin',
+    'SingleElimination': 'Single Elimination',
+    'DoubleElimination': 'Double Elimination',
+    'Swiss': 'Swiss System',
+    'Pools': 'Pool Play',
+    'BracketRound': 'Bracket Round',
+    'Draw': 'Draw',
+    'Award': 'Award Ceremony',
+  };
+
+  if (incomingRules.length === 0 && outgoingRules.length === 0 && !phaseType) return null;
 
   // Build phase name lookup
   const phaseNameById = {};
   phases.forEach(p => { phaseNameById[p.id] = p.name; });
 
-  // Group internal rules by type (Winner/Loser)
-  const winnerRules = internalRules.filter(r => r.type === 'Winner');
-  const loserRules = internalRules.filter(r => r.type === 'Loser');
-
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <GitBranch className="w-4 h-4 text-blue-600" />
         <span className="text-sm font-semibold text-blue-800">Phase Advancement</span>
       </div>
 
-      {/* Incoming: where units come from */}
-      {incomingRules.length > 0 && (
-        <div>
+      {/* 3-column horizontal layout */}
+      <div className="flex flex-col md:flex-row md:gap-6">
+        {/* Column 1: Incoming From */}
+        <div className="flex-1 min-w-0">
           <h4 className="text-xs font-medium text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
             <ArrowRight className="w-3 h-3 rotate-180" />
             Incoming From
           </h4>
           <div className="space-y-1">
-            {incomingRules.map((rule, idx) => (
+            {incomingRules.length > 0 ? incomingRules.map((rule, idx) => (
               <div key={rule.id || idx} className="flex items-center gap-2 text-sm text-gray-700">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                 <span>
@@ -384,83 +392,31 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
                   )}
                 </span>
               </div>
-            ))}
+            )) : (
+              <div className="text-sm text-gray-400 italic">Entry phase</div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Phase Internal: exit position mapping + internal bracket progression */}
-      {(exitPositions.length > 0 || internalRules.length > 0) && (
-        <div className={incomingRules.length > 0 ? "mt-4 pt-4 border-t border-blue-200" : ""}>
-          <h4 className="text-xs font-medium text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+        {/* Column 2: Phase Internal */}
+        <div className="flex-1 min-w-0 mt-4 md:mt-0 md:border-l md:border-blue-200 md:pl-6">
+          <h4 className="text-xs font-medium text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1">
             <Target className="w-3 h-3" />
             Phase Internal
           </h4>
-          
-          {/* For RoundRobin phases, just show "Round Robin" */}
-          {phaseDetails.phaseType === 'RoundRobin' && (
-            <div className="text-sm text-gray-700 mb-3">Round Robin</div>
-          )}
-          
-          {/* Exit position mapping (skip for RoundRobin) */}
-          {exitPositions.length > 0 && phaseDetails.phaseType !== 'RoundRobin' && (
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {exitPositions.map((pos, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    pos.type === 'Winner' ? 'bg-green-500' : 'bg-orange-500'
-                  }`} />
-                  <span>
-                    <span className="font-medium">#{pos.position}</span> = {pos.source}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {/* Internal bracket progression (multi-round brackets) */}
-          {internalRules.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-              {winnerRules.length > 0 && (
-                <div>
-                  <span className="text-[10px] text-green-600 font-medium">Winners</span>
-                  <div className="space-y-0.5 mt-1">
-                    {winnerRules.map((rule, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
-                        <span className="w-1 h-1 rounded-full bg-green-500 flex-shrink-0" />
-                        <span>{rule.sourceEncounter} → {rule.targetEncounter}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {loserRules.length > 0 && (
-                <div>
-                  <span className="text-[10px] text-orange-600 font-medium">Losers (Consolation)</span>
-                  <div className="space-y-0.5 mt-1">
-                    {loserRules.map((rule, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
-                        <span className="w-1 h-1 rounded-full bg-orange-500 flex-shrink-0" />
-                        <span>{rule.sourceEncounter} → {rule.targetEncounter}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <div className="text-sm text-gray-700 font-medium">
+            {phaseTypeLabels[phaseType] || phaseType || 'Unknown'}
+          </div>
         </div>
-      )}
 
-      {/* Outgoing: where winners/losers go */}
-      {outgoingRules.length > 0 && (
-        <div className={(incomingRules.length > 0 || exitPositions.length > 0 || internalRules.length > 0) ? "mt-4 pt-4 border-t border-blue-200" : ""}>
+        {/* Column 3: Advances To */}
+        <div className="flex-1 min-w-0 mt-4 md:mt-0 md:border-l md:border-blue-200 md:pl-6">
           <h4 className="text-xs font-medium text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
             <ArrowRight className="w-3 h-3" />
             Advances To
           </h4>
           <div className="space-y-1">
-            {outgoingRules.map((rule, idx) => (
+            {outgoingRules.length > 0 ? outgoingRules.map((rule, idx) => (
               <div key={rule.id || idx} className="flex items-center gap-2 text-sm text-gray-700">
                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                   rule.description?.toLowerCase().includes('loser') ? 'bg-orange-500' : 'bg-green-500'
@@ -474,10 +430,12 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
                   )}
                 </span>
               </div>
-            ))}
+            )) : (
+              <div className="text-sm text-gray-400 italic">Final phase</div>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
