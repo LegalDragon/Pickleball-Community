@@ -233,6 +233,7 @@ public class BlogController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<List<BlogPostListDto>>>> GetPosts(
         [FromQuery] string? category = null,
+        [FromQuery] string? postType = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10)
     {
@@ -246,6 +247,12 @@ public class BlogController : ControllerBase
             if (!string.IsNullOrEmpty(category))
             {
                 query = query.Where(p => p.Category != null && p.Category.Slug == category);
+            }
+
+            // Filter by post type if provided
+            if (!string.IsNullOrEmpty(postType) && Enum.TryParse<BlogPostType>(postType, true, out var postTypeEnum))
+            {
+                query = query.Where(p => p.PostType == postTypeEnum);
             }
 
             var total = await query.CountAsync();
@@ -265,6 +272,9 @@ public class BlogController : ControllerBase
                     CategoryName = p.Category != null ? p.Category.Name : null,
                     CategorySlug = p.Category != null ? p.Category.Slug : null,
                     Status = p.Status.ToString(),
+                    PostType = p.PostType.ToString(),
+                    VideoUrl = p.VideoUrl,
+                    VideoAssetId = p.VideoAssetId,
                     PublishedAt = p.PublishedAt,
                     ViewCount = p.ViewCount,
                     CommentCount = p.Comments.Count(c => c.IsApproved && !c.IsDeleted),
@@ -319,6 +329,9 @@ public class BlogController : ControllerBase
                     CategoryName = p.Category != null ? p.Category.Name : null,
                     CategorySlug = p.Category != null ? p.Category.Slug : null,
                     Status = p.Status.ToString(),
+                    PostType = p.PostType.ToString(),
+                    VideoUrl = p.VideoUrl,
+                    VideoAssetId = p.VideoAssetId,
                     PublishedAt = p.PublishedAt,
                     ViewCount = p.ViewCount,
                     CommentCount = p.Comments.Count(c => !c.IsDeleted),
@@ -371,6 +384,9 @@ public class BlogController : ControllerBase
                     CategoryName = p.Category != null ? p.Category.Name : null,
                     CategorySlug = p.Category != null ? p.Category.Slug : null,
                     Status = p.Status.ToString(),
+                    PostType = p.PostType.ToString(),
+                    VideoUrl = p.VideoUrl,
+                    VideoAssetId = p.VideoAssetId,
                     PublishedAt = p.PublishedAt,
                     ViewCount = p.ViewCount,
                     CommentCount = p.Comments.Count(c => !c.IsDeleted),
@@ -446,6 +462,9 @@ public class BlogController : ControllerBase
                 CategoryName = post.Category?.Name,
                 CategorySlug = post.Category?.Slug,
                 Status = post.Status.ToString(),
+                PostType = post.PostType.ToString(),
+                VideoUrl = post.VideoUrl,
+                VideoAssetId = post.VideoAssetId,
                 PublishedAt = post.PublishedAt,
                 ViewCount = post.ViewCount,
                 AllowComments = post.AllowComments,
@@ -490,6 +509,13 @@ public class BlogController : ControllerBase
                 slug = $"{slug}-{DateTime.Now.Ticks % 10000}";
             }
 
+            // Parse PostType (default to Blog)
+            var postType = BlogPostType.Blog;
+            if (!string.IsNullOrEmpty(request.PostType) && Enum.TryParse<BlogPostType>(request.PostType, true, out var parsedPostType))
+            {
+                postType = parsedPostType;
+            }
+
             var post = new BlogPost
             {
                 Title = request.Title,
@@ -500,6 +526,9 @@ public class BlogController : ControllerBase
                 AuthorId = userId.Value,
                 CategoryId = request.CategoryId,
                 AllowComments = request.AllowComments,
+                PostType = postType,
+                VideoUrl = request.VideoUrl,
+                VideoAssetId = request.VideoAssetId,
                 Status = request.Publish ? BlogPostStatus.Published : BlogPostStatus.Draft,
                 PublishedAt = request.Publish ? DateTime.Now : null,
                 CreatedAt = DateTime.Now
@@ -526,6 +555,9 @@ public class BlogController : ControllerBase
                 CategoryName = category?.Name,
                 CategorySlug = category?.Slug,
                 Status = post.Status.ToString(),
+                PostType = post.PostType.ToString(),
+                VideoUrl = post.VideoUrl,
+                VideoAssetId = post.VideoAssetId,
                 PublishedAt = post.PublishedAt,
                 ViewCount = 0,
                 AllowComments = post.AllowComments,
@@ -585,6 +617,12 @@ public class BlogController : ControllerBase
             if (request.FeaturedImageUrl != null) post.FeaturedImageUrl = request.FeaturedImageUrl;
             if (request.CategoryId.HasValue) post.CategoryId = request.CategoryId.Value;
             if (request.AllowComments.HasValue) post.AllowComments = request.AllowComments.Value;
+            if (!string.IsNullOrEmpty(request.PostType) && Enum.TryParse<BlogPostType>(request.PostType, true, out var newPostType))
+            {
+                post.PostType = newPostType;
+            }
+            if (request.VideoUrl != null) post.VideoUrl = request.VideoUrl;
+            if (request.VideoAssetId.HasValue) post.VideoAssetId = request.VideoAssetId.Value;
 
             if (!string.IsNullOrEmpty(request.Status))
             {
@@ -620,6 +658,9 @@ public class BlogController : ControllerBase
                 CategoryName = post.Category?.Name,
                 CategorySlug = post.Category?.Slug,
                 Status = post.Status.ToString(),
+                PostType = post.PostType.ToString(),
+                VideoUrl = post.VideoUrl,
+                VideoAssetId = post.VideoAssetId,
                 PublishedAt = post.PublishedAt,
                 ViewCount = post.ViewCount,
                 AllowComments = post.AllowComments,
