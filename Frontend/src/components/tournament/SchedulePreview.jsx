@@ -344,21 +344,10 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 function PhaseAdvancementInfo({ phaseDetails, phases }) {
   const incomingRules = phaseDetails.incomingRules || [];
   const outgoingRules = phaseDetails.outgoingRules || [];
+  const exitPositions = phaseDetails.exitPositionMapping || [];
   const phaseType = phaseDetails.phaseType || phaseDetails.type;
 
-  // Human-readable phase type labels
-  const phaseTypeLabels = {
-    'RoundRobin': 'Round Robin',
-    'SingleElimination': 'Single Elimination',
-    'DoubleElimination': 'Double Elimination',
-    'Swiss': 'Swiss System',
-    'Pools': 'Pool Play',
-    'BracketRound': 'Bracket Round',
-    'Draw': 'Draw',
-    'Award': 'Award Ceremony',
-  };
-
-  if (incomingRules.length === 0 && outgoingRules.length === 0 && !phaseType) return null;
+  if (incomingRules.length === 0 && outgoingRules.length === 0 && exitPositions.length === 0) return null;
 
   // Build phase name lookup
   const phaseNameById = {};
@@ -382,7 +371,7 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
           <div className="space-y-1">
             {incomingRules.length > 0 ? incomingRules.map((rule, idx) => (
               <div key={rule.id || idx} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
                 <span>
                   {rule.description || (
                     <>
@@ -398,14 +387,25 @@ function PhaseAdvancementInfo({ phaseDetails, phases }) {
           </div>
         </div>
 
-        {/* Column 2: Phase Internal */}
+        {/* Column 2: Phase Internal (exit position mapping) */}
         <div className="flex-1 min-w-0 mt-4 md:mt-0 md:border-l md:border-blue-200 md:pl-6">
           <h4 className="text-xs font-medium text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1">
             <Target className="w-3 h-3" />
             Phase Internal
           </h4>
-          <div className="text-sm text-gray-700 font-medium">
-            {phaseTypeLabels[phaseType] || phaseType || 'Unknown'}
+          <div className="space-y-1">
+            {exitPositions.length > 0 ? exitPositions.map((pos, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  pos.type === 'Winner' ? 'bg-green-500' : 'bg-orange-500'
+                }`} />
+                <span>
+                  <span className="font-medium">#{pos.position}</span> = {pos.source}
+                </span>
+              </div>
+            )) : (
+              <div className="text-sm text-gray-400 italic">{phaseType === 'RoundRobin' ? 'Round Robin' : 'Direct'}</div>
+            )}
           </div>
         </div>
 
