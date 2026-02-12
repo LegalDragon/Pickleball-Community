@@ -15,7 +15,7 @@ on:
         default: production
 
 concurrency:
-  group: deploy-${{ inputs.environment || 'staging' }}
+  group: deploy-${{ inputs.environment || 'production' }}
   cancel-in-progress: true
 
 jobs:
@@ -77,10 +77,10 @@ jobs:
           retention-days: 3
 
   deploy:
-    name: Deploy to IIS (${{ inputs.environment || 'staging' }})
+    name: Deploy to IIS (${{ inputs.environment || 'production' }})
     needs: build
     runs-on: [self-hosted, windows, iis]
-    environment: ${{ inputs.environment || 'staging' }}
+    environment: ${{ inputs.environment || 'production' }}
     steps:
       - name: Checkout (for commit info)
         uses: actions/checkout@v4
@@ -90,7 +90,7 @@ jobs:
       - name: Set environment variables
         shell: powershell
         run: |
-          $env_name = "${{ inputs.environment || 'staging' }}"
+          $env_name = "${{ inputs.environment || 'production' }}"
           if ($env_name -eq "production") {
             echo "SITE_NAME=_pb.community" >> $env:GITHUB_ENV
             echo "APP_POOL=_pb.community" >> $env:GITHUB_ENV
