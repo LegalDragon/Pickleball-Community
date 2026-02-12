@@ -16,7 +16,8 @@ import EncounterDetail from './EncounterDetail';
  * - bracket: Visual bracket for elimination tournaments
  */
 export default function SchedulePreview({ divisionId, phaseId = null, showFilters = true }) {
-  const [phases, setPhases] = useState([]);
+  const [phases, setPhases] = useState([]); // playable phases for tabs
+  const [allPhases, setAllPhases] = useState([]); // all phases including Draw/Award for name lookup
   const [schedule, setSchedule] = useState(null);
   const [selectedPhase, setSelectedPhase] = useState(phaseId);
   const [phaseDetails, setPhaseDetails] = useState(null); // full phase with advancement rules
@@ -46,6 +47,9 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
     try {
       const response = await tournamentApi.getDivisionPhases(divisionId);
       if (response.success && response.data?.length > 0) {
+        // Keep all phases for name lookup (Draw, Award, etc.)
+        setAllPhases(response.data);
+        
         // Filter out Draw and Award phases (they have no encounters to display)
         // and sort by phaseOrder to ensure correct display order
         const playablePhases = response.data
@@ -260,7 +264,7 @@ export default function SchedulePreview({ divisionId, phaseId = null, showFilter
 
       {/* Phase Advancement Rules */}
       {!loading && phaseDetails && (
-        <PhaseAdvancementInfo phaseDetails={phaseDetails} phases={phases} />
+        <PhaseAdvancementInfo phaseDetails={phaseDetails} phases={allPhases} />
       )}
 
       {/* Empty State */}
