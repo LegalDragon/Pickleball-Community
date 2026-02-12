@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight, FolderOpen } from 'lucide-react';
+import { FileText, Search, Tag, Calendar, User, MessageCircle, Star, Edit2, Plus, X, Send, ArrowLeft, Trash2, Eye, Clock, ChevronRight, FolderOpen, Video, Upload, PlayCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { blogApi, ratingApi, getSharedAssetUrl } from '../services/api';
 
@@ -14,6 +14,7 @@ export default function Blog() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState(searchParams.get('category') || '');
+  const [selectedPostType, setSelectedPostType] = useState(searchParams.get('type') || '');
   const [showWriteModal, setShowWriteModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
   const [editingPost, setEditingPost] = useState(null);
@@ -306,19 +307,33 @@ function BlogPostCard({ post, onClick }) {
     });
   };
 
+  const isVlog = post.postType === 'Vlog' || post.videoUrl || post.videoAssetId;
+
   return (
     <div
       className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
       onClick={onClick}
     >
       <div className="md:flex">
-        {post.featuredImageUrl && (
-          <div className="md:w-64 flex-shrink-0">
-            <img
-              src={getSharedAssetUrl(post.featuredImageUrl)}
-              alt={post.title}
-              className="w-full h-48 md:h-full object-cover"
-            />
+        {(post.featuredImageUrl || isVlog) && (
+          <div className="md:w-64 flex-shrink-0 relative">
+            {post.featuredImageUrl ? (
+              <img
+                src={getSharedAssetUrl(post.featuredImageUrl)}
+                alt={post.title}
+                className="w-full h-48 md:h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-48 md:h-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center">
+                <PlayCircle className="w-16 h-16 text-white/80" />
+              </div>
+            )}
+            {isVlog && (
+              <div className="absolute top-2 left-2 px-2 py-1 bg-red-600 text-white text-xs font-bold rounded flex items-center gap-1">
+                <Video className="w-3 h-3" />
+                VLOG
+              </div>
+            )}
           </div>
         )}
         <div className="p-6 flex-1">
@@ -378,9 +393,61 @@ function WritePostModal({ post, categories, onClose, onSave }) {
     categoryId: post?.categoryId || '',
     content: post?.content || '',
     excerpt: post?.excerpt || '',
-    featuredImageUrl: post?.featuredImageUrl || ''
+    featuredImageUrl: post?.featuredImageUrl || '',
+    postType: post?.postType || 'Blog',
+    videoUrl: post?.videoUrl || '',
+    videoAssetId: post?.videoAssetId || null
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate video file
+    if (!file.type.startsWith('video/')) {
+      alert('Please select a video file');
+      return;
+    }
+
+    // Max 500MB
+    if (file.size > 500 * 1024 * 1024) {
+      alert('Video must be less than 500MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('folder', 'videos');
+
+      const response = await fetch('/api/assets/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: uploadFormData
+      });
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        setFormData(prev => ({
+          ...prev,
+          videoAssetId: result.data.assetId,
+          videoUrl: `/api/assets/${result.data.assetId}`
+        }));
+      } else {
+        alert(result.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Video upload error:', err);
+      alert('Failed to upload video');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e, publish = false) => {
     e.preventDefault();
@@ -391,7 +458,9 @@ function WritePostModal({ post, categories, onClose, onSave }) {
         ...formData,
         categoryId: formData.categoryId ? parseInt(formData.categoryId, 10) : null,
         featuredImageUrl: formData.featuredImageUrl || null,
-        excerpt: formData.excerpt || null
+        excerpt: formData.excerpt || null,
+        videoUrl: formData.videoUrl || null,
+        videoAssetId: formData.videoAssetId || null
       };
       await onSave(dataToSend, publish);
     } finally {
@@ -440,6 +509,78 @@ function WritePostModal({ post, categories, onClose, onSave }) {
             </select>
           </div>
 
+          {/* Post Type Selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="postType"
+                  value="Blog"
+                  checked={formData.postType === 'Blog'}
+                  onChange={(e) => setFormData({ ...formData, postType: e.target.value })}
+                  className="w-4 h-4 text-purple-600"
+                />
+                <FileText className="w-4 h-4 text-gray-600" />
+                <span>Blog Post</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="postType"
+                  value="Vlog"
+                  checked={formData.postType === 'Vlog'}
+                  onChange={(e) => setFormData({ ...formData, postType: e.target.value })}
+                  className="w-4 h-4 text-purple-600"
+                />
+                <Video className="w-4 h-4 text-red-600" />
+                <span>Video Post (Vlog)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Video Upload for Vlogs */}
+          {formData.postType === 'Vlog' && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <label className="block text-sm font-medium text-red-700 mb-2">
+                <Video className="w-4 h-4 inline mr-1" />
+                Upload Video *
+              </label>
+              {formData.videoUrl ? (
+                <div className="space-y-3">
+                  <video
+                    src={formData.videoUrl}
+                    controls
+                    className="w-full max-h-64 rounded-lg bg-black"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, videoUrl: '', videoAssetId: null })}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Remove video
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg cursor-pointer hover:bg-red-700 transition-colors">
+                    <Upload className="w-4 h-4" />
+                    {uploading ? 'Uploading...' : 'Choose Video'}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-sm text-gray-500">Max 500MB</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
             <input
@@ -447,7 +588,7 @@ function WritePostModal({ post, categories, onClose, onSave }) {
               value={formData.featuredImageUrl}
               onChange={(e) => setFormData({ ...formData, featuredImageUrl: e.target.value })}
               className="w-full border border-gray-300 rounded-lg p-3 focus:ring-purple-500 focus:border-purple-500"
-              placeholder="https://example.com/image.jpg"
+              placeholder="https://example.com/image.jpg (optional thumbnail for video)"
             />
           </div>
 
@@ -645,7 +786,26 @@ function PostDetailModal({ post, user, isAuthenticated, canEdit, onClose, onEdit
         </div>
 
         <div className="p-6">
-          {post.featuredImageUrl && (
+          {/* Video Player for Vlogs */}
+          {(post.postType === 'Vlog' || post.videoUrl || post.videoAssetId) && (
+            <div className="mb-6">
+              <div className="relative rounded-lg overflow-hidden bg-black">
+                <video
+                  src={post.videoUrl || `/api/assets/${post.videoAssetId}`}
+                  controls
+                  className="w-full max-h-[400px]"
+                  poster={post.featuredImageUrl ? getSharedAssetUrl(post.featuredImageUrl) : undefined}
+                />
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-red-600">
+                <Video className="w-4 h-4" />
+                <span className="text-sm font-medium">Video Post</span>
+              </div>
+            </div>
+          )}
+
+          {/* Featured Image (only show if no video or as thumbnail) */}
+          {post.featuredImageUrl && !post.videoUrl && !post.videoAssetId && (
             <img
               src={getSharedAssetUrl(post.featuredImageUrl)}
               alt={post.title}

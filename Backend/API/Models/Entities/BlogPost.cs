@@ -10,6 +10,12 @@ public enum BlogPostStatus
     Archived
 }
 
+public enum BlogPostType
+{
+    Blog,
+    Vlog
+}
+
 public class BlogPost
 {
     public int Id { get; set; }
@@ -30,6 +36,14 @@ public class BlogPost
 
     [MaxLength(500)]
     public string? FeaturedImageUrl { get; set; }
+
+    // Video support for Vlogs
+    public BlogPostType PostType { get; set; } = BlogPostType.Blog;
+
+    [MaxLength(500)]
+    public string? VideoUrl { get; set; }
+
+    public int? VideoAssetId { get; set; }
 
     public int AuthorId { get; set; }
 

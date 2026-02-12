@@ -36,6 +36,10 @@ public class BlogPostDto
     public string? Excerpt { get; set; }
     public string Content { get; set; } = string.Empty;
     public string? FeaturedImageUrl { get; set; }
+    // Video/Vlog support
+    public string PostType { get; set; } = "Blog";
+    public string? VideoUrl { get; set; }
+    public int? VideoAssetId { get; set; }
     public int AuthorId { get; set; }
     public string AuthorName { get; set; } = string.Empty;
     public string? AuthorImageUrl { get; set; }
@@ -60,6 +64,10 @@ public class BlogPostListDto
     public string Slug { get; set; } = string.Empty;
     public string? Excerpt { get; set; }
     public string? FeaturedImageUrl { get; set; }
+    // Video/Vlog support
+    public string PostType { get; set; } = "Blog";
+    public string? VideoUrl { get; set; }
+    public int? VideoAssetId { get; set; }
     public string AuthorName { get; set; } = string.Empty;
     public string? AuthorImageUrl { get; set; }
     public string? CategoryName { get; set; }
@@ -78,6 +86,10 @@ public class CreateBlogPostRequest
     public string? Excerpt { get; set; }
     public string Content { get; set; } = string.Empty;
     public string? FeaturedImageUrl { get; set; }
+    // Video/Vlog support
+    public string PostType { get; set; } = "Blog";
+    public string? VideoUrl { get; set; }
+    public int? VideoAssetId { get; set; }
     public int? CategoryId { get; set; }
     public bool AllowComments { get; set; } = true;
     public bool Publish { get; set; } = false;
@@ -89,6 +101,10 @@ public class UpdateBlogPostRequest
     public string? Excerpt { get; set; }
     public string? Content { get; set; }
     public string? FeaturedImageUrl { get; set; }
+    // Video/Vlog support
+    public string? PostType { get; set; }
+    public string? VideoUrl { get; set; }
+    public int? VideoAssetId { get; set; }
     public int? CategoryId { get; set; }
     public bool? AllowComments { get; set; }
     public string? Status { get; set; }
