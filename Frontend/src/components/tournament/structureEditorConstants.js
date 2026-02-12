@@ -167,8 +167,9 @@ export function autoGenerateRules(phases) {
   for (let i = 0; i < phases.length - 1; i++) {
     const src = phases[i]
     const tgt = phases[i + 1]
-    const srcOrder = i + 1
-    const tgtOrder = i + 2
+    // Use sortOrder from phase, NOT array index + 1
+    const srcOrder = src.sortOrder || (i + 1)
+    const tgtOrder = tgt.sortOrder || (i + 2)
     const slotsToAdvance = Math.min(
       parseInt(src.advancingSlotCount) || 0,
       parseInt(tgt.incomingSlotCount) || 0
