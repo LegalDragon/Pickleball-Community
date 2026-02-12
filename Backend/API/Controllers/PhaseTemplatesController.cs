@@ -1328,7 +1328,8 @@ public class PhaseTemplatesController : ControllerBase
             var currentPhase = orderedPhases[i];
             
             // Check if this is a pool phase and find all parallel pool phases
-            var isPoolPhase = currentPhase.Name?.Contains("Pool") == true || currentPhase.PoolCount > 1;
+            // Detect pool phases by: "Pool" in name, "RoundRobin" type, or PoolCount > 1
+            var isPoolPhase = IsPoolPhase(currentPhase);
             var parallelPools = new List<(int index, DivisionPhase phase)> { (i, currentPhase) };
             
             if (isPoolPhase)
@@ -1337,7 +1338,7 @@ public class PhaseTemplatesController : ControllerBase
                 for (int j = i + 1; j < orderedPhases.Count; j++)
                 {
                     var nextPhase = orderedPhases[j];
-                    var nextIsPool = nextPhase.Name?.Contains("Pool") == true || nextPhase.PoolCount > 1;
+                    var nextIsPool = IsPoolPhase(nextPhase);
                     if (nextIsPool)
                     {
                         parallelPools.Add((j, nextPhase));
@@ -1431,6 +1432,32 @@ public class PhaseTemplatesController : ControllerBase
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Detect if a phase is a pool/round-robin phase that should be grouped with parallel phases
+    /// </summary>
+    private static bool IsPoolPhase(DivisionPhase phase)
+    {
+        // Check name patterns: "Pool", "RoundRobin", or single letter suffix (A, B, C...)
+        var name = phase.Name ?? "";
+        var hasPoolInName = name.Contains("Pool", StringComparison.OrdinalIgnoreCase);
+        var hasRoundRobinInName = name.Contains("RoundRobin", StringComparison.OrdinalIgnoreCase);
+        
+        // Check if name ends with a single letter (Pool A, Pool B, RoundRobin A, etc.)
+        var trimmedName = name.Trim();
+        var endsWithPoolLetter = trimmedName.Length > 1 && 
+            char.IsLetter(trimmedName[^1]) && 
+            (trimmedName.Length < 2 || trimmedName[^2] == ' ');
+        
+        // Check phase type
+        var isRoundRobinType = phase.PhaseType == PhaseTypes.RoundRobin || phase.PhaseType == PhaseTypes.Pools;
+        
+        // Check pool count
+        var hasMultiplePools = phase.PoolCount > 1;
+        
+        return hasPoolInName || hasRoundRobinInName || hasMultiplePools || 
+               (isRoundRobinType && endsWithPoolLetter);
     }
 
     #endregion
