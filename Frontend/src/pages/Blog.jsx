@@ -34,6 +34,19 @@ const getYouTubeThumbnails = (videoId) => {
   ];
 };
 
+// Fetch Vimeo thumbnail via oEmbed API
+const fetchVimeoThumbnail = async (videoId) => {
+  try {
+    const response = await fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.thumbnail_url;
+  } catch (err) {
+    console.error('Failed to fetch Vimeo thumbnail:', err);
+    return null;
+  }
+};
+
 export default function Blog() {
   const { user, isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -475,6 +488,8 @@ function WritePostModal({ post, categories, onClose, onSave }) {
   const [isEditingVideo, setIsEditingVideo] = useState(false);
   const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
   const [showThumbnailPicker, setShowThumbnailPicker] = useState(false);
+  const [vimeoThumbnail, setVimeoThumbnail] = useState(null);
+  const [fetchingVimeoThumb, setFetchingVimeoThumb] = useState(false);
 
   // Generate thumbnail from uploaded video
   const handleGenerateThumbnail = async () => {
@@ -730,6 +745,35 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       </button>
                     )}
                     
+                    {/* Vimeo thumbnail fetch */}
+                    {formData.videoUrl?.includes('vimeo.com') && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const vimeoId = getVimeoId(formData.videoUrl);
+                          if (!vimeoId) return;
+                          setFetchingVimeoThumb(true);
+                          const thumb = await fetchVimeoThumbnail(vimeoId);
+                          if (thumb) {
+                            setVimeoThumbnail(thumb);
+                            setShowThumbnailPicker(true);
+                          } else {
+                            alert('Could not fetch Vimeo thumbnail');
+                          }
+                          setFetchingVimeoThumb(false);
+                        }}
+                        disabled={fetchingVimeoThumb}
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50"
+                      >
+                        {fetchingVimeoThumb ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Image className="w-3 h-3" />
+                        )}
+                        {fetchingVimeoThumb ? 'Fetching...' : 'Get Thumbnail'}
+                      </button>
+                    )}
+                    
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, videoUrl: '', videoAssetId: null })}
@@ -780,6 +824,40 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Vimeo Thumbnail Picker */}
+                  {showThumbnailPicker && vimeoThumbnail && formData.videoUrl?.includes('vimeo.com') && (
+                    <div className="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <p className="text-sm font-medium text-purple-700 mb-3">Vimeo thumbnail:</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, featuredImageUrl: vimeoThumbnail });
+                          setShowThumbnailPicker(false);
+                        }}
+                        className={`relative group rounded-lg overflow-hidden border-2 transition-all max-w-xs ${
+                          formData.featuredImageUrl === vimeoThumbnail 
+                            ? 'border-purple-500 ring-2 ring-purple-300' 
+                            : 'border-gray-200 hover:border-purple-400'
+                        }`}
+                      >
+                        <img
+                          src={vimeoThumbnail}
+                          alt="Vimeo thumbnail"
+                          className="w-full aspect-video object-cover"
+                        />
+                        {formData.featuredImageUrl === vimeoThumbnail && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <div className="bg-purple-500 text-white p-1 rounded-full">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </div>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
