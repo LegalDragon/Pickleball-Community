@@ -21,6 +21,19 @@ const isExternalVideo = (url) => {
   return url && (url.startsWith('http://') || url.startsWith('https://'));
 };
 
+// Get YouTube thumbnail options
+const getYouTubeThumbnails = (videoId) => {
+  if (!videoId) return [];
+  return [
+    { url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`, label: 'HD (1280×720)' },
+    { url: `https://img.youtube.com/vi/${videoId}/sddefault.jpg`, label: 'SD (640×480)' },
+    { url: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, label: 'HQ (480×360)' },
+    { url: `https://img.youtube.com/vi/${videoId}/1.jpg`, label: 'Frame 1' },
+    { url: `https://img.youtube.com/vi/${videoId}/2.jpg`, label: 'Frame 2' },
+    { url: `https://img.youtube.com/vi/${videoId}/3.jpg`, label: 'Frame 3' },
+  ];
+};
+
 export default function Blog() {
   const { user, isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -461,6 +474,7 @@ function WritePostModal({ post, categories, onClose, onSave }) {
   const [uploading, setUploading] = useState(false);
   const [isEditingVideo, setIsEditingVideo] = useState(false);
   const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
+  const [showThumbnailPicker, setShowThumbnailPicker] = useState(false);
 
   // Generate thumbnail from uploaded video
   const handleGenerateThumbnail = async () => {
@@ -704,6 +718,18 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       </button>
                     )}
                     
+                    {/* YouTube thumbnail picker */}
+                    {(formData.videoUrl?.includes('youtube.com') || formData.videoUrl?.includes('youtu.be')) && (
+                      <button
+                        type="button"
+                        onClick={() => setShowThumbnailPicker(!showThumbnailPicker)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+                      >
+                        <Image className="w-3 h-3" />
+                        {showThumbnailPicker ? 'Hide Thumbnails' : 'Pick Thumbnail'}
+                      </button>
+                    )}
+                    
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, videoUrl: '', videoAssetId: null })}
@@ -713,6 +739,49 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       Remove
                     </button>
                   </div>
+                  
+                  {/* YouTube Thumbnail Picker Grid */}
+                  {showThumbnailPicker && getYouTubeId(formData.videoUrl) && (
+                    <div className="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <p className="text-sm font-medium text-purple-700 mb-3">Select a thumbnail:</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {getYouTubeThumbnails(getYouTubeId(formData.videoUrl)).map((thumb, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setFormData({ ...formData, featuredImageUrl: thumb.url });
+                              setShowThumbnailPicker(false);
+                            }}
+                            className={`relative group rounded-lg overflow-hidden border-2 transition-all ${
+                              formData.featuredImageUrl === thumb.url 
+                                ? 'border-purple-500 ring-2 ring-purple-300' 
+                                : 'border-gray-200 hover:border-purple-400'
+                            }`}
+                          >
+                            <img
+                              src={thumb.url}
+                              alt={thumb.label}
+                              className="w-full aspect-video object-cover"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                              {formData.featuredImageUrl === thumb.url && (
+                                <div className="bg-purple-500 text-white p-1 rounded-full">
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {thumb.label}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
