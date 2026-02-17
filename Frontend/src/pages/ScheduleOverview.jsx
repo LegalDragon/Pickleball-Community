@@ -280,7 +280,7 @@ export default function ScheduleOverview() {
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             {/* Division Selector Header */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1">
+              <div className="flex items-center gap-3 flex-1">
                 <label className="text-sm font-medium text-gray-700">Division:</label>
                 <select
                   value={selectedDivisionId || ''}
@@ -293,23 +293,29 @@ export default function ScheduleOverview() {
                     </option>
                   ))}
                 </select>
+                
+                {/* Game Settings Button - next to dropdown */}
+                {(() => {
+                  const selectedDiv = divisionsWithSchedules.find(d => d.id === selectedDivisionId);
+                  if (!selectedDiv) return null;
+                  return (
+                    <button
+                      onClick={() => setGameSettingsModal({ isOpen: true, division: selectedDiv })}
+                      className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors border border-gray-200 hover:border-orange-300"
+                      title="Game Settings for this division"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                  );
+                })()}
               </div>
 
-              {/* Selected division info */}
+              {/* Selected division progress */}
               {(() => {
                 const selectedDiv = divisionsWithSchedules.find(d => d.id === selectedDivisionId);
                 if (!selectedDiv) return null;
                 return (
                   <div className="flex items-center gap-4">
-                    {/* Game Settings Button */}
-                    <button
-                      onClick={() => setGameSettingsModal({ isOpen: true, division: selectedDiv })}
-                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Game Settings"
-                    >
-                      <Settings className="w-5 h-5" />
-                    </button>
-
                     {/* Progress bar */}
                     {selectedDiv.totalMatches > 0 && (
                       <div className="flex items-center gap-2">
