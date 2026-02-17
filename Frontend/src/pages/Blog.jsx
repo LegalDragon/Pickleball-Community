@@ -860,6 +860,92 @@ function WritePostModal({ post, categories, onClose, onSave }) {
                       </button>
                     </div>
                   )}
+                  
+                  {/* Message for unsupported video sources */}
+                  {formData.videoUrl && 
+                   !formData.videoAssetId && 
+                   !formData.videoUrl.includes('youtube.com') && 
+                   !formData.videoUrl.includes('youtu.be') && 
+                   !formData.videoUrl.includes('vimeo.com') && (
+                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> Automatic thumbnail generation is not available for this video source. 
+                        Please upload a custom thumbnail below.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Manual thumbnail upload - always available */}
+                  <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-sm font-medium text-gray-700 mb-2">
+                      {formData.featuredImageUrl ? 'Replace thumbnail:' : 'Upload custom thumbnail:'}
+                    </p>
+                    {formData.featuredImageUrl && (
+                      <div className="mb-3">
+                        <img 
+                          src={formData.featuredImageUrl.startsWith('/api') 
+                            ? formData.featuredImageUrl 
+                            : formData.featuredImageUrl
+                          } 
+                          alt="Current thumbnail" 
+                          className="w-32 h-20 object-cover rounded border"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                        <Upload className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">Choose Image</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            
+                            // Upload the thumbnail image
+                            const uploadFormData = new FormData();
+                            uploadFormData.append('file', file);
+                            uploadFormData.append('folder', 'thumbnails');
+                            
+                            try {
+                              const response = await fetch('/api/assets/upload', {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                },
+                                body: uploadFormData
+                              });
+                              
+                              const result = await response.json();
+                              if (result.success && result.data?.assetId) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  featuredImageUrl: `/api/assets/${result.data.assetId}`
+                                }));
+                              } else {
+                                alert(result.message || 'Failed to upload thumbnail');
+                              }
+                            } catch (err) {
+                              console.error('Thumbnail upload error:', err);
+                              alert('Failed to upload thumbnail');
+                            }
+                          }}
+                        />
+                      </label>
+                      {formData.featuredImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, featuredImageUrl: '' }))}
+                          className="text-sm text-red-600 hover:text-red-700"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
