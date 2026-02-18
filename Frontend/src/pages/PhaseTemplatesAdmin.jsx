@@ -1821,6 +1821,15 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     onChange({ ...vs, phases: reordered })
   }, [nodes, edges, vs, onChange])
 
+  // Auto-generate advancement rules based on phase slot counts
+  const handleAutoGenerateRules = useCallback(() => {
+    const newRules = autoGenerateRules(vs.phases)
+    onChange({ ...vs, advancementRules: newRules })
+    // Rebuild edges to show the new rules
+    const newEdges = buildEdges(newRules, vs.phases, null)
+    setEdges(newEdges)
+  }, [vs, onChange, buildEdges, setEdges])
+
   // Export canvas as PNG image
   const handleExportImage = useCallback(() => {
     const nodesBounds = getNodesBounds(nodes)
@@ -1991,6 +2000,10 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
               <button onClick={handleAutoLayout}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
                 <LayoutGrid className="w-3.5 h-3.5" /> Auto Layout
+              </button>
+              <button onClick={handleAutoGenerateRules}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-purple-600 hover:bg-purple-50 border-purple-200">
+                <Zap className="w-3.5 h-3.5" /> Auto Rules
               </button>
               <button onClick={handleSyncSortOrder}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-white border rounded-lg shadow-sm text-xs font-medium text-gray-600 hover:bg-gray-50">
