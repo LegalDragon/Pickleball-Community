@@ -177,9 +177,13 @@ export function serializeVisualToJson(vs) {
 export function autoGenerateRules(phases) {
   const rules = []
   
-  // Track remaining slots for each phase
-  // exitRemaining: { phaseIndex: { position: true/false for normal, or poolIndex-position: true/false for pools } }
-  // incomingRemaining: { phaseIndex: Set of remaining slot numbers }
+  // Create a sorted view of phases by sortOrder, tracking original indices
+  // This ensures we process phases in logical order (1, 2, 3...) not array order
+  const sortedPhases = phases
+    .map((phase, origIdx) => ({ phase, origIdx, sortOrder: phase.sortOrder || (origIdx + 1) }))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+  
+  // Track remaining slots for each phase (keyed by original index)
   const exitRemaining = {}
   const incomingRemaining = {}
   
@@ -211,10 +215,10 @@ export function autoGenerateRules(phases) {
     }
   })
   
-  // Helper to count remaining exits for a phase
+  // Helper to count remaining exits for a phase (by original index)
   const countRemainingExits = (idx) => Object.values(exitRemaining[idx]).filter(v => v).length
   
-  // Helper to count remaining incoming for a phase
+  // Helper to count remaining incoming for a phase (by original index)
   const countRemainingIncoming = (idx) => incomingRemaining[idx].size
   
   // Helper to get first available exit slot
@@ -239,36 +243,37 @@ export function autoGenerateRules(phases) {
   }
   
   // Iteratively connect phases until no more connections can be made
+  // Key: iterate by SORTORDER, not array index
   let madeConnection = true
   while (madeConnection) {
     madeConnection = false
     
-    // Find smallest source phase index with remaining exits
-    let srcIdx = -1
-    for (let i = 0; i < phases.length; i++) {
-      if (countRemainingExits(i) > 0) {
-        srcIdx = i
+    // Find lowest sortOrder phase with remaining exits (source)
+    let srcEntry = null
+    for (const entry of sortedPhases) {
+      if (countRemainingExits(entry.origIdx) > 0) {
+        srcEntry = entry
         break
       }
     }
-    if (srcIdx < 0) break
+    if (!srcEntry) break
     
-    // Find smallest target phase index (after source) with remaining incoming slots
-    // Target must be different from source (no self-referential)
-    let tgtIdx = -1
-    for (let i = 0; i < phases.length; i++) {
-      if (i !== srcIdx && countRemainingIncoming(i) > 0) {
-        tgtIdx = i
+    // Find lowest sortOrder phase (different from source) with remaining incoming slots (target)
+    let tgtEntry = null
+    for (const entry of sortedPhases) {
+      if (entry.origIdx !== srcEntry.origIdx && countRemainingIncoming(entry.origIdx) > 0) {
+        tgtEntry = entry
         break
       }
     }
-    if (tgtIdx < 0) break
+    if (!tgtEntry) break
     
+    const srcIdx = srcEntry.origIdx
+    const tgtIdx = tgtEntry.origIdx
     const srcPhase = phases[srcIdx]
-    const tgtPhase = phases[tgtIdx]
     const isPools = srcPhase.phaseType === 'Pools' && (parseInt(srcPhase.poolCount) || 0) > 1
     
-    // Connect available slots
+    // Connect available slots - fill target phase completely before moving to next
     while (countRemainingExits(srcIdx) > 0 && countRemainingIncoming(tgtIdx) > 0) {
       const exitKey = getFirstAvailableExit(srcIdx)
       const inSlot = getFirstAvailableIncoming(tgtIdx)
@@ -278,7 +283,7 @@ export function autoGenerateRules(phases) {
       exitRemaining[srcIdx][exitKey] = false
       incomingRemaining[tgtIdx].delete(inSlot)
       
-      // Create rule - use 1-based phase order indices (srcIdx + 1, tgtIdx + 1)
+      // Create rule - use 1-based phase order indices (origIdx + 1)
       if (isPools && String(exitKey).includes('-')) {
         const [poolIndex, position] = exitKey.split('-').map(Number)
         rules.push({
