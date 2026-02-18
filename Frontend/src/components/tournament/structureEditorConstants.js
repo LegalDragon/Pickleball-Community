@@ -271,6 +271,7 @@ export function autoGenerateRules(phases) {
     const srcIdx = srcEntry.origIdx
     const tgtIdx = tgtEntry.origIdx
     const srcPhase = phases[srcIdx]
+    const tgtPhase = phases[tgtIdx]
     const isPools = srcPhase.phaseType === 'Pools' && (parseInt(srcPhase.poolCount) || 0) > 1
     
     // Connect available slots - fill target phase completely before moving to next
@@ -283,10 +284,14 @@ export function autoGenerateRules(phases) {
       exitRemaining[srcIdx][exitKey] = false
       incomingRemaining[tgtIdx].delete(inSlot)
       
-      // Create rule - use 1-based phase order indices (origIdx + 1)
+      // Create rule with BOTH formats:
+      // - sourcePhase/targetPhase (names) for serialization to JSON
+      // - sourcePhaseOrder/targetPhaseOrder (1-based indices) for ListPhaseEditor dropdowns
       if (isPools && String(exitKey).includes('-')) {
         const [poolIndex, position] = exitKey.split('-').map(Number)
         rules.push({
+          sourcePhase: srcPhase.name,
+          targetPhase: tgtPhase.name,
           sourcePhaseOrder: srcIdx + 1,
           targetPhaseOrder: tgtIdx + 1,
           finishPosition: position,
@@ -295,6 +300,8 @@ export function autoGenerateRules(phases) {
         })
       } else {
         rules.push({
+          sourcePhase: srcPhase.name,
+          targetPhase: tgtPhase.name,
           sourcePhaseOrder: srcIdx + 1,
           targetPhaseOrder: tgtIdx + 1,
           finishPosition: parseInt(exitKey),
