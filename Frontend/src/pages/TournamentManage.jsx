@@ -6785,7 +6785,7 @@ export default function TournamentManage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
                     <option value="">All Divisions</option>
-                    {tournament?.divisions?.map(div => (
+                    {event?.divisions?.map(div => (
                       <option key={div.id} value={div.id}>{div.name}</option>
                     ))}
                   </select>
@@ -6833,7 +6833,7 @@ export default function TournamentManage() {
                     )}
                     {paymentDivisionFilter && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
-                        Division: {tournament?.divisions?.find(d => d.id === parseInt(paymentDivisionFilter))?.name || paymentDivisionFilter}
+                        Division: {event?.divisions?.find(d => d.id === parseInt(paymentDivisionFilter))?.name || paymentDivisionFilter}
                         <button onClick={() => handlePaymentFilterChange('division', '')} className="hover:text-orange-900">
                           <X className="w-3 h-3" />
                         </button>
