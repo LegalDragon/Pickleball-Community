@@ -1351,6 +1351,40 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
     setEdges(newEdges)
   }, [selectedEdgeKey, vs.advancementRules, vs.phases, setEdges, buildEdges])
 
+  // Validate connection before allowing it
+  const isValidConnection = useCallback((connection) => {
+    const sourceIdx = parseInt(connection.source.replace('phase-', ''))
+    const targetIdx = parseInt(connection.target.replace('phase-', ''))
+    
+    // Prevent self-referential connections
+    if (sourceIdx === targetIdx) return false
+    
+    const srcPhase = vs.phases[sourceIdx]
+    const tgtPhase = vs.phases[targetIdx]
+    if (!srcPhase || !tgtPhase) return false
+    
+    // Count exit slots already used by this source phase
+    const usedExitSlots = vs.advancementRules.filter(r => 
+      r.sourcePhase === srcPhase.name
+    ).length
+    
+    // Count incoming slots already used by this target phase
+    const usedIncomingSlots = vs.advancementRules.filter(r =>
+      r.targetPhase === tgtPhase.name
+    ).length
+    
+    const totalExitSlots = parseInt(srcPhase.advancingSlotCount) || 0
+    const totalIncomingSlots = parseInt(tgtPhase.incomingSlotCount) || 0
+    
+    // Prevent connection if source has no remaining exit slots
+    if (usedExitSlots >= totalExitSlots) return false
+    
+    // Prevent connection if target has no remaining incoming slots
+    if (usedIncomingSlots >= totalIncomingSlots) return false
+    
+    return true
+  }, [vs.phases, vs.advancementRules])
+
   // When a connection is made, create advancement rules
   const onConnect = useCallback((params) => {
     const sourceIdx = parseInt(params.source.replace('phase-', ''))
@@ -1912,6 +1946,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
           onNodesChange={readOnly ? undefined : onNodesChange}
           onEdgesChange={readOnly ? undefined : onEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
+          isValidConnection={readOnly ? undefined : isValidConnection}
           onEdgesDelete={readOnly ? undefined : onEdgesDelete}
           onNodeClick={readOnly ? undefined : onNodeClick}
           onEdgeClick={readOnly ? undefined : onEdgeClick}

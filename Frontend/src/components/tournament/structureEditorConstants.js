@@ -172,41 +172,134 @@ export function serializeVisualToJson(vs) {
 }
 
 // ── Auto-generate advancement rules ──
+// Smart algorithm: connect smallest phase with remaining exits to smallest phase with remaining incoming slots
+// Never creates self-referential connections (phase to itself)
 export function autoGenerateRules(phases) {
   const rules = []
-  for (let i = 0; i < phases.length - 1; i++) {
-    const src = phases[i]
-    const tgt = phases[i + 1]
-    const slotsToAdvance = Math.min(
-      parseInt(src.advancingSlotCount) || 0,
-      parseInt(tgt.incomingSlotCount) || 0
-    )
-    if (src.phaseType === 'Pools' && (parseInt(src.poolCount) || 0) > 1) {
-      const poolCount = parseInt(src.poolCount)
-      const advPerPool = Math.max(1, Math.floor(slotsToAdvance / poolCount))
-      let slot = 1
+  
+  // Track remaining slots for each phase
+  // exitRemaining: { phaseIndex: { position: true/false for normal, or poolIndex-position: true/false for pools } }
+  // incomingRemaining: { phaseIndex: Set of remaining slot numbers }
+  const exitRemaining = {}
+  const incomingRemaining = {}
+  
+  phases.forEach((phase, idx) => {
+    const advCount = parseInt(phase.advancingSlotCount) || 0
+    const inCount = parseInt(phase.incomingSlotCount) || 0
+    const isPools = phase.phaseType === 'Pools' && (parseInt(phase.poolCount) || 0) > 1
+    
+    // Initialize exit slots
+    exitRemaining[idx] = {}
+    if (isPools) {
+      const poolCount = parseInt(phase.poolCount)
+      const advPerPool = Math.max(1, Math.floor(advCount / poolCount))
       for (let pool = 0; pool < poolCount; pool++) {
         for (let pos = 1; pos <= advPerPool; pos++) {
-          rules.push({
-            sourcePhase: src.name,
-            targetPhase: tgt.name,
-            finishPosition: pos,
-            targetSlotNumber: slot++,
-            sourcePoolIndex: pool
-          })
+          exitRemaining[idx][`${pool}-${pos}`] = true
         }
       }
     } else {
-      for (let pos = 1; pos <= slotsToAdvance; pos++) {
+      for (let pos = 1; pos <= advCount; pos++) {
+        exitRemaining[idx][pos] = true
+      }
+    }
+    
+    // Initialize incoming slots
+    incomingRemaining[idx] = new Set()
+    for (let slot = 1; slot <= inCount; slot++) {
+      incomingRemaining[idx].add(slot)
+    }
+  })
+  
+  // Helper to count remaining exits for a phase
+  const countRemainingExits = (idx) => Object.values(exitRemaining[idx]).filter(v => v).length
+  
+  // Helper to count remaining incoming for a phase
+  const countRemainingIncoming = (idx) => incomingRemaining[idx].size
+  
+  // Helper to get first available exit slot
+  const getFirstAvailableExit = (idx) => {
+    for (const key of Object.keys(exitRemaining[idx]).sort((a, b) => {
+      // Sort: pool-position format comes before plain numbers, then numerically
+      const aIsPool = String(a).includes('-')
+      const bIsPool = String(b).includes('-')
+      if (aIsPool && !bIsPool) return -1
+      if (!aIsPool && bIsPool) return 1
+      return parseInt(String(a).split('-').pop()) - parseInt(String(b).split('-').pop())
+    })) {
+      if (exitRemaining[idx][key]) return key
+    }
+    return null
+  }
+  
+  // Helper to get first available incoming slot
+  const getFirstAvailableIncoming = (idx) => {
+    const slots = Array.from(incomingRemaining[idx]).sort((a, b) => a - b)
+    return slots.length > 0 ? slots[0] : null
+  }
+  
+  // Iteratively connect phases until no more connections can be made
+  let madeConnection = true
+  while (madeConnection) {
+    madeConnection = false
+    
+    // Find smallest source phase index with remaining exits
+    let srcIdx = -1
+    for (let i = 0; i < phases.length; i++) {
+      if (countRemainingExits(i) > 0) {
+        srcIdx = i
+        break
+      }
+    }
+    if (srcIdx < 0) break
+    
+    // Find smallest target phase index (after source) with remaining incoming slots
+    // Target must be different from source (no self-referential)
+    let tgtIdx = -1
+    for (let i = 0; i < phases.length; i++) {
+      if (i !== srcIdx && countRemainingIncoming(i) > 0) {
+        tgtIdx = i
+        break
+      }
+    }
+    if (tgtIdx < 0) break
+    
+    const srcPhase = phases[srcIdx]
+    const tgtPhase = phases[tgtIdx]
+    const isPools = srcPhase.phaseType === 'Pools' && (parseInt(srcPhase.poolCount) || 0) > 1
+    
+    // Connect available slots
+    while (countRemainingExits(srcIdx) > 0 && countRemainingIncoming(tgtIdx) > 0) {
+      const exitKey = getFirstAvailableExit(srcIdx)
+      const inSlot = getFirstAvailableIncoming(tgtIdx)
+      if (!exitKey || !inSlot) break
+      
+      // Mark as used
+      exitRemaining[srcIdx][exitKey] = false
+      incomingRemaining[tgtIdx].delete(inSlot)
+      
+      // Create rule
+      if (isPools && String(exitKey).includes('-')) {
+        const [poolIndex, position] = exitKey.split('-').map(Number)
         rules.push({
-          sourcePhase: src.name,
-          targetPhase: tgt.name,
-          finishPosition: pos,
-          targetSlotNumber: pos,
+          sourcePhase: srcPhase.name,
+          targetPhase: tgtPhase.name,
+          finishPosition: position,
+          targetSlotNumber: inSlot,
+          sourcePoolIndex: poolIndex
+        })
+      } else {
+        rules.push({
+          sourcePhase: srcPhase.name,
+          targetPhase: tgtPhase.name,
+          finishPosition: parseInt(exitKey),
+          targetSlotNumber: inSlot,
           sourcePoolIndex: null
         })
       }
+      madeConnection = true
     }
   }
+  
   return rules
 }
