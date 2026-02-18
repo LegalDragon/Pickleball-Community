@@ -1074,6 +1074,198 @@ public class TournamentPaymentController : EventControllerBase
         return Ok(new ApiResponse<bool> { Success = true, Data = true, Message = "Payment proof updated" });
     }
 
+    /// <summary>
+    /// Get registrations that a payment can be applied to (for the payer's event registrations)
+    /// </summary>
+    [HttpGet("payments/{paymentId}/applicable-registrations")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> GetApplicableRegistrations(int paymentId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Payment not found" });
+
+        // Must be event registration payment
+        if (payment.PaymentType != PaymentTypes.EventRegistration || !payment.RelatedObjectId.HasValue)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Payment is not for event registration" });
+
+        var eventId = payment.RelatedObjectId.Value;
+
+        // Check authorization
+        if (!await CanManagePaymentsAsync(eventId))
+            return Forbid();
+
+        // Get payer's registrations in this event
+        var payerRegistrations = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Event)
+            .Include(m => m.User)
+            .Where(m => m.UserId == payment.UserId && m.Unit!.EventId == eventId && m.Unit.Status != "Cancelled")
+            .Select(m => new {
+                MemberId = m.Id,
+                m.UserId,
+                UserName = Utility.FormatName(m.User!.LastName, m.User.FirstName),
+                UnitId = m.UnitId,
+                UnitName = m.Unit!.Name,
+                DivisionId = m.Unit.DivisionId,
+                DivisionName = m.Unit.Division != null ? m.Unit.Division.Name : null,
+                AmountDue = (m.Unit.Event!.RegistrationFee + (m.Unit.Division != null ? m.Unit.Division.DivisionFee ?? 0 : 0)) / m.Unit.Members.Count(x => x.InviteStatus == "Accepted"),
+                m.HasPaid,
+                m.AmountPaid,
+                m.PaymentId,
+                AlreadyLinkedToThisPayment = m.PaymentId == paymentId
+            })
+            .ToListAsync();
+
+        // Calculate how much of this payment is already applied
+        var alreadyApplied = await _context.EventUnitMembers
+            .Where(m => m.PaymentId == paymentId)
+            .SumAsync(m => m.AmountPaid);
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Data = new
+            {
+                payment = new
+                {
+                    payment.Id,
+                    payment.UserId,
+                    PayerName = Utility.FormatName(payment.User?.LastName, payment.User?.FirstName),
+                    payment.Amount,
+                    AlreadyApplied = alreadyApplied,
+                    Remaining = payment.Amount - alreadyApplied
+                },
+                registrations = payerRegistrations
+            }
+        });
+    }
+
+    /// <summary>
+    /// Apply a payment to one or more registrations
+    /// </summary>
+    [HttpPost("payments/{paymentId}/apply")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> ApplyPaymentToRegistrations(
+        int paymentId,
+        [FromBody] ApplyPaymentRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (request.MemberIds == null || request.MemberIds.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No registrations selected" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Payment not found" });
+
+        // Must be event registration payment
+        if (payment.PaymentType != PaymentTypes.EventRegistration || !payment.RelatedObjectId.HasValue)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Payment is not for event registration" });
+
+        var eventId = payment.RelatedObjectId.Value;
+
+        // Check authorization
+        if (!await CanManagePaymentsAsync(eventId))
+            return Forbid();
+
+        // Get members to apply payment to
+        var members = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Event)
+            .Where(m => request.MemberIds.Contains(m.Id) && m.Unit!.EventId == eventId)
+            .ToListAsync();
+
+        if (members.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No valid registrations found" });
+
+        // Calculate amount per member (or use custom amounts if provided)
+        var amountsApplied = new List<(int memberId, decimal amount)>();
+        
+        foreach (var member in members)
+        {
+            // Calculate per-member fee
+            var unitMemberCount = await _context.EventUnitMembers
+                .CountAsync(m => m.UnitId == member.UnitId && m.InviteStatus == "Accepted");
+            var totalFee = (member.Unit!.Event!.RegistrationFee + (member.Unit.Division?.DivisionFee ?? 0));
+            var perMemberFee = unitMemberCount > 0 ? totalFee / unitMemberCount : totalFee;
+
+            // Use custom amount if provided, otherwise use per-member fee
+            var amountToApply = request.CustomAmounts?.ContainsKey(member.Id) == true
+                ? request.CustomAmounts[member.Id]
+                : perMemberFee;
+
+            // Update member
+            member.HasPaid = true;
+            member.PaidAt = DateTime.UtcNow;
+            member.AmountPaid = amountToApply;
+            member.PaymentId = paymentId;
+            member.PaymentProofUrl = payment.PaymentProofUrl;
+            member.PaymentReference = payment.PaymentReference;
+            member.PaymentMethod = payment.PaymentMethod;
+            member.ReferenceId = payment.ReferenceId;
+
+            amountsApplied.Add((member.Id, amountToApply));
+
+            // Update unit payment status
+            var allUnitMembers = await _context.EventUnitMembers
+                .Where(m => m.UnitId == member.UnitId && m.InviteStatus == "Accepted")
+                .ToListAsync();
+            var allPaid = allUnitMembers.All(m => m.HasPaid);
+            var anyPaid = allUnitMembers.Any(m => m.HasPaid);
+            var totalPaidInUnit = allUnitMembers.Sum(m => m.AmountPaid);
+
+            member.Unit.AmountPaid = totalPaidInUnit;
+            if (allPaid && totalPaidInUnit >= totalFee)
+            {
+                member.Unit.PaymentStatus = "Paid";
+                member.Unit.PaidAt = DateTime.UtcNow;
+            }
+            else if (anyPaid)
+            {
+                member.Unit.PaymentStatus = "Partial";
+            }
+            member.Unit.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Update payment record
+        payment.IsApplied = true;
+        payment.AppliedAt = DateTime.UtcNow;
+        payment.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        var totalApplied = amountsApplied.Sum(a => a.amount);
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Data = new
+            {
+                appliedCount = members.Count,
+                totalApplied,
+                applications = amountsApplied.Select(a => new { memberId = a.memberId, amount = a.amount })
+            },
+            Message = $"Payment applied to {members.Count} registration(s)"
+        });
+    }
+
 
     // ============================================
     // Division Fee Management

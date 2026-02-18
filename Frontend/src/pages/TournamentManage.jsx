@@ -161,6 +161,9 @@ export default function TournamentManage() {
   const [viewingProofUrl, setViewingProofUrl] = useState(null); // URL to display in modal
   const [uploadingProofForPayment, setUploadingProofForPayment] = useState(null);
   const proofFileInputRef = useRef(null);
+  const [applyingPayment, setApplyingPayment] = useState(null); // paymentId being applied
+  const [applicableRegistrations, setApplicableRegistrations] = useState(null); // registrations for apply modal
+  const [selectedRegistrations, setSelectedRegistrations] = useState([]); // selected member IDs to apply to
 
   // Payment filter state
   const [paymentSearchName, setPaymentSearchName] = useState('');
@@ -2748,6 +2751,53 @@ export default function TournamentManage() {
       toast.error('Failed to unverify payment');
     } finally {
       setVerifyingPayment(null);
+    }
+  };
+
+  // Fetch applicable registrations for a payment
+  const handleOpenApplyPayment = async (paymentId) => {
+    setApplyingPayment(paymentId);
+    setSelectedRegistrations([]);
+    try {
+      const response = await tournamentApi.getApplicableRegistrations(paymentId);
+      if (response.success) {
+        setApplicableRegistrations(response.data);
+        // Auto-select unpaid registrations
+        const unpaidMemberIds = response.data.registrations
+          .filter(r => !r.hasPaid && !r.alreadyLinkedToThisPayment)
+          .map(r => r.memberId);
+        setSelectedRegistrations(unpaidMemberIds);
+      } else {
+        toast.error(response.message || 'Failed to load registrations');
+        setApplyingPayment(null);
+      }
+    } catch (err) {
+      console.error('Error loading applicable registrations:', err);
+      toast.error('Failed to load registrations');
+      setApplyingPayment(null);
+    }
+  };
+
+  // Apply payment to selected registrations
+  const handleApplyPayment = async () => {
+    if (selectedRegistrations.length === 0) {
+      toast.error('Please select at least one registration');
+      return;
+    }
+    try {
+      const response = await tournamentApi.applyPaymentToRegistrations(applyingPayment, selectedRegistrations);
+      if (response.success) {
+        toast.success(response.message || 'Payment applied successfully');
+        setApplyingPayment(null);
+        setApplicableRegistrations(null);
+        setSelectedRegistrations([]);
+        loadPaymentSummary();
+      } else {
+        toast.error(response.message || 'Failed to apply payment');
+      }
+    } catch (err) {
+      console.error('Error applying payment:', err);
+      toast.error('Failed to apply payment');
     }
   };
 
@@ -7064,8 +7114,88 @@ export default function TournamentManage() {
                                       )}
                                       Upload Proof
                                     </button>
+                                    <button
+                                      onClick={() => handleOpenApplyPayment(payment.id)}
+                                      className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center gap-2"
+                                    >
+                                      <UserCheck className="w-4 h-4" />
+                                      Apply Payment
+                                    </button>
                                   </div>
                                 </div>
+
+                                {/* Apply Payment Panel */}
+                                {applyingPayment === payment.id && applicableRegistrations && (
+                                  <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h4 className="font-medium text-green-800">Apply Payment to Registrations</h4>
+                                      <button
+                                        onClick={() => { setApplyingPayment(null); setApplicableRegistrations(null); }}
+                                        className="text-green-600 hover:text-green-800"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <div className="text-sm text-green-700 mb-3">
+                                      Payment: ${applicableRegistrations.payment?.amount?.toFixed(2)} | 
+                                      Applied: ${applicableRegistrations.payment?.alreadyApplied?.toFixed(2)} | 
+                                      Remaining: ${applicableRegistrations.payment?.remaining?.toFixed(2)}
+                                    </div>
+                                    {applicableRegistrations.registrations?.length > 0 ? (
+                                      <div className="space-y-2 mb-4">
+                                        {applicableRegistrations.registrations.map(reg => (
+                                          <label key={reg.memberId} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${reg.alreadyLinkedToThisPayment ? 'bg-green-100' : reg.hasPaid ? 'bg-gray-100' : 'bg-white'} border`}>
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedRegistrations.includes(reg.memberId) || reg.alreadyLinkedToThisPayment}
+                                              disabled={reg.alreadyLinkedToThisPayment}
+                                              onChange={(e) => {
+                                                if (e.target.checked) {
+                                                  setSelectedRegistrations([...selectedRegistrations, reg.memberId]);
+                                                } else {
+                                                  setSelectedRegistrations(selectedRegistrations.filter(id => id !== reg.memberId));
+                                                }
+                                              }}
+                                              className="rounded border-green-300 text-green-600 focus:ring-green-500"
+                                            />
+                                            <div className="flex-1">
+                                              <div className="font-medium text-gray-900">{reg.userName}</div>
+                                              <div className="text-xs text-gray-500">{reg.divisionName} • {reg.unitName}</div>
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-sm font-medium">${reg.amountDue?.toFixed(2)}</div>
+                                              {reg.alreadyLinkedToThisPayment ? (
+                                                <div className="text-xs text-green-600">Already applied</div>
+                                              ) : reg.hasPaid ? (
+                                                <div className="text-xs text-gray-500">Paid (${reg.amountPaid?.toFixed(2)})</div>
+                                              ) : (
+                                                <div className="text-xs text-orange-600">Unpaid</div>
+                                              )}
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-gray-500 mb-4">No registrations found for this payer in this event.</p>
+                                    )}
+                                    <div className="flex justify-end gap-2">
+                                      <button
+                                        onClick={() => { setApplyingPayment(null); setApplicableRegistrations(null); }}
+                                        className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={handleApplyPayment}
+                                        disabled={selectedRegistrations.length === 0}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                        Apply to {selectedRegistrations.length} Registration{selectedRegistrations.length !== 1 ? 's' : ''}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

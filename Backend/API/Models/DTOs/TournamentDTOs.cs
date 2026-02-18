@@ -935,6 +935,19 @@ public class ApplyPaymentToTeammatesRequest
     public bool RedistributeAmount { get; set; } = true;
 }
 
+public class ApplyPaymentRequest
+{
+    /// <summary>
+    /// List of EventUnitMember IDs to apply payment to
+    /// </summary>
+    public List<int> MemberIds { get; set; } = new();
+    /// <summary>
+    /// Optional custom amounts per member (key = memberId, value = amount)
+    /// If not provided, uses calculated per-member fee
+    /// </summary>
+    public Dictionary<int, decimal>? CustomAmounts { get; set; }
+}
+
 // ==================== Payment Summary DTOs ====================
 
 public class EventPaymentSummaryDto
