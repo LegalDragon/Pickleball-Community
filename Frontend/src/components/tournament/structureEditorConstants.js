@@ -278,20 +278,20 @@ export function autoGenerateRules(phases) {
       exitRemaining[srcIdx][exitKey] = false
       incomingRemaining[tgtIdx].delete(inSlot)
       
-      // Create rule
+      // Create rule - use 1-based phase order indices (srcIdx + 1, tgtIdx + 1)
       if (isPools && String(exitKey).includes('-')) {
         const [poolIndex, position] = exitKey.split('-').map(Number)
         rules.push({
-          sourcePhase: srcPhase.name,
-          targetPhase: tgtPhase.name,
+          sourcePhaseOrder: srcIdx + 1,
+          targetPhaseOrder: tgtIdx + 1,
           finishPosition: position,
           targetSlotNumber: inSlot,
           sourcePoolIndex: poolIndex
         })
       } else {
         rules.push({
-          sourcePhase: srcPhase.name,
-          targetPhase: tgtPhase.name,
+          sourcePhaseOrder: srcIdx + 1,
+          targetPhaseOrder: tgtIdx + 1,
           finishPosition: parseInt(exitKey),
           targetSlotNumber: inSlot,
           sourcePoolIndex: null
