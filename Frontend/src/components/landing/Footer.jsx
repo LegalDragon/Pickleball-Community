@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
+import { BUILD_VERSION } from '../../version';
 
 const Footer = () => {
   const { t } = useTranslation('nav');
@@ -139,11 +140,9 @@ const Footer = () => {
         <div className="copyright">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
             <span>&copy; 2023-{new Date().getFullYear()} {t('footer.copyright')}</span>
-            {buildDate && (
-              <span className="text-gray-500 text-xs">
-                Build: {buildDate}
-              </span>
-            )}
+            <span className="text-gray-500 text-xs" title={buildDate ? `Build date: ${buildDate}` : undefined}>
+              v{BUILD_VERSION}
+            </span>
             <button
               onClick={handleCheckForUpdates}
               disabled={checking}
