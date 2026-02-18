@@ -2645,10 +2645,10 @@ export default function TournamentManage() {
     try {
       // Build filter params from state or passed filters
       const filterParams = {
-        searchName: filters.searchName ?? paymentSearchName || undefined,
-        paymentStatus: filters.paymentStatus ?? paymentStatusFilter || undefined,
-        divisionId: filters.divisionId ?? (paymentDivisionFilter ? parseInt(paymentDivisionFilter) : undefined),
-        paymentMethod: filters.paymentMethod ?? paymentMethodFilter || undefined,
+        searchName: (filters.searchName !== undefined ? filters.searchName : paymentSearchName) || undefined,
+        paymentStatus: (filters.paymentStatus !== undefined ? filters.paymentStatus : paymentStatusFilter) || undefined,
+        divisionId: filters.divisionId !== undefined ? filters.divisionId : (paymentDivisionFilter ? parseInt(paymentDivisionFilter) : undefined),
+        paymentMethod: (filters.paymentMethod !== undefined ? filters.paymentMethod : paymentMethodFilter) || undefined,
       };
 
       // Remove undefined values
