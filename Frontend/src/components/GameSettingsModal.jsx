@@ -376,41 +376,73 @@ export default function GameSettingsModal({ isOpen, onClose, division, eventId, 
                               </div>
                             );})
                           ) : (
-                            // Single match format - simpler UI
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2">
-                                <label className="text-sm text-gray-700">Games per Match:</label>
-                                <div className="flex gap-2">
-                                  {[1, 3, 5].map(num => (
-                                    <button
-                                      key={num}
-                                      onClick={() => updatePhaseFormatSetting(phase.phaseId, null, 'bestOf', num)}
-                                      className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
-                                        (phaseSettings[phase.phaseId]?.[null]?.bestOf || 1) === num
-                                          ? 'border-orange-500 bg-orange-50 text-orange-700'
-                                          : 'border-gray-200 hover:border-gray-300'
-                                      }`}
-                                    >
-                                      {num === 1 ? '1 Game' : `Best of ${num}`}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
+                            // Single match format - show per-game settings when Bo3/Bo5
+                            (() => {
+                              const currentBestOf = phaseSettings[phase.phaseId]?.[null]?.bestOf || 1;
+                              return (
+                                <div className="space-y-4">
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-sm text-gray-700">Games per Match:</label>
+                                      <div className="flex gap-2">
+                                        {[1, 3, 5].map(num => (
+                                          <button
+                                            key={num}
+                                            onClick={() => updatePhaseFormatSetting(phase.phaseId, null, 'bestOf', num)}
+                                            className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+                                              currentBestOf === num
+                                                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                          >
+                                            {num === 1 ? '1 Game' : `Best of ${num}`}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
 
-                              <div className="flex items-center gap-2 ml-auto">
-                                <label className="text-sm text-gray-500">Score Format:</label>
-                                <select
-                                  value={phaseSettings[phase.phaseId]?.[null]?.scoreFormatId || ''}
-                                  onChange={(e) => updatePhaseFormatSetting(phase.phaseId, null, 'scoreFormatId', e.target.value ? parseInt(e.target.value) : null)}
-                                  className="border border-gray-300 rounded-lg p-2 text-sm"
-                                >
-                                  <option value="">Default</option>
-                                  {scoreFormats.map(sf => (
-                                    <option key={sf.id} value={sf.id}>{sf.name}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
+                                    {/* Show single score format only for 1 Game */}
+                                    {currentBestOf === 1 && (
+                                      <div className="flex items-center gap-2 ml-auto">
+                                        <label className="text-sm text-gray-500">Score Format:</label>
+                                        <select
+                                          value={phaseSettings[phase.phaseId]?.[null]?.scoreFormatId || ''}
+                                          onChange={(e) => updatePhaseFormatSetting(phase.phaseId, null, 'scoreFormatId', e.target.value ? parseInt(e.target.value) : null)}
+                                          className="border border-gray-300 rounded-lg p-2 text-sm"
+                                        >
+                                          <option value="">Default</option>
+                                          {scoreFormats.map(sf => (
+                                            <option key={sf.id} value={sf.id}>{sf.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Per-game format selection when Best of 3 or 5 */}
+                                  {currentBestOf > 1 && (
+                                    <div className="ml-4 pl-4 border-l-2 border-orange-200 space-y-2">
+                                      <div className="text-xs font-medium text-gray-600">Score format per game:</div>
+                                      {Array.from({ length: currentBestOf }, (_, i) => i + 1).map(gameNum => (
+                                        <div key={gameNum} className="flex items-center gap-3">
+                                          <span className="text-xs text-gray-500 w-16">Game {gameNum}:</span>
+                                          <select
+                                            value={phaseSettings[phase.phaseId]?.[null]?.gameFormats?.[gameNum]?.scoreFormatId || ''}
+                                            onChange={(e) => updateGameFormatSetting(phase.phaseId, null, gameNum, 'scoreFormatId', e.target.value ? parseInt(e.target.value) : null)}
+                                            className="border border-gray-300 rounded p-1 text-sm flex-1"
+                                          >
+                                            <option value="">Default</option>
+                                            {scoreFormats.map(sf => (
+                                              <option key={sf.id} value={sf.id}>{sf.name}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()
                           )}
                         </div>
                       )}
