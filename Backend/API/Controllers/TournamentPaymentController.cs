@@ -898,152 +898,51 @@ public class TournamentPaymentController : EventControllerBase
 
     /// <summary>
     /// Get payment summary for an event (organizer/admin only)
+    /// Supports filtering by player name, payment status, division, and payment method
     /// </summary>
     [HttpGet("events/{eventId}/payment-summary")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<EventPaymentSummaryDto>>> GetEventPaymentSummary(int eventId)
+    public async Task<ActionResult<ApiResponse<EventPaymentSummaryDto>>> GetEventPaymentSummary(
+        int eventId,
+        [FromQuery] string? searchName = null,
+        [FromQuery] string? paymentStatus = null,
+        [FromQuery] int? divisionId = null,
+        [FromQuery] string? paymentMethod = null)
     {
         var userId = GetUserId();
         if (!userId.HasValue)
             return Unauthorized(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = "Unauthorized" });
 
-        var evt = await _context.Events
-            .Include(e => e.Divisions)
-            .FirstOrDefaultAsync(e => e.Id == eventId);
-
-        if (evt == null)
-            return NotFound(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = "Event not found" });
-
         // Check authorization - allow organizer, admin, or staff with payment permissions
         if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
-        // Get all units with members for this event
-        var units = await _context.EventUnits
-            .Include(u => u.Members)
-                .ThenInclude(m => m.User)
-            .Include(u => u.Division)
-            .Where(u => u.EventId == eventId && u.Status != "Cancelled")
-            .OrderBy(u => u.Division != null ? u.Division.Name : "")
-            .ThenBy(u => u.Name)
-            .ToListAsync();
-
-        // Get all payments for this event
-        var payments = await _context.UserPayments
-            .Include(p => p.User)
-            .Where(p => p.PaymentType == PaymentTypes.EventRegistration && p.RelatedObjectId == eventId)
-            .OrderByDescending(p => p.CreatedAt)
-            .ToListAsync();
-
-        // Build payment details per division
-        var divisionPayments = new List<DivisionPaymentSummaryDto>();
-        foreach (var division in evt.Divisions.OrderBy(d => d.Name))
+        // Build filter request
+        PaymentSummaryFilterRequest? filter = null;
+        if (!string.IsNullOrEmpty(searchName) || !string.IsNullOrEmpty(paymentStatus) ||
+            divisionId.HasValue || !string.IsNullOrEmpty(paymentMethod))
         {
-            var divUnits = units.Where(u => u.DivisionId == division.Id).ToList();
-            var divPayments = new DivisionPaymentSummaryDto
+            filter = new PaymentSummaryFilterRequest
             {
-                DivisionId = division.Id,
-                DivisionName = division.Name,
-                ExpectedFeePerUnit = evt.RegistrationFee + (division.DivisionFee ?? 0m),
-                TotalUnits = divUnits.Count,
-                TotalExpected = divUnits.Count * (evt.RegistrationFee + (division.DivisionFee ?? 0m)),
-                TotalPaid = divUnits.Sum(u => u.AmountPaid),
-                Units = divUnits.Select(u => new UnitPaymentDto
-                {
-                    UnitId = u.Id,
-                    UnitName = u.Name,
-                    PaymentStatus = u.PaymentStatus ?? "Pending",
-                    AmountPaid = u.AmountPaid,
-                    AmountDue = evt.RegistrationFee + (division.DivisionFee ?? 0m),
-                    PaymentProofUrl = u.PaymentProofUrl,
-                    PaymentReference = u.PaymentReference,
-                    ReferenceId = u.ReferenceId,
-                    PaidAt = u.PaidAt,
-                    Members = u.Members.Select(m => new UnitMemberPaymentDto
-                    {
-                        UserId = m.UserId,
-                        UserName = $"{m.User?.FirstName} {m.User?.LastName}".Trim(),
-                        UserEmail = m.User?.Email,
-                        HasPaid = m.HasPaid,
-                        AmountPaid = m.AmountPaid,
-                        PaymentProofUrl = m.PaymentProofUrl,
-                        PaymentReference = m.PaymentReference,
-                        PaidAt = m.PaidAt
-                    }).ToList()
-                }).ToList()
+                SearchName = searchName,
+                PaymentStatus = paymentStatus,
+                DivisionId = divisionId,
+                PaymentMethod = paymentMethod
             };
-
-            divPayments.UnitsFullyPaid = divPayments.Units.Count(u => u.PaymentStatus == "Paid" || u.AmountPaid >= u.AmountDue);
-            divPayments.UnitsPartiallyPaid = divPayments.Units.Count(u =>
-                u.PaymentStatus != "Paid" && u.AmountPaid > 0 && u.AmountPaid < u.AmountDue);
-            divPayments.UnitsUnpaid = divPayments.Units.Count(u => u.AmountPaid == 0);
-            divPayments.IsBalanced = Math.Abs(divPayments.TotalPaid - divPayments.TotalExpected) < 0.01m;
-
-            divisionPayments.Add(divPayments);
         }
 
-        // Get all members that have payments applied (for building AppliedTo lists)
-        var allMembersWithPayments = await _context.EventUnitMembers
-            .Include(m => m.User)
-            .Include(m => m.Unit)
-            .Where(m => m.Unit!.EventId == eventId && m.PaymentId != null)
-            .ToListAsync();
+        var result = await _paymentService.GetEventPaymentSummaryAsync(eventId, userId.Value, filter);
 
-        // Build payment records with applied-to information
-        var paymentRecords = new List<PaymentRecordDto>();
-        foreach (var p in payments)
+        if (!result.Success)
         {
-            var appliedMembers = allMembersWithPayments
-                .Where(m => m.PaymentId == p.Id)
-                .Select(m => new PaymentApplicationDto
-                {
-                    UserId = m.UserId,
-                    UserName = Utility.FormatName(m.User?.LastName, m.User?.FirstName) ?? "",
-                    AmountApplied = m.AmountPaid
-                })
-                .ToList();
-
-            var totalApplied = appliedMembers.Sum(a => a.AmountApplied);
-
-            paymentRecords.Add(new PaymentRecordDto
-            {
-                Id = p.Id,
-                UserId = p.UserId,
-                UserName = Utility.FormatName(p.User?.LastName, p.User?.FirstName) ?? "",
-                UserEmail = p.User?.Email,
-                Amount = p.Amount,
-                PaymentMethod = p.PaymentMethod,
-                PaymentReference = p.PaymentReference,
-                PaymentProofUrl = p.PaymentProofUrl,
-                ReferenceId = p.ReferenceId,
-                Status = p.Status,
-                CreatedAt = p.CreatedAt,
-                VerifiedAt = p.VerifiedAt,
-                TotalApplied = totalApplied,
-                IsFullyApplied = Math.Abs(totalApplied - p.Amount) < 0.01m,
-                AppliedTo = appliedMembers
-            });
+            if (result.StatusCode == 404)
+                return NotFound(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = result.Message });
+            if (result.StatusCode == 403)
+                return Forbid();
+            return BadRequest(new ApiResponse<EventPaymentSummaryDto> { Success = false, Message = result.Message });
         }
 
-        // Build overall summary
-        var summary = new EventPaymentSummaryDto
-        {
-            EventId = eventId,
-            EventName = evt.Name,
-            RegistrationFee = evt.RegistrationFee,
-            TotalUnits = units.Count,
-            TotalExpected = divisionPayments.Sum(d => d.TotalExpected),
-            TotalPaid = divisionPayments.Sum(d => d.TotalPaid),
-            TotalOutstanding = divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid),
-            UnitsFullyPaid = divisionPayments.Sum(d => d.UnitsFullyPaid),
-            UnitsPartiallyPaid = divisionPayments.Sum(d => d.UnitsPartiallyPaid),
-            UnitsUnpaid = divisionPayments.Sum(d => d.UnitsUnpaid),
-            IsBalanced = Math.Abs(divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid)) < 0.01m,
-            DivisionPayments = divisionPayments,
-            RecentPayments = paymentRecords
-        };
-
-        return Ok(new ApiResponse<EventPaymentSummaryDto> { Success = true, Data = summary });
+        return Ok(new ApiResponse<EventPaymentSummaryDto> { Success = true, Data = result.Data });
     }
 
     /// <summary>

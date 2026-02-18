@@ -1033,6 +1033,32 @@ public class PaymentApplicationDto
     public decimal AmountApplied { get; set; }
 }
 
+/// <summary>
+/// Filter request for payment summary queries
+/// </summary>
+public class PaymentSummaryFilterRequest
+{
+    /// <summary>
+    /// Search by player name (first name, last name, or both)
+    /// </summary>
+    public string? SearchName { get; set; }
+
+    /// <summary>
+    /// Filter by payment status: Pending, PendingVerification, Verified, Paid, Partial
+    /// </summary>
+    public string? PaymentStatus { get; set; }
+
+    /// <summary>
+    /// Filter by division ID
+    /// </summary>
+    public int? DivisionId { get; set; }
+
+    /// <summary>
+    /// Filter by payment method: Cash, Zelle, Venmo, PayPal, CreditCard, Check, Other
+    /// </summary>
+    public string? PaymentMethod { get; set; }
+}
+
 // ============================================
 // Admin Registration DTOs
 // ============================================

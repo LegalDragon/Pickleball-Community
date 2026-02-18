@@ -1598,8 +1598,15 @@ export const tournamentApi = {
     api.put(`/tournament/units/${unitId}/join-method`, { joinMethod }),
 
   // Payment
-  getPaymentSummary: (eventId) =>
-    api.get(`/tournament/events/${eventId}/payment-summary`),
+  getPaymentSummary: (eventId, filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.searchName) params.append('searchName', filters.searchName);
+    if (filters.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    if (filters.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+    const queryString = params.toString();
+    return api.get(`/tournament/events/${eventId}/payment-summary${queryString ? `?${queryString}` : ''}`);
+  },
   uploadPaymentProof: (eventId, unitId, data) =>
     api.post(`/tournament/events/${eventId}/units/${unitId}/payment`, data),
   markAsPaid: (eventId, unitId) =>

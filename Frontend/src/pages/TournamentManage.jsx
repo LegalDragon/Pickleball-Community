@@ -7,7 +7,7 @@ import {
   Award, ArrowRight, Lock, Unlock, Save, Map, ExternalLink, FileText, User,
   CheckCircle, XCircle, MoreVertical, Upload, Send, Info, Radio, ClipboardList,
   Download, Lightbulb, Shield, Trash2, Building2, Layers, UserCheck, Grid3X3,
-  Hammer, BookOpen, Phone, EyeOff, Edit3, Map as MapIcon, Mail, Image, Zap
+  Hammer, BookOpen, Phone, EyeOff, Edit3, Map as MapIcon, Mail, Image, Zap, Search
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -161,6 +161,12 @@ export default function TournamentManage() {
   const [viewingProofUrl, setViewingProofUrl] = useState(null); // URL to display in modal
   const [uploadingProofForPayment, setUploadingProofForPayment] = useState(null);
   const proofFileInputRef = useRef(null);
+
+  // Payment filter state
+  const [paymentSearchName, setPaymentSearchName] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
+  const [paymentDivisionFilter, setPaymentDivisionFilter] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('');
 
   // Division editing state
   const [editingDivision, setEditingDivision] = useState(null);
@@ -2634,10 +2640,25 @@ export default function TournamentManage() {
   };
 
   // Payment Management functions
-  const loadPaymentSummary = async () => {
+  const loadPaymentSummary = async (filters = {}) => {
     setLoadingPayments(true);
     try {
-      const response = await tournamentApi.getPaymentSummary(eventId);
+      // Build filter params from state or passed filters
+      const filterParams = {
+        searchName: filters.searchName ?? paymentSearchName || undefined,
+        paymentStatus: filters.paymentStatus ?? paymentStatusFilter || undefined,
+        divisionId: filters.divisionId ?? (paymentDivisionFilter ? parseInt(paymentDivisionFilter) : undefined),
+        paymentMethod: filters.paymentMethod ?? paymentMethodFilter || undefined,
+      };
+
+      // Remove undefined values
+      Object.keys(filterParams).forEach(key => {
+        if (filterParams[key] === undefined || filterParams[key] === '') {
+          delete filterParams[key];
+        }
+      });
+
+      const response = await tournamentApi.getPaymentSummary(eventId, filterParams);
       if (response.success) {
         setPaymentSummary(response.data);
       } else {
@@ -2649,6 +2670,48 @@ export default function TournamentManage() {
     } finally {
       setLoadingPayments(false);
     }
+  };
+
+  // Debounced payment search
+  const handlePaymentSearchChange = (value) => {
+    setPaymentSearchName(value);
+    // Debounce the actual search
+    const timeoutId = setTimeout(() => {
+      loadPaymentSummary({ searchName: value });
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  };
+
+  // Handle payment filter changes
+  const handlePaymentFilterChange = (filterType, value) => {
+    switch (filterType) {
+      case 'status':
+        setPaymentStatusFilter(value);
+        loadPaymentSummary({ paymentStatus: value });
+        break;
+      case 'division':
+        setPaymentDivisionFilter(value);
+        loadPaymentSummary({ divisionId: value ? parseInt(value) : undefined });
+        break;
+      case 'method':
+        setPaymentMethodFilter(value);
+        loadPaymentSummary({ paymentMethod: value });
+        break;
+    }
+  };
+
+  // Clear all payment filters
+  const clearPaymentFilters = () => {
+    setPaymentSearchName('');
+    setPaymentStatusFilter('');
+    setPaymentDivisionFilter('');
+    setPaymentMethodFilter('');
+    loadPaymentSummary({
+      searchName: '',
+      paymentStatus: '',
+      divisionId: undefined,
+      paymentMethod: ''
+    });
   };
 
   const handleVerifyPayment = async (paymentId) => {
@@ -6672,12 +6735,127 @@ export default function TournamentManage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Payment Management</h2>
               <button
-                onClick={loadPaymentSummary}
+                onClick={() => loadPaymentSummary()}
                 disabled={loadingPayments}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
               >
                 <RefreshCw className={`w-5 h-5 ${loadingPayments ? 'animate-spin' : ''}`} />
               </button>
+            </div>
+
+            {/* Search and Filter Controls */}
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Search by Name */}
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Search Player</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={paymentSearchName}
+                      onChange={(e) => handlePaymentSearchChange(e.target.value)}
+                      placeholder="Search by player name..."
+                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Status Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                  <select
+                    value={paymentStatusFilter}
+                    onChange={(e) => handlePaymentFilterChange('status', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="PendingVerification">Pending Verification</option>
+                    <option value="Verified">Verified</option>
+                  </select>
+                </div>
+
+                {/* Division Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Division</label>
+                  <select
+                    value={paymentDivisionFilter}
+                    onChange={(e) => handlePaymentFilterChange('division', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Divisions</option>
+                    {tournament?.divisions?.map(div => (
+                      <option key={div.id} value={div.id}>{div.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Payment Method Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Method</label>
+                  <select
+                    value={paymentMethodFilter}
+                    onChange={(e) => handlePaymentFilterChange('method', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Methods</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Zelle">Zelle</option>
+                    <option value="Venmo">Venmo</option>
+                    <option value="PayPal">PayPal</option>
+                    <option value="CreditCard">Credit Card</option>
+                    <option value="Check">Check</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Active filters indicator and clear button */}
+              {(paymentSearchName || paymentStatusFilter || paymentDivisionFilter || paymentMethodFilter) && (
+                <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    {paymentSearchName && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+                        Name: {paymentSearchName}
+                        <button onClick={() => { setPaymentSearchName(''); loadPaymentSummary({ searchName: '' }); }} className="hover:text-orange-900">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {paymentStatusFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+                        Status: {paymentStatusFilter}
+                        <button onClick={() => handlePaymentFilterChange('status', '')} className="hover:text-orange-900">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {paymentDivisionFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+                        Division: {tournament?.divisions?.find(d => d.id === parseInt(paymentDivisionFilter))?.name || paymentDivisionFilter}
+                        <button onClick={() => handlePaymentFilterChange('division', '')} className="hover:text-orange-900">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {paymentMethodFilter && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
+                        Method: {paymentMethodFilter}
+                        <button onClick={() => handlePaymentFilterChange('method', '')} className="hover:text-orange-900">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={clearPaymentFilters}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              )}
             </div>
 
             {loadingPayments && !paymentSummary ? (

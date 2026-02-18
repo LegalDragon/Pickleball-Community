@@ -16,7 +16,7 @@ public interface ITournamentPaymentService
     Task<ServiceResult<object>> ApplyPaymentToTeammatesAsync(int eventId, int unitId, int memberId, int organizerUserId, ApplyPaymentToTeammatesRequest request);
     Task<ServiceResult<MemberPaymentDto>> UpdateMemberPaymentAsync(int eventId, int unitId, int memberId, int organizerUserId, UpdateMemberPaymentRequest request);
     Task<ServiceResult<bool>> RemoveRegistrationAsync(int eventId, int unitId, int targetUserId, int currentUserId);
-    Task<ServiceResult<EventPaymentSummaryDto>> GetEventPaymentSummaryAsync(int eventId, int userId);
+    Task<ServiceResult<EventPaymentSummaryDto>> GetEventPaymentSummaryAsync(int eventId, int userId, PaymentSummaryFilterRequest? filter = null);
     Task<ServiceResult<bool>> VerifyPaymentAsync(int paymentId, int userId);
     Task<ServiceResult<bool>> UnverifyPaymentAsync(int paymentId, int userId);
 }
@@ -650,6 +650,11 @@ public class TournamentPaymentService : ITournamentPaymentService
         if (member == null)
             return ServiceResult<MemberPaymentDto>.NotFound("Member not found in unit");
 
+        // Calculate per-member amount for default
+        var memberCount = unit.Members.Count(m => m.InviteStatus == "Accepted");
+        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
+        var perMemberAmount = memberCount > 0 ? amountDue / memberCount : amountDue;
+
         if (request.PaymentReference != null)
             member.PaymentReference = request.PaymentReference;
         if (request.PaymentProofUrl != null)
@@ -661,18 +666,104 @@ public class TournamentPaymentService : ITournamentPaymentService
         if (request.ReferenceId != null)
             member.ReferenceId = request.ReferenceId;
 
+        // Generate reference ID if not provided
+        if (string.IsNullOrEmpty(member.ReferenceId))
+            member.ReferenceId = $"E{eventId}-U{unitId}-P{memberId}";
+
         if (request.HasPaid.HasValue)
         {
+            var wasNotPaid = !member.HasPaid;
             member.HasPaid = request.HasPaid.Value;
-            if (request.HasPaid.Value && !member.PaidAt.HasValue)
-                member.PaidAt = DateTime.Now;
-            else if (!request.HasPaid.Value)
+
+            if (request.HasPaid.Value)
+            {
+                if (!member.PaidAt.HasValue)
+                    member.PaidAt = DateTime.Now;
+
+                // Default amount if not set
+                if (member.AmountPaid == 0 && !request.AmountPaid.HasValue)
+                    member.AmountPaid = perMemberAmount;
+
+                // CRITICAL FIX: Create or update UserPayment record when marking as paid
+                // This ensures the payment shows up in the TD payments tab
+                var existingPayment = await _context.UserPayments
+                    .FirstOrDefaultAsync(p => p.PaymentType == PaymentTypes.EventRegistration
+                        && p.RelatedObjectId == eventId
+                        && p.SecondaryObjectId == unitId
+                        && p.UserId == memberId);
+
+                if (existingPayment == null)
+                {
+                    // Create new UserPayment record
+                    var userPayment = new UserPayment
+                    {
+                        UserId = memberId,
+                        PaymentType = PaymentTypes.EventRegistration,
+                        RelatedObjectId = eventId,
+                        SecondaryObjectId = unitId,
+                        TertiaryObjectId = member.Id,
+                        Description = $"Event registration - {unit.Event?.Name}",
+                        Amount = member.AmountPaid,
+                        PaymentProofUrl = member.PaymentProofUrl,
+                        PaymentReference = member.PaymentReference,
+                        PaymentMethod = member.PaymentMethod,
+                        ReferenceId = member.ReferenceId,
+                        Status = "Verified",
+                        VerifiedByUserId = organizerUserId,
+                        VerifiedAt = DateTime.Now,
+                        Notes = "Added by organizer",
+                        IsApplied = true,
+                        AppliedAt = DateTime.Now,
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
+                    };
+                    _context.UserPayments.Add(userPayment);
+                    await _context.SaveChangesAsync();
+                    member.PaymentId = userPayment.Id;
+                }
+                else
+                {
+                    // Update existing UserPayment record
+                    existingPayment.Amount = member.AmountPaid;
+                    existingPayment.PaymentProofUrl = member.PaymentProofUrl;
+                    existingPayment.PaymentReference = member.PaymentReference;
+                    existingPayment.PaymentMethod = member.PaymentMethod;
+                    existingPayment.ReferenceId = member.ReferenceId;
+                    existingPayment.Status = "Verified";
+                    existingPayment.VerifiedByUserId = organizerUserId;
+                    existingPayment.VerifiedAt = DateTime.Now;
+                    existingPayment.IsApplied = true;
+                    existingPayment.AppliedAt = DateTime.Now;
+                    existingPayment.UpdatedAt = DateTime.Now;
+                    member.PaymentId = existingPayment.Id;
+                }
+            }
+            else
+            {
+                // Unmarking as paid
                 member.PaidAt = null;
+
+                // Update UserPayment status if exists
+                var existingPayment = await _context.UserPayments
+                    .FirstOrDefaultAsync(p => p.PaymentType == PaymentTypes.EventRegistration
+                        && p.RelatedObjectId == eventId
+                        && p.SecondaryObjectId == unitId
+                        && p.UserId == memberId);
+
+                if (existingPayment != null)
+                {
+                    existingPayment.Status = !string.IsNullOrEmpty(existingPayment.PaymentProofUrl) ? "PendingVerification" : "Pending";
+                    existingPayment.IsApplied = false;
+                    existingPayment.AppliedAt = null;
+                    existingPayment.VerifiedAt = null;
+                    existingPayment.VerifiedByUserId = null;
+                    existingPayment.UpdatedAt = DateTime.Now;
+                }
+            }
         }
 
         var allMembersPaid = unit.Members.All(m => m.HasPaid);
         var anyMemberPaid = unit.Members.Any(m => m.HasPaid);
-        var amountDue = (unit.Event?.RegistrationFee ?? 0m) + (unit.Division?.DivisionFee ?? 0m);
 
         if (allMembersPaid)
         {
@@ -862,7 +953,7 @@ public class TournamentPaymentService : ITournamentPaymentService
         }
     }
 
-    public async Task<ServiceResult<EventPaymentSummaryDto>> GetEventPaymentSummaryAsync(int eventId, int userId)
+    public async Task<ServiceResult<EventPaymentSummaryDto>> GetEventPaymentSummaryAsync(int eventId, int userId, PaymentSummaryFilterRequest? filter = null)
     {
         var evt = await _context.Events
             .Include(e => e.Divisions)
@@ -883,16 +974,106 @@ public class TournamentPaymentService : ITournamentPaymentService
             .ThenBy(u => u.Name)
             .ToListAsync();
 
-        var payments = await _context.UserPayments
+        // Build payments query with filters
+        IQueryable<UserPayment> paymentsQuery = _context.UserPayments
             .Include(p => p.User)
-            .Where(p => p.PaymentType == PaymentTypes.EventRegistration && p.RelatedObjectId == eventId)
+            .Where(p => p.PaymentType == PaymentTypes.EventRegistration && p.RelatedObjectId == eventId);
+
+        // Apply filters
+        if (filter != null)
+        {
+            // Filter by payment status
+            if (!string.IsNullOrEmpty(filter.PaymentStatus))
+            {
+                paymentsQuery = paymentsQuery.Where(p => p.Status == filter.PaymentStatus);
+            }
+
+            // Filter by payment method
+            if (!string.IsNullOrEmpty(filter.PaymentMethod))
+            {
+                paymentsQuery = paymentsQuery.Where(p => p.PaymentMethod == filter.PaymentMethod);
+            }
+
+            // Filter by player name (search in User's first name or last name)
+            if (!string.IsNullOrEmpty(filter.SearchName))
+            {
+                var searchTerm = filter.SearchName.ToLower();
+                paymentsQuery = paymentsQuery.Where(p =>
+                    (p.User != null && p.User.FirstName != null && p.User.FirstName.ToLower().Contains(searchTerm)) ||
+                    (p.User != null && p.User.LastName != null && p.User.LastName.ToLower().Contains(searchTerm)));
+            }
+
+            // Filter by division - need to join through units
+            if (filter.DivisionId.HasValue)
+            {
+                var unitIdsInDivision = units
+                    .Where(u => u.DivisionId == filter.DivisionId.Value)
+                    .Select(u => u.Id)
+                    .ToHashSet();
+
+                paymentsQuery = paymentsQuery.Where(p => p.SecondaryObjectId.HasValue && unitIdsInDivision.Contains(p.SecondaryObjectId.Value));
+            }
+        }
+
+        var payments = await paymentsQuery
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
 
-        var divisionPayments = new List<DivisionPaymentSummaryDto>();
-        foreach (var division in evt.Divisions.OrderBy(d => d.Name))
+        // Filter units based on filter criteria (for division summary)
+        var filteredUnits = units.ToList();
+        if (filter != null)
         {
-            var divUnits = units.Where(u => u.DivisionId == division.Id).ToList();
+            // Filter units by division
+            if (filter.DivisionId.HasValue)
+            {
+                filteredUnits = filteredUnits.Where(u => u.DivisionId == filter.DivisionId.Value).ToList();
+            }
+
+            // Filter units by payment status
+            if (!string.IsNullOrEmpty(filter.PaymentStatus))
+            {
+                // Map payment status filter to unit payment statuses
+                var statusFilter = filter.PaymentStatus;
+                if (statusFilter == "Verified" || statusFilter == "Paid")
+                    filteredUnits = filteredUnits.Where(u => u.PaymentStatus == "Paid").ToList();
+                else if (statusFilter == "Pending")
+                    filteredUnits = filteredUnits.Where(u => u.PaymentStatus == "Pending" || u.PaymentStatus == "PendingVerification").ToList();
+                else if (statusFilter == "PendingVerification")
+                    filteredUnits = filteredUnits.Where(u => u.PaymentStatus == "PendingVerification").ToList();
+                else if (statusFilter == "Partial")
+                    filteredUnits = filteredUnits.Where(u => u.PaymentStatus == "Partial").ToList();
+            }
+
+            // Filter units by player name search
+            if (!string.IsNullOrEmpty(filter.SearchName))
+            {
+                var searchTerm = filter.SearchName.ToLower();
+                filteredUnits = filteredUnits.Where(u =>
+                    u.Members.Any(m =>
+                        (m.User?.FirstName?.ToLower().Contains(searchTerm) ?? false) ||
+                        (m.User?.LastName?.ToLower().Contains(searchTerm) ?? false)
+                    )
+                ).ToList();
+            }
+
+            // Filter units by payment method
+            if (!string.IsNullOrEmpty(filter.PaymentMethod))
+            {
+                filteredUnits = filteredUnits.Where(u =>
+                    u.Members.Any(m => m.PaymentMethod == filter.PaymentMethod)
+                ).ToList();
+            }
+        }
+
+        // Build division summaries using filtered units
+        var divisionsToInclude = filter?.DivisionId.HasValue == true
+            ? evt.Divisions.Where(d => d.Id == filter.DivisionId.Value)
+            : evt.Divisions;
+
+        var divisionPayments = new List<DivisionPaymentSummaryDto>();
+        foreach (var division in divisionsToInclude.OrderBy(d => d.Name))
+        {
+            var divUnits = filteredUnits.Where(u => u.DivisionId == division.Id).ToList();
             var divPayment = new DivisionPaymentSummaryDto
             {
                 DivisionId = division.Id,
@@ -981,7 +1162,7 @@ public class TournamentPaymentService : ITournamentPaymentService
             EventId = eventId,
             EventName = evt.Name,
             RegistrationFee = evt.RegistrationFee,
-            TotalUnits = units.Count,
+            TotalUnits = filteredUnits.Count,
             TotalExpected = divisionPayments.Sum(d => d.TotalExpected),
             TotalPaid = divisionPayments.Sum(d => d.TotalPaid),
             TotalOutstanding = divisionPayments.Sum(d => d.TotalExpected) - divisionPayments.Sum(d => d.TotalPaid),
