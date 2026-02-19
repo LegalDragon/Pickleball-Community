@@ -544,7 +544,7 @@ export function PhaseFlowDiagram({ phases, structureJson }) {
       // Create edges from grouped rules
       edgeMap.forEach(({ sourcePhaseOrder, targetPhaseOrder, count, rules }) => {
         const sortedByTarget = [...rules].sort((a, b) => a.targetSlotNumber - b.targetSlotNumber);
-        const positions = sortedByTarget.map(r => r.finishPosition);
+        const positions = sortedByTarget.map(r => r.sourceRank || r.finishPosition);
         const label = count === 1 ? `${positions[0]}` : positions.join(', ');
 
         edgeList.push({
