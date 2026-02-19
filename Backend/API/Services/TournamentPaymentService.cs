@@ -1119,6 +1119,7 @@ public class TournamentPaymentService : ITournamentPaymentService
         var allMembersWithPayments = await _context.EventUnitMembers
             .Include(m => m.User)
             .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
             .Where(m => m.Unit!.EventId == eventId && m.PaymentId != null)
             .ToListAsync();
 
@@ -1130,8 +1131,11 @@ public class TournamentPaymentService : ITournamentPaymentService
                 .Select(m => new PaymentApplicationDto
                 {
                     UserId = m.UserId,
+                    MemberId = m.Id,
                     UserName = Utility.FormatName(m.User?.LastName, m.User?.FirstName) ?? "",
-                    AmountApplied = m.AmountPaid
+                    AmountApplied = m.AmountPaid,
+                    DivisionName = m.Unit?.Division?.Name,
+                    UnitName = m.Unit?.Name
                 })
                 .ToList();
 

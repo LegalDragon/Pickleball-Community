@@ -948,6 +948,14 @@ public class ApplyPaymentRequest
     public Dictionary<int, decimal>? CustomAmounts { get; set; }
 }
 
+public class UnapplyPaymentRequest
+{
+    /// <summary>
+    /// List of EventUnitMember IDs to remove payment application from
+    /// </summary>
+    public List<int> MemberIds { get; set; } = new();
+}
+
 // ==================== Payment Summary DTOs ====================
 
 public class EventPaymentSummaryDto
@@ -1042,8 +1050,11 @@ public class PaymentRecordDto
 public class PaymentApplicationDto
 {
     public int UserId { get; set; }
+    public int MemberId { get; set; }
     public string UserName { get; set; } = string.Empty;
     public decimal AmountApplied { get; set; }
+    public string? DivisionName { get; set; }
+    public string? UnitName { get; set; }
 }
 
 /// <summary>

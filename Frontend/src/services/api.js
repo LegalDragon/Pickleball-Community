@@ -1634,6 +1634,8 @@ export const tournamentApi = {
     api.get(`/tournament/payments/${paymentId}/applicable-registrations`),
   applyPaymentToRegistrations: (paymentId, memberIds, customAmounts = null) =>
     api.post(`/tournament/payments/${paymentId}/apply`, { memberIds, customAmounts }),
+  unapplyPaymentFromRegistrations: (paymentId, memberIds) =>
+    api.post(`/tournament/payments/${paymentId}/unapply`, { memberIds }),
 
   // Tournament Courts
   getTournamentCourts: (eventId) => api.get(`/tournament/events/${eventId}/courts`),

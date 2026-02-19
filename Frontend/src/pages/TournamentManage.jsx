@@ -164,6 +164,7 @@ export default function TournamentManage() {
   const [applyingPayment, setApplyingPayment] = useState(null); // paymentId being applied
   const [applicableRegistrations, setApplicableRegistrations] = useState(null); // registrations for apply modal
   const [selectedRegistrations, setSelectedRegistrations] = useState([]); // selected member IDs to apply to
+  const [registrationsToUnapply, setRegistrationsToUnapply] = useState([]); // member IDs to remove payment from
 
   // Payment filter state
   const [paymentSearchName, setPaymentSearchName] = useState('');
@@ -2758,6 +2759,7 @@ export default function TournamentManage() {
   const handleOpenApplyPayment = async (paymentId) => {
     setApplyingPayment(paymentId);
     setSelectedRegistrations([]);
+    setRegistrationsToUnapply([]);
     try {
       const response = await tournamentApi.getApplicableRegistrations(paymentId);
       if (response.success) {
@@ -2778,23 +2780,46 @@ export default function TournamentManage() {
     }
   };
 
-  // Apply payment to selected registrations
+  // Apply/unapply payment to selected registrations
   const handleApplyPayment = async () => {
-    if (selectedRegistrations.length === 0) {
-      toast.error('Please select at least one registration');
+    if (selectedRegistrations.length === 0 && registrationsToUnapply.length === 0) {
+      toast.error('Please select at least one registration to apply or remove');
       return;
     }
     try {
-      const response = await tournamentApi.applyPaymentToRegistrations(applyingPayment, selectedRegistrations);
-      if (response.success) {
-        toast.success(response.message || 'Payment applied successfully');
-        setApplyingPayment(null);
-        setApplicableRegistrations(null);
-        setSelectedRegistrations([]);
-        loadPaymentSummary();
-      } else {
-        toast.error(response.message || 'Failed to apply payment');
+      let applySuccess = true;
+      let unapplySuccess = true;
+      
+      // First, unapply from any registrations that were unchecked
+      if (registrationsToUnapply.length > 0) {
+        const unapplyResponse = await tournamentApi.unapplyPaymentFromRegistrations(applyingPayment, registrationsToUnapply);
+        unapplySuccess = unapplyResponse.success;
+        if (!unapplySuccess) {
+          toast.error(unapplyResponse.message || 'Failed to remove payment from some registrations');
+        }
       }
+      
+      // Then, apply to newly selected registrations
+      if (selectedRegistrations.length > 0) {
+        const applyResponse = await tournamentApi.applyPaymentToRegistrations(applyingPayment, selectedRegistrations);
+        applySuccess = applyResponse.success;
+        if (!applySuccess) {
+          toast.error(applyResponse.message || 'Failed to apply payment');
+        }
+      }
+      
+      if (applySuccess && unapplySuccess) {
+        const actions = [];
+        if (selectedRegistrations.length > 0) actions.push(`applied to ${selectedRegistrations.length}`);
+        if (registrationsToUnapply.length > 0) actions.push(`removed from ${registrationsToUnapply.length}`);
+        toast.success(`Payment ${actions.join(' and ')} registration(s)`);
+      }
+      
+      setApplyingPayment(null);
+      setApplicableRegistrations(null);
+      setSelectedRegistrations([]);
+      setRegistrationsToUnapply([]);
+      loadPaymentSummary();
     } catch (err) {
       console.error('Error applying payment:', err);
       toast.error('Failed to apply payment');
@@ -7045,8 +7070,8 @@ export default function TournamentManage() {
                                       <h4 className="text-sm font-medium text-gray-700 mb-2">Applied to:</h4>
                                       <div className="flex flex-wrap gap-2">
                                         {payment.appliedTo.map((app, idx) => (
-                                          <span key={idx} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                            {app.userName} (${app.amountApplied?.toFixed(2)})
+                                          <span key={idx} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded" title={app.unitName}>
+                                            {app.userName}{app.divisionName ? ` - ${app.divisionName}` : ''} (${app.amountApplied?.toFixed(2)})
                                           </span>
                                         ))}
                                       </div>
@@ -7143,20 +7168,36 @@ export default function TournamentManage() {
                                     </div>
                                     {applicableRegistrations.registrations?.length > 0 ? (
                                       <div className="space-y-2 mb-4">
-                                        {applicableRegistrations.registrations.map(reg => (
-                                          <label key={reg.memberId} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${reg.alreadyLinkedToThisPayment ? 'bg-green-100' : reg.hasPaid ? 'bg-gray-100' : 'bg-white'} border`}>
+                                        {applicableRegistrations.registrations.map(reg => {
+                                          // Determine if checkbox should be checked
+                                          const isAlreadyLinked = reg.alreadyLinkedToThisPayment;
+                                          const isBeingRemoved = registrationsToUnapply.includes(reg.memberId);
+                                          const isNewlySelected = selectedRegistrations.includes(reg.memberId);
+                                          const isChecked = isNewlySelected || (isAlreadyLinked && !isBeingRemoved);
+                                          
+                                          return (
+                                          <label key={reg.memberId} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer ${isAlreadyLinked && !isBeingRemoved ? 'bg-green-100' : isBeingRemoved ? 'bg-red-50' : reg.hasPaid ? 'bg-gray-100' : 'bg-white'} border ${isBeingRemoved ? 'border-red-300' : ''}`}>
                                             <input
                                               type="checkbox"
-                                              checked={selectedRegistrations.includes(reg.memberId) || reg.alreadyLinkedToThisPayment}
-                                              disabled={reg.alreadyLinkedToThisPayment}
+                                              checked={isChecked}
                                               onChange={(e) => {
-                                                if (e.target.checked) {
-                                                  setSelectedRegistrations([...selectedRegistrations, reg.memberId]);
+                                                if (isAlreadyLinked) {
+                                                  // For already-linked items, toggle the unapply list
+                                                  if (e.target.checked) {
+                                                    setRegistrationsToUnapply(registrationsToUnapply.filter(id => id !== reg.memberId));
+                                                  } else {
+                                                    setRegistrationsToUnapply([...registrationsToUnapply, reg.memberId]);
+                                                  }
                                                 } else {
-                                                  setSelectedRegistrations(selectedRegistrations.filter(id => id !== reg.memberId));
+                                                  // For new items, toggle the selected list
+                                                  if (e.target.checked) {
+                                                    setSelectedRegistrations([...selectedRegistrations, reg.memberId]);
+                                                  } else {
+                                                    setSelectedRegistrations(selectedRegistrations.filter(id => id !== reg.memberId));
+                                                  }
                                                 }
                                               }}
-                                              className="rounded border-green-300 text-green-600 focus:ring-green-500"
+                                              className={`rounded ${isBeingRemoved ? 'border-red-300 text-red-600 focus:ring-red-500' : 'border-green-300 text-green-600 focus:ring-green-500'}`}
                                             />
                                             <div className="flex-1">
                                               <div className="font-medium text-gray-900">{reg.userName}</div>
@@ -7164,7 +7205,9 @@ export default function TournamentManage() {
                                             </div>
                                             <div className="text-right">
                                               <div className="text-sm font-medium">${reg.amountDue?.toFixed(2)}</div>
-                                              {reg.alreadyLinkedToThisPayment ? (
+                                              {isBeingRemoved ? (
+                                                <div className="text-xs text-red-600">Will be removed</div>
+                                              ) : isAlreadyLinked ? (
                                                 <div className="text-xs text-green-600">Already applied</div>
                                               ) : reg.hasPaid ? (
                                                 <div className="text-xs text-gray-500">Paid (${reg.amountPaid?.toFixed(2)})</div>
@@ -7173,25 +7216,31 @@ export default function TournamentManage() {
                                               )}
                                             </div>
                                           </label>
-                                        ))}
+                                        )})}
                                       </div>
                                     ) : (
                                       <p className="text-sm text-gray-500 mb-4">No registrations found for this payer in this event.</p>
                                     )}
                                     <div className="flex justify-end gap-2">
                                       <button
-                                        onClick={() => { setApplyingPayment(null); setApplicableRegistrations(null); }}
+                                        onClick={() => { setApplyingPayment(null); setApplicableRegistrations(null); setRegistrationsToUnapply([]); }}
                                         className="px-4 py-2 text-gray-600 hover:text-gray-800"
                                       >
                                         Cancel
                                       </button>
                                       <button
                                         onClick={handleApplyPayment}
-                                        disabled={selectedRegistrations.length === 0}
+                                        disabled={selectedRegistrations.length === 0 && registrationsToUnapply.length === 0}
                                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
                                       >
                                         <Check className="w-4 h-4" />
-                                        Apply to {selectedRegistrations.length} Registration{selectedRegistrations.length !== 1 ? 's' : ''}
+                                        {selectedRegistrations.length > 0 && registrationsToUnapply.length > 0 ? (
+                                          <>Apply to {selectedRegistrations.length}, Remove from {registrationsToUnapply.length}</>
+                                        ) : registrationsToUnapply.length > 0 ? (
+                                          <>Remove from {registrationsToUnapply.length} Registration{registrationsToUnapply.length !== 1 ? 's' : ''}</>
+                                        ) : (
+                                          <>Apply to {selectedRegistrations.length} Registration{selectedRegistrations.length !== 1 ? 's' : ''}</>
+                                        )}
                                       </button>
                                     </div>
                                   </div>

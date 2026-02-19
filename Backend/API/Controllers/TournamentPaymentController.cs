@@ -1266,6 +1266,113 @@ public class TournamentPaymentController : EventControllerBase
         });
     }
 
+    /// <summary>
+    /// Remove payment application from one or more registrations
+    /// </summary>
+    [HttpPost("payments/{paymentId}/unapply")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> UnapplyPaymentFromRegistrations(
+        int paymentId,
+        [FromBody] UnapplyPaymentRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<object> { Success = false, Message = "Unauthorized" });
+
+        if (request.MemberIds == null || request.MemberIds.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No registrations selected" });
+
+        var payment = await _context.UserPayments
+            .Include(p => p.User)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null)
+            return NotFound(new ApiResponse<object> { Success = false, Message = "Payment not found" });
+
+        // Must be event registration payment
+        if (payment.PaymentType != PaymentTypes.EventRegistration || !payment.RelatedObjectId.HasValue)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "Payment is not for event registration" });
+
+        var eventId = payment.RelatedObjectId.Value;
+
+        // Check authorization
+        if (!await CanManagePaymentsAsync(eventId))
+            return Forbid();
+
+        // Get members to remove payment application from
+        var members = await _context.EventUnitMembers
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Division)
+            .Include(m => m.Unit)
+                .ThenInclude(u => u!.Event)
+            .Where(m => request.MemberIds.Contains(m.Id) && m.PaymentId == paymentId)
+            .ToListAsync();
+
+        if (members.Count == 0)
+            return BadRequest(new ApiResponse<object> { Success = false, Message = "No valid registrations found linked to this payment" });
+
+        var removedCount = 0;
+
+        foreach (var member in members)
+        {
+            // Clear payment info from member
+            member.HasPaid = false;
+            member.PaidAt = null;
+            member.AmountPaid = 0;
+            member.PaymentId = null;
+            // Keep PaymentProofUrl, PaymentReference, PaymentMethod, ReferenceId for records
+
+            removedCount++;
+
+            // Update unit payment status
+            var allUnitMembers = await _context.EventUnitMembers
+                .Where(m => m.UnitId == member.UnitId && m.InviteStatus == "Accepted")
+                .ToListAsync();
+            var allPaid = allUnitMembers.All(m => m.HasPaid);
+            var anyPaid = allUnitMembers.Any(m => m.HasPaid);
+            var totalPaidInUnit = allUnitMembers.Sum(m => m.AmountPaid);
+
+            var totalFee = (member.Unit!.Event!.RegistrationFee + (member.Unit.Division?.DivisionFee ?? 0));
+
+            member.Unit.AmountPaid = totalPaidInUnit;
+            if (allPaid && totalPaidInUnit >= totalFee)
+            {
+                member.Unit.PaymentStatus = "Paid";
+            }
+            else if (anyPaid)
+            {
+                member.Unit.PaymentStatus = "Partial";
+                member.Unit.PaidAt = null;
+            }
+            else
+            {
+                member.Unit.PaymentStatus = "Pending";
+                member.Unit.PaidAt = null;
+            }
+            member.Unit.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Update payment record - check if still applied anywhere
+        var stillLinkedCount = await _context.EventUnitMembers
+            .CountAsync(m => m.PaymentId == paymentId);
+
+        if (stillLinkedCount == 0)
+        {
+            payment.IsApplied = false;
+            payment.AppliedAt = null;
+        }
+        payment.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<object>
+        {
+            Success = true,
+            Data = new { removedCount },
+            Message = $"Payment removed from {removedCount} registration(s)"
+        });
+    }
+
 
     // ============================================
     // Division Fee Management
