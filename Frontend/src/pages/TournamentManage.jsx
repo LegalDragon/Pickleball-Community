@@ -175,6 +175,7 @@ export default function TournamentManage() {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('');
   const [paymentSortBy, setPaymentSortBy] = useState('date'); // 'date', 'name', 'amount', 'status'
   const [paymentSortDir, setPaymentSortDir] = useState('desc'); // 'asc', 'desc'
+  const [exportingPayments, setExportingPayments] = useState(false);
 
   // Division editing state
   const [editingDivision, setEditingDivision] = useState(null);
@@ -2489,6 +2490,36 @@ export default function TournamentManage() {
       toast.error('Failed to export registrations');
     } finally {
       setExportingRegistrations(false);
+    }
+  };
+
+  const handleExportPayments = async () => {
+    setExportingPayments(true);
+    try {
+      const filters = {
+        searchName: paymentSearchName || undefined,
+        paymentStatus: paymentStatusFilter || undefined,
+        divisionId: paymentDivisionFilter || undefined,
+        paymentMethod: paymentMethodFilter || undefined
+      };
+      const response = await tournamentApi.exportPayments(eventId, filters);
+      const blob = new Blob([response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payments_${eventId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Payments exported');
+    } catch (err) {
+      console.error('Error exporting payments:', err);
+      toast.error('Failed to export payments');
+    } finally {
+      setExportingPayments(false);
     }
   };
 
@@ -6835,13 +6866,24 @@ export default function TournamentManage() {
             />
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Payment Management</h2>
-              <button
-                onClick={() => loadPaymentSummary()}
-                disabled={loadingPayments}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-5 h-5 ${loadingPayments ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportPayments}
+                  disabled={exportingPayments || loadingPayments}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg disabled:opacity-50"
+                  title="Export to Excel"
+                >
+                  <Download className="w-4 h-4" />
+                  {exportingPayments ? 'Exporting...' : 'Export'}
+                </button>
+                <button
+                  onClick={() => loadPaymentSummary()}
+                  disabled={loadingPayments}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loadingPayments ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Search and Filter Controls */}

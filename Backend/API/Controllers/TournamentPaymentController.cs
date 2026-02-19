@@ -946,6 +946,97 @@ public class TournamentPaymentController : EventControllerBase
     }
 
     /// <summary>
+    /// Export payments to Excel (organizer/admin only)
+    /// </summary>
+    [HttpGet("events/{eventId}/payments/export")]
+    [Authorize]
+    public async Task<IActionResult> ExportPayments(
+        int eventId,
+        [FromQuery] string? searchName = null,
+        [FromQuery] string? paymentStatus = null,
+        [FromQuery] int? divisionId = null,
+        [FromQuery] string? paymentMethod = null)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized();
+
+        if (!await CanManagePaymentsAsync(eventId))
+            return Forbid();
+
+        // Build filter request
+        PaymentSummaryFilterRequest? filter = null;
+        if (!string.IsNullOrEmpty(searchName) || !string.IsNullOrEmpty(paymentStatus) ||
+            divisionId.HasValue || !string.IsNullOrEmpty(paymentMethod))
+        {
+            filter = new PaymentSummaryFilterRequest
+            {
+                SearchName = searchName,
+                PaymentStatus = paymentStatus,
+                DivisionId = divisionId,
+                PaymentMethod = paymentMethod
+            };
+        }
+
+        var result = await _paymentService.GetEventPaymentSummaryAsync(eventId, userId.Value, filter);
+        if (!result.Success || result.Data == null)
+            return BadRequest("Failed to get payment data");
+
+        var evt = await _context.Events.FindAsync(eventId);
+        var eventName = evt?.Name ?? $"Event_{eventId}";
+
+        // Generate Excel
+        using var workbook = new ClosedXML.Excel.XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Payments");
+
+        // Header
+        sheet.Cell(1, 1).Value = $"Payment Records - {eventName}";
+        sheet.Cell(1, 1).Style.Font.Bold = true;
+        sheet.Cell(1, 1).Style.Font.FontSize = 14;
+        sheet.Cell(2, 1).Value = $"Exported: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        sheet.Cell(3, 1).Value = $"Total Collected: ${result.Data.TotalPaid:N2} | Expected: ${result.Data.TotalExpected:N2} | Outstanding: ${result.Data.TotalOutstanding:N2}";
+
+        // Column headers
+        var headers = new[] { "Name", "Email", "Amount", "Method", "Reference", "Status", "Submitted", "Verified", "Applied To" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            sheet.Cell(5, i + 1).Value = headers[i];
+            sheet.Cell(5, i + 1).Style.Font.Bold = true;
+            sheet.Cell(5, i + 1).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+        }
+
+        // Data rows
+        int row = 6;
+        foreach (var payment in result.Data.RecentPayments)
+        {
+            sheet.Cell(row, 1).Value = payment.UserName;
+            sheet.Cell(row, 2).Value = payment.UserEmail ?? "";
+            sheet.Cell(row, 3).Value = payment.Amount;
+            sheet.Cell(row, 3).Style.NumberFormat.Format = "$#,##0.00";
+            sheet.Cell(row, 4).Value = payment.PaymentMethod ?? "";
+            sheet.Cell(row, 5).Value = payment.PaymentReference ?? "";
+            sheet.Cell(row, 6).Value = payment.Status ?? "Pending";
+            sheet.Cell(row, 7).Value = payment.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+            sheet.Cell(row, 8).Value = payment.VerifiedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+            sheet.Cell(row, 9).Value = string.Join(", ", payment.AppliedTo.Select(a => $"{a.UserName} (${a.AmountApplied:N2})"));
+            row++;
+        }
+
+        // Auto-fit columns
+        sheet.Columns().AdjustToContents();
+
+        // Return file
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+        var content = stream.ToArray();
+
+        return File(content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"Payments_{eventName.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}.xlsx");
+    }
+
+    /// <summary>
     /// Verify a payment (organizer/admin only)
     /// </summary>
     [HttpPost("payments/{paymentId}/verify")]

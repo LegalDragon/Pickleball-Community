@@ -1653,6 +1653,15 @@ export const tournamentApi = {
   getSchedule: (divisionId) => api.get(`/tournament/divisions/${divisionId}/schedule`),
   downloadScoresheet: (divisionId) => api.get(`/tournament/divisions/${divisionId}/scoresheet`, { responseType: 'blob' }),
   exportRegistrations: (eventId) => api.get(`/tournament/events/${eventId}/registrations/export`, { responseType: 'blob' }),
+  exportPayments: (eventId, filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.searchName) params.append('searchName', filters.searchName);
+    if (filters.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    if (filters.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+    const query = params.toString();
+    return api.get(`/tournament/events/${eventId}/payments/export${query ? `?${query}` : ''}`, { responseType: 'blob' });
+  },
 
   // Division game settings
   updateDivisionGameSettings: (eventId, divisionId, data) =>
