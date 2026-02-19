@@ -548,6 +548,16 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
                     ? cachedDuration
                     : baseDuration;
 
+                // Debug: log court availability for first few encounters
+                if (assigned < 5)
+                {
+                    var courtInfo = string.Join(", ", courts.Select(c => 
+                        $"{c.CourtLabel}@{(courtNextAvailable.TryGetValue(c.Id, out var t) ? t.ToString("HH:mm") : divStartTime.ToString("HH:mm"))}"));
+                    _logger.LogInformation(
+                        "Scheduling {Label} (#{Num}) Round {Round}: Courts available: [{Courts}], minStart would be based on units",
+                        encounter.EncounterLabel ?? $"E{encounter.Id}", encounter.EncounterNumber, encounter.RoundNumber, courtInfo);
+                }
+
                 // Find earliest available slot
                 var bestSlot = FindEarliestSlot(
                     encounter, courts, encounterDuration, restMinutes,
@@ -568,12 +578,21 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
 
                 // Assign the encounter
                 var (courtId, startTime, endTime) = bestSlot.Value;
+                var assignedCourt = courts.FirstOrDefault(c => c.Id == courtId);
 
                 encounter.TournamentCourtId = courtId;
                 encounter.EstimatedStartTime = startTime;
                 encounter.EstimatedDurationMinutes = encounterDuration;
                 encounter.EstimatedEndTime = endTime;
                 encounter.UpdatedAt = DateTime.Now;
+
+                // Debug: log assignment
+                if (assigned < 5)
+                {
+                    _logger.LogInformation(
+                        "  → Assigned to {Court} at {Time}",
+                        assignedCourt?.CourtLabel ?? $"Court#{courtId}", startTime.ToString("HH:mm"));
+                }
 
                 // Update trackers
                 courtNextAvailable[courtId] = endTime;
