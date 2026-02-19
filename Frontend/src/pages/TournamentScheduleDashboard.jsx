@@ -121,9 +121,37 @@ export default function TournamentScheduleDashboard() {
     if (!data?.divisions) return []
     return data.divisions.map(div => {
       const divEncs = encounters.filter(e => e.divisionId === div.id)
+      
+      // Sort all division encounters by phase order, then round, then encounter number
+      // and assign a division-level sequence index
+      const sortedDivEncs = [...divEncs].sort((a, b) => {
+        // Get phase sort orders
+        const phaseA = data.divisions.find(d => d.id === div.id)?.phases?.find(p => p.id === a.phaseId)
+        const phaseB = data.divisions.find(d => d.id === div.id)?.phases?.find(p => p.id === b.phaseId)
+        const phaseOrderA = phaseA?.sortOrder ?? 999
+        const phaseOrderB = phaseB?.sortOrder ?? 999
+        if (phaseOrderA !== phaseOrderB) return phaseOrderA - phaseOrderB
+        // Then by round number
+        if ((a.roundNumber || 0) !== (b.roundNumber || 0)) return (a.roundNumber || 0) - (b.roundNumber || 0)
+        // Then by encounter number within phase
+        return (a.encounterNumber || 0) - (b.encounterNumber || 0)
+      })
+      
+      // Assign division-level sequence index (1-based)
+      const divEncounterIndexMap = new Map()
+      sortedDivEncs.forEach((enc, idx) => {
+        divEncounterIndexMap.set(enc.id, idx + 1)
+      })
+      
+      // Add divisionEncounterIndex to each encounter
+      const divEncsWithIndex = divEncs.map(enc => ({
+        ...enc,
+        divisionEncounterIndex: divEncounterIndexMap.get(enc.id) || enc.encounterNumber
+      }))
+      
       const phases = (div.phases || [])
         .map(ph => {
-          const phEncs = divEncs.filter(e => e.phaseId === ph.id)
+          const phEncs = divEncsWithIndex.filter(e => e.phaseId === ph.id)
           const assigned = phEncs.filter(e => e.courtId && e.estimatedStartTime).length
           return { ...ph, encounters: phEncs, assigned, total: phEncs.length }
         })
@@ -918,7 +946,7 @@ function EncounterTable({
                 onClick={() => onSelectEncounter(isSelected ? null : enc)}
               >
                 <td className="px-2 py-1.5 text-gray-600 font-medium">
-                  {enc.encounterNumber ? `E${enc.encounterNumber}` : enc.id}
+                  {enc.divisionEncounterIndex || enc.encounterNumber || enc.id}
                 </td>
                 <td className="px-2 py-1.5">
                   <span className="font-medium text-gray-800">{enc.unit1Name || enc.unit1SeedLabel || 'TBD'}</span>
