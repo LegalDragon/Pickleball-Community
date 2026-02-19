@@ -173,6 +173,8 @@ export default function TournamentManage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
   const [paymentDivisionFilter, setPaymentDivisionFilter] = useState('');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('');
+  const [paymentSortBy, setPaymentSortBy] = useState('date'); // 'date', 'name', 'amount', 'status'
+  const [paymentSortDir, setPaymentSortDir] = useState('desc'); // 'asc', 'desc'
 
   // Division editing state
   const [editingDivision, setEditingDivision] = useState(null);
@@ -6989,14 +6991,58 @@ export default function TournamentManage() {
 
                 {/* Recent Payments List */}
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b">
-                    <h3 className="font-semibold text-gray-900">Payment Records</h3>
-                    <p className="text-sm text-gray-500">{paymentSummary.recentPayments?.length || 0} payment{paymentSummary.recentPayments?.length !== 1 ? 's' : ''}</p>
+                  <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Payment Records</h3>
+                      <p className="text-sm text-gray-500">{paymentSummary.recentPayments?.length || 0} payment{paymentSummary.recentPayments?.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">Sort by:</span>
+                      <select
+                        value={paymentSortBy}
+                        onChange={(e) => setPaymentSortBy(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="date">Date</option>
+                        <option value="name">Name</option>
+                        <option value="amount">Amount</option>
+                        <option value="status">Status</option>
+                      </select>
+                      <button
+                        onClick={() => setPaymentSortDir(paymentSortDir === 'asc' ? 'desc' : 'asc')}
+                        className="p-1 hover:bg-gray-200 rounded"
+                        title={paymentSortDir === 'asc' ? 'Ascending' : 'Descending'}
+                      >
+                        {paymentSortDir === 'asc' ? (
+                          <ChevronUp className="w-4 h-4 text-gray-600" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-600" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {paymentSummary.recentPayments?.length > 0 ? (
                     <div className="divide-y divide-gray-100">
-                      {paymentSummary.recentPayments.map(payment => {
+                      {[...paymentSummary.recentPayments].sort((a, b) => {
+                        let comparison = 0;
+                        switch (paymentSortBy) {
+                          case 'name':
+                            comparison = (a.userName || '').localeCompare(b.userName || '');
+                            break;
+                          case 'amount':
+                            comparison = (a.amount || 0) - (b.amount || 0);
+                            break;
+                          case 'status':
+                            comparison = (a.status || '').localeCompare(b.status || '');
+                            break;
+                          case 'date':
+                          default:
+                            comparison = new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+                            break;
+                        }
+                        return paymentSortDir === 'asc' ? comparison : -comparison;
+                      }).map(payment => {
                         const isExpanded = expandedPayment === payment.id;
                         const isVerifying = verifyingPayment === payment.id;
 
