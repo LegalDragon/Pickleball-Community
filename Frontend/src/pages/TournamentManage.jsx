@@ -1056,7 +1056,7 @@ export default function TournamentManage() {
             advancementRules: phasesRes.advancementRules.map(r => ({
               sourcePhaseOrder: r.sourcePhaseOrder,
               targetPhaseOrder: r.targetPhaseOrder,
-              finishPosition: r.finishPosition,
+              finishPosition: r.sourceRank || r.finishPosition,
               targetSlotNumber: r.targetSlotNumber
             }))
           };
