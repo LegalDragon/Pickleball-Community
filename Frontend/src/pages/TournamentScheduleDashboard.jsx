@@ -611,9 +611,17 @@ export default function TournamentScheduleDashboard() {
                       }}
                       className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                     />
-                    <div>
-                      <div className="font-medium text-gray-900">{group.name}</div>
-                      <div className="text-xs text-gray-500">{group.courts?.length || 0} courts</div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{group.groupName || group.name || 'Unnamed Group'}</div>
+                      <div className="text-xs text-gray-500">
+                        {group.courts?.length || group.courtCount || 0} courts
+                        {group.locationArea && <span className="ml-2">• {group.locationArea}</span>}
+                      </div>
+                      {group.courts?.length > 0 && (
+                        <div className="text-xs text-gray-400 mt-1">
+                          {group.courts.map(c => c.courtLabel).join(', ')}
+                        </div>
+                      )}
                     </div>
                   </label>
                 ))}
