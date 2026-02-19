@@ -917,7 +917,9 @@ function EncounterTable({
                 className={`hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-purple-50 ring-1 ring-purple-300 ring-inset' : ''}`}
                 onClick={() => onSelectEncounter(isSelected ? null : enc)}
               >
-                <td className="px-2 py-1.5 text-gray-400">{enc.encounterNumber}</td>
+                <td className="px-2 py-1.5 text-gray-600 font-medium">
+                  {enc.encounterNumber ? `E${enc.encounterNumber}` : enc.id}
+                </td>
                 <td className="px-2 py-1.5">
                   <span className="font-medium text-gray-800">{enc.unit1Name || enc.unit1SeedLabel || 'TBD'}</span>
                   <span className="text-gray-400 mx-1">vs</span>
