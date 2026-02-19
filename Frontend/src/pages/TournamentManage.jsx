@@ -5716,6 +5716,25 @@ export default function TournamentManage() {
                       </div>
                       )}
 
+                      {/* Summary Stats */}
+                      <div className="px-4 py-3 bg-blue-50 border-t text-sm flex items-center gap-6">
+                        {(() => {
+                          const allStandings = schedule.poolStandings.flatMap(pool => pool.standings || []);
+                          const totalMatches = allStandings.reduce((sum, s) => sum + (s.matchesWon || 0), 0);
+                          const totalGames = allStandings.reduce((sum, s) => sum + (s.gamesWon || 0), 0);
+                          return (
+                            <>
+                              <span className="font-medium text-blue-800">
+                                Total Matches: <span className="text-blue-900">{totalMatches}</span>
+                              </span>
+                              <span className="font-medium text-blue-800">
+                                Total Games: <span className="text-blue-900">{totalGames}</span>
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+
                       {/* Legend */}
                       <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500 flex items-center gap-4">
                         <span>MW = Matches Won</span>
