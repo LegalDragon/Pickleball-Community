@@ -19,6 +19,12 @@ public class ScheduleRequest
     public bool ClearExisting { get; set; } = true;
     public bool RespectPlayerOverlap { get; set; } = true;
     public List<int>? EncounterIds { get; set; }
+    /// <summary>
+    /// Pool scheduling mode: "interleaved" (default) or "block"
+    /// - Interleaved: Pool A R1G1, Pool B R1G1, Pool A R1G2, Pool B R1G2... (fair progression)
+    /// - Block: Pool A R1 complete, then Pool B R1 complete... (faster per-pool completion)
+    /// </summary>
+    public string PoolSchedulingMode { get; set; } = "interleaved";
 }
 
 public class ScheduleResult
@@ -403,7 +409,7 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
                 return Fail("No courts available for scheduling");
 
             // 8. Sort encounters by priority
-            var sortedEncounters = SortEncountersByPriority(encountersToSchedule);
+            var sortedEncounters = SortEncountersByPriority(encountersToSchedule, request.PoolSchedulingMode ?? "interleaved");
 
             // 9. Determine start time and match settings per division
             // Now phase-aware: different phases can have different encounter durations
@@ -1225,11 +1231,13 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
 
     /// <summary>
     /// Sort encounters by scheduling priority:
-    /// - Pool play: round number, then interleave pools (Pool A R1, Pool B R1, Pool C R1, Pool A R2, ...)
+    /// - Pool play: round number, then either interleave or block by pool
     /// - Bracket: round number strictly (must complete round N before N+1)
     /// - Mix: pool play first, then brackets
     /// </summary>
-    private static List<EventEncounter> SortEncountersByPriority(List<EventEncounter> encounters)
+    /// <param name="encounters">Encounters to sort</param>
+    /// <param name="poolMode">"interleaved" (default) or "block"</param>
+    private static List<EventEncounter> SortEncountersByPriority(List<EventEncounter> encounters, string poolMode = "interleaved")
     {
         // Separate pool play and bracket encounters
         var poolEncounters = encounters
@@ -1247,36 +1255,58 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
             .Except(bracketEncounters)
             .ToList();
 
-        // Sort pool encounters: by round, then interleave by pool
+        // Sort pool encounters based on mode
         var sortedPool = new List<EventEncounter>();
-        var poolByRound = poolEncounters
-            .GroupBy(e => e.RoundNumber)
-            .OrderBy(g => g.Key);
-
-        foreach (var roundGroup in poolByRound)
+        
+        if (poolMode == "block")
         {
-            // Within a round, interleave pools: Pool A match 1, Pool B match 1, Pool C match 1, etc.
-            var byPool = roundGroup
-                .GroupBy(e => e.PoolId ?? 0)
-                .OrderBy(g => g.Key)
-                .Select(g => g.OrderBy(e => e.EncounterNumber).ToList())
-                .ToList();
+            // Block mode: complete each pool's round before moving to next pool
+            // Order: Pool A R1 all games, Pool B R1 all games, Pool A R2 all games, Pool B R2 all games...
+            var poolByRound = poolEncounters
+                .GroupBy(e => e.RoundNumber)
+                .OrderBy(g => g.Key);
 
-            if (byPool.Count <= 1)
+            foreach (var roundGroup in poolByRound)
             {
-                // Single pool or no pool: just sort by encounter number
-                sortedPool.AddRange(roundGroup.OrderBy(e => e.EncounterNumber));
-            }
-            else
-            {
-                // Interleave: take one from each pool in order
-                int maxCount = byPool.Max(p => p.Count);
-                for (int i = 0; i < maxCount; i++)
+                var byPool = roundGroup
+                    .GroupBy(e => e.PoolId ?? 0)
+                    .OrderBy(g => g.Key);
+
+                foreach (var poolGames in byPool)
                 {
-                    foreach (var pool in byPool)
+                    sortedPool.AddRange(poolGames.OrderBy(e => e.EncounterNumber));
+                }
+            }
+        }
+        else
+        {
+            // Interleaved mode (default): Pool A R1G1, Pool B R1G1, Pool A R1G2, Pool B R1G2...
+            var poolByRound = poolEncounters
+                .GroupBy(e => e.RoundNumber)
+                .OrderBy(g => g.Key);
+
+            foreach (var roundGroup in poolByRound)
+            {
+                var byPool = roundGroup
+                    .GroupBy(e => e.PoolId ?? 0)
+                    .OrderBy(g => g.Key)
+                    .Select(g => g.OrderBy(e => e.EncounterNumber).ToList())
+                    .ToList();
+
+                if (byPool.Count <= 1)
+                {
+                    sortedPool.AddRange(roundGroup.OrderBy(e => e.EncounterNumber));
+                }
+                else
+                {
+                    int maxCount = byPool.Max(p => p.Count);
+                    for (int i = 0; i < maxCount; i++)
                     {
-                        if (i < pool.Count)
-                            sortedPool.Add(pool[i]);
+                        foreach (var pool in byPool)
+                        {
+                            if (i < pool.Count)
+                                sortedPool.Add(pool[i]);
+                        }
                     }
                 }
             }

@@ -61,6 +61,9 @@ export default function TournamentScheduleDashboard() {
   // Court group assignment
   const [assigningCourtGroupsFor, setAssigningCourtGroupsFor] = useState(null) // divisionId
   const [selectedCourtGroupIds, setSelectedCourtGroupIds] = useState([])
+  
+  // Scheduling options
+  const [poolSchedulingMode, setPoolSchedulingMode] = useState('interleaved') // 'interleaved' or 'block'
 
   // Division colors
   const divColors = useMemo(() => {
@@ -174,6 +177,7 @@ export default function TournamentScheduleDashboard() {
             divisionId: div.id,
             clearExisting: true,
             respectPlayerOverlap: true,
+            poolSchedulingMode,
           })
           if (res.success) {
             results.push({ div: div.name, ...res.data })
@@ -207,6 +211,7 @@ export default function TournamentScheduleDashboard() {
         divisionId,
         clearExisting: true,
         respectPlayerOverlap: true,
+        poolSchedulingMode,
       })
       if (res.success) {
         const count = res.data?.assignedCount || 0
@@ -235,6 +240,7 @@ export default function TournamentScheduleDashboard() {
         phaseId,
         clearExisting: false, // only fill unassigned in this phase
         respectPlayerOverlap: true,
+        poolSchedulingMode,
       })
       if (res.success) {
         const count = res.data?.assignedCount || 0
@@ -448,11 +454,21 @@ export default function TournamentScheduleDashboard() {
                   </span>
                 )}
               </div>
+              {/* Pool Scheduling Mode */}
+              <select
+                value={poolSchedulingMode}
+                onChange={(e) => setPoolSchedulingMode(e.target.value)}
+                className="px-2 py-2 border rounded-lg text-sm bg-white"
+                title="Pool Scheduling Mode"
+              >
+                <option value="interleaved">Interleaved Pools</option>
+                <option value="block">Block by Pool</option>
+              </select>
               <button
                 onClick={handleAutoAssignAll}
                 disabled={busy || viewMode === 'phase'}
                 className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5 text-sm font-medium"
-                title={viewMode === 'phase' ? 'Use auto-schedule in Phase View instead' : ''}
+                title={viewMode === 'phase' ? 'Use auto-schedule in Phase View instead' : `${poolSchedulingMode === 'block' ? 'Finish each pool before next' : 'Alternate between pools'}`}
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                 Auto-Schedule All
