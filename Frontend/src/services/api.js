@@ -1833,30 +1833,30 @@ export const tournamentApi = {
   // =====================================================
 
   /** Generate schedule with constraint solving (player overlap, rest times, court groups, round deps) */
-  schedulingGenerate: (data) => api.post('/api/scheduling/generate', data),
+  schedulingGenerate: (data) => api.post('/scheduling/generate', data),
   /** Validate schedule for conflicts */
   schedulingValidate: (eventId, divisionId) =>
-    api.get(`/api/scheduling/validate/${eventId}${divisionId ? `?divisionId=${divisionId}` : ''}`),
+    api.get(`/scheduling/validate/${eventId}${divisionId ? `?divisionId=${divisionId}` : ''}`),
   /** Clear schedule assignments for a division (optionally a specific phase) */
   schedulingClear: (divisionId, phaseId) =>
-    api.post(`/api/scheduling/clear/${divisionId}${phaseId ? `?phaseId=${phaseId}` : ''}`),
+    api.post(`/scheduling/clear/${divisionId}${phaseId ? `?phaseId=${phaseId}` : ''}`),
   /** Auto-assign a single encounter to best available court/time */
   schedulingAssignSingle: (encounterId) =>
-    api.post(`/api/scheduling/assign-single/${encounterId}`),
+    api.post(`/scheduling/assign-single/${encounterId}`),
   /** Get available courts for a division/phase from court group assignments */
   schedulingGetAvailableCourts: (divisionId, phaseId) =>
-    api.get(`/api/scheduling/available-courts/${divisionId}${phaseId ? `?phaseId=${phaseId}` : ''}`),
+    api.get(`/scheduling/available-courts/${divisionId}${phaseId ? `?phaseId=${phaseId}` : ''}`),
 
   /** Auto-allocate matches across time blocks (division+phase → courts + time window) */
-  schedulingAutoAllocate: (data) => api.post('/api/scheduling/auto-allocate', data),
+  schedulingAutoAllocate: (data) => api.post('/scheduling/auto-allocate', data),
   /** Move a single encounter to a new court/time (drag-drop) */
   schedulingMoveEncounter: (encounterId, data) =>
-    api.put(`/api/scheduling/move-encounter/${encounterId}`, data),
+    api.put(`/scheduling/move-encounter/${encounterId}`, data),
   /** Get full schedule grid data for visual scheduler */
-  schedulingGetGrid: (eventId) => api.get(`/api/scheduling/grid/${eventId}`),
+  schedulingGetGrid: (eventId) => api.get(`/scheduling/grid/${eventId}`),
   /** Save time block allocations */
   schedulingSaveBlocks: (eventId, blocks) =>
-    api.post(`/api/scheduling/blocks/${eventId}`, { blocks }),
+    api.post(`/scheduling/blocks/${eventId}`, { blocks }),
 
   // =====================================================
   // Division Fees

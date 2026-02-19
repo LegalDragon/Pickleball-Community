@@ -14,7 +14,7 @@ namespace Pickleball.Community.API.Controllers;
 /// Handles court assignment, time allocation, and conflict detection.
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("[controller]")]
 [Authorize]
 public class SchedulingController : EventControllerBase
 {
