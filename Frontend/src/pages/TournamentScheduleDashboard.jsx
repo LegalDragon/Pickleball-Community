@@ -57,6 +57,10 @@ export default function TournamentScheduleDashboard() {
   const [movingEncounter, setMovingEncounter] = useState(null)
   const [filterDivision, setFilterDivision] = useState(null)
   const [showTimeline, setShowTimeline] = useState(true)
+  
+  // Court group assignment
+  const [assigningCourtGroupsFor, setAssigningCourtGroupsFor] = useState(null) // divisionId
+  const [selectedCourtGroupIds, setSelectedCourtGroupIds] = useState([])
 
   // Division colors
   const divColors = useMemo(() => {
@@ -338,6 +342,34 @@ export default function TournamentScheduleDashboard() {
     }
   }
 
+  // Assign court groups to division
+  const handleAssignCourtGroups = async () => {
+    if (!assigningCourtGroupsFor || selectedCourtGroupIds.length === 0) {
+      toast.error('Please select at least one court group')
+      return
+    }
+    try {
+      setBusy(true)
+      const response = await tournamentApi.assignCourtGroupsToDivision(
+        assigningCourtGroupsFor,
+        selectedCourtGroupIds
+      )
+      if (response.success) {
+        toast.success('Court groups assigned')
+        setAssigningCourtGroupsFor(null)
+        setSelectedCourtGroupIds([])
+        await loadAll()
+      } else {
+        toast.error(response.message || 'Failed to assign court groups')
+      }
+    } catch (err) {
+      console.error('Error assigning court groups:', err)
+      toast.error('Failed to assign court groups')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Toggle expanded
   const toggleDiv = (id) => {
     setExpandedDivisions(prev => {
@@ -527,6 +559,10 @@ export default function TournamentScheduleDashboard() {
                 onMoveEncounter={(enc) => { setMovingEncounter(enc); setShowTimeline(true) }}
                 selectedEncounter={selectedEncounter}
                 onSelectEncounter={setSelectedEncounter}
+                onAssignCourtGroups={() => {
+                  setAssigningCourtGroupsFor(div.id)
+                  setSelectedCourtGroupIds([])
+                }}
                 busy={busy}
               />
             ))}
@@ -549,6 +585,61 @@ export default function TournamentScheduleDashboard() {
         )}
       </div>
       )}
+
+      {/* Court Group Assignment Modal */}
+      {assigningCourtGroupsFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setAssigningCourtGroupsFor(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Assign Court Groups</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Select court groups for: <strong>{data?.divisions?.find(d => d.id === assigningCourtGroupsFor)?.name}</strong>
+            </p>
+            
+            {data?.courtGroups?.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                {data.courtGroups.map(group => (
+                  <label key={group.id} className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={selectedCourtGroupIds.includes(group.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCourtGroupIds([...selectedCourtGroupIds, group.id])
+                        } else {
+                          setSelectedCourtGroupIds(selectedCourtGroupIds.filter(id => id !== group.id))
+                        }
+                      }}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="font-medium text-gray-900">{group.name}</div>
+                      <div className="text-xs text-gray-500">{group.courts?.length || 0} courts</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">No court groups configured for this event.</p>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setAssigningCourtGroupsFor(null)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAssignCourtGroups}
+                disabled={selectedCourtGroupIds.length === 0 || busy}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {busy ? 'Assigning...' : `Assign ${selectedCourtGroupIds.length} Group${selectedCourtGroupIds.length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -559,7 +650,7 @@ export default function TournamentScheduleDashboard() {
 function DivisionCard({
   div, expanded, onToggle, allCourts,
   onAutoAssign, onAutoAssignPhase, onClear, onAssignCourt,
-  onMoveEncounter, selectedEncounter, onSelectEncounter, busy
+  onMoveEncounter, selectedEncounter, onSelectEncounter, onAssignCourtGroups, busy
 }) {
   const c = div.color
   const pct = div.totalEncounters > 0 ? Math.round((div.totalAssigned / div.totalEncounters) * 100) : 0
@@ -636,9 +727,12 @@ function DivisionCard({
               <RotateCcw className="w-3.5 h-3.5" /> Clear
             </button>
             {!div.assignedCourtGroups?.length && (
-              <span className="text-xs text-yellow-600 flex items-center gap-1 ml-2">
-                <AlertTriangle className="w-3.5 h-3.5" /> No court groups assigned
-              </span>
+              <button 
+                onClick={onAssignCourtGroups}
+                className="text-xs text-yellow-600 hover:text-yellow-800 flex items-center gap-1 ml-2 hover:underline"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" /> No court groups assigned — click to assign
+              </button>
             )}
           </div>
 
