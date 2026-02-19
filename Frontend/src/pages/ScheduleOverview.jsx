@@ -219,12 +219,11 @@ export default function ScheduleOverview() {
                       </div>
                     </div>
 
-                    {/* Phase breakdown */}
-                    {div.phases?.length > 0 && (
+                    {/* Phase breakdown - only show phases with encounters */}
+                    {div.phases?.filter(p => p.totalEncounters > 0).length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-                        {div.phases.map(phase => {
-                          const phasePct = phase.totalEncounters > 0
-                            ? (phase.completedEncounters / phase.totalEncounters) * 100 : 0;
+                        {div.phases.filter(phase => phase.totalEncounters > 0).map(phase => {
+                          const phasePct = (phase.completedEncounters / phase.totalEncounters) * 100;
                           return (
                             <div key={phase.phaseId} className="flex items-center gap-3">
                               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
