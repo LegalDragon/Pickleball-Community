@@ -1283,7 +1283,58 @@ public class EncounterController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Recalculate encounter durations for this phase based on new BestOf settings
+        await RecalculateEncounterDurationsForPhaseAsync(phaseId, phase.Division!);
+
         return Ok(new { success = true, message = "Phase game settings updated" });
+    }
+
+    /// <summary>
+    /// Recalculate estimated duration for all encounters in a phase based on BestOf settings
+    /// </summary>
+    private async Task RecalculateEncounterDurationsForPhaseAsync(int phaseId, EventDivision division)
+    {
+        var phase = await _context.DivisionPhases
+            .Include(p => p.Division)
+            .FirstOrDefaultAsync(p => p.Id == phaseId);
+        
+        if (phase == null) return;
+
+        // Get phase match settings to find the BestOf
+        var phaseSettings = await _context.PhaseMatchSettings
+            .Where(s => s.PhaseId == phaseId)
+            .ToListAsync();
+        
+        // Resolve effective BestOf: PhaseMatchSettings > Phase.BestOf > Division.GamesPerMatch > 1
+        var bestOf = phaseSettings.FirstOrDefault()?.BestOf 
+            ?? phase.BestOf 
+            ?? division.GamesPerMatch;
+        if (bestOf < 1) bestOf = 1;
+
+        // Base game duration (no buffer for multi-game matches)
+        var gameDuration = phase.GameDurationMinutes 
+            ?? phase.EstimatedMatchDurationMinutes 
+            ?? division.EstimatedMatchDurationMinutes 
+            ?? 20;
+
+        // Calculate total duration: for BO3/BO5, just games × duration (no buffer)
+        // For single game, add buffer
+        var buffer = phase.MatchBufferMinutes ?? 5;
+        var totalDuration = bestOf > 1 ? bestOf * gameDuration : gameDuration + buffer;
+
+        // Update all encounters in this phase
+        var encounters = await _context.EventEncounters
+            .Where(e => e.PhaseId == phaseId)
+            .ToListAsync();
+
+        foreach (var enc in encounters)
+        {
+            enc.EstimatedDurationMinutes = totalDuration;
+            enc.BestOf = bestOf;
+            enc.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     /// <summary>
