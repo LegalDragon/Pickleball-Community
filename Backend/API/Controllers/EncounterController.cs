@@ -1307,10 +1307,13 @@ public class EncounterController : ControllerBase
         
         // Resolve effective BestOf: PhaseMatchSettings > Phase.BestOf > Division.GamesPerMatch > 1
         var phaseSetting = phaseSettings.FirstOrDefault();
-        var bestOf = phaseSetting != null && phaseSetting.BestOf > 0 
-            ? phaseSetting.BestOf 
-            : (phase.BestOf ?? division.GamesPerMatch);
-        if (bestOf < 1) bestOf = 1;
+        int bestOf;
+        if (phaseSetting != null && phaseSetting.BestOf > 0)
+            bestOf = phaseSetting.BestOf;
+        else if (phase.BestOf.HasValue && phase.BestOf.Value > 0)
+            bestOf = phase.BestOf.Value;
+        else
+            bestOf = division.GamesPerMatch > 0 ? division.GamesPerMatch : 1;
 
         // Base game duration (no buffer for multi-game matches)
         var gameDuration = phase.GameDurationMinutes 
