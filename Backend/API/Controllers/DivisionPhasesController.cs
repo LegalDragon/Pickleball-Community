@@ -77,7 +77,7 @@ public class DivisionPhasesController : ControllerBase
                     SourcePhaseOrder = p.PhaseOrder,
                     r.TargetPhaseId,
                     TargetPhaseOrder = r.TargetPhase != null ? r.TargetPhase.PhaseOrder : 0,
-                    r.FinishPosition,
+                    r.SourceRank,
                     r.TargetSlotNumber,
                     r.Description
                 }).ToList()
@@ -91,7 +91,7 @@ public class DivisionPhasesController : ControllerBase
             {
                 r.SourcePhaseOrder,
                 r.TargetPhaseOrder,
-                r.FinishPosition,
+                r.SourceRank,
                 r.TargetSlotNumber
             })
             .ToList();
