@@ -862,8 +862,9 @@ function PhaseSection({
           </div>
           <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
             <span>{phase.total} encounters</span>
-            <span className="text-purple-600">Bo{encBestOf}</span>
+            <span className="text-purple-600 font-medium">Bo{encBestOf}</span>
             {encDuration && <span>~{fmtDuration(encDuration)}/encounter</span>}
+            <span className="text-orange-500">[raw: {encBestOf}×?={encDuration}m]</span>
             {startTime && <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{startTime}{endTime && ` – ${endTime}`}</span>}
           </div>
         </div>

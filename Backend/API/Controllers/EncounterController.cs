@@ -1331,14 +1331,19 @@ public class EncounterController : ControllerBase
             .Where(e => e.PhaseId == phaseId)
             .ToListAsync();
 
+        // DEBUG: Log calculation
+        Console.WriteLine($"[DURATION DEBUG] Phase {phaseId}: bestOf={bestOf}, gameDuration={gameDuration}, buffer={buffer}, totalDuration={totalDuration}, encounters={encounters.Count}");
+
         foreach (var enc in encounters)
         {
+            Console.WriteLine($"[DURATION DEBUG] Updating encounter {enc.Id}: old duration={enc.EstimatedDurationMinutes}, new duration={totalDuration}, bestOf={bestOf}");
             enc.EstimatedDurationMinutes = totalDuration;
             enc.BestOf = bestOf;
             enc.UpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();
+        Console.WriteLine($"[DURATION DEBUG] Saved {encounters.Count} encounters for phase {phaseId}");
     }
 
     /// <summary>
