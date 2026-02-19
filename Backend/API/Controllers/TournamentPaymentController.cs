@@ -1075,11 +1075,16 @@ public class TournamentPaymentController : EventControllerBase
     }
 
     /// <summary>
-    /// Get registrations that a payment can be applied to (for the payer's event registrations)
+    /// Get registrations that a payment can be applied to.
+    /// By default returns payer's registrations. Use includeAllPlayers=true to get all event registrations.
+    /// Use search parameter to filter by player name.
     /// </summary>
     [HttpGet("payments/{paymentId}/applicable-registrations")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<object>>> GetApplicableRegistrations(int paymentId)
+    public async Task<ActionResult<ApiResponse<object>>> GetApplicableRegistrations(
+        int paymentId,
+        [FromQuery] bool includeAllPlayers = false,
+        [FromQuery] string? search = null)
     {
         var userId = GetUserId();
         if (!userId.HasValue)
@@ -1102,14 +1107,33 @@ public class TournamentPaymentController : EventControllerBase
         if (!await CanManagePaymentsAsync(eventId))
             return Forbid();
 
-        // Get payer's registrations in this event
-        var payerRegistrations = await _context.EventUnitMembers
+        // Build query for registrations
+        var query = _context.EventUnitMembers
             .Include(m => m.Unit)
                 .ThenInclude(u => u!.Division)
             .Include(m => m.Unit)
                 .ThenInclude(u => u!.Event)
             .Include(m => m.User)
-            .Where(m => m.UserId == payment.UserId && m.Unit!.EventId == eventId && m.Unit.Status != "Cancelled")
+            .Where(m => m.Unit!.EventId == eventId && m.Unit.Status != "Cancelled" && m.InviteStatus == "Accepted");
+
+        // Filter by payer only if not including all players
+        if (!includeAllPlayers)
+        {
+            query = query.Where(m => m.UserId == payment.UserId);
+        }
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(m => 
+                (m.User != null && m.User.FirstName != null && m.User.FirstName.ToLower().Contains(searchLower)) ||
+                (m.User != null && m.User.LastName != null && m.User.LastName.ToLower().Contains(searchLower)));
+        }
+
+        var registrations = await query
+            .OrderBy(m => m.User!.LastName)
+            .ThenBy(m => m.User!.FirstName)
             .Select(m => new {
                 MemberId = m.Id,
                 m.UserId,
@@ -1122,7 +1146,8 @@ public class TournamentPaymentController : EventControllerBase
                 m.HasPaid,
                 m.AmountPaid,
                 m.PaymentId,
-                AlreadyLinkedToThisPayment = m.PaymentId == paymentId
+                AlreadyLinkedToThisPayment = m.PaymentId == paymentId,
+                IsPayerRegistration = m.UserId == payment.UserId
             })
             .ToListAsync();
 
@@ -1145,7 +1170,7 @@ public class TournamentPaymentController : EventControllerBase
                     AlreadyApplied = alreadyApplied,
                     Remaining = payment.Amount - alreadyApplied
                 },
-                registrations = payerRegistrations
+                registrations = registrations
             }
         });
     }

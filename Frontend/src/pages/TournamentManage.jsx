@@ -163,6 +163,8 @@ export default function TournamentManage() {
   const proofFileInputRef = useRef(null);
   const [applyingPayment, setApplyingPayment] = useState(null); // paymentId being applied
   const [applicableRegistrations, setApplicableRegistrations] = useState(null); // registrations for apply modal
+  const [showAllPlayers, setShowAllPlayers] = useState(false); // toggle to show all players in apply modal
+  const [applyPlayerSearch, setApplyPlayerSearch] = useState(''); // search filter for apply modal
   const [selectedRegistrations, setSelectedRegistrations] = useState([]); // selected member IDs to apply to
   const [registrationsToUnapply, setRegistrationsToUnapply] = useState([]); // member IDs to remove payment from
 
@@ -2760,11 +2762,13 @@ export default function TournamentManage() {
     setApplyingPayment(paymentId);
     setSelectedRegistrations([]);
     setRegistrationsToUnapply([]);
+    setShowAllPlayers(false);
+    setApplyPlayerSearch('');
     try {
       const response = await tournamentApi.getApplicableRegistrations(paymentId);
       if (response.success) {
         setApplicableRegistrations(response.data);
-        // Auto-select unpaid registrations
+        // Auto-select unpaid registrations from payer only
         const unpaidMemberIds = response.data.registrations
           .filter(r => !r.hasPaid && !r.alreadyLinkedToThisPayment)
           .map(r => r.memberId);
@@ -2777,6 +2781,26 @@ export default function TournamentManage() {
       console.error('Error loading applicable registrations:', err);
       toast.error('Failed to load registrations');
       setApplyingPayment(null);
+    }
+  };
+
+  // Refresh applicable registrations with filters
+  const refreshApplicableRegistrations = async (includeAll, search) => {
+    if (!applyingPayment) return;
+    try {
+      const response = await tournamentApi.getApplicableRegistrations(applyingPayment, { 
+        includeAllPlayers: includeAll, 
+        search: search || undefined 
+      });
+      if (response.success) {
+        // Preserve payment info but update registrations
+        setApplicableRegistrations(prev => ({
+          ...prev,
+          registrations: response.data.registrations
+        }));
+      }
+    } catch (err) {
+      console.error('Error refreshing registrations:', err);
     }
   };
 
@@ -7166,6 +7190,42 @@ export default function TournamentManage() {
                                       Applied: ${applicableRegistrations.payment?.alreadyApplied?.toFixed(2)} | 
                                       Remaining: ${applicableRegistrations.payment?.remaining?.toFixed(2)}
                                     </div>
+                                    
+                                    {/* Show All Players Toggle & Search */}
+                                    <div className="flex flex-col sm:flex-row gap-3 mb-3 p-3 bg-white rounded-lg border">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={showAllPlayers}
+                                          onChange={(e) => {
+                                            setShowAllPlayers(e.target.checked);
+                                            refreshApplicableRegistrations(e.target.checked, applyPlayerSearch);
+                                          }}
+                                          className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                        />
+                                        <span className="text-sm text-gray-700">Show all players in event</span>
+                                      </label>
+                                      {showAllPlayers && (
+                                        <div className="flex-1 relative">
+                                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                          <input
+                                            type="text"
+                                            placeholder="Search player by name..."
+                                            value={applyPlayerSearch}
+                                            onChange={(e) => {
+                                              setApplyPlayerSearch(e.target.value);
+                                              // Debounce search
+                                              clearTimeout(window.applySearchTimeout);
+                                              window.applySearchTimeout = setTimeout(() => {
+                                                refreshApplicableRegistrations(showAllPlayers, e.target.value);
+                                              }, 300);
+                                            }}
+                                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
                                     {applicableRegistrations.registrations?.length > 0 ? (
                                       <div className="space-y-2 mb-4">
                                         {applicableRegistrations.registrations.map(reg => {
@@ -7200,7 +7260,12 @@ export default function TournamentManage() {
                                               className={`rounded ${isBeingRemoved ? 'border-red-300 text-red-600 focus:ring-red-500' : 'border-green-300 text-green-600 focus:ring-green-500'}`}
                                             />
                                             <div className="flex-1">
-                                              <div className="font-medium text-gray-900">{reg.userName}</div>
+                                              <div className="font-medium text-gray-900">
+                                                {reg.userName}
+                                                {showAllPlayers && !reg.isPayerRegistration && (
+                                                  <span className="ml-2 text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Other</span>
+                                                )}
+                                              </div>
                                               <div className="text-xs text-gray-500">{reg.divisionName} • {reg.unitName}</div>
                                             </div>
                                             <div className="text-right">
@@ -7219,7 +7284,13 @@ export default function TournamentManage() {
                                         )})}
                                       </div>
                                     ) : (
-                                      <p className="text-sm text-gray-500 mb-4">No registrations found for this payer in this event.</p>
+                                      <p className="text-sm text-gray-500 mb-4">
+                                        {showAllPlayers && applyPlayerSearch 
+                                          ? `No players found matching "${applyPlayerSearch}"`
+                                          : showAllPlayers 
+                                            ? 'No registrations found in this event'
+                                            : 'No registrations found for this payer in this event'}
+                                      </p>
                                     )}
                                     <div className="flex justify-end gap-2">
                                       <button

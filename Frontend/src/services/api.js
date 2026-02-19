@@ -1630,8 +1630,10 @@ export const tournamentApi = {
     api.post(`/tournament/payments/${paymentId}/unverify`),
   updatePaymentProof: (paymentId, data) =>
     api.put(`/tournament/payments/${paymentId}/proof`, data),
-  getApplicableRegistrations: (paymentId) =>
-    api.get(`/tournament/payments/${paymentId}/applicable-registrations`),
+  getApplicableRegistrations: (paymentId, { includeAllPlayers = false, search = null } = {}) =>
+    api.get(`/tournament/payments/${paymentId}/applicable-registrations`, { 
+      params: { includeAllPlayers, search: search || undefined } 
+    }),
   applyPaymentToRegistrations: (paymentId, memberIds, customAmounts = null) =>
     api.post(`/tournament/payments/${paymentId}/apply`, { memberIds, customAmounts }),
   unapplyPaymentFromRegistrations: (paymentId, memberIds) =>
