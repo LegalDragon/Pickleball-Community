@@ -1323,7 +1323,7 @@ public class EncounterController : ControllerBase
 
         // Calculate total duration: for BO3/BO5, just games × duration (no buffer)
         // For single game, add buffer
-        var buffer = phase.MatchBufferMinutes ?? 5;
+        var buffer = phase.MatchBufferMinutes > 0 ? phase.MatchBufferMinutes : 5;
         var totalDuration = bestOf > 1 ? bestOf * gameDuration : gameDuration + buffer;
 
         // Update all encounters in this phase
