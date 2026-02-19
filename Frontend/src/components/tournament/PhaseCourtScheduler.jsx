@@ -174,9 +174,26 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     return grouped
   }, [matches])
 
-  // Get unique divisions
+  // Get unique divisions - include all from data.divisions plus any from matches
   const divisions = useMemo(() => {
     const divMap = {}
+    // First, add all divisions from the data prop (court-planning data)
+    data?.divisions?.forEach(d => {
+      divMap[d.id] = {
+        id: d.id,
+        name: d.name,
+        phases: {}
+      }
+      // Add phases from data if available
+      d.phases?.forEach(p => {
+        divMap[d.id].phases[p.id] = {
+          id: p.id,
+          name: p.name,
+          phaseOrder: p.sortOrder || 0
+        }
+      })
+    })
+    // Then merge in any division/phase info from matches (games)
     matches.forEach(m => {
       if (!divMap[m.divisionId]) {
         divMap[m.divisionId] = {
@@ -198,7 +215,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       // Sort phases by phaseOrder
       phases: Object.values(d.phases).sort((a, b) => (a.phaseOrder || 0) - (b.phaseOrder || 0))
     }))
-  }, [matches])
+  }, [matches, data])
 
   // Get all courts (from data prop)
   const allCourts = useMemo(() => {
