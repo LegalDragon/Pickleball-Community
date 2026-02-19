@@ -51,6 +51,31 @@ jobs:
         run: npm ci
         working-directory: Frontend
 
+      - name: Update build version
+        run: |
+          VERSION_FILE="Frontend/src/version.js"
+          TODAY=$(date -u +%Y%m%d)
+          
+          # Read current version
+          CURRENT_VERSION=$(grep -oP "BUILD_VERSION = '\K[^']+" "$VERSION_FILE" || echo "0.0")
+          CURRENT_DATE=$(echo "$CURRENT_VERSION" | cut -d'.' -f1)
+          CURRENT_NUM=$(echo "$CURRENT_VERSION" | cut -d'.' -f2)
+          
+          # Calculate new version
+          if [ "$CURRENT_DATE" = "$TODAY" ]; then
+            NEW_NUM=$((CURRENT_NUM + 1))
+          else
+            NEW_NUM=1
+          fi
+          NEW_VERSION="${TODAY}.${NEW_NUM}"
+          
+          # Update version file
+          echo "// Build version - updated by CI/CD or manually" > "$VERSION_FILE"
+          echo "// Format: YYYYMMDD.N (date + build number)" >> "$VERSION_FILE"
+          echo "export const BUILD_VERSION = '${NEW_VERSION}';" >> "$VERSION_FILE"
+          
+          echo "Updated version: $CURRENT_VERSION -> $NEW_VERSION"
+
       - name: Build frontend
         run: npm run build
         working-directory: Frontend
