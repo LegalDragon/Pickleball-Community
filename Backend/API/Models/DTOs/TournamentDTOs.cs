@@ -622,6 +622,7 @@ public class DivisionStatusDto
     public int TotalMatches { get; set; }
     public int CompletedMatches { get; set; }
     public int InProgressMatches { get; set; }
+    public int TotalGames { get; set; }
     public bool ScheduleReady { get; set; }
     public bool UnitsAssigned { get; set; }
 }

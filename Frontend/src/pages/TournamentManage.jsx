@@ -3932,7 +3932,10 @@ export default function TournamentManage() {
                               <span className="text-yellow-600">+{div.waitlistedUnits} waitlisted</span>
                             )}
                             {div.registeredUnits > 0 && (
-                              <span>{div.completedMatches} / {div.totalMatches} matches</span>
+                              <>
+                                <span>{div.totalMatches} matches</span>
+                                <span>{div.totalGames} games</span>
+                              </>
                             )}
                           </div>
                         </div>

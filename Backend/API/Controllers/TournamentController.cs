@@ -2088,6 +2088,7 @@ public class TournamentController : EventControllerBase
                 TotalMatches = matches.Count(m => m.DivisionId == d.Id),
                 CompletedMatches = matches.Count(m => m.DivisionId == d.Id && m.Status == "Completed"),
                 InProgressMatches = matches.Count(m => m.DivisionId == d.Id && m.Status == "InProgress"),
+                TotalGames = games.Count(g => g.EncounterMatch?.Encounter?.DivisionId == d.Id),
                 ScheduleReady = matches.Any(m => m.DivisionId == d.Id),
                 UnitsAssigned = units.Where(u => u.DivisionId == d.Id).All(u => u.UnitNumber.HasValue)
             }).ToList(),
