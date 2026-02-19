@@ -841,9 +841,10 @@ function PhaseSection({
   const startTime = phase.estimatedStartTime ? fmtTime(phase.estimatedStartTime) : null
   const endTime = phase.estimatedEndTime ? fmtTime(phase.estimatedEndTime) : null
 
-  // Estimate encounter duration from the encounters themselves
+  // Estimate encounter duration and BestOf from the encounters themselves
   const sampleEnc = phase.encounters.find(e => e.estimatedDurationMinutes)
   const encDuration = sampleEnc?.estimatedDurationMinutes
+  const encBestOf = sampleEnc?.bestOf || 1
 
   return (
     <div className="border-t">
@@ -861,6 +862,7 @@ function PhaseSection({
           </div>
           <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
             <span>{phase.total} encounters</span>
+            <span className="text-purple-600">Bo{encBestOf}</span>
             {encDuration && <span>~{fmtDuration(encDuration)}/encounter</span>}
             {startTime && <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{startTime}{endTime && ` – ${endTime}`}</span>}
           </div>

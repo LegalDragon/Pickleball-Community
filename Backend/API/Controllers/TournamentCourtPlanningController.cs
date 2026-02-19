@@ -171,6 +171,7 @@ public class TournamentCourtPlanningController : EventControllerBase
                 EstimatedStartTime = e.EstimatedStartTime,
                 EstimatedEndTime = e.EstimatedEndTime,
                 EstimatedDurationMinutes = e.EstimatedDurationMinutes ?? e.Division!.EstimatedMatchDurationMinutes,
+                BestOf = e.BestOf,
                 IsBye = e.Status == "Bye" || (e.Unit1Id == null && e.Unit2Id == null && e.Unit1SeedLabel == "BYE")
             })
             .ToListAsync();

@@ -1235,6 +1235,7 @@ public class EncounterPlanningDto
     public DateTime? EstimatedStartTime { get; set; }
     public DateTime? EstimatedEndTime { get; set; }
     public int? EstimatedDurationMinutes { get; set; }
+    public int BestOf { get; set; } = 1;
     public bool IsBye { get; set; }
 }
 
