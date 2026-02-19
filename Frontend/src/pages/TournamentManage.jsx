@@ -1040,7 +1040,7 @@ export default function TournamentManage() {
         const phases = (phasesRes.data || []).map((p, i) => ({
           name: p.name,
           type: p.phaseType,
-          order: p.sortOrder || (i + 1),
+          order: p.phaseOrder || p.sortOrder || (i + 1),
           incomingSlots: p.incomingSlotCount,
           exitingSlots: p.advancingSlotCount,
           inSlots: p.incomingSlotCount,
@@ -1048,9 +1048,24 @@ export default function TournamentManage() {
           poolCount: p.poolCount,
           encounterCount: p.encounterCount
         }));
-        // Try to get structureJson from the division in dashboard data
-        const div = dashboard?.divisions?.find(d => d.id === divisionId);
-        const structureJson = div?.phaseTemplateJson || div?.structureJson || null;
+        
+        // Build structureJson from advancementRules returned by API
+        let structureJson = null;
+        if (phasesRes.advancementRules && phasesRes.advancementRules.length > 0) {
+          structureJson = {
+            advancementRules: phasesRes.advancementRules.map(r => ({
+              sourcePhaseOrder: r.sourcePhaseOrder,
+              targetPhaseOrder: r.targetPhaseOrder,
+              finishPosition: r.finishPosition,
+              targetSlotNumber: r.targetSlotNumber
+            }))
+          };
+        } else {
+          // Fallback: try to get structureJson from the division in dashboard data
+          const div = dashboard?.divisions?.find(d => d.id === divisionId);
+          structureJson = div?.phaseTemplateJson || div?.structureJson || null;
+        }
+        
         setDivisionPhaseData(prev => ({
           ...prev,
           [divisionId]: { phases, structureJson }

@@ -69,11 +69,34 @@ public class DivisionPhasesController : ControllerBase
                 p.MatchBufferMinutes,
                 EncounterCount = p.Encounters.Count,
                 SlotCount = p.Slots.Count,
-                PoolNames = p.Pools.OrderBy(pl => pl.PoolOrder).Select(pl => pl.PoolName).ToList()
+                PoolNames = p.Pools.OrderBy(pl => pl.PoolOrder).Select(pl => pl.PoolName).ToList(),
+                // Advancement rules for diagram connectors
+                OutgoingAdvancementRules = p.OutgoingAdvancementRules.Select(r => new
+                {
+                    r.Id,
+                    SourcePhaseOrder = p.PhaseOrder,
+                    r.TargetPhaseId,
+                    TargetPhaseOrder = r.TargetPhase != null ? r.TargetPhase.PhaseOrder : 0,
+                    r.FinishPosition,
+                    r.TargetSlotNumber,
+                    r.Description
+                }).ToList()
             })
             .ToListAsync();
 
-        return Ok(new { success = true, data = phases });
+        // Build advancement rules summary for diagram
+        var advancementRules = phases
+            .SelectMany(p => p.OutgoingAdvancementRules)
+            .Select(r => new
+            {
+                r.SourcePhaseOrder,
+                r.TargetPhaseOrder,
+                r.FinishPosition,
+                r.TargetSlotNumber
+            })
+            .ToList();
+
+        return Ok(new { success = true, data = phases, advancementRules });
     }
 
     /// <summary>
