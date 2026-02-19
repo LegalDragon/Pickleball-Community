@@ -1413,6 +1413,15 @@ public class EncounterController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        // Recalculate encounter durations for all affected phases
+        var processedPhases = new HashSet<int>();
+        foreach (var settingDto in dto.Settings)
+        {
+            if (processedPhases.Contains(settingDto.PhaseId)) continue;
+            processedPhases.Add(settingDto.PhaseId);
+            await RecalculateEncounterDurationsForPhaseAsync(settingDto.PhaseId, division);
+        }
+
         return Ok(new { success = true, message = "Division game settings updated" });
     }
 
