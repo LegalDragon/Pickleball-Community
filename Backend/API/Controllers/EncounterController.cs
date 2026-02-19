@@ -1292,13 +1292,13 @@ public class EncounterController : ControllerBase
     /// <summary>
     /// Recalculate estimated duration for all encounters in a phase based on BestOf settings
     /// </summary>
-    private async Task RecalculateEncounterDurationsForPhaseAsync(int phaseId, EventDivision division)
+    private async Task<(int BestOf, int GameDuration, int TotalDuration, int EncountersUpdated)> RecalculateEncounterDurationsForPhaseAsync(int phaseId, EventDivision division)
     {
         var phase = await _context.DivisionPhases
             .Include(p => p.Division)
             .FirstOrDefaultAsync(p => p.Id == phaseId);
         
-        if (phase == null) return;
+        if (phase == null) return (0, 0, 0, 0);
 
         // Get phase match settings to find the BestOf
         var phaseSettings = await _context.PhaseMatchSettings
@@ -1331,19 +1331,16 @@ public class EncounterController : ControllerBase
             .Where(e => e.PhaseId == phaseId)
             .ToListAsync();
 
-        // DEBUG: Log calculation
-        Console.WriteLine($"[DURATION DEBUG] Phase {phaseId}: bestOf={bestOf}, gameDuration={gameDuration}, buffer={buffer}, totalDuration={totalDuration}, encounters={encounters.Count}");
-
         foreach (var enc in encounters)
         {
-            Console.WriteLine($"[DURATION DEBUG] Updating encounter {enc.Id}: old duration={enc.EstimatedDurationMinutes}, new duration={totalDuration}, bestOf={bestOf}");
             enc.EstimatedDurationMinutes = totalDuration;
             enc.BestOf = bestOf;
             enc.UpdatedAt = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();
-        Console.WriteLine($"[DURATION DEBUG] Saved {encounters.Count} encounters for phase {phaseId}");
+        
+        return (bestOf, gameDuration, totalDuration, encounters.Count);
     }
 
     /// <summary>
@@ -1420,14 +1417,26 @@ public class EncounterController : ControllerBase
 
         // Recalculate encounter durations for all affected phases
         var processedPhases = new HashSet<int>();
+        var debugInfo = new List<object>();
         foreach (var settingDto in dto.Settings)
         {
             if (processedPhases.Contains(settingDto.PhaseId)) continue;
             processedPhases.Add(settingDto.PhaseId);
-            await RecalculateEncounterDurationsForPhaseAsync(settingDto.PhaseId, division);
+            var result = await RecalculateEncounterDurationsForPhaseAsync(settingDto.PhaseId, division);
+            debugInfo.Add(new { 
+                phaseId = settingDto.PhaseId, 
+                bestOf = result.BestOf, 
+                gameDuration = result.GameDuration,
+                totalDuration = result.TotalDuration,
+                encountersUpdated = result.EncountersUpdated
+            });
         }
 
-        return Ok(new { success = true, message = "Division game settings updated" });
+        return Ok(new { 
+            success = true, 
+            message = "Division game settings updated",
+            debug = debugInfo
+        });
     }
 
     /// <summary>
