@@ -153,10 +153,11 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       match.effectiveGameDuration = gameDur
       match.effectiveChangeover = changeover
       match.effectiveBuffer = buffer
-      // Match duration = (games × gameDuration) + buffer
-      // Note: No changeover time between games within the same match (all games are back-to-back)
+      // Match duration calculation:
+      // - For BO3/BO5 (multi-game matches): just totalGames × gameDuration (no buffer)
+      // - For single game: gameDuration + buffer
       const playTime = match.totalGames * gameDur
-      match.duration = playTime + buffer
+      match.duration = match.totalGames > 1 ? playTime : playTime + buffer
       return match
     })
   }, [games, phaseTiming])
@@ -795,8 +796,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                     <span className="text-xs text-gray-500">min</span>
                   </div>
                   <div className="text-xs text-blue-700 mt-1 pt-1 border-t border-blue-200">
-                    {timing.bestOf > 1 ? `Bo${timing.bestOf}` : '1 game'} = {timing.bestOf * timing.gameDurationMinutes + timing.matchBufferMinutes}min/slot
-                    <span className="text-gray-500 ml-1">({timing.bestOf}×{timing.gameDurationMinutes}m + {timing.matchBufferMinutes}m buffer)</span>
+                    {timing.bestOf > 1 
+                      ? `Bo${timing.bestOf} = ${timing.bestOf * timing.gameDurationMinutes}min/slot (${timing.bestOf}×${timing.gameDurationMinutes}m, no buffer)`
+                      : `1 game = ${timing.gameDurationMinutes + timing.matchBufferMinutes}min/slot (${timing.gameDurationMinutes}m + ${timing.matchBufferMinutes}m buffer)`
+                    }
                   </div>
                 </div>
               )
