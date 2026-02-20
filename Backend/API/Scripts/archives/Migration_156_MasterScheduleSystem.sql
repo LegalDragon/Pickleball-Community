@@ -5,6 +5,23 @@
 --              enabling TDs to plan which divisions run on which courts at what times.
 
 -- ============================================
+-- Drop tables if they exist (to fix partial creation from failed migration)
+-- ============================================
+IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CourtAvailabilities')
+BEGIN
+    DROP TABLE CourtAvailabilities;
+    PRINT 'Dropped existing CourtAvailabilities table';
+END
+GO
+
+IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'EventCourtScheduleBlocks')
+BEGIN
+    DROP TABLE EventCourtScheduleBlocks;
+    PRINT 'Dropped existing EventCourtScheduleBlocks table';
+END
+GO
+
+-- ============================================
 -- Table 1: EventCourtScheduleBlocks
 -- ============================================
 IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'EventCourtScheduleBlocks')
