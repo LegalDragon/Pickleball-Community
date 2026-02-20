@@ -276,3 +276,111 @@ public class PlayerScheduleDto
     /// </summary>
     public int RemainingMatches { get; set; }
 }
+
+// ============================================
+// Court Availability DTOs
+// ============================================
+
+public class CourtAvailabilityDto
+{
+    public int Id { get; set; }
+    public int EventId { get; set; }
+    public int? TournamentCourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public int DayNumber { get; set; }
+    public string AvailableFrom { get; set; } = "08:00"; // HH:mm format
+    public string AvailableTo { get; set; } = "18:00";   // HH:mm format
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; }
+    public bool IsEventDefault { get; set; } // true if TournamentCourtId is null
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CourtAvailabilitySummaryDto
+{
+    public int EventId { get; set; }
+    public DateTime EventStartDate { get; set; }
+    public int TotalDays { get; set; }
+    
+    /// <summary>
+    /// Event-level defaults (one per day)
+    /// </summary>
+    public List<CourtAvailabilityDto> EventDefaults { get; set; } = new();
+    
+    /// <summary>
+    /// Court-specific overrides
+    /// </summary>
+    public List<CourtAvailabilityDto> CourtOverrides { get; set; } = new();
+    
+    /// <summary>
+    /// All courts with their effective availability (merged defaults + overrides)
+    /// </summary>
+    public List<CourtEffectiveAvailabilityDto> EffectiveAvailability { get; set; } = new();
+}
+
+public class CourtEffectiveAvailabilityDto
+{
+    public int CourtId { get; set; }
+    public string CourtLabel { get; set; } = string.Empty;
+    public List<DayAvailabilityDto> Days { get; set; } = new();
+}
+
+public class DayAvailabilityDto
+{
+    public int DayNumber { get; set; }
+    public DateTime Date { get; set; }
+    public string AvailableFrom { get; set; } = "08:00";
+    public string AvailableTo { get; set; } = "18:00";
+    public bool HasOverride { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class SetEventDefaultAvailabilityRequest
+{
+    public int DayNumber { get; set; } = 1;
+    public string AvailableFrom { get; set; } = "08:00"; // HH:mm format
+    public string AvailableTo { get; set; } = "18:00";   // HH:mm format
+    public string? Notes { get; set; }
+}
+
+public class SetCourtAvailabilityRequest
+{
+    public int DayNumber { get; set; } = 1;
+    public string AvailableFrom { get; set; } = "08:00"; // HH:mm format
+    public string AvailableTo { get; set; } = "18:00";   // HH:mm format
+    public string? Notes { get; set; }
+}
+
+public class BulkSetAvailabilityRequest
+{
+    /// <summary>
+    /// Apply to all days (ignores DayNumber if true)
+    /// </summary>
+    public bool ApplyToAllDays { get; set; } = false;
+    
+    /// <summary>
+    /// Specific day number (used if ApplyToAllDays = false)
+    /// </summary>
+    public int DayNumber { get; set; } = 1;
+    
+    public string AvailableFrom { get; set; } = "08:00";
+    public string AvailableTo { get; set; } = "18:00";
+    public string? Notes { get; set; }
+}
+
+// ============================================
+// Extended Validation DTOs (with availability)
+// ============================================
+
+public class AvailabilityViolationDto
+{
+    public int EncounterId { get; set; }
+    public string? EncounterLabel { get; set; }
+    public int? CourtId { get; set; }
+    public string? CourtLabel { get; set; }
+    public DateTime ScheduledStart { get; set; }
+    public DateTime ScheduledEnd { get; set; }
+    public string AvailableFrom { get; set; } = string.Empty;
+    public string AvailableTo { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+}

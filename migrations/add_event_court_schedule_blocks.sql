@@ -1,10 +1,12 @@
--- Migration: Add EventCourtScheduleBlocks table for Master Schedule System
+-- Migration: Add Master Schedule System tables
 -- Date: 2026-02-20
 -- Author: Claude (automated)
--- Description: Creates table for master schedule blocks enabling TDs to plan
---              which divisions run on which courts at what times, with dependencies.
+-- Description: Creates tables for master schedule blocks and court availability
+--              enabling TDs to plan which divisions run on which courts at what times.
 
--- Check if table already exists
+-- ============================================
+-- Table 1: EventCourtScheduleBlocks
+-- ============================================
 IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'EventCourtScheduleBlocks')
 BEGIN
     CREATE TABLE EventCourtScheduleBlocks (
@@ -77,5 +79,64 @@ END
 ELSE
 BEGIN
     PRINT 'EventCourtScheduleBlocks table already exists - skipping';
+END
+GO
+
+-- ============================================
+-- Table 2: CourtAvailabilities
+-- ============================================
+IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CourtAvailabilities')
+BEGIN
+    CREATE TABLE CourtAvailabilities (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        
+        -- Event reference (required)
+        EventId INT NOT NULL,
+        
+        -- Court reference (NULL = event default for all courts)
+        TournamentCourtId INT NULL,
+        
+        -- Day within the event (1, 2, 3... for multi-day events)
+        DayNumber INT NOT NULL DEFAULT 1,
+        
+        -- Availability window (time of day)
+        AvailableFrom TIME NOT NULL DEFAULT '08:00:00',
+        AvailableTo TIME NOT NULL DEFAULT '18:00:00',
+        
+        -- Metadata
+        Notes NVARCHAR(500) NULL,
+        IsActive BIT NOT NULL DEFAULT 1,
+        
+        -- Audit fields
+        CreatedByUserId INT NULL,
+        UpdatedByUserId INT NULL,
+        CreatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
+        UpdatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
+        
+        -- Foreign keys
+        CONSTRAINT FK_CourtAvailabilities_Events FOREIGN KEY (EventId) REFERENCES Events(Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CourtAvailabilities_TournamentCourts FOREIGN KEY (TournamentCourtId) REFERENCES TournamentCourts(Id),
+        CONSTRAINT FK_CourtAvailabilities_CreatedByUser FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id),
+        CONSTRAINT FK_CourtAvailabilities_UpdatedByUser FOREIGN KEY (UpdatedByUserId) REFERENCES Users(Id)
+    );
+
+    -- Index for event lookup
+    CREATE INDEX IX_CourtAvailabilities_EventId ON CourtAvailabilities(EventId);
+    
+    -- Index for court-specific lookups
+    CREATE INDEX IX_CourtAvailabilities_TournamentCourtId ON CourtAvailabilities(TournamentCourtId) WHERE TournamentCourtId IS NOT NULL;
+    
+    -- Index for day lookups
+    CREATE INDEX IX_CourtAvailabilities_DayNumber ON CourtAvailabilities(EventId, DayNumber);
+    
+    -- Unique constraint: one availability per court per day (or one default per day)
+    CREATE UNIQUE INDEX UX_CourtAvailabilities_CourtDay ON CourtAvailabilities(EventId, TournamentCourtId, DayNumber) 
+        WHERE IsActive = 1;
+
+    PRINT 'Created CourtAvailabilities table with indexes';
+END
+ELSE
+BEGIN
+    PRINT 'CourtAvailabilities table already exists - skipping';
 END
 GO

@@ -375,4 +375,216 @@ public class MasterScheduleController : EventControllerBase
             });
         }
     }
+
+    // ============================================
+    // Court Availability
+    // ============================================
+
+    /// <summary>
+    /// Get all court availability for an event (defaults + overrides)
+    /// </summary>
+    [HttpGet("{eventId}/court-availability")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<CourtAvailabilitySummaryDto>>> GetCourtAvailability(int eventId)
+    {
+        try
+        {
+            var availability = await _masterScheduleService.GetCourtAvailabilityAsync(eventId);
+            return Ok(new ApiResponse<CourtAvailabilitySummaryDto>
+            {
+                Success = true,
+                Data = availability
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new ApiResponse<CourtAvailabilitySummaryDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting court availability for event {EventId}", eventId);
+            return BadRequest(new ApiResponse<CourtAvailabilitySummaryDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Set event-level default availability for a day.
+    /// Applies to all courts unless they have a specific override.
+    /// </summary>
+    [Authorize]
+    [HttpPost("{eventId}/court-availability")]
+    public async Task<ActionResult<ApiResponse<CourtAvailabilityDto>>> SetEventDefaultAvailability(
+        int eventId,
+        [FromBody] SetEventDefaultAvailabilityRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<CourtAvailabilityDto> { Success = false, Message = "Unauthorized" });
+
+        if (!await CanManageEventAsync(eventId))
+            return Forbid();
+
+        try
+        {
+            var result = await _masterScheduleService.SetEventDefaultAvailabilityAsync(eventId, request, userId.Value);
+            return Ok(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = true,
+                Data = result,
+                Message = $"Set default availability for day {request.DayNumber}: {request.AvailableFrom} - {request.AvailableTo}"
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting default availability for event {EventId}", eventId);
+            return BadRequest(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Set court-specific availability override.
+    /// Overrides the event default for this specific court.
+    /// </summary>
+    [Authorize]
+    [HttpPut("courts/{courtId}/availability")]
+    public async Task<ActionResult<ApiResponse<CourtAvailabilityDto>>> SetCourtAvailability(
+        int courtId,
+        [FromBody] SetCourtAvailabilityRequest request)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<CourtAvailabilityDto> { Success = false, Message = "Unauthorized" });
+
+        // Get court to check event ownership
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court == null)
+            return NotFound(new ApiResponse<CourtAvailabilityDto> { Success = false, Message = "Court not found" });
+
+        if (!await CanManageEventAsync(court.EventId))
+            return Forbid();
+
+        try
+        {
+            var result = await _masterScheduleService.SetCourtAvailabilityAsync(courtId, request, userId.Value);
+            return Ok(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = true,
+                Data = result,
+                Message = $"Set availability override for court: {request.AvailableFrom} - {request.AvailableTo}"
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting court availability for court {CourtId}", courtId);
+            return BadRequest(new ApiResponse<CourtAvailabilityDto>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Remove court-specific availability override (falls back to event default)
+    /// </summary>
+    [Authorize]
+    [HttpDelete("courts/{courtId}/availability")]
+    public async Task<ActionResult<ApiResponse<bool>>> RemoveCourtAvailabilityOverride(
+        int courtId,
+        [FromQuery] int dayNumber = 1)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new ApiResponse<bool> { Success = false, Message = "Unauthorized" });
+
+        // Get court to check event ownership
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court == null)
+            return NotFound(new ApiResponse<bool> { Success = false, Message = "Court not found" });
+
+        if (!await CanManageEventAsync(court.EventId))
+            return Forbid();
+
+        try
+        {
+            var result = await _masterScheduleService.RemoveCourtAvailabilityOverrideAsync(courtId, dayNumber);
+            if (!result)
+                return NotFound(new ApiResponse<bool> { Success = false, Message = "No override found for this court and day" });
+
+            return Ok(new ApiResponse<bool>
+            {
+                Success = true,
+                Data = true,
+                Message = "Court availability override removed"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing court availability for court {CourtId}", courtId);
+            return BadRequest(new ApiResponse<bool>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Validate scheduled matches against court availability windows.
+    /// Returns list of matches that fall outside their court's availability.
+    /// </summary>
+    [HttpGet("master-schedule/{eventId}/validate-availability")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<List<AvailabilityViolationDto>>>> ValidateAvailability(int eventId)
+    {
+        try
+        {
+            var violations = await _masterScheduleService.ValidateAvailabilityAsync(eventId);
+            return Ok(new ApiResponse<List<AvailabilityViolationDto>>
+            {
+                Success = true,
+                Data = violations,
+                Message = violations.Count == 0 
+                    ? "All matches are within court availability windows" 
+                    : $"{violations.Count} matches are outside court availability"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating availability for event {EventId}", eventId);
+            return BadRequest(new ApiResponse<List<AvailabilityViolationDto>>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
 }

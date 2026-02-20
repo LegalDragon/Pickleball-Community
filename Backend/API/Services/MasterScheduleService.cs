@@ -51,6 +51,40 @@ public interface IMasterScheduleService
     /// Validate schedule blocks for conflicts
     /// </summary>
     Task<List<ScheduleBlockConflictDto>> ValidateScheduleBlocksAsync(int eventId);
+
+    // ============================================
+    // Court Availability Methods
+    // ============================================
+
+    /// <summary>
+    /// Get all court availability (defaults + overrides) for an event
+    /// </summary>
+    Task<CourtAvailabilitySummaryDto> GetCourtAvailabilityAsync(int eventId);
+
+    /// <summary>
+    /// Set event-level default availability for a day
+    /// </summary>
+    Task<CourtAvailabilityDto> SetEventDefaultAvailabilityAsync(int eventId, SetEventDefaultAvailabilityRequest request, int userId);
+
+    /// <summary>
+    /// Set court-specific availability override
+    /// </summary>
+    Task<CourtAvailabilityDto> SetCourtAvailabilityAsync(int courtId, SetCourtAvailabilityRequest request, int userId);
+
+    /// <summary>
+    /// Remove court-specific override (falls back to event default)
+    /// </summary>
+    Task<bool> RemoveCourtAvailabilityOverrideAsync(int courtId, int dayNumber);
+
+    /// <summary>
+    /// Get effective availability for a court on a specific day
+    /// </summary>
+    Task<DayAvailabilityDto?> GetEffectiveCourtAvailabilityAsync(int eventId, int courtId, int dayNumber);
+
+    /// <summary>
+    /// Validate scheduled matches against court availability
+    /// </summary>
+    Task<List<AvailabilityViolationDto>> ValidateAvailabilityAsync(int eventId);
 }
 
 public class MasterScheduleService : IMasterScheduleService
@@ -496,7 +530,13 @@ public class MasterScheduleService : IMasterScheduleService
                     ?? block.Division?.EstimatedMatchDurationMinutes
                     ?? 20;
 
-                // Schedule encounters using round-robin court assignment
+                // Load court availability for this event
+                var evt = await _context.Events.FindAsync(eventId);
+                var availabilities = await _context.CourtAvailabilities
+                    .Where(a => a.EventId == eventId && a.IsActive)
+                    .ToListAsync();
+
+                // Schedule encounters using round-robin court assignment with availability checks
                 var courtNextAvailable = courts.ToDictionary(c => c.Id, c => effectiveStartTime);
                 int scheduled = 0;
 
@@ -516,6 +556,13 @@ public class MasterScheduleService : IMasterScheduleService
                     {
                         encounterDuration = await _courtAssignmentService.CalculateEncounterDurationMinutesAsync(
                             encounter, block.Division, encounter.Phase);
+                    }
+
+                    // Check court availability and adjust start time if needed
+                    if (evt != null)
+                    {
+                        startTime = AdjustForCourtAvailability(
+                            startTime, encounterDuration, bestCourt.Id, evt.StartDate, availabilities);
                     }
 
                     encounter.TournamentCourtId = bestCourt.Id;
@@ -813,5 +860,454 @@ public class MasterScheduleService : IMasterScheduleService
     private static string GetDivisionColor(int divisionId)
     {
         return DivisionColors[divisionId % DivisionColors.Length];
+    }
+
+    // ============================================
+    // Court Availability Implementation
+    // ============================================
+
+    public async Task<CourtAvailabilitySummaryDto> GetCourtAvailabilityAsync(int eventId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            throw new ArgumentException("Event not found");
+
+        var totalDays = (evt.EndDate.Date - evt.StartDate.Date).Days + 1;
+        if (totalDays < 1) totalDays = 1;
+
+        // Get all availability records for this event
+        var allAvailability = await _context.CourtAvailabilities
+            .Where(a => a.EventId == eventId && a.IsActive)
+            .Include(a => a.TournamentCourt)
+            .OrderBy(a => a.DayNumber)
+            .ToListAsync();
+
+        // Separate defaults (TournamentCourtId = null) from overrides
+        var eventDefaults = allAvailability
+            .Where(a => a.TournamentCourtId == null)
+            .Select(a => MapAvailabilityToDto(a))
+            .ToList();
+
+        var courtOverrides = allAvailability
+            .Where(a => a.TournamentCourtId != null)
+            .Select(a => MapAvailabilityToDto(a))
+            .ToList();
+
+        // Get all courts and build effective availability
+        var courts = await _context.TournamentCourts
+            .Where(c => c.EventId == eventId && c.IsActive)
+            .OrderBy(c => c.SortOrder)
+            .ToListAsync();
+
+        var effectiveAvailability = new List<CourtEffectiveAvailabilityDto>();
+
+        foreach (var court in courts)
+        {
+            var courtEffective = new CourtEffectiveAvailabilityDto
+            {
+                CourtId = court.Id,
+                CourtLabel = court.CourtLabel
+            };
+
+            for (int day = 1; day <= totalDays; day++)
+            {
+                // Check for court-specific override first
+                var courtOverride = allAvailability.FirstOrDefault(a => 
+                    a.TournamentCourtId == court.Id && a.DayNumber == day);
+
+                if (courtOverride != null)
+                {
+                    courtEffective.Days.Add(new DayAvailabilityDto
+                    {
+                        DayNumber = day,
+                        Date = evt.StartDate.Date.AddDays(day - 1),
+                        AvailableFrom = courtOverride.AvailableFrom.ToString(@"hh\:mm"),
+                        AvailableTo = courtOverride.AvailableTo.ToString(@"hh\:mm"),
+                        HasOverride = true,
+                        Notes = courtOverride.Notes
+                    });
+                }
+                else
+                {
+                    // Fall back to event default
+                    var eventDefault = allAvailability.FirstOrDefault(a => 
+                        a.TournamentCourtId == null && a.DayNumber == day);
+
+                    courtEffective.Days.Add(new DayAvailabilityDto
+                    {
+                        DayNumber = day,
+                        Date = evt.StartDate.Date.AddDays(day - 1),
+                        AvailableFrom = eventDefault?.AvailableFrom.ToString(@"hh\:mm") ?? "08:00",
+                        AvailableTo = eventDefault?.AvailableTo.ToString(@"hh\:mm") ?? "18:00",
+                        HasOverride = false,
+                        Notes = eventDefault?.Notes
+                    });
+                }
+            }
+
+            effectiveAvailability.Add(courtEffective);
+        }
+
+        return new CourtAvailabilitySummaryDto
+        {
+            EventId = eventId,
+            EventStartDate = evt.StartDate,
+            TotalDays = totalDays,
+            EventDefaults = eventDefaults,
+            CourtOverrides = courtOverrides,
+            EffectiveAvailability = effectiveAvailability
+        };
+    }
+
+    public async Task<CourtAvailabilityDto> SetEventDefaultAvailabilityAsync(int eventId, SetEventDefaultAvailabilityRequest request, int userId)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null)
+            throw new ArgumentException("Event not found");
+
+        // Parse time strings
+        if (!TimeSpan.TryParse(request.AvailableFrom, out var availableFrom))
+            throw new ArgumentException("Invalid AvailableFrom time format. Use HH:mm");
+        if (!TimeSpan.TryParse(request.AvailableTo, out var availableTo))
+            throw new ArgumentException("Invalid AvailableTo time format. Use HH:mm");
+
+        // Look for existing default for this day
+        var existing = await _context.CourtAvailabilities
+            .FirstOrDefaultAsync(a => a.EventId == eventId && 
+                                     a.TournamentCourtId == null && 
+                                     a.DayNumber == request.DayNumber);
+
+        if (existing != null)
+        {
+            existing.AvailableFrom = availableFrom;
+            existing.AvailableTo = availableTo;
+            existing.Notes = request.Notes;
+            existing.UpdatedByUserId = userId;
+            existing.UpdatedAt = DateTime.Now;
+        }
+        else
+        {
+            existing = new CourtAvailability
+            {
+                EventId = eventId,
+                TournamentCourtId = null,
+                DayNumber = request.DayNumber,
+                AvailableFrom = availableFrom,
+                AvailableTo = availableTo,
+                Notes = request.Notes,
+                CreatedByUserId = userId,
+                UpdatedByUserId = userId
+            };
+            _context.CourtAvailabilities.Add(existing);
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Set event default availability for event {EventId} day {Day}: {From}-{To}",
+            eventId, request.DayNumber, availableFrom, availableTo);
+
+        return MapAvailabilityToDto(existing);
+    }
+
+    public async Task<CourtAvailabilityDto> SetCourtAvailabilityAsync(int courtId, SetCourtAvailabilityRequest request, int userId)
+    {
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court == null)
+            throw new ArgumentException("Court not found");
+
+        // Parse time strings
+        if (!TimeSpan.TryParse(request.AvailableFrom, out var availableFrom))
+            throw new ArgumentException("Invalid AvailableFrom time format. Use HH:mm");
+        if (!TimeSpan.TryParse(request.AvailableTo, out var availableTo))
+            throw new ArgumentException("Invalid AvailableTo time format. Use HH:mm");
+
+        // Look for existing override for this court+day
+        var existing = await _context.CourtAvailabilities
+            .FirstOrDefaultAsync(a => a.EventId == court.EventId && 
+                                     a.TournamentCourtId == courtId && 
+                                     a.DayNumber == request.DayNumber);
+
+        if (existing != null)
+        {
+            existing.AvailableFrom = availableFrom;
+            existing.AvailableTo = availableTo;
+            existing.Notes = request.Notes;
+            existing.UpdatedByUserId = userId;
+            existing.UpdatedAt = DateTime.Now;
+        }
+        else
+        {
+            existing = new CourtAvailability
+            {
+                EventId = court.EventId,
+                TournamentCourtId = courtId,
+                DayNumber = request.DayNumber,
+                AvailableFrom = availableFrom,
+                AvailableTo = availableTo,
+                Notes = request.Notes,
+                CreatedByUserId = userId,
+                UpdatedByUserId = userId
+            };
+            _context.CourtAvailabilities.Add(existing);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Reload with navigation properties
+        await _context.Entry(existing).Reference(a => a.TournamentCourt).LoadAsync();
+
+        _logger.LogInformation("Set court availability override for court {CourtId} day {Day}: {From}-{To}",
+            courtId, request.DayNumber, availableFrom, availableTo);
+
+        return MapAvailabilityToDto(existing);
+    }
+
+    public async Task<bool> RemoveCourtAvailabilityOverrideAsync(int courtId, int dayNumber)
+    {
+        var court = await _context.TournamentCourts.FindAsync(courtId);
+        if (court == null)
+            throw new ArgumentException("Court not found");
+
+        var existing = await _context.CourtAvailabilities
+            .FirstOrDefaultAsync(a => a.TournamentCourtId == courtId && a.DayNumber == dayNumber);
+
+        if (existing == null)
+            return false;
+
+        _context.CourtAvailabilities.Remove(existing);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Removed court availability override for court {CourtId} day {Day}", courtId, dayNumber);
+
+        return true;
+    }
+
+    public async Task<DayAvailabilityDto?> GetEffectiveCourtAvailabilityAsync(int eventId, int courtId, int dayNumber)
+    {
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null) return null;
+
+        // Check for court-specific override first
+        var courtOverride = await _context.CourtAvailabilities
+            .FirstOrDefaultAsync(a => a.EventId == eventId && 
+                                     a.TournamentCourtId == courtId && 
+                                     a.DayNumber == dayNumber &&
+                                     a.IsActive);
+
+        if (courtOverride != null)
+        {
+            return new DayAvailabilityDto
+            {
+                DayNumber = dayNumber,
+                Date = evt.StartDate.Date.AddDays(dayNumber - 1),
+                AvailableFrom = courtOverride.AvailableFrom.ToString(@"hh\:mm"),
+                AvailableTo = courtOverride.AvailableTo.ToString(@"hh\:mm"),
+                HasOverride = true,
+                Notes = courtOverride.Notes
+            };
+        }
+
+        // Fall back to event default
+        var eventDefault = await _context.CourtAvailabilities
+            .FirstOrDefaultAsync(a => a.EventId == eventId && 
+                                     a.TournamentCourtId == null && 
+                                     a.DayNumber == dayNumber &&
+                                     a.IsActive);
+
+        return new DayAvailabilityDto
+        {
+            DayNumber = dayNumber,
+            Date = evt.StartDate.Date.AddDays(dayNumber - 1),
+            AvailableFrom = eventDefault?.AvailableFrom.ToString(@"hh\:mm") ?? "08:00",
+            AvailableTo = eventDefault?.AvailableTo.ToString(@"hh\:mm") ?? "18:00",
+            HasOverride = false,
+            Notes = eventDefault?.Notes
+        };
+    }
+
+    public async Task<List<AvailabilityViolationDto>> ValidateAvailabilityAsync(int eventId)
+    {
+        var violations = new List<AvailabilityViolationDto>();
+
+        var evt = await _context.Events.FindAsync(eventId);
+        if (evt == null) return violations;
+
+        // Get all scheduled encounters with court assignments
+        var encounters = await _context.EventEncounters
+            .Where(e => e.EventId == eventId && 
+                       e.TournamentCourtId != null && 
+                       e.EstimatedStartTime != null &&
+                       e.Status != "Cancelled" && e.Status != "Bye")
+            .Include(e => e.TournamentCourt)
+            .Include(e => e.Division)
+            .ToListAsync();
+
+        // Get all availability data
+        var availabilities = await _context.CourtAvailabilities
+            .Where(a => a.EventId == eventId && a.IsActive)
+            .ToListAsync();
+
+        foreach (var encounter in encounters)
+        {
+            var startTime = encounter.EstimatedStartTime!.Value;
+            var endTime = encounter.EstimatedEndTime ?? startTime.AddMinutes(encounter.EstimatedDurationMinutes ?? 20);
+            var dayNumber = (startTime.Date - evt.StartDate.Date).Days + 1;
+
+            // Get effective availability for this court on this day
+            var courtOverride = availabilities.FirstOrDefault(a => 
+                a.TournamentCourtId == encounter.TournamentCourtId && a.DayNumber == dayNumber);
+            var eventDefault = availabilities.FirstOrDefault(a => 
+                a.TournamentCourtId == null && a.DayNumber == dayNumber);
+
+            var effective = courtOverride ?? eventDefault;
+            
+            // If no availability defined, use defaults (8am-6pm)
+            var availFrom = effective?.AvailableFrom ?? new TimeSpan(8, 0, 0);
+            var availTo = effective?.AvailableTo ?? new TimeSpan(18, 0, 0);
+
+            // Check if match starts before availability
+            if (startTime.TimeOfDay < availFrom)
+            {
+                violations.Add(new AvailabilityViolationDto
+                {
+                    EncounterId = encounter.Id,
+                    EncounterLabel = encounter.EncounterLabel ?? $"{encounter.Division?.Name} Match {encounter.EncounterNumber}",
+                    CourtId = encounter.TournamentCourtId,
+                    CourtLabel = encounter.TournamentCourt?.CourtLabel,
+                    ScheduledStart = startTime,
+                    ScheduledEnd = endTime,
+                    AvailableFrom = availFrom.ToString(@"hh\:mm"),
+                    AvailableTo = availTo.ToString(@"hh\:mm"),
+                    Message = $"Match starts at {startTime:HH:mm} but court opens at {availFrom:hh\\:mm}"
+                });
+            }
+
+            // Check if match ends after availability
+            if (endTime.TimeOfDay > availTo)
+            {
+                violations.Add(new AvailabilityViolationDto
+                {
+                    EncounterId = encounter.Id,
+                    EncounterLabel = encounter.EncounterLabel ?? $"{encounter.Division?.Name} Match {encounter.EncounterNumber}",
+                    CourtId = encounter.TournamentCourtId,
+                    CourtLabel = encounter.TournamentCourt?.CourtLabel,
+                    ScheduledStart = startTime,
+                    ScheduledEnd = endTime,
+                    AvailableFrom = availFrom.ToString(@"hh\:mm"),
+                    AvailableTo = availTo.ToString(@"hh\:mm"),
+                    Message = $"Match ends at {endTime:HH:mm} but court closes at {availTo:hh\\:mm}"
+                });
+            }
+        }
+
+        return violations;
+    }
+
+    /// <summary>
+    /// Gets effective availability for a court, returning start/end times.
+    /// Used internally by auto-scheduler.
+    /// </summary>
+    private async Task<(TimeSpan availFrom, TimeSpan availTo)> GetEffectiveAvailabilityTimesAsync(
+        int eventId, int courtId, int dayNumber, List<CourtAvailability>? cachedAvailabilities = null)
+    {
+        var availabilities = cachedAvailabilities ?? await _context.CourtAvailabilities
+            .Where(a => a.EventId == eventId && a.IsActive)
+            .ToListAsync();
+
+        var courtOverride = availabilities.FirstOrDefault(a => 
+            a.TournamentCourtId == courtId && a.DayNumber == dayNumber);
+        var eventDefault = availabilities.FirstOrDefault(a => 
+            a.TournamentCourtId == null && a.DayNumber == dayNumber);
+
+        var effective = courtOverride ?? eventDefault;
+        
+        return (
+            effective?.AvailableFrom ?? new TimeSpan(8, 0, 0),
+            effective?.AvailableTo ?? new TimeSpan(18, 0, 0)
+        );
+    }
+
+    /// <summary>
+    /// Adjusts a proposed start time to respect court availability windows.
+    /// If the match would end after closing, moves it to the next day's opening.
+    /// </summary>
+    private DateTime AdjustForCourtAvailability(
+        DateTime proposedStart, 
+        int durationMinutes, 
+        int courtId, 
+        DateTime eventStartDate,
+        List<CourtAvailability> availabilities)
+    {
+        var maxIterations = 10; // Prevent infinite loops
+        var currentStart = proposedStart;
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            var dayNumber = (currentStart.Date - eventStartDate.Date).Days + 1;
+            if (dayNumber < 1) dayNumber = 1;
+
+            // Get effective availability for this court on this day
+            var courtOverride = availabilities.FirstOrDefault(a => 
+                a.TournamentCourtId == courtId && a.DayNumber == dayNumber);
+            var eventDefault = availabilities.FirstOrDefault(a => 
+                a.TournamentCourtId == null && a.DayNumber == dayNumber);
+
+            var availFrom = courtOverride?.AvailableFrom ?? eventDefault?.AvailableFrom ?? new TimeSpan(8, 0, 0);
+            var availTo = courtOverride?.AvailableTo ?? eventDefault?.AvailableTo ?? new TimeSpan(18, 0, 0);
+
+            var proposedEnd = currentStart.AddMinutes(durationMinutes);
+
+            // Check if start time is before opening
+            if (currentStart.TimeOfDay < availFrom)
+            {
+                // Move to opening time on same day
+                currentStart = currentStart.Date.Add(availFrom);
+                continue; // Re-check with new time
+            }
+
+            // Check if end time is after closing
+            if (proposedEnd.TimeOfDay > availTo && proposedEnd.Date == currentStart.Date)
+            {
+                // Move to next day at opening time
+                var nextDay = currentStart.Date.AddDays(1);
+                var nextDayNumber = (nextDay - eventStartDate.Date).Days + 1;
+                
+                // Get next day's availability
+                var nextCourtOverride = availabilities.FirstOrDefault(a => 
+                    a.TournamentCourtId == courtId && a.DayNumber == nextDayNumber);
+                var nextEventDefault = availabilities.FirstOrDefault(a => 
+                    a.TournamentCourtId == null && a.DayNumber == nextDayNumber);
+                
+                var nextAvailFrom = nextCourtOverride?.AvailableFrom ?? nextEventDefault?.AvailableFrom ?? new TimeSpan(8, 0, 0);
+                
+                currentStart = nextDay.Add(nextAvailFrom);
+                continue; // Re-check with new time
+            }
+
+            // Time is valid within availability window
+            return currentStart;
+        }
+
+        // Fallback: return the proposed start (scheduler couldn't fit it)
+        _logger.LogWarning("Could not adjust time for court {CourtId} - may be outside availability", courtId);
+        return proposedStart;
+    }
+
+    private CourtAvailabilityDto MapAvailabilityToDto(CourtAvailability availability)
+    {
+        return new CourtAvailabilityDto
+        {
+            Id = availability.Id,
+            EventId = availability.EventId,
+            TournamentCourtId = availability.TournamentCourtId,
+            CourtLabel = availability.TournamentCourt?.CourtLabel,
+            DayNumber = availability.DayNumber,
+            AvailableFrom = availability.AvailableFrom.ToString(@"hh\:mm"),
+            AvailableTo = availability.AvailableTo.ToString(@"hh\:mm"),
+            Notes = availability.Notes,
+            IsActive = availability.IsActive,
+            IsEventDefault = availability.TournamentCourtId == null,
+            CreatedAt = availability.CreatedAt
+        };
     }
 }
