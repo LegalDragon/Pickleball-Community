@@ -632,8 +632,13 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
             const phases = [...(div.phases || [])].sort((a, b) => 
               (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
             )
-            // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points, not playable)
-            const playablePhases = phases.filter(p => (p.incomingSlotCount || 0) > 0 && (p.advancingSlotCount || 0) > 0)
+            // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points), and Draw/Award types (no encounters)
+            const playablePhases = phases.filter(p => 
+              (p.incomingSlotCount || 0) > 0 && 
+              (p.advancingSlotCount || 0) > 0 &&
+              p.phaseType !== 'Draw' && 
+              p.phaseType !== 'Award'
+            )
             const playablePhaseIds = new Set(playablePhases.map(p => p.id))
             const noPhaseMatches = divMatches['no-phase'] || []
             const color = divColors[div.id]
@@ -655,10 +660,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                   <span className="ml-auto text-xs text-gray-500">{totalDivMatches} matches</span>
                 </button>
                 
-                {/* Phases */}
+                {/* Phases (only playable - excludes Draw/Award) */}
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-1">
-                    {phases.map(phase => {
+                    {playablePhases.map(phase => {
                       const phaseMatches = divMatches[phase.id] || []
                       const isSelected = selectedDivision === div.id && selectedPhase === phase.id
                       const scheduledCount = phaseMatches.filter(m => 
