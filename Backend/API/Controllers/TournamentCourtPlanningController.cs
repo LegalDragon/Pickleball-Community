@@ -172,7 +172,10 @@ public class TournamentCourtPlanningController : EventControllerBase
                 EstimatedEndTime = e.EstimatedEndTime,
                 EstimatedDurationMinutes = e.EstimatedDurationMinutes ?? e.Division!.EstimatedMatchDurationMinutes,
                 BestOf = e.BestOf,
-                IsBye = e.Status == "Bye" || (e.Unit1Id == null && e.Unit2Id == null && e.Unit1SeedLabel == "BYE")
+                IsBye = e.Status == "Bye" || (e.Unit1Id == null && e.Unit2Id == null && e.Unit1SeedLabel == "BYE"),
+                // Phase dependency fields for scheduling
+                WinnerNextEncounterId = e.WinnerNextEncounterId,
+                LoserNextEncounterId = e.LoserNextEncounterId
             })
             .ToListAsync();
 

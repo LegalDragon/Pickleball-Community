@@ -1237,6 +1237,9 @@ public class EncounterPlanningDto
     public int? EstimatedDurationMinutes { get; set; }
     public int BestOf { get; set; } = 1;
     public bool IsBye { get; set; }
+    // Phase dependency fields - for scheduling respecting advancement rules
+    public int? WinnerNextEncounterId { get; set; }
+    public int? LoserNextEncounterId { get; set; }
 }
 
 // ============================================

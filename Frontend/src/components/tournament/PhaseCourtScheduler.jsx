@@ -133,7 +133,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         effectiveBuffer: buffer,
         duration,
         // Original encounter data for reference
-        status: enc.status
+        status: enc.status,
+        // Phase dependency fields - for scheduling respecting advancement rules
+        winnerNextEncounterId: enc.winnerNextEncounterId,
+        loserNextEncounterId: enc.loserNextEncounterId
       }
     })
     
@@ -269,6 +272,47 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     return [match.unit1Id, match.unit2Id].filter(Boolean)
   }
 
+  // Build dependency map: encounterId -> list of encounters that must finish before this one can start
+  const dependencyMap = useMemo(() => {
+    const deps = {} // encounterId -> array of prerequisite encounterIds
+    matches.forEach(m => {
+      // Find all matches whose winner/loser feeds into this match
+      const prereqs = matches.filter(other => 
+        other.winnerNextEncounterId === m.id || other.loserNextEncounterId === m.id
+      )
+      if (prereqs.length > 0) {
+        deps[m.id] = prereqs.map(p => p.id)
+      }
+    })
+    return deps
+  }, [matches])
+
+  // Get the earliest time a match can start based on its prerequisites
+  const getEarliestStartTime = useCallback((matchId, proposedAssignments) => {
+    const prereqIds = dependencyMap[matchId]
+    if (!prereqIds || prereqIds.length === 0) return null // No prerequisites
+    
+    let latestEndTime = null
+    for (const prereqId of prereqIds) {
+      // Check if prereq is scheduled (either existing or proposed)
+      const existing = scheduledMatches.find(m => m.id === prereqId)
+      const proposed = proposedAssignments[prereqId]
+      const prereqMatch = matches.find(m => m.id === prereqId)
+      
+      let endTime = null
+      if (proposed?.startTime) {
+        endTime = addMinutes(new Date(proposed.startTime), prereqMatch?.duration || 30)
+      } else if (existing?.startTime) {
+        endTime = addMinutes(new Date(existing.startTime), existing.duration || 30)
+      }
+      
+      if (endTime && (!latestEndTime || endTime > latestEndTime)) {
+        latestEndTime = endTime
+      }
+    }
+    return latestEndTime
+  }, [dependencyMap, scheduledMatches, matches])
+
   // Check if scheduling a match at a time would violate back-to-back rule
   const wouldViolateStagger = useCallback((match, courtId, startTime, proposedAssignments) => {
     const teams = getTeamIds(match)
@@ -341,9 +385,23 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
       let scheduled = false
       let attempts = 0
       
+      // Check phase dependencies - get earliest allowed start time
+      const earliestAllowed = getEarliestStartTime(match.id, newAssignments)
+      if (earliestAllowed && currentTime < earliestAllowed) {
+        // This match has prerequisites that haven't finished yet
+        // Advance time to when prerequisites are done
+        currentTime = new Date(earliestAllowed)
+      }
+      
       // Try each court, advancing time if needed
       while (!scheduled && attempts < courtIds.length * 20) {
         const courtId = courtIds[courtIndex % courtIds.length]
+        
+        // Re-check dependencies after time changes
+        const currentEarliestAllowed = getEarliestStartTime(match.id, newAssignments)
+        if (currentEarliestAllowed && currentTime < currentEarliestAllowed) {
+          currentTime = new Date(currentEarliestAllowed)
+        }
         
         // Check for conflicts on this court at this time
         const hasCourtConflict = scheduledMatches.some(m => {
@@ -388,7 +446,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
 
     setAssignments(newAssignments)
     toast.success(`Scheduled ${sortedMatches.length} matches`)
-  }, [selectedMatches, matches, assignments, scheduledMatches, wouldViolateStagger, toast])
+  }, [selectedMatches, matches, assignments, scheduledMatches, wouldViolateStagger, getEarliestStartTime, toast])
 
   // ─── Save assignments (update encounter scheduling) ──────────────────────────────────
   const saveAssignments = async () => {
