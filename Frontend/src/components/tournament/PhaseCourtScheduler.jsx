@@ -225,14 +225,26 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   }, [matches, data])
 
   // Get all courts (from data prop)
+  // Get unique courts (deduplicated by ID since courts can belong to multiple groups)
   const allCourts = useMemo(() => {
     if (!data) return []
-    const courts = []
+    const courtMap = new Map() // courtId -> court object (deduplicates)
     data.courtGroups?.forEach(g => {
-      g.courts?.forEach(c => courts.push({ ...c, groupName: g.groupName }))
+      g.courts?.forEach(c => {
+        if (!courtMap.has(c.id)) {
+          courtMap.set(c.id, { ...c, groupName: g.groupName })
+        }
+      })
     })
-    data.unassignedCourts?.forEach(c => courts.push({ ...c, groupName: 'Unassigned' }))
-    return courts
+    data.unassignedCourts?.forEach(c => {
+      if (!courtMap.has(c.id)) {
+        courtMap.set(c.id, { ...c, groupName: 'Unassigned' })
+      }
+    })
+    // Sort by court label for consistent display
+    return Array.from(courtMap.values()).sort((a, b) => 
+      (a.courtLabel || '').localeCompare(b.courtLabel || '', undefined, { numeric: true })
+    )
   }, [data])
 
   // Time slots for the timeline
