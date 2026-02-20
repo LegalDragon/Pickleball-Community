@@ -21,7 +21,7 @@ const COLORS = [
 
 // Time slot size in minutes
 const SLOT_SIZE = 15
-const PIXELS_PER_SLOT = 30
+const PIXELS_PER_SLOT = 20 // Reduced from 30 for narrower blocks (~20 min matches)
 const DEFAULT_GAME_DURATION = 15 // minutes per game
 
 function formatTime(date) {
@@ -82,7 +82,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     // Filter out byes
     const validEncounters = data.encounters.filter(e => !e.isBye)
     
-    return validEncounters.map(enc => {
+    // Get phase sort order lookup from data.divisions
+    const phaseOrderLookup = {}
+    data?.divisions?.forEach(div => {
+      div.phases?.forEach(phase => {
+        phaseOrderLookup[phase.id] = phase.sortOrder || phase.phaseOrder || 0
+      })
+    })
+    
+    const matchList = validEncounters.map(enc => {
       // Use phase timing overrides if set
       const timing = phaseTiming[enc.phaseId] || {}
       const gameDur = timing.gameDurationMinutes ?? DEFAULT_GAME_DURATION
@@ -105,10 +113,11 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         divisionName: enc.divisionName,
         phaseId: enc.phaseId,
         phaseName: enc.phaseName,
+        phaseOrder: phaseOrderLookup[enc.phaseId] || 0,
         matchLabel: enc.encounterLabel,
-        roundNumber: enc.roundNumber,
+        roundNumber: enc.roundNumber || 0,
         roundName: enc.roundName,
-        encounterNumber: enc.encounterNumber,
+        encounterNumber: enc.encounterNumber || 0,
         unit1Name: enc.unit1Name,
         unit2Name: enc.unit2Name,
         unit1Id: enc.unit1Id,
@@ -127,7 +136,30 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         status: enc.status
       }
     })
-  }, [data?.encounters, phaseTiming])
+    
+    // Compute division-level sequence numbers (unique per division)
+    // Group by division, sort by phase order → round → encounter number
+    const byDivision = {}
+    matchList.forEach(m => {
+      if (!byDivision[m.divisionId]) byDivision[m.divisionId] = []
+      byDivision[m.divisionId].push(m)
+    })
+    
+    Object.values(byDivision).forEach(divMatches => {
+      // Sort by phase order, then round number, then encounter number
+      divMatches.sort((a, b) => {
+        if (a.phaseOrder !== b.phaseOrder) return a.phaseOrder - b.phaseOrder
+        if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber
+        return a.encounterNumber - b.encounterNumber
+      })
+      // Assign division-level sequence (1-based)
+      divMatches.forEach((m, idx) => {
+        m.divisionSequence = idx + 1
+      })
+    })
+    
+    return matchList
+  }, [data?.encounters, data?.divisions, phaseTiming])
 
   // ─── Group matches by division and phase ──────────────────────────────────
   const matchesByDivPhase = useMemo(() => {
@@ -1126,10 +1158,8 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
           const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
           const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
           const color = divColors[match.divisionId] || COLORS[0]
-          // Show encounter # or match label, with phase info for compact display
-          const label = match.encounterNumber 
-            ? `#${match.encounterNumber}` 
-            : (match.matchLabel || `${match.unit1Name?.split(' ')[0] || 'TBD'} v ${match.unit2Name?.split(' ')[0] || 'TBD'}`)
+          // Show division-level sequence # (unique per division)
+          const label = `#${match.divisionSequence || '?'}`
           
           return (
             <div
@@ -1137,13 +1167,13 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
               className={`absolute top-1 bottom-1 rounded ${color.bg} ${color.border} border flex items-center justify-center px-1 text-xs overflow-hidden cursor-move`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 30)
+                width: Math.max(width - 2, 28)
               }}
               draggable
               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
-              title={`${match.divisionName}\n${match.phaseName || ''}\n${match.matchLabel || `#${match.encounterNumber}`}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
+              title={`${match.divisionName}\n${match.phaseName || ''}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
             >
-              <span className={`font-medium ${color.text} truncate`}>
+              <span className={`font-semibold ${color.text}`}>
                 {label}
               </span>
             </div>
@@ -1156,9 +1186,7 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
           const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
           const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
           const color = divColors[match.divisionId] || COLORS[0]
-          const label = match.encounterNumber 
-            ? `#${match.encounterNumber}` 
-            : (match.matchLabel || `${match.unit1Name?.split(' ')[0] || 'TBD'} v ${match.unit2Name?.split(' ')[0] || 'TBD'}`)
+          const label = `#${match.divisionSequence || '?'}`
           
           return (
             <div
@@ -1166,13 +1194,13 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
               className={`absolute top-1 bottom-1 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center px-1 text-xs overflow-hidden cursor-move opacity-80`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 30)
+                width: Math.max(width - 2, 28)
               }}
               draggable
               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
-              title={`PENDING\n${match.divisionName}\n${match.phaseName || ''}\n${match.matchLabel || `#${match.encounterNumber}`}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
+              title={`PENDING\n${match.divisionName}\n${match.phaseName || ''}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
             >
-              <span className={`font-medium ${color.text} truncate`}>
+              <span className={`font-semibold ${color.text}`}>
                 {label}
               </span>
             </div>
