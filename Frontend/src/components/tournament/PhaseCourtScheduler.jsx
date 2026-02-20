@@ -4,7 +4,7 @@ import {
   GripVertical, MapPin, Calendar, AlertTriangle, Zap,
   Play, Square, Users, Filter, RotateCcw, Hash, Layers, Eye, EyeOff
 } from 'lucide-react'
-import { tournamentApi, encounterApi } from '../../services/api'
+import { tournamentApi } from '../../services/api'
 import { useToast } from '../../contexts/ToastContext'
 import { CanvasPhaseEditor } from '../../pages/PhaseTemplatesAdmin'
 import { parseStructureToVisual } from './structureEditorConstants'
@@ -44,14 +44,10 @@ function getSlotIndex(time, dayStart) {
 export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   const toast = useToast()
   
-  // Raw games data from API
-  const [games, setGames] = useState([])
-  const [loadingGames, setLoadingGames] = useState(true)
-  
-  // Selection state (now at match level)
+  // Selection state (at encounter/match level)
   const [selectedDivision, setSelectedDivision] = useState(null)
   const [selectedPhase, setSelectedPhase] = useState(null)
-  const [selectedMatches, setSelectedMatches] = useState(new Set()) // matchId set
+  const [selectedMatches, setSelectedMatches] = useState(new Set()) // encounterId set
   const [expandedDivisions, setExpandedDivisions] = useState(new Set())
   
   // Scheduling state (at match level)
@@ -79,88 +75,59 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   
   const timelineRef = useRef(null)
 
-  // ─── Load Games ──────────────────────────────────
-  useEffect(() => {
-    const loadGames = async () => {
-      try {
-        setLoadingGames(true)
-        const response = await tournamentApi.getGamesForScheduling(eventId)
-        if (response.success) {
-          setGames(response.data || [])
-        } else {
-          toast.error(response.message || 'Failed to load games')
-        }
-      } catch (err) {
-        console.error('Error loading games:', err)
-        toast.error('Failed to load games')
-      } finally {
-        setLoadingGames(false)
-      }
-    }
-    loadGames()
-  }, [eventId])
-
-  // ─── Group games into matches ──────────────────────────────────
+  // ─── Derive matches from encounters (no games needed for scheduling) ──────────────────────────────────
   const matches = useMemo(() => {
-    const matchMap = {}
-    games.forEach(game => {
-      const key = game.matchId || `encounter-${game.encounterId}` // fallback to encounter if no matchId
-      if (!matchMap[key]) {
-        matchMap[key] = {
-          id: key,
-          matchId: game.matchId,
-          encounterId: game.encounterId,
-          divisionId: game.divisionId,
-          divisionName: game.divisionName,
-          phaseId: game.phaseId,
-          phaseName: game.phaseName,
-          matchLabel: game.matchLabel,
-          unit1Name: game.unit1Name,
-          unit2Name: game.unit2Name,
-          unit1Id: game.unit1Id,
-          unit2Id: game.unit2Id,
-          games: [],
-          // Will be updated below
-          totalGames: game.totalGamesInMatch || 1,
-          courtId: null,
-          courtLabel: null,
-          scheduledStartTime: null,
-          scheduledEndTime: null,
-          // Timing parameters from phase
-          gameDurationMinutes: game.gameDurationMinutes || DEFAULT_GAME_DURATION,
-          changeoverMinutes: game.changeoverMinutes ?? 2,
-          matchBufferMinutes: game.matchBufferMinutes ?? 5
-        }
-      }
-      matchMap[key].games.push(game)
-      // Use first game's court/time as the match's court/time
-      if (game.tournamentCourtId && !matchMap[key].courtId) {
-        matchMap[key].courtId = game.tournamentCourtId
-        matchMap[key].courtLabel = game.courtLabel
-        matchMap[key].scheduledStartTime = game.scheduledStartTime
-        matchMap[key].scheduledEndTime = game.scheduledEndTime
+    if (!data?.encounters) return []
+    
+    // Filter out byes
+    const validEncounters = data.encounters.filter(e => !e.isBye)
+    
+    return validEncounters.map(enc => {
+      // Use phase timing overrides if set
+      const timing = phaseTiming[enc.phaseId] || {}
+      const gameDur = timing.gameDurationMinutes ?? DEFAULT_GAME_DURATION
+      const changeover = timing.changeoverMinutes ?? 2
+      const buffer = timing.matchBufferMinutes ?? 5
+      
+      // Get BestOf from encounter (defaults to 1 if not set)
+      const bestOf = enc.bestOf || 1
+      
+      // Calculate duration: bestOf × gameDuration + changeovers + buffer
+      // For BO3: 3 games + 2 changeovers + buffer
+      // For BO1: 1 game + buffer
+      const playTime = bestOf * gameDur + (bestOf > 1 ? (bestOf - 1) * changeover : 0)
+      const duration = playTime + buffer
+      
+      return {
+        id: enc.id, // Use encounter ID as match ID for scheduling
+        encounterId: enc.id,
+        divisionId: enc.divisionId,
+        divisionName: enc.divisionName,
+        phaseId: enc.phaseId,
+        phaseName: enc.phaseName,
+        matchLabel: enc.encounterLabel,
+        roundNumber: enc.roundNumber,
+        roundName: enc.roundName,
+        encounterNumber: enc.encounterNumber,
+        unit1Name: enc.unit1Name,
+        unit2Name: enc.unit2Name,
+        unit1Id: enc.unit1Id,
+        unit2Id: enc.unit2Id,
+        totalGames: bestOf,
+        courtId: enc.courtId,
+        courtLabel: enc.courtLabel,
+        scheduledStartTime: enc.scheduledTime || enc.estimatedStartTime,
+        scheduledEndTime: enc.estimatedEndTime,
+        // Timing
+        effectiveGameDuration: gameDur,
+        effectiveChangeover: changeover,
+        effectiveBuffer: buffer,
+        duration,
+        // Original encounter data for reference
+        status: enc.status
       }
     })
-    // Sort games within each match and calculate duration
-    return Object.values(matchMap).map(match => {
-      match.games.sort((a, b) => a.gameNumber - b.gameNumber)
-      // Use phase timing overrides if set, otherwise use values from API
-      const timing = phaseTiming[match.phaseId] || {}
-      const gameDur = timing.gameDurationMinutes ?? match.gameDurationMinutes
-      const changeover = timing.changeoverMinutes ?? match.changeoverMinutes
-      const buffer = timing.matchBufferMinutes ?? match.matchBufferMinutes
-      // Store effective timing on match
-      match.effectiveGameDuration = gameDur
-      match.effectiveChangeover = changeover
-      match.effectiveBuffer = buffer
-      // Match duration calculation:
-      // - For BO3/BO5 (multi-game matches): just totalGames × gameDuration (no buffer)
-      // - For single game: gameDuration + buffer
-      const playTime = match.totalGames * gameDur
-      match.duration = match.totalGames > 1 ? playTime : playTime + buffer
-      return match
-    })
-  }, [games, phaseTiming])
+  }, [data?.encounters, phaseTiming])
 
   // ─── Group matches by division and phase ──────────────────────────────────
   const matchesByDivPhase = useMemo(() => {
@@ -387,7 +354,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
     toast.success(`Scheduled ${sortedMatches.length} matches`)
   }, [selectedMatches, matches, assignments, scheduledMatches, wouldViolateStagger, toast])
 
-  // ─── Save assignments (apply to all games in each match) ──────────────────────────────────
+  // ─── Save assignments (update encounter scheduling) ──────────────────────────────────
   const saveAssignments = async () => {
     if (Object.keys(assignments).length === 0) {
       toast.warn('No changes to save')
@@ -396,33 +363,26 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
 
     setSaving(true)
     try {
-      // Build game-level updates from match assignments
+      // Build encounter-level updates
       const updates = []
       
-      for (const [matchId, { courtId, startTime, endTime }] of Object.entries(assignments)) {
-        const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+      for (const [encounterId, { courtId, startTime, endTime }] of Object.entries(assignments)) {
+        const match = matches.find(m => m.id === encounterId || m.id === parseInt(encounterId))
         if (!match) continue
         
-        // Apply the same court to all games in this match
-        // Each game gets the match start time (games are played sequentially on same court)
-        for (const game of match.games) {
-          updates.push({
-            gameId: game.id,
-            courtId,
-            scheduledStartTime: startTime,
-            scheduledEndTime: endTime
-          })
-        }
+        updates.push({
+          encounterId: match.encounterId,
+          courtId,
+          scheduledTime: startTime,
+          estimatedStartTime: startTime // Also set estimatedStartTime
+        })
       }
 
-      const response = await tournamentApi.bulkAssignGames(eventId, updates)
+      const response = await tournamentApi.bulkAssignCourtsAndTimes(eventId, updates)
       if (response.success) {
         toast.success('Schedule saved!')
         setAssignments({})
-        // Reload games to get updated data
-        const gamesRes = await tournamentApi.getGamesForScheduling(eventId)
-        if (gamesRes.success) setGames(gamesRes.data || [])
-        onUpdate?.()
+        onUpdate?.() // Reload parent data which includes encounters
       } else {
         toast.error(response.message || 'Failed to save')
       }
@@ -567,11 +527,11 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   }
 
   // ─── Render ──────────────────────────────────
-  if (loadingGames || !data) {
+  if (!data) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-        <span className="ml-2 text-gray-500">Loading matches...</span>
+        <span className="ml-2 text-gray-500">Loading data...</span>
       </div>
     )
   }
@@ -663,39 +623,6 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                 {/* Phases (only playable - excludes Draw/Award) */}
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-1">
-                    {/* Show generate games button if no matches exist */}
-                    {totalDivMatches === 0 && playablePhases.length > 0 && (
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
-                        <div className="flex items-center gap-2 text-yellow-800 text-sm mb-2">
-                          <AlertTriangle className="w-4 h-4" />
-                          <span>No games found for this division. Games need to be generated from encounters.</span>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const result = await encounterApi.generateGamesForDivision(div.id)
-                              if (result.success) {
-                                toast.success(result.message || `Generated ${result.gamesCreated} games`)
-                                // Reload games
-                                const response = await tournamentApi.getGamesForScheduling(eventId)
-                                if (response.success) {
-                                  setGames(response.data || [])
-                                }
-                              } else {
-                                toast.error(result.message || 'Failed to generate games')
-                              }
-                            } catch (err) {
-                              console.error('Error generating games:', err)
-                              toast.error('Failed to generate games')
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-xs font-medium flex items-center gap-1.5"
-                        >
-                          <Zap className="w-3.5 h-3.5" />
-                          Generate Games
-                        </button>
-                      </div>
-                    )}
                     {playablePhases.map(phase => {
                       const phaseMatches = divMatches[phase.id] || []
                       const isSelected = selectedDivision === div.id && selectedPhase === phase.id

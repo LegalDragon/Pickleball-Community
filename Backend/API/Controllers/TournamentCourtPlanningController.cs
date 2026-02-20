@@ -462,13 +462,19 @@ public class TournamentCourtPlanningController : EventControllerBase
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Schedule published for event {EventId} by user {UserId}", eventId, userId.Value);
+        // Generate games for all scheduled encounters that don't have games yet
+        var gamesCreated = await GenerateGamesForScheduledEncountersAsync(eventId);
+
+        _logger.LogInformation("Schedule published for event {EventId} by user {UserId}. Created {GamesCreated} games.", 
+            eventId, userId.Value, gamesCreated);
 
         return Ok(new ApiResponse<object>
         {
             Success = true,
-            Message = "Schedule published successfully",
-            Data = new { PublishedAt = evt.SchedulePublishedAt }
+            Message = gamesCreated > 0 
+                ? $"Schedule published successfully. Created {gamesCreated} games." 
+                : "Schedule published successfully",
+            Data = new { PublishedAt = evt.SchedulePublishedAt, GamesCreated = gamesCreated }
         });
     }
 
@@ -1289,6 +1295,94 @@ public class TournamentCourtPlanningController : EventControllerBase
             Success = true,
             Message = $"{games.Count} games updated"
         });
+    }
+
+    /// <summary>
+    /// Generate games for all scheduled encounters that don't have games yet
+    /// Called during schedule publish to create game records with court/time assignments
+    /// </summary>
+    private async Task<int> GenerateGamesForScheduledEncountersAsync(int eventId)
+    {
+        // Get all encounters with scheduling info, including their matches and games
+        var encounters = await _context.EventEncounters
+            .Include(e => e.Division)
+            .Include(e => e.Phase)
+            .Include(e => e.Matches)
+                .ThenInclude(m => m.Games)
+            .Where(e => e.EventId == eventId && e.Status != "Bye")
+            .ToListAsync();
+
+        // Get phase match settings for BestOf configuration
+        var phaseSettings = await _context.PhaseMatchSettings
+            .Where(s => s.Phase!.Division!.EventId == eventId)
+            .ToDictionaryAsync(s => s.PhaseId, s => s);
+
+        var gamesCreated = 0;
+        var now = DateTime.UtcNow;
+
+        foreach (var encounter in encounters)
+        {
+            // Determine BestOf for this encounter
+            var bestOf = encounter.BestOf;
+            if (bestOf <= 0)
+            {
+                // Try to get from phase settings
+                if (encounter.PhaseId.HasValue && phaseSettings.TryGetValue(encounter.PhaseId.Value, out var settings))
+                {
+                    bestOf = settings.BestOf > 0 ? settings.BestOf : 1;
+                }
+                else
+                {
+                    bestOf = 1; // Default to 1 game
+                }
+                encounter.BestOf = bestOf;
+            }
+
+            // If no match exists, create one
+            if (!encounter.Matches.Any())
+            {
+                var newMatch = new EncounterMatch
+                {
+                    EncounterId = encounter.Id,
+                    MatchOrder = 1,
+                    Status = "Scheduled",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                _context.EncounterMatches.Add(newMatch);
+                encounter.Matches.Add(newMatch);
+                await _context.SaveChangesAsync(); // Save to get the ID
+            }
+
+            foreach (var match in encounter.Matches)
+            {
+                // Skip if games already exist
+                if (match.Games.Any())
+                    continue;
+
+                // Create games based on BestOf
+                for (int g = 1; g <= bestOf; g++)
+                {
+                    var game = new EventGame
+                    {
+                        EncounterMatchId = match.Id,
+                        GameNumber = g,
+                        // Copy court and time from encounter
+                        TournamentCourtId = encounter.TournamentCourtId,
+                        ScheduledStartTime = encounter.ScheduledTime ?? encounter.EstimatedStartTime,
+                        ScheduledEndTime = encounter.EstimatedEndTime,
+                        Status = "Scheduled",
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+                    _context.EventGames.Add(game);
+                    gamesCreated++;
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return gamesCreated;
     }
 
 }
