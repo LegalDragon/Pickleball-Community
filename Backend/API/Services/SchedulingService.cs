@@ -1141,10 +1141,16 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
     public async Task<int> CalculateEncounterDurationMinutesAsync(
         EventEncounter encounter, EventDivision division, DivisionPhase? phase)
     {
-        // Base per-game duration: phase override > division override > 20 min default
+        // Base per-game duration: phase override > division override > 15 min default
         var gameDuration = phase?.EstimatedMatchDurationMinutes
             ?? division.EstimatedMatchDurationMinutes
-            ?? 20;
+            ?? 15;
+
+        // Changeover time between games (default 2 min)
+        var changeoverMinutes = 2;
+        
+        // Buffer time after match ends (default 5 min)
+        var bufferMinutes = 5;
 
         // Get match formats for this division (defines how many matches per encounter)
         var matchFormats = await _context.EncounterMatchFormats
@@ -1170,22 +1176,34 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
             foreach (var format in matchFormats)
             {
                 var bestOf = ResolveEffectiveBestOf(format, phase, phaseSettings, division);
-                totalDuration += bestOf * gameDuration;
+                // Duration = games × gameDuration + changeovers
+                var matchDuration = bestOf * gameDuration + (bestOf > 1 ? (bestOf - 1) * changeoverMinutes : 0);
+                totalDuration += matchDuration;
             }
+            // Add buffer at the end
+            totalDuration += bufferMinutes;
         }
         else if (division.MatchesPerEncounter > 1)
         {
             // Division says multiple matches but no explicit formats defined
-            var bestOf = phase?.BestOf ?? division.GamesPerMatch;
+            var bestOf = phase?.BestOf ?? encounter.BestOf;
+            if (bestOf < 1) bestOf = division.GamesPerMatch;
             if (bestOf < 1) bestOf = 1;
-            totalDuration = division.MatchesPerEncounter * bestOf * gameDuration;
+            // Duration = games × gameDuration + changeovers + buffer
+            var gamesDuration = bestOf * gameDuration + (bestOf > 1 ? (bestOf - 1) * changeoverMinutes : 0);
+            totalDuration = division.MatchesPerEncounter * gamesDuration + bufferMinutes;
         }
         else
         {
             // Simple single-match encounter
-            var bestOf = phase?.BestOf ?? division.GamesPerMatch;
+            // Use encounter's BestOf first (if set), then phase, then division
+            var bestOf = encounter.BestOf > 0 ? encounter.BestOf : (phase?.BestOf ?? division.GamesPerMatch);
             if (bestOf < 1) bestOf = 1;
-            totalDuration = bestOf * gameDuration;
+            
+            // Duration = games × gameDuration + changeovers + buffer
+            // For BO3: 3×15 + 2×2 + 5 = 54 min
+            // For BO1: 1×15 + 0 + 5 = 20 min
+            totalDuration = bestOf * gameDuration + (bestOf > 1 ? (bestOf - 1) * changeoverMinutes : 0) + bufferMinutes;
         }
 
         return totalDuration;
