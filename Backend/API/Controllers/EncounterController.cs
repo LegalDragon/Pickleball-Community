@@ -1484,4 +1484,115 @@ public class EncounterController : ControllerBase
 
         return Ok(new { success = true, data = dtos });
     }
+
+    /// <summary>
+    /// Generate games for all matches in a division that don't have games yet
+    /// This is useful when encounters/matches were created but games weren't generated
+    /// </summary>
+    [HttpPost("divisions/{divisionId}/generate-games")]
+    public async Task<IActionResult> GenerateGamesForDivision(int divisionId)
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue)
+            return Unauthorized(new { success = false, message = "Unauthorized" });
+
+        var division = await _context.EventDivisions
+            .Include(d => d.Phases)
+            .FirstOrDefaultAsync(d => d.Id == divisionId);
+
+        if (division == null)
+            return NotFound(new { success = false, message = "Division not found" });
+
+        if (!await IsEventOrganizer(division.EventId, userId.Value))
+            return Forbid();
+
+        // Get all encounters for this division with their matches
+        var encounters = await _context.EventEncounters
+            .Include(e => e.Phase)
+            .Include(e => e.Matches)
+                .ThenInclude(m => m.Games)
+            .Where(e => e.DivisionId == divisionId)
+            .ToListAsync();
+
+        // Get phase match settings for game configuration
+        var phaseSettings = await _context.PhaseMatchSettings
+            .Where(s => s.Phase!.DivisionId == divisionId)
+            .ToDictionaryAsync(s => s.PhaseId, s => s);
+
+        int gamesCreated = 0;
+        int matchesProcessed = 0;
+
+        foreach (var encounter in encounters)
+        {
+            // Determine BestOf for this encounter
+            var bestOf = encounter.BestOf;
+            if (bestOf <= 0)
+            {
+                // Try to get from phase settings
+                if (encounter.PhaseId.HasValue && phaseSettings.TryGetValue(encounter.PhaseId.Value, out var settings))
+                {
+                    bestOf = settings.BestOf > 0 ? settings.BestOf : 1;
+                }
+                else
+                {
+                    bestOf = 1; // Default to 1 game
+                }
+                // Update encounter with bestOf
+                encounter.BestOf = bestOf;
+            }
+
+            // If no matches exist, create one
+            if (!encounter.Matches.Any())
+            {
+                var newMatch = new EncounterMatch
+                {
+                    EncounterId = encounter.Id,
+                    MatchOrder = 1,
+                    Status = "Scheduled",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.EncounterMatches.Add(newMatch);
+                encounter.Matches.Add(newMatch);
+                await _context.SaveChangesAsync(); // Save to get the ID
+            }
+
+            foreach (var match in encounter.Matches)
+            {
+                // Skip if games already exist
+                if (match.Games.Any())
+                    continue;
+
+                matchesProcessed++;
+
+                // Create games based on BestOf
+                for (int g = 1; g <= bestOf; g++)
+                {
+                    var game = new EventGame
+                    {
+                        EncounterMatchId = match.Id,
+                        GameNumber = g,
+                        Status = "Scheduled",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.EventGames.Add(game);
+                    gamesCreated++;
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Generated {GamesCreated} games for {MatchesProcessed} matches in division {DivisionId}",
+            gamesCreated, matchesProcessed, divisionId);
+
+        return Ok(new { 
+            success = true, 
+            message = $"Generated {gamesCreated} games for {matchesProcessed} matches",
+            gamesCreated,
+            matchesProcessed,
+            encountersTotal = encounters.Count
+        });
+    }
 }

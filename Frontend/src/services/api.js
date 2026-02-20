@@ -2746,7 +2746,10 @@ export const encounterApi = {
   getDivisionGameSettings: (divisionId) => api.get(`/encounters/divisions/${divisionId}/game-settings`),
   updateDivisionGameSettings: (divisionId, data) => api.put(`/encounters/divisions/${divisionId}/game-settings`, data),
   getPhaseGameSettings: (phaseId) => api.get(`/encounters/phases/${phaseId}/game-settings`),
-  updatePhaseGameSettings: (phaseId, data) => api.put(`/encounters/phases/${phaseId}/game-settings`, data)
+  updatePhaseGameSettings: (phaseId, data) => api.put(`/encounters/phases/${phaseId}/game-settings`, data),
+  
+  // Generate games for division (for divisions where games weren't created)
+  generateGamesForDivision: (divisionId) => api.post(`/encounters/divisions/${divisionId}/generate-games`)
 }
 
 // =====================================================

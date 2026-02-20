@@ -4,7 +4,7 @@ import {
   GripVertical, MapPin, Calendar, AlertTriangle, Zap,
   Play, Square, Users, Filter, RotateCcw, Hash, Layers, Eye, EyeOff
 } from 'lucide-react'
-import { tournamentApi } from '../../services/api'
+import { tournamentApi, encounterApi } from '../../services/api'
 import { useToast } from '../../contexts/ToastContext'
 import { CanvasPhaseEditor } from '../../pages/PhaseTemplatesAdmin'
 import { parseStructureToVisual } from './structureEditorConstants'
@@ -663,6 +663,39 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                 {/* Phases (only playable - excludes Draw/Award) */}
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-1">
+                    {/* Show generate games button if no matches exist */}
+                    {totalDivMatches === 0 && playablePhases.length > 0 && (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
+                        <div className="flex items-center gap-2 text-yellow-800 text-sm mb-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>No games found for this division. Games need to be generated from encounters.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const result = await encounterApi.generateGamesForDivision(div.id)
+                              if (result.success) {
+                                toast.success(result.message || `Generated ${result.gamesCreated} games`)
+                                // Reload games
+                                const response = await tournamentApi.getGamesForScheduling(eventId)
+                                if (response.success) {
+                                  setGames(response.data || [])
+                                }
+                              } else {
+                                toast.error(result.message || 'Failed to generate games')
+                              }
+                            } catch (err) {
+                              console.error('Error generating games:', err)
+                              toast.error('Failed to generate games')
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-xs font-medium flex items-center gap-1.5"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Generate Games
+                        </button>
+                      </div>
+                    )}
                     {playablePhases.map(phase => {
                       const phaseMatches = divMatches[phase.id] || []
                       const isSelected = selectedDivision === div.id && selectedPhase === phase.id
