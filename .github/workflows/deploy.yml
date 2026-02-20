@@ -165,7 +165,7 @@ jobs:
             foreach ($file in $migrationFiles) {
               Write-Host "[MIGRATIONS] Running: $($file.Name)"
               try {
-                Invoke-Sqlcmd -InputFile $file.FullName -ServerInstance "localhost" -Database "PickleballCommunity" -TrustServerCertificate -QueryTimeout 300
+                Invoke-Sqlcmd -InputFile $file.FullName -ServerInstance "localhost" -Database "PickleballCommunity" -QueryTimeout 300
                 Write-Host "[MIGRATIONS] Completed: $($file.Name)"
               } catch {
                 Write-Host "[MIGRATIONS] WARNING: $($file.Name) - $($_.Exception.Message)"
