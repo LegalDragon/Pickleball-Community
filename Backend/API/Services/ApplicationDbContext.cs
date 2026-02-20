@@ -195,6 +195,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<EventStaff> EventStaff { get; set; }
     public DbSet<DivisionCourtBlock> DivisionCourtBlocks { get; set; }
 
+    // Master Schedule System
+    public DbSet<EventCourtScheduleBlock> EventCourtScheduleBlocks { get; set; }
+
     // Video Chat Rooms
     public DbSet<VideoRoom> VideoRooms { get; set; }
 
