@@ -525,6 +525,10 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
             // 11. Greedy assignment
             int assigned = 0;
             var usedCourts = new HashSet<int>();
+            
+            // Track scheduled times by encounter ID for dependency checking
+            // (WinnerSourceEncounters are separate entity instances, need to check by ID)
+            var scheduledEndTimes = new Dictionary<int, DateTime>();
 
             foreach (var encounter in sortedEncounters)
             {
@@ -568,7 +572,7 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
                 var bestSlot = FindEarliestSlot(
                     encounter, courts, encounterDuration, restMinutes,
                     courtNextAvailable, unitNextAvailable, playerNextAvailable,
-                    playerUnitMap, roundCompletionTimes,
+                    playerUnitMap, roundCompletionTimes, scheduledEndTimes,
                     request.RespectPlayerOverlap, divStartTime);
 
                 if (bestSlot == null)
@@ -602,6 +606,7 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
 
                 // Update trackers
                 courtNextAvailable[courtId] = endTime;
+                scheduledEndTimes[encounter.Id] = endTime; // Track for dependency checking
 
                 var availableAfterRest = endTime.AddMinutes(restMinutes);
 
@@ -1350,6 +1355,7 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
         Dictionary<int, DateTime> playerNextAvailable,
         Dictionary<int, HashSet<int>> playerUnitMap,
         Dictionary<(int divisionId, int? phaseId, int roundNumber), DateTime> roundCompletionTimes,
+        Dictionary<int, DateTime> scheduledEndTimes,
         bool respectPlayerOverlap,
         DateTime divisionStartTime)
     {
@@ -1387,13 +1393,20 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
                     minStart = MaxDateTime(minStart, prevRoundEnd);
             }
 
-            // Also check WinnerSourceEncounters
+            // Also check WinnerSourceEncounters (encounters whose winner feeds into this one)
             if (encounter.WinnerSourceEncounters?.Any() == true)
             {
                 foreach (var src in encounter.WinnerSourceEncounters)
                 {
-                    if (src.EstimatedEndTime.HasValue)
+                    // First check if this source was just scheduled in this run (by ID)
+                    if (scheduledEndTimes.TryGetValue(src.Id, out var scheduledEnd))
+                    {
+                        minStart = MaxDateTime(minStart, scheduledEnd);
+                    }
+                    else if (src.EstimatedEndTime.HasValue)
+                    {
                         minStart = MaxDateTime(minStart, src.EstimatedEndTime.Value);
+                    }
                     else if (src.EstimatedStartTime.HasValue)
                     {
                         var srcDuration = src.EstimatedDurationMinutes ?? 20;
@@ -1402,12 +1415,20 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
                 }
             }
 
+            // Also check LoserSourceEncounters (encounters whose loser feeds into this one, e.g., Bronze match)
             if (encounter.LoserSourceEncounters?.Any() == true)
             {
                 foreach (var src in encounter.LoserSourceEncounters)
                 {
-                    if (src.EstimatedEndTime.HasValue)
+                    // First check if this source was just scheduled in this run (by ID)
+                    if (scheduledEndTimes.TryGetValue(src.Id, out var scheduledEnd))
+                    {
+                        minStart = MaxDateTime(minStart, scheduledEnd);
+                    }
+                    else if (src.EstimatedEndTime.HasValue)
+                    {
                         minStart = MaxDateTime(minStart, src.EstimatedEndTime.Value);
+                    }
                     else if (src.EstimatedStartTime.HasValue)
                     {
                         var srcDuration = src.EstimatedDurationMinutes ?? 20;
