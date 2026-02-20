@@ -81,7 +81,7 @@ export default function ScheduleGridInline({
   }, [gridData, timeIncrement]);
 
   // Row height in pixels per time increment
-  const ROW_HEIGHT = 48;
+  const ROW_HEIGHT = 36; // Reduced from 48 to fit more matches
   const HEADER_HEIGHT = 44;
   const TIME_COL_WIDTH = 64;
 
@@ -139,7 +139,7 @@ export default function ScheduleGridInline({
     const durationMinutes = (encEnd - encStart) / 60000;
 
     const top = (startMinutes / timeIncrement) * ROW_HEIGHT;
-    const height = Math.max((durationMinutes / timeIncrement) * ROW_HEIGHT, 24); // min 24px
+    const height = Math.max((durationMinutes / timeIncrement) * ROW_HEIGHT, 18); // min 18px (reduced from 24)
 
     return { top, height };
   }, [gridData, timeIncrement, timeSlots]);
@@ -620,15 +620,15 @@ export default function ScheduleGridInline({
                   }}
                   title=""
                 >
-                  <div className="px-1.5 py-1 h-full flex flex-col justify-center text-[11px] leading-tight">
+                  <div className="px-1 py-0.5 h-full flex flex-col justify-center text-[10px] leading-tight">
                     <div className="font-semibold truncate">
                       {enc.unit1Name?.split(' ').slice(0, 2).join(' ') || 'TBD'}
                     </div>
                     <div className="font-semibold truncate">
                       vs {enc.unit2Name?.split(' ').slice(0, 2).join(' ') || 'TBD'}
                     </div>
-                    {pos.height > 40 && (
-                      <div className="text-[10px] opacity-70 truncate mt-0.5">
+                    {pos.height > 30 && (
+                      <div className="text-[9px] opacity-70 truncate">
                         {formatTimeShort(enc.startTime)}–{formatTimeShort(enc.endTime)}
                         {enc.phaseName && ` • ${enc.phaseName}`}
                       </div>
@@ -653,7 +653,7 @@ export default function ScheduleGridInline({
             const startMin = (ghostStart - gridStart) / 60000;
             const duration = ghost.durationMinutes || 20;
             const top = (startMin / timeIncrement) * ROW_HEIGHT;
-            const height = Math.max((duration / timeIncrement) * ROW_HEIGHT, 24);
+            const height = Math.max((duration / timeIncrement) * ROW_HEIGHT, 18);
 
             return (
               <div
@@ -681,7 +681,7 @@ export default function ScheduleGridInline({
 
             const dragEnc = dragDataRef.current?.encounters?.find(e => e.id === dragDataRef.current.primaryEncId);
             const duration = dragEnc?.durationMinutes || 20;
-            const height = Math.max((duration / timeIncrement) * ROW_HEIGHT, 24);
+            const height = Math.max((duration / timeIncrement) * ROW_HEIGHT, 18);
 
             return (
               <div
