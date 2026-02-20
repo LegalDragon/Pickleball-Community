@@ -154,18 +154,12 @@ jobs:
 
       - name: Run SQL migrations
         shell: powershell
-        env:
-          DEPLOY_API_KEY: ${{ secrets.DEPLOY_API_KEY }}
         run: |
-          Write-Host "[MIGRATIONS] Running deployment SQL..."
-          Start-Sleep -Seconds 10
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $headers = @{
-            "X-Deploy-Key" = $env:DEPLOY_API_KEY
-            "Content-Type" = "application/json"
-          }
+          Write-Host "[MIGRATIONS] Running SQL migrations directly..."
+          Start-Sleep -Seconds 5
+          
           # Ensure Deployments table exists
-          $sql = @"
+          $deploymentsSql = @"
           IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deployments')
           BEGIN
             CREATE TABLE Deployments (
@@ -180,16 +174,29 @@ jobs:
             );
             CREATE INDEX IX_Deployments_DeployedAt ON Deployments (DeployedAt DESC);
           END
-          "@
-          $body = @{ sql = $sql } | ConvertTo-Json
-          $url = "https://${{ env.APP_DOMAIN }}/api/admin/migrations/run-sql"
-          Write-Host "[MIGRATIONS] Trying $url ..."
+"@
           try {
-            $response = Invoke-RestMethod -Uri $url -Method POST -Headers $headers -Body $body -TimeoutSec 60
-            Write-Host "[MIGRATIONS] $($response.message)"
+            Invoke-Sqlcmd -Query $deploymentsSql -ServerInstance "localhost" -Database "PickleballCommunity" -TrustServerCertificate -QueryTimeout 60
+            Write-Host "[MIGRATIONS] Deployments table ensured"
           } catch {
-            Write-Host "[MIGRATIONS] Failed: $($_.Exception.Message)"
-            Write-Host "[MIGRATIONS] WARN: SQL migration failed. Run manually if needed."
+            Write-Host "[MIGRATIONS] WARNING: Could not ensure Deployments table: $($_.Exception.Message)"
+          }
+          
+          # Run pending migration files from archives folder
+          $migrationsPath = "Backend\API\Scripts\archives"
+          if (Test-Path $migrationsPath) {
+            $migrationFiles = Get-ChildItem -Path $migrationsPath -Filter "Migration_*.sql" | Sort-Object Name
+            foreach ($file in $migrationFiles) {
+              Write-Host "[MIGRATIONS] Running: $($file.Name)"
+              try {
+                Invoke-Sqlcmd -InputFile $file.FullName -ServerInstance "localhost" -Database "PickleballCommunity" -TrustServerCertificate -QueryTimeout 300
+                Write-Host "[MIGRATIONS] Completed: $($file.Name)"
+              } catch {
+                Write-Host "[MIGRATIONS] WARNING: $($file.Name) - $($_.Exception.Message)"
+              }
+            }
+          } else {
+            Write-Host "[MIGRATIONS] No migrations folder found at $migrationsPath"
           }
 
       - name: Record deployment
