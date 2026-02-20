@@ -50,13 +50,11 @@ BEGIN
         CreatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
         UpdatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
         
-        -- Foreign keys
+        -- Foreign keys (User FKs omitted - nullable audit fields)
         CONSTRAINT FK_EventCourtScheduleBlocks_Events FOREIGN KEY (EventId) REFERENCES Events(Id) ON DELETE CASCADE,
         CONSTRAINT FK_EventCourtScheduleBlocks_EventDivisions FOREIGN KEY (DivisionId) REFERENCES EventDivisions(Id),
         CONSTRAINT FK_EventCourtScheduleBlocks_DivisionPhases FOREIGN KEY (PhaseId) REFERENCES DivisionPhases(Id),
-        CONSTRAINT FK_EventCourtScheduleBlocks_DependsOnBlock FOREIGN KEY (DependsOnBlockId) REFERENCES EventCourtScheduleBlocks(Id),
-        CONSTRAINT FK_EventCourtScheduleBlocks_CreatedByUser FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id),
-        CONSTRAINT FK_EventCourtScheduleBlocks_UpdatedByUser FOREIGN KEY (UpdatedByUserId) REFERENCES Users(Id)
+        CONSTRAINT FK_EventCourtScheduleBlocks_DependsOnBlock FOREIGN KEY (DependsOnBlockId) REFERENCES EventCourtScheduleBlocks(Id)
     );
 
     -- Index for fast event lookup
@@ -113,11 +111,9 @@ BEGIN
         CreatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
         UpdatedAt DATETIME2 NOT NULL DEFAULT GETDATE(),
         
-        -- Foreign keys
+        -- Foreign keys (User FKs omitted - nullable audit fields)
         CONSTRAINT FK_CourtAvailabilities_Events FOREIGN KEY (EventId) REFERENCES Events(Id) ON DELETE CASCADE,
-        CONSTRAINT FK_CourtAvailabilities_TournamentCourts FOREIGN KEY (TournamentCourtId) REFERENCES TournamentCourts(Id),
-        CONSTRAINT FK_CourtAvailabilities_CreatedByUser FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id),
-        CONSTRAINT FK_CourtAvailabilities_UpdatedByUser FOREIGN KEY (UpdatedByUserId) REFERENCES Users(Id)
+        CONSTRAINT FK_CourtAvailabilities_TournamentCourts FOREIGN KEY (TournamentCourtId) REFERENCES TournamentCourts(Id)
     );
 
     -- Index for event lookup
