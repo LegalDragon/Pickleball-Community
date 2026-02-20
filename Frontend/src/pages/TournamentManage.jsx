@@ -132,6 +132,15 @@ export default function TournamentManage() {
   const [expandedGroupId, setExpandedGroupId] = useState(null);
   const [deletingGroupId, setDeletingGroupId] = useState(null);
 
+  // Court availability state
+  const [courtAvailability, setCourtAvailability] = useState(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [editingCourtAvailability, setEditingCourtAvailability] = useState(null);
+  const [availabilityForm, setAvailabilityForm] = useState({ dayNumber: 1, availableFrom: '09:00', availableTo: '18:00' });
+  const [savingAvailability, setSavingAvailability] = useState(false);
+  const [selectedAvailabilityDay, setSelectedAvailabilityDay] = useState(1);
+
   // Unit management state
   const [unitsData, setUnitsData] = useState(null); // All units grouped by division
   const [loadingUnits, setLoadingUnits] = useState(false);
@@ -723,6 +732,119 @@ export default function TournamentManage() {
       console.error('Error loading court groups:', err);
     } finally {
       setLoadingCourtGroups(false);
+    }
+  };
+
+  // Court availability management
+  const loadCourtAvailability = async () => {
+    setLoadingAvailability(true);
+    try {
+      const response = await tournamentApi.getCourtAvailability(eventId);
+      if (response.success) {
+        setCourtAvailability(response.data);
+      }
+    } catch (err) {
+      console.error('Error loading court availability:', err);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
+  // Format time from "HH:mm:ss" or "HH:mm" to "h:mm AM/PM"
+  const formatAvailabilityTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
+  };
+
+  // Get effective availability for a court on a specific day
+  const getCourtEffectiveAvailability = (courtId, dayNumber = 1) => {
+    if (!courtAvailability?.effectiveAvailability) return null;
+    const courtData = courtAvailability.effectiveAvailability.find(c => c.courtId === courtId);
+    if (!courtData?.days) return null;
+    return courtData.days.find(d => d.dayNumber === dayNumber);
+  };
+
+  // Check if a court has custom hours (override)
+  const courtHasCustomHours = (courtId) => {
+    if (!courtAvailability?.courtOverrides) return false;
+    return courtAvailability.courtOverrides.some(o => o.courtId === courtId);
+  };
+
+  // Get number of event days
+  const getEventDays = () => {
+    if (!event?.startDate || !event?.endDate) return 1;
+    const start = new Date(event.startDate);
+    const end = new Date(event.endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, diffDays);
+  };
+
+  // Handle saving event default availability
+  const handleSaveEventAvailability = async () => {
+    setSavingAvailability(true);
+    try {
+      const response = await tournamentApi.setEventDefaultAvailability(eventId, {
+        dayNumber: availabilityForm.dayNumber,
+        availableFrom: availabilityForm.availableFrom,
+        availableTo: availabilityForm.availableTo
+      });
+      if (response.success) {
+        toast.success('Event availability updated');
+        setShowAvailabilityModal(false);
+        loadCourtAvailability();
+      } else {
+        toast.error(response.message || 'Failed to update availability');
+      }
+    } catch (err) {
+      console.error('Error saving event availability:', err);
+      toast.error('Failed to update availability');
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
+  // Handle saving court-specific availability
+  const handleSaveCourtAvailability = async () => {
+    if (!editingCourtAvailability) return;
+    setSavingAvailability(true);
+    try {
+      const response = await tournamentApi.setCourtAvailability(editingCourtAvailability.courtId, {
+        dayNumber: availabilityForm.dayNumber,
+        availableFrom: availabilityForm.availableFrom,
+        availableTo: availabilityForm.availableTo
+      });
+      if (response.success) {
+        toast.success('Court availability updated');
+        setEditingCourtAvailability(null);
+        loadCourtAvailability();
+      } else {
+        toast.error(response.message || 'Failed to update court availability');
+      }
+    } catch (err) {
+      console.error('Error saving court availability:', err);
+      toast.error('Failed to update court availability');
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
+  // Handle removing court override (use event default)
+  const handleRemoveCourtAvailability = async (courtId, dayNumber) => {
+    try {
+      const response = await tournamentApi.removeCourtAvailability(courtId, dayNumber);
+      if (response.success) {
+        toast.success('Court now uses event default hours');
+        loadCourtAvailability();
+      } else {
+        toast.error(response.message || 'Failed to remove override');
+      }
+    } catch (err) {
+      console.error('Error removing court availability:', err);
+      toast.error('Failed to remove override');
     }
   };
 
@@ -3262,8 +3384,9 @@ export default function TournamentManage() {
                       if (tab.key === 'payments' && !paymentSummary) {
                         loadPaymentSummary();
                       }
-                      if (tab.key === 'courts' && courtGroups.length === 0) {
-                        loadCourtGroups();
+                      if (tab.key === 'courts') {
+                        if (courtGroups.length === 0) loadCourtGroups();
+                        if (!courtAvailability) loadCourtAvailability();
                       }
                       if (tab.key === 'registrations') {
                         loadJoinRequests();
@@ -4287,6 +4410,113 @@ export default function TournamentManage() {
         {/* Courts Tab */}
         {activeTab === 'courts' && (
           <div className="space-y-6">
+            {/* Court Availability Section */}
+            {isOrganizer && (
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-orange-600" />
+                    Court Availability
+                  </h3>
+                  <button
+                    onClick={() => {
+                      const defaultDay = courtAvailability?.eventDefaults?.[0];
+                      setAvailabilityForm({
+                        dayNumber: selectedAvailabilityDay,
+                        availableFrom: defaultDay?.availableFrom?.substring(0, 5) || '09:00',
+                        availableTo: defaultDay?.availableTo?.substring(0, 5) || '18:00'
+                      });
+                      setShowAvailabilityModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 flex items-center gap-2"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Set Default Hours
+                  </button>
+                </div>
+
+                {loadingAvailability ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                  </div>
+                ) : courtAvailability?.eventDefaults?.length > 0 ? (
+                  <div className="space-y-3">
+                    {/* Day tabs for multi-day events */}
+                    {getEventDays() > 1 && (
+                      <div className="flex gap-2 mb-3">
+                        {Array.from({ length: getEventDays() }, (_, i) => i + 1).map(day => (
+                          <button
+                            key={day}
+                            onClick={() => setSelectedAvailabilityDay(day)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                              selectedAvailabilityDay === day
+                                ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            Day {day}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Show current default for selected day */}
+                    {(() => {
+                      const dayDefault = courtAvailability.eventDefaults.find(d => d.dayNumber === selectedAvailabilityDay);
+                      if (dayDefault) {
+                        return (
+                          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                            <Clock className="w-5 h-5 text-gray-400" />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                Default Hours{getEventDays() > 1 ? ` (Day ${selectedAvailabilityDay})` : ''}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {formatAvailabilityTime(dayDefault.availableFrom)} - {formatAvailabilityTime(dayDefault.availableTo)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <p className="text-sm text-gray-500">
+                          No default hours set for Day {selectedAvailabilityDay}
+                        </p>
+                      );
+                    })()}
+
+                    {/* Courts with custom hours */}
+                    {courtAvailability.courtOverrides?.filter(o => o.dayNumber === selectedAvailabilityDay).length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-xs font-medium text-gray-500 uppercase mb-2">Courts with Custom Hours</div>
+                        <div className="flex flex-wrap gap-2">
+                          {courtAvailability.courtOverrides
+                            .filter(o => o.dayNumber === selectedAvailabilityDay)
+                            .map(override => (
+                              <div
+                                key={`${override.courtId}-${override.dayNumber}`}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm"
+                              >
+                                <span className="font-medium">{override.courtLabel}</span>
+                                <span className="text-blue-500">
+                                  {formatAvailabilityTime(override.availableFrom)} - {formatAvailabilityTime(override.availableTo)}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 text-sm bg-gray-50 rounded-lg">
+                    <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    <p>No court availability set yet.</p>
+                    <p className="text-xs mt-1">Set default hours to help with scheduling.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Court Groups Management */}
             {isOrganizer && (
               <div className="bg-white rounded-xl shadow-sm p-4">
@@ -4620,10 +4850,21 @@ export default function TournamentManage() {
                     return `${hours}h ${mins}m`;
                   };
 
+                  // Get effective availability for this court
+                  const courtEffective = getCourtEffectiveAvailability(court.id, selectedAvailabilityDay);
+                  const hasCustom = courtHasCustomHours(court.id);
+
                   return (
                     <div key={court.id} className="bg-white rounded-xl shadow-sm p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-gray-900">{court.courtLabel}</h3>
+                          {hasCustom && (
+                            <span title="Custom hours set" className="text-blue-500">
+                              <Clock className="w-3.5 h-3.5" />
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                             court.status === 'InUse' ? 'bg-orange-100 text-orange-700' :
@@ -4643,6 +4884,32 @@ export default function TournamentManage() {
                           )}
                         </div>
                       </div>
+
+                      {/* Court availability hours */}
+                      {courtEffective && (
+                        <div className={`text-xs mb-3 flex items-center gap-1 ${hasCustom ? 'text-blue-600' : 'text-gray-500'}`}>
+                          <Clock className="w-3 h-3" />
+                          <span>
+                            {formatAvailabilityTime(courtEffective.from)} - {formatAvailabilityTime(courtEffective.to)}
+                          </span>
+                          {isOrganizer && (
+                            <button
+                              onClick={() => {
+                                setEditingCourtAvailability({ courtId: court.id, courtLabel: court.courtLabel });
+                                setAvailabilityForm({
+                                  dayNumber: selectedAvailabilityDay,
+                                  availableFrom: courtEffective.from?.substring(0, 5) || '09:00',
+                                  availableTo: courtEffective.to?.substring(0, 5) || '18:00'
+                                });
+                              }}
+                              className={`ml-1 ${hasCustom ? 'text-blue-500 hover:text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
+                              title={hasCustom ? 'Edit custom hours' : 'Set custom hours'}
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       {/* Current Game */}
                       {court.currentGame ? (
@@ -4863,6 +5130,224 @@ export default function TournamentManage() {
                 <button
                   onClick={() => setEditingCourt(null)}
                   disabled={savingCourt}
+                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Event Default Availability Modal */}
+        {showAvailabilityModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-600" />
+                Set Default Court Hours
+              </h3>
+
+              <div className="space-y-4">
+                {/* Day selector for multi-day events */}
+                {getEventDays() > 1 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Day
+                    </label>
+                    <div className="flex gap-2 flex-wrap">
+                      {Array.from({ length: getEventDays() }, (_, i) => i + 1).map(day => (
+                        <button
+                          key={day}
+                          onClick={() => {
+                            setAvailabilityForm(prev => ({ ...prev, dayNumber: day }));
+                            // Load existing values for this day if available
+                            const existing = courtAvailability?.eventDefaults?.find(d => d.dayNumber === day);
+                            if (existing) {
+                              setAvailabilityForm({
+                                dayNumber: day,
+                                availableFrom: existing.availableFrom?.substring(0, 5) || '09:00',
+                                availableTo: existing.availableTo?.substring(0, 5) || '18:00'
+                              });
+                            }
+                          }}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                            availabilityForm.dayNumber === day
+                              ? 'bg-orange-100 text-orange-700 border-2 border-orange-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-2 border-transparent'
+                          }`}
+                        >
+                          Day {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Available From
+                    </label>
+                    <input
+                      type="time"
+                      value={availabilityForm.availableFrom}
+                      onChange={(e) => setAvailabilityForm(prev => ({ ...prev, availableFrom: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Available To
+                    </label>
+                    <input
+                      type="time"
+                      value={availabilityForm.availableTo}
+                      onChange={(e) => setAvailabilityForm(prev => ({ ...prev, availableTo: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  This sets the default operating hours for all courts. Individual courts can override these hours.
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSaveEventAvailability}
+                  disabled={savingAvailability}
+                  className="flex-1 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {savingAvailability ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save
+                </button>
+                <button
+                  onClick={() => setShowAvailabilityModal(false)}
+                  disabled={savingAvailability}
+                  className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Court-Specific Availability Modal */}
+        {editingCourtAvailability && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-600" />
+                Custom Hours: {editingCourtAvailability.courtLabel}
+              </h3>
+
+              <div className="space-y-4">
+                {/* Day selector for multi-day events */}
+                {getEventDays() > 1 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Day
+                    </label>
+                    <div className="flex gap-2 flex-wrap">
+                      {Array.from({ length: getEventDays() }, (_, i) => i + 1).map(day => (
+                        <button
+                          key={day}
+                          onClick={() => {
+                            setAvailabilityForm(prev => ({ ...prev, dayNumber: day }));
+                            // Load existing override for this court/day if available
+                            const existing = courtAvailability?.courtOverrides?.find(
+                              o => o.courtId === editingCourtAvailability.courtId && o.dayNumber === day
+                            );
+                            if (existing) {
+                              setAvailabilityForm({
+                                dayNumber: day,
+                                availableFrom: existing.availableFrom?.substring(0, 5) || '09:00',
+                                availableTo: existing.availableTo?.substring(0, 5) || '18:00'
+                              });
+                            } else {
+                              // Fall back to event default
+                              const eventDefault = courtAvailability?.eventDefaults?.find(d => d.dayNumber === day);
+                              setAvailabilityForm({
+                                dayNumber: day,
+                                availableFrom: eventDefault?.availableFrom?.substring(0, 5) || '09:00',
+                                availableTo: eventDefault?.availableTo?.substring(0, 5) || '18:00'
+                              });
+                            }
+                          }}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                            availabilityForm.dayNumber === day
+                              ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-2 border-transparent'
+                          }`}
+                        >
+                          Day {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Available From
+                    </label>
+                    <input
+                      type="time"
+                      value={availabilityForm.availableFrom}
+                      onChange={(e) => setAvailabilityForm(prev => ({ ...prev, availableFrom: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Available To
+                    </label>
+                    <input
+                      type="time"
+                      value={availabilityForm.availableTo}
+                      onChange={(e) => setAvailabilityForm(prev => ({ ...prev, availableTo: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  Set custom operating hours for this court that differ from the event default.
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSaveCourtAvailability}
+                  disabled={savingAvailability}
+                  className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {savingAvailability ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save Custom Hours
+                </button>
+                <button
+                  onClick={() => handleRemoveCourtAvailability(editingCourtAvailability.courtId, availabilityForm.dayNumber)}
+                  disabled={savingAvailability}
+                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg font-medium hover:bg-gray-50"
+                  title="Remove custom hours and use event default"
+                >
+                  Use Default
+                </button>
+                <button
+                  onClick={() => setEditingCourtAvailability(null)}
+                  disabled={savingAvailability}
                   className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
                 >
                   Cancel

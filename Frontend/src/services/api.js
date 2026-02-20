@@ -1893,7 +1893,21 @@ export const tournamentApi = {
   createEventFeeType: (eventId, data) => api.post(`/tournament/events/${eventId}/fee-types`, data),
   updateEventFeeType: (eventId, feeTypeId, data) => api.put(`/tournament/events/${eventId}/fee-types/${feeTypeId}`, data),
   deleteEventFeeType: (eventId, feeTypeId) => api.delete(`/tournament/events/${eventId}/fee-types/${feeTypeId}`),
-  bulkUpdateEventFeeTypes: (eventId, feeTypes) => api.put(`/tournament/events/${eventId}/fee-types`, feeTypes)
+  bulkUpdateEventFeeTypes: (eventId, feeTypes) => api.put(`/tournament/events/${eventId}/fee-types`, feeTypes),
+
+  // =====================================================
+  // Court Availability
+  // =====================================================
+
+  /** Get all availability (event defaults + court overrides + effective) */
+  getCourtAvailability: (eventId) => api.get(`/tournament/${eventId}/court-availability`),
+  /** Set event default availability for a day */
+  setEventDefaultAvailability: (eventId, data) => api.post(`/tournament/${eventId}/court-availability`, data),
+  /** Set court-specific availability override */
+  setCourtAvailability: (courtId, data) => api.put(`/tournament/courts/${courtId}/availability`, data),
+  /** Remove court-specific availability override */
+  removeCourtAvailability: (courtId, dayNumber) => 
+    api.delete(`/tournament/courts/${courtId}/availability`, { params: { dayNumber } })
 }
 
 // Messaging API
