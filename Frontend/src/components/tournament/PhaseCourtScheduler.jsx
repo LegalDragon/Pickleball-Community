@@ -152,12 +152,16 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         name: d.name,
         phases: {}
       }
-      // Add phases from data if available
+      // Add phases from data if available (include all properties for filtering)
       d.phases?.forEach(p => {
         divMap[d.id].phases[p.id] = {
           id: p.id,
           name: p.name,
-          phaseOrder: p.sortOrder || 0
+          phaseOrder: p.sortOrder || 0,
+          phaseType: p.phaseType,
+          incomingSlotCount: p.incomingSlotCount,
+          advancingSlotCount: p.advancingSlotCount,
+          encounterCount: p.encounterCount
         }
       })
     })
@@ -592,12 +596,13 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
             const phases = [...(div.phases || [])].sort((a, b) => 
               (a.phaseOrder || a.sortOrder || 0) - (b.phaseOrder || b.sortOrder || 0)
             )
-            // Exclude phases with 0 incoming or 0 advancing slots (entry/exit points), and Draw/Award types (no encounters)
+            // Exclude Draw/Award types (no encounters). Include phases if slot counts are missing (undefined means not set, not 0)
             const playablePhases = phases.filter(p => 
-              (p.incomingSlotCount || 0) > 0 && 
-              (p.advancingSlotCount || 0) > 0 &&
               p.phaseType !== 'Draw' && 
-              p.phaseType !== 'Award'
+              p.phaseType !== 'Award' &&
+              // Only filter by slot count if they're explicitly set to 0
+              (p.incomingSlotCount === undefined || p.incomingSlotCount > 0) &&
+              (p.advancingSlotCount === undefined || p.advancingSlotCount > 0)
             )
             const playablePhaseIds = new Set(playablePhases.map(p => p.id))
             const noPhaseMatches = divMatches['no-phase'] || []
@@ -1121,22 +1126,25 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
           const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
           const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
           const color = divColors[match.divisionId] || COLORS[0]
+          // Show encounter # or match label, with phase info for compact display
+          const label = match.encounterNumber 
+            ? `#${match.encounterNumber}` 
+            : (match.matchLabel || `${match.unit1Name?.split(' ')[0] || 'TBD'} v ${match.unit2Name?.split(' ')[0] || 'TBD'}`)
           
           return (
             <div
               key={match.id}
-              className={`absolute top-1 bottom-1 rounded ${color.bg} ${color.border} border flex items-center px-2 text-xs overflow-hidden cursor-move`}
+              className={`absolute top-1 bottom-1 rounded ${color.bg} ${color.border} border flex items-center justify-center px-1 text-xs overflow-hidden cursor-move`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 50)
+                width: Math.max(width - 2, 30)
               }}
               draggable
               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
-              title={`${match.unit1Name} vs ${match.unit2Name} (Bo${match.totalGames}, ${match.duration}min)`}
+              title={`${match.divisionName}\n${match.phaseName || ''}\n${match.matchLabel || `#${match.encounterNumber}`}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
             >
-              <span className={`truncate ${color.text}`}>
-                {match.unit1Name || 'TBD'} v {match.unit2Name || 'TBD'}
-                <span className="opacity-50 ml-1">Bo{match.totalGames}</span>
+              <span className={`font-medium ${color.text} truncate`}>
+                {label}
               </span>
             </div>
           )
@@ -1148,22 +1156,24 @@ function CourtRow({ court, timeSlots, dayStart, scheduledMatches, pendingAssignm
           const slotIndex = getSlotIndex(new Date(match.startTime), dayStart)
           const width = Math.ceil(match.duration / SLOT_SIZE) * PIXELS_PER_SLOT
           const color = divColors[match.divisionId] || COLORS[0]
+          const label = match.encounterNumber 
+            ? `#${match.encounterNumber}` 
+            : (match.matchLabel || `${match.unit1Name?.split(' ')[0] || 'TBD'} v ${match.unit2Name?.split(' ')[0] || 'TBD'}`)
           
           return (
             <div
               key={`pending-${match.id}`}
-              className={`absolute top-1 bottom-1 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center px-2 text-xs overflow-hidden cursor-move opacity-80`}
+              className={`absolute top-1 bottom-1 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center px-1 text-xs overflow-hidden cursor-move opacity-80`}
               style={{
                 left: slotIndex * PIXELS_PER_SLOT,
-                width: Math.max(width - 2, 50)
+                width: Math.max(width - 2, 30)
               }}
               draggable
               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
-              title={`${match.unit1Name} vs ${match.unit2Name} (Bo${match.totalGames}, ${match.duration}min) - pending`}
+              title={`PENDING\n${match.divisionName}\n${match.phaseName || ''}\n${match.matchLabel || `#${match.encounterNumber}`}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\nBo${match.totalGames} (${match.duration}min)`}
             >
-              <span className={`truncate ${color.text}`}>
-                {match.unit1Name || 'TBD'} v {match.unit2Name || 'TBD'}
-                <span className="opacity-50 ml-1">Bo{match.totalGames}</span>
+              <span className={`font-medium ${color.text} truncate`}>
+                {label}
               </span>
             </div>
           )
