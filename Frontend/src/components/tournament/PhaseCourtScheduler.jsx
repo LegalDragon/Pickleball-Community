@@ -1037,64 +1037,155 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           />
         )}
 
-        {/* Timeline grid */}
+        {/* Timeline grid - Transposed: Time rows × Court columns */}
         <div className="flex-1 overflow-auto" ref={timelineRef}>
           <div className="min-w-max">
-            {/* Time header */}
+            {/* Court header (columns) */}
             <div className="sticky top-0 z-10 flex bg-gray-100 border-b">
-              <div className="w-24 flex-shrink-0 px-2 py-2 font-medium text-xs text-gray-500 border-r">
-                Court
+              <div className="w-16 flex-shrink-0 px-2 py-2 font-medium text-xs text-gray-500 border-r">
+                Time
               </div>
-              <div className="flex">
-                {timeSlots.map((slot, i) => (
-                  <div
-                    key={i}
-                    className={`flex-shrink-0 text-center text-xs py-2 border-r ${
-                      slot.getMinutes() === 0 ? 'font-medium text-gray-700 bg-gray-50' : 'text-gray-400'
-                    }`}
-                    style={{ width: PIXELS_PER_SLOT }}
-                  >
-                    {slot.getMinutes() === 0 ? formatTime(slot) : ''}
-                  </div>
-                ))}
-              </div>
+              {allCourts.map(court => (
+                <div
+                  key={court.id}
+                  className="flex-shrink-0 px-1 py-2 font-medium text-xs text-gray-700 border-r text-center"
+                  style={{ width: 70 }}
+                >
+                  {court.courtLabel}
+                </div>
+              ))}
             </div>
 
-            {/* Court rows */}
-            {allCourts.map(court => (
-              <CourtRow
-                key={court.id}
-                court={court}
-                timeSlots={timeSlots}
-                dayStart={dayStart}
-                scheduledMatches={scheduledMatches.filter(m => m.courtId === court.id)}
-                pendingAssignments={Object.entries(assignments)
-                  .filter(([_, a]) => a.courtId === court.id)
-                  .map(([id, a]) => {
-                    const match = matches.find(m => m.id === id || m.id === parseInt(id))
-                    return match ? { ...match, ...a } : null
-                  })
-                  .filter(Boolean)}
-                divColors={divColors}
-                matches={matches}
-                onDropMatch={(matchId, time) => {
-                  const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
-                  if (match && !wouldViolateStagger(match, court.id, time.getTime(), assignments)) {
-                    const endTime = addMinutes(time, match.duration)
-                    setAssignments(prev => ({
-                      ...prev,
-                      [matchId]: { 
-                        courtId: court.id, 
-                        startTime: time.toISOString(),
-                        endTime: endTime.toISOString()
+            {/* Time rows */}
+            {timeSlots.map((slot, slotIndex) => {
+              const isHour = slot.getMinutes() === 0
+              return (
+                <div 
+                  key={slotIndex} 
+                  className={`flex ${isHour ? 'border-t border-gray-300' : 'border-t border-gray-100'}`}
+                  style={{ height: PIXELS_PER_SLOT }}
+                >
+                  {/* Time label */}
+                  <div 
+                    className={`w-16 flex-shrink-0 px-2 flex items-center text-[11px] border-r ${
+                      isHour ? 'font-medium text-gray-700 bg-gray-50' : 'text-gray-300'
+                    }`}
+                  >
+                    {isHour ? formatTime(slot) : ''}
+                  </div>
+                  
+                  {/* Court columns */}
+                  {allCourts.map(court => {
+                    const cellTime = slot.getTime()
+                    
+                    // Find match starting in this slot for this court
+                    const startingMatch = scheduledMatches.find(m => {
+                      if (m.courtId !== court.id) return false
+                      const mStart = new Date(m.startTime).getTime()
+                      return mStart >= cellTime && mStart < cellTime + SLOT_SIZE * 60000
+                    })
+                    
+                    // Find pending match starting in this slot
+                    const pendingMatch = !startingMatch && Object.entries(assignments).find(([id, a]) => {
+                      if (a.courtId !== court.id) return false
+                      const aStart = new Date(a.startTime).getTime()
+                      return aStart >= cellTime && aStart < cellTime + SLOT_SIZE * 60000
+                    })
+                    
+                    // Check if a match spans this slot (started earlier, still running)
+                    const spanningMatch = !startingMatch && !pendingMatch && scheduledMatches.find(m => {
+                      if (m.courtId !== court.id) return false
+                      const mStart = new Date(m.startTime).getTime()
+                      const mEnd = mStart + m.duration * 60000
+                      return mStart < cellTime && mEnd > cellTime
+                    })
+                    
+                    if (startingMatch) {
+                      const color = divColors[startingMatch.divisionId] || COLORS[0]
+                      const heightSlots = Math.ceil(startingMatch.duration / SLOT_SIZE)
+                      
+                      return (
+                        <div 
+                          key={court.id} 
+                          className="flex-shrink-0 border-r relative"
+                          style={{ width: 70 }}
+                        >
+                          <div
+                            className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} ${color.border} border flex items-center justify-center text-xs cursor-move overflow-hidden z-10`}
+                            style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('matchId', startingMatch.id.toString())}
+                            title={`${startingMatch.divisionName}\n${startingMatch.phaseName || ''}\n#${startingMatch.divisionSequence}: ${startingMatch.unit1Name || 'TBD'} vs ${startingMatch.unit2Name || 'TBD'}\nBo${startingMatch.totalGames} (${startingMatch.duration}min)`}
+                          >
+                            <span className={`font-semibold ${color.text}`}>
+                              #{startingMatch.divisionSequence || '?'}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    }
+                    
+                    if (pendingMatch) {
+                      const [matchId, assignment] = pendingMatch
+                      const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+                      if (match) {
+                        const color = divColors[match.divisionId] || COLORS[0]
+                        const heightSlots = Math.ceil(match.duration / SLOT_SIZE)
+                        
+                        return (
+                          <div 
+                            key={court.id} 
+                            className="flex-shrink-0 border-r relative"
+                            style={{ width: 70 }}
+                          >
+                            <div
+                              className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center text-xs cursor-move overflow-hidden z-10 opacity-80`}
+                              style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
+                              draggable
+                              onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
+                              title={`PENDING\n${match.divisionName}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}`}
+                            >
+                              <span className={`font-semibold ${color.text}`}>
+                                #{match.divisionSequence || '?'}
+                              </span>
+                            </div>
+                          </div>
+                        )
                       }
-                    }))
-                  } else {
-                    toast.warn('Would cause back-to-back conflict for a team')
-                  }
-                }}
-              />
-            ))}
+                    }
+                    
+                    // Empty cell or spanned cell
+                    return (
+                      <div 
+                        key={court.id} 
+                        className={`flex-shrink-0 border-r ${spanningMatch ? '' : 'hover:bg-gray-50'}`}
+                        style={{ width: 70 }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const matchId = e.dataTransfer.getData('matchId')
+                          if (!matchId) return
+                          const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+                          if (match && !wouldViolateStagger(match, court.id, slot.getTime(), assignments)) {
+                            const endTime = addMinutes(slot, match.duration)
+                            setAssignments(prev => ({
+                              ...prev,
+                              [matchId]: { 
+                                courtId: court.id, 
+                                startTime: slot.toISOString(),
+                                endTime: endTime.toISOString()
+                              }
+                            }))
+                          } else if (match) {
+                            toast.warn('Would cause back-to-back conflict for a team')
+                          }
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
