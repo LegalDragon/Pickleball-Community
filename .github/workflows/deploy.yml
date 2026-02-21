@@ -134,7 +134,9 @@ jobs:
           Write-Host "[BACKUP] Backing up database to $backupFile ..."
           try {
             $sql = "BACKUP DATABASE [PickleballCommunity] TO DISK = N'$backupFile' WITH NOFORMAT, NOINIT, NAME = N'PickleballCommunity-Pre-Deploy', SKIP, NOREWIND, NOUNLOAD, COMPRESSION, STATS = 10"
-            Invoke-Sqlcmd -Query $sql -ServerInstance "localhost" -TrustServerCertificate -QueryTimeout 120
+            # Use connection string to avoid -TrustServerCertificate parameter compatibility issues
+            $connStr = "Server=localhost;Database=master;Integrated Security=True;TrustServerCertificate=True"
+            Invoke-Sqlcmd -Query $sql -ConnectionString $connStr -QueryTimeout 120
             Write-Host "[BACKUP] Database backup completed: $backupFile"
           } catch {
             Write-Host "[BACKUP] WARNING: Backup failed: $($_.Exception.Message)"
@@ -160,12 +162,13 @@ jobs:
           
           # Run pending migration files from archives folder
           $migrationsPath = "Backend\API\Scripts\archives"
+          $connStr = "Server=localhost;Database=PickleballCommunity;Integrated Security=True;TrustServerCertificate=True"
           if (Test-Path $migrationsPath) {
             $migrationFiles = Get-ChildItem -Path $migrationsPath -Filter "Migration_*.sql" | Sort-Object Name
             foreach ($file in $migrationFiles) {
               Write-Host "[MIGRATIONS] Running: $($file.Name)"
               try {
-                Invoke-Sqlcmd -InputFile $file.FullName -ServerInstance "localhost" -Database "PickleballCommunity" -QueryTimeout 300
+                Invoke-Sqlcmd -InputFile $file.FullName -ConnectionString $connStr -QueryTimeout 300
                 Write-Host "[MIGRATIONS] Completed: $($file.Name)"
               } catch {
                 Write-Host "[MIGRATIONS] WARNING: $($file.Name) - $($_.Exception.Message)"
