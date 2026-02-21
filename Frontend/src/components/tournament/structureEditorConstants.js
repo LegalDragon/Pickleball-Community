@@ -24,7 +24,7 @@ export const PHASE_TYPES = [
 
 export const BRACKET_TYPES = ['SingleElimination', 'DoubleElimination', 'BracketRound']
 
-export const SEEDING_STRATEGIES = ['CrossPool', 'Sequential', 'Manual']
+export const SEEDING_STRATEGIES = ['Sequential', 'Folded', 'CrossPool', 'Manual']
 
 /**
  * Get folded bracket slot for a given seed position.
@@ -291,18 +291,19 @@ export function autoGenerateRules(phases) {
     const isPools = srcPhase.phaseType === 'Pools' && (parseInt(srcPhase.poolCount) || 0) > 1
     
     // Connect available slots - fill target phase completely before moving to next
-    // For bracket targets, use folded seeding (1 vs 8, 4 vs 5, 3 vs 6, 2 vs 7)
-    const isBracketTarget = BRACKET_TYPES.includes(tgtPhase.phaseType)
+    // For bracket targets with 'Folded' seeding, use folded pattern (1 vs 8, 4 vs 5, 3 vs 6, 2 vs 7)
+    const useFoldedSeeding = BRACKET_TYPES.includes(tgtPhase.phaseType) && 
+                             tgtPhase.seedingStrategy === 'Folded'
     const totalIncomingSlots = parseInt(tgtPhase.incomingSlotCount) || 0
     
     while (countRemainingExits(srcIdx) > 0 && countRemainingIncoming(tgtIdx) > 0) {
       const exitKey = getFirstAvailableExit(srcIdx)
       if (!exitKey) break
       
-      // Determine target slot - use folded seeding for brackets
+      // Determine target slot - use folded seeding if configured
       let inSlot
-      if (isBracketTarget && !isPools) {
-        // For non-pool sources going to bracket, use folded seeding
+      if (useFoldedSeeding && !isPools) {
+        // For non-pool sources going to bracket with Folded seeding
         const position = parseInt(exitKey)
         const foldedSlot = getFoldedBracketSlot(position, totalIncomingSlots)
         // Use folded slot if available, otherwise fall back to first available
