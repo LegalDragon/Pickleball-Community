@@ -57,7 +57,7 @@ const NODE_WIDTH_EXPANDED = 280
 const NODE_HEIGHT_EXPANDED = 220 // Taller when expanded to show mini diagram
 
 // ── PhaseInternalDiagram: SVG mini-diagram showing internal flow of a phase ──
-const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, poolCount, bestOf, includeConsolation }) => {
+const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, poolCount, bestOf, includeConsolation, seedingStrategy }) => {
   const incoming = parseInt(incomingSlots) || 4
   const advancing = parseInt(advancingSlots) || 2
   const pools = parseInt(poolCount) || 0
@@ -379,6 +379,14 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
       const rowH = 24
       const svgH = Math.min(200, matchCount * rowH + 28)
 
+      // Helper to get folded matchups: M1=1v8, M2=2v7, M3=3v6, M4=4v5, etc.
+      const getFoldedMatchup = (matchIndex, totalSlots) => {
+        const seed1 = matchIndex + 1
+        const seed2 = totalSlots - matchIndex
+        return [seed1, seed2]
+      }
+      const useFolded = seedingStrategy === 'Folded'
+
       return (
         <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
           <text x={svgW / 2} y={12} fontSize="9" fill={GRAY} textAnchor="middle" fontWeight="600" fontFamily="system-ui">
@@ -387,11 +395,13 @@ const PhaseInternalDiagram = memo(({ phaseType, incomingSlots, advancingSlots, p
           </text>
           {Array.from({ length: matchCount }, (_, i) => {
             const my = 22 + i * rowH + rowH / 2
+            // For folded seeding, show seed matchups (1v8, 2v7, etc.)
+            const [slot1, slot2] = useFolded ? getFoldedMatchup(i, incoming) : [i * 2 + 1, i * 2 + 2]
             return (
               <g key={i}>
                 {/* Two incoming slots with numbers */}
-                <InSlot x={22} y={my - 5} num={i * 2 + 1} />
-                <InSlot x={22} y={my + 5} num={i * 2 + 2} />
+                <InSlot x={22} y={my - 5} num={slot1} />
+                <InSlot x={22} y={my + 5} num={slot2} />
                 <line x1={29} y1={my - 5} x2={55} y2={my - 5} stroke={LINE_GRAY} strokeWidth={0.8} />
                 <line x1={29} y1={my + 5} x2={55} y2={my + 5} stroke={LINE_GRAY} strokeWidth={0.8} />
                 <line x1={55} y1={my - 5} x2={55} y2={my + 5} stroke={LINE_GRAY} strokeWidth={0.8} />
@@ -610,6 +620,7 @@ const PhaseNode = memo(({ data, selected }) => {
             poolCount={data.poolCount}
             bestOf={data.bestOf}
             includeConsolation={data.includeConsolation}
+            seedingStrategy={data.seedingStrategy}
           />
         </div>
       )}
@@ -1138,6 +1149,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
         poolCount: phase.poolCount,
         bestOf: phase.bestOf,
         includeConsolation: phase.includeConsolation,
+        seedingStrategy: phase.seedingStrategy,
         awardType: phase.awardType,
         drawMethod: phase.drawMethod,
         layoutDirection: dir,
@@ -1332,6 +1344,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
             poolCount: phase.poolCount,
             bestOf: phase.bestOf,
             includeConsolation: phase.includeConsolation,
+            seedingStrategy: phase.seedingStrategy,
             awardType: phase.awardType,
             drawMethod: phase.drawMethod,
             layoutDirection,
