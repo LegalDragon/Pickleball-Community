@@ -134,7 +134,8 @@ jobs:
           Write-Host "[BACKUP] Backing up database to $backupFile ..."
           
           # Use sqlcmd.exe directly (more reliable than Invoke-Sqlcmd on old PowerShell)
-          $sql = "BACKUP DATABASE [PickleballCommunity] TO DISK = N'$backupFile' WITH NOFORMAT, NOINIT, NAME = N'PickleballCommunity-Pre-Deploy', SKIP, NOREWIND, NOUNLOAD, COMPRESSION, STATS = 10"
+          # Note: COMPRESSION removed - not supported on SQL Server Express
+          $sql = "BACKUP DATABASE [PickleballCommunity] TO DISK = N'$backupFile' WITH NOFORMAT, NOINIT, NAME = N'PickleballCommunity-Pre-Deploy', SKIP, NOREWIND, NOUNLOAD, STATS = 10"
           & sqlcmd -S localhost -E -Q $sql -t 120
           if ($LASTEXITCODE -ne 0) {
             throw "SQL backup failed with exit code $LASTEXITCODE"
