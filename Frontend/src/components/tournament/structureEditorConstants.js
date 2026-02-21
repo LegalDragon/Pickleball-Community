@@ -26,6 +26,22 @@ export const BRACKET_TYPES = ['SingleElimination', 'DoubleElimination', 'Bracket
 
 export const SEEDING_STRATEGIES = ['CrossPool', 'Sequential', 'Manual']
 
+/**
+ * Get folded bracket slot for a given seed position.
+ * For 8 teams: 1→1, 2→3, 3→5, 4→7, 5→8, 6→6, 7→4, 8→2
+ * This ensures top seeds are on opposite sides and #1 plays #8, #2 plays #7, etc.
+ */
+export function getFoldedBracketSlot(position, totalSlots) {
+  const half = totalSlots / 2
+  if (position <= half) {
+    // First half: positions 1,2,3,4 → slots 1,3,5,7 (odd slots)
+    return position * 2 - 1
+  } else {
+    // Second half: positions 5,6,7,8 → slots 8,6,4,2 (even slots in reverse)
+    return (totalSlots - position + 1) * 2
+  }
+}
+
 export const AWARD_TYPES = ['Gold', 'Silver', 'Bronze', 'none']
 
 // ── Default objects ──
@@ -275,10 +291,26 @@ export function autoGenerateRules(phases) {
     const isPools = srcPhase.phaseType === 'Pools' && (parseInt(srcPhase.poolCount) || 0) > 1
     
     // Connect available slots - fill target phase completely before moving to next
+    // For bracket targets, use folded seeding (1 vs 8, 4 vs 5, 3 vs 6, 2 vs 7)
+    const isBracketTarget = BRACKET_TYPES.includes(tgtPhase.phaseType)
+    const totalIncomingSlots = parseInt(tgtPhase.incomingSlotCount) || 0
+    
     while (countRemainingExits(srcIdx) > 0 && countRemainingIncoming(tgtIdx) > 0) {
       const exitKey = getFirstAvailableExit(srcIdx)
-      const inSlot = getFirstAvailableIncoming(tgtIdx)
-      if (!exitKey || !inSlot) break
+      if (!exitKey) break
+      
+      // Determine target slot - use folded seeding for brackets
+      let inSlot
+      if (isBracketTarget && !isPools) {
+        // For non-pool sources going to bracket, use folded seeding
+        const position = parseInt(exitKey)
+        const foldedSlot = getFoldedBracketSlot(position, totalIncomingSlots)
+        // Use folded slot if available, otherwise fall back to first available
+        inSlot = incomingRemaining[tgtIdx].has(foldedSlot) ? foldedSlot : getFirstAvailableIncoming(tgtIdx)
+      } else {
+        inSlot = getFirstAvailableIncoming(tgtIdx)
+      }
+      if (!inSlot) break
       
       // Mark as used
       exitRemaining[srcIdx][exitKey] = false
