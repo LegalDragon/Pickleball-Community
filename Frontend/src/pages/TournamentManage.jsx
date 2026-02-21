@@ -773,13 +773,17 @@ export default function TournamentManage() {
     return courtAvailability.courtOverrides.some(o => o.courtId === courtId);
   };
 
-  // Get number of event days
+  // Get number of event days (calendar days, ignoring time)
   const getEventDays = () => {
     if (!event?.startDate || !event?.endDate) return 1;
+    // Parse dates and normalize to midnight to count calendar days
     const start = new Date(event.startDate);
     const end = new Date(event.endDate);
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    // Reset to midnight to avoid timezone/time issues
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    const diffTime = endDay - startDay;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return Math.max(1, diffDays);
   };
 
