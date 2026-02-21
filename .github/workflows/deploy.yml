@@ -132,16 +132,17 @@ jobs:
           if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Path $backupDir -Force }
           $backupFile = "$backupDir\PickleballCommunity_$timestamp.bak"
           Write-Host "[BACKUP] Backing up database to $backupFile ..."
-          try {
-            $sql = "BACKUP DATABASE [PickleballCommunity] TO DISK = N'$backupFile' WITH NOFORMAT, NOINIT, NAME = N'PickleballCommunity-Pre-Deploy', SKIP, NOREWIND, NOUNLOAD, COMPRESSION, STATS = 10"
-            # Use connection string to avoid -TrustServerCertificate parameter compatibility issues
-            $connStr = "Server=localhost;Database=master;Integrated Security=True;TrustServerCertificate=True"
-            Invoke-Sqlcmd -Query $sql -ConnectionString $connStr -QueryTimeout 120
-            Write-Host "[BACKUP] Database backup completed: $backupFile"
-          } catch {
-            Write-Host "[BACKUP] WARNING: Backup failed: $($_.Exception.Message)"
-            Write-Host "[BACKUP] Continuing with deploy..."
+          
+          $sql = "BACKUP DATABASE [PickleballCommunity] TO DISK = N'$backupFile' WITH NOFORMAT, NOINIT, NAME = N'PickleballCommunity-Pre-Deploy', SKIP, NOREWIND, NOUNLOAD, COMPRESSION, STATS = 10"
+          $connStr = "Server=localhost;Database=master;Integrated Security=True;TrustServerCertificate=True"
+          Invoke-Sqlcmd -Query $sql -ConnectionString $connStr -QueryTimeout 120 -ErrorAction Stop
+          
+          # Verify backup file was created
+          if (-not (Test-Path $backupFile)) {
+            throw "Backup file was not created: $backupFile"
           }
+          $size = (Get-Item $backupFile).Length / 1MB
+          Write-Host "[BACKUP] SUCCESS: $backupFile ($([math]::Round($size, 2)) MB)"
 
       - name: Deploy to IIS
         shell: powershell
