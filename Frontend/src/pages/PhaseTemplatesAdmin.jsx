@@ -1132,7 +1132,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
       data: {
         label: phase.name,
         phaseType: phase.phaseType,
-        sortOrder: idx + 1,
+        sortOrder: phase.sortOrder || (idx + 1),
         incomingSlotCount: phase.incomingSlotCount,
         advancingSlotCount: phase.advancingSlotCount,
         poolCount: phase.poolCount,
@@ -1320,7 +1320,7 @@ const CanvasPhaseEditorInner = ({ visualState, onChange, readOnly = false }) => 
       return prev.map((node, idx) => {
         const phase = vs.phases[idx]
         if (!phase) return node
-        const order = idx + 1
+        const order = phase.sortOrder || (idx + 1)
         return {
           ...node,
           data: {
