@@ -62,6 +62,9 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   const [showPhaseDiagram, setShowPhaseDiagram] = useState(false)
   const [divisionStructure, setDivisionStructure] = useState(null) // { divisionId, visualState }
   const [loadingStructure, setLoadingStructure] = useState(false)
+  
+  // Quick Schedule Modal
+  const [quickScheduleDivision, setQuickScheduleDivision] = useState(null) // { id, name, matchCount, phases }
   const [dayStart, setDayStart] = useState(() => {
     const d = new Date(data?.eventStartDate || new Date())
     d.setHours(8, 0, 0, 0)
@@ -718,14 +721,31 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
             return (
               <div key={div.id} className="mb-2">
                 {/* Division header */}
-                <button
-                  onClick={() => toggleDivision(div.id)}
-                  className={`w-full px-3 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-50 ${color?.bg} ${color?.border} border`}
-                >
-                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                  <span className={`font-medium ${color?.text}`}>{div.name}</span>
-                  <span className="ml-auto text-xs text-gray-500">{totalDivMatches} matches</span>
-                </button>
+                <div className={`w-full px-3 py-2 rounded-lg flex items-center gap-2 ${color?.bg} ${color?.border} border`}>
+                  <button
+                    onClick={() => toggleDivision(div.id)}
+                    className="flex items-center gap-2 flex-1 hover:opacity-80"
+                  >
+                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    <span className={`font-medium ${color?.text}`}>{div.name}</span>
+                  </button>
+                  <span className="text-xs text-gray-500">{totalDivMatches} matches</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setQuickScheduleDivision({
+                        id: div.id,
+                        name: div.name,
+                        matchCount: totalDivMatches,
+                        phases: playablePhases
+                      })
+                    }}
+                    className={`p-1.5 rounded-lg hover:bg-white/50 ${color?.text}`}
+                    title="Quick Schedule"
+                  >
+                    <Zap className="w-4 h-4" />
+                  </button>
+                </div>
                 
                 {/* Phases (only playable - excludes Draw/Award) */}
                 {isExpanded && (
@@ -1189,6 +1209,43 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           </div>
         </div>
       </div>
+
+      {/* Quick Schedule Modal */}
+      {quickScheduleDivision && (
+        <QuickScheduleModal
+          division={quickScheduleDivision}
+          courts={allCourts}
+          matches={matches}
+          dayStart={dayStart}
+          onClose={() => setQuickScheduleDivision(null)}
+          onSchedule={async (params) => {
+            try {
+              const res = await tournamentApi.schedulingGenerate({
+                eventId: parseInt(eventId),
+                divisionId: params.divisionId,
+                startTime: params.startTime.toISOString(),
+                matchDurationMinutes: params.matchDurationMinutes,
+                restTimeMinutes: params.restTimeMinutes,
+                clearExisting: false,
+                respectPlayerOverlap: true,
+                courtIds: params.courtIds
+              })
+              if (res.success) {
+                toast.success(`Scheduled ${res.data?.assignedCount || 0} matches`)
+                if (res.data?.conflicts?.length > 0) {
+                  toast.warn(`${res.data.conflicts.length} conflicts detected`)
+                }
+                onUpdate?.()
+              } else {
+                toast.error(res.message || 'Scheduling failed')
+              }
+            } catch (err) {
+              console.error('Scheduling error:', err)
+              toast.error(err.response?.data?.message || 'Scheduling failed')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1264,6 +1321,205 @@ function QuickScheduleBar({ courts, selectedCount, totalDuration, dayStart, onSc
         <Zap className="w-4 h-4" />
         Auto-Schedule
       </button>
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════
+// Quick Schedule Modal - For division-level scheduling
+// ═════════════════════════════════════════════════════
+function QuickScheduleModal({ division, courts, matches, dayStart, onClose, onSchedule }) {
+  const [selectedCourts, setSelectedCourts] = useState(new Set(courts.slice(0, 6).map(c => c.id)))
+  const [startTime, setStartTime] = useState(
+    `${String(dayStart.getHours()).padStart(2, '0')}:${String(dayStart.getMinutes()).padStart(2, '0')}`
+  )
+  const [matchDuration, setMatchDuration] = useState(20)
+  const [restTime, setRestTime] = useState(5)
+  const [scheduling, setScheduling] = useState(false)
+
+  const divisionMatches = matches.filter(m => m.divisionId === division.id)
+  const unscheduledMatches = divisionMatches.filter(m => !m.courtId && !m.scheduledStartTime)
+  const totalDuration = unscheduledMatches.length * (matchDuration + restTime)
+  
+  // Calculate estimated end time
+  const estimatedEnd = useMemo(() => {
+    if (selectedCourts.size === 0) return null
+    const [h, m] = startTime.split(':').map(Number)
+    const start = new Date(dayStart)
+    start.setHours(h, m, 0, 0)
+    const slotsPerCourt = Math.ceil(unscheduledMatches.length / selectedCourts.size)
+    const minutes = slotsPerCourt * (matchDuration + restTime)
+    return addMinutes(start, minutes)
+  }, [selectedCourts, startTime, unscheduledMatches.length, matchDuration, restTime, dayStart])
+
+  const toggleCourt = (courtId) => {
+    setSelectedCourts(prev => {
+      const next = new Set(prev)
+      if (next.has(courtId)) next.delete(courtId)
+      else next.add(courtId)
+      return next
+    })
+  }
+
+  const selectAllCourts = () => setSelectedCourts(new Set(courts.map(c => c.id)))
+  const clearCourts = () => setSelectedCourts(new Set())
+
+  const handleSchedule = async () => {
+    if (selectedCourts.size === 0) return
+    setScheduling(true)
+    try {
+      const [h, m] = startTime.split(':').map(Number)
+      const start = new Date(dayStart)
+      start.setHours(h, m, 0, 0)
+      await onSchedule({
+        divisionId: division.id,
+        courtIds: Array.from(selectedCourts),
+        startTime: start,
+        matchDurationMinutes: matchDuration,
+        restTimeMinutes: restTime
+      })
+      onClose()
+    } finally {
+      setScheduling(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-purple-600 to-indigo-600">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Quick Schedule
+              </h2>
+              <p className="text-purple-200 text-sm">{division.name}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-5">
+          {/* Match stats */}
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex-1">
+              <div className="text-2xl font-bold text-gray-900">{unscheduledMatches.length}</div>
+              <div className="text-xs text-gray-500">matches to schedule</div>
+            </div>
+            <div className="flex-1">
+              <div className="text-2xl font-bold text-gray-900">{divisionMatches.length - unscheduledMatches.length}</div>
+              <div className="text-xs text-gray-500">already scheduled</div>
+            </div>
+          </div>
+
+          {/* Courts selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Courts to use</label>
+              <div className="text-xs space-x-2">
+                <button onClick={selectAllCourts} className="text-purple-600 hover:underline">All</button>
+                <button onClick={clearCourts} className="text-gray-500 hover:underline">None</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {courts.map(court => (
+                <button
+                  key={court.id}
+                  onClick={() => toggleCourt(court.id)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition ${
+                    selectedCourts.has(court.id)
+                      ? 'bg-purple-600 text-white border-purple-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
+                  }`}
+                >
+                  {court.courtLabel}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Time settings */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Start Time</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Match (min)</label>
+              <input
+                type="number"
+                min="5"
+                max="60"
+                value={matchDuration}
+                onChange={(e) => setMatchDuration(parseInt(e.target.value) || 15)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Rest (min)</label>
+              <input
+                type="number"
+                min="0"
+                max="30"
+                value={restTime}
+                onChange={(e) => setRestTime(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Preview */}
+          {selectedCourts.size > 0 && unscheduledMatches.length > 0 && (
+            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">Schedule Preview</span>
+              </div>
+              <p>
+                {unscheduledMatches.length} matches on {selectedCourts.size} courts
+                {estimatedEnd && (
+                  <> → ends ~<strong>{formatTime(estimatedEnd)}</strong></>
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSchedule}
+            disabled={selectedCourts.size === 0 || unscheduledMatches.length === 0 || scheduling}
+            className="px-6 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+          >
+            {scheduling ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            Schedule {unscheduledMatches.length} Matches
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

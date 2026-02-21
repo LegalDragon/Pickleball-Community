@@ -20,6 +20,10 @@ public class ScheduleRequest
     public bool RespectPlayerOverlap { get; set; } = true;
     public List<int>? EncounterIds { get; set; }
     /// <summary>
+    /// Specific courts to use for scheduling. If empty, uses all active courts for the event.
+    /// </summary>
+    public List<int>? CourtIds { get; set; }
+    /// <summary>
     /// Pool scheduling mode: "interleaved" (default) or "block"
     /// - Interleaved: Pool A R1G1, Pool B R1G1, Pool A R1G2, Pool B R1G2... (fair progression)
     /// - Block: Pool A R1 complete, then Pool B R1 complete... (faster per-pool completion)
@@ -392,14 +396,28 @@ public class SchedulingService : ISchedulingService, ICourtAssignmentService
             var divisionCourts = new Dictionary<int, List<TournamentCourt>>();
             foreach (var division in divisions)
             {
-                var courts = await GetAvailableCourtsAsync(division.Id, request.PhaseId);
-                if (!courts.Any())
+                List<TournamentCourt> courts;
+                
+                // If specific courts are requested, use those
+                if (request.CourtIds != null && request.CourtIds.Any())
                 {
-                    // Fallback to all event courts
+                    var courtIdSet = new HashSet<int>(request.CourtIds);
                     courts = await _context.TournamentCourts
-                        .Where(c => c.EventId == eventId && c.IsActive)
+                        .Where(c => c.EventId == eventId && c.IsActive && courtIdSet.Contains(c.Id))
                         .OrderBy(c => c.SortOrder)
                         .ToListAsync();
+                }
+                else
+                {
+                    courts = await GetAvailableCourtsAsync(division.Id, request.PhaseId);
+                    if (!courts.Any())
+                    {
+                        // Fallback to all event courts
+                        courts = await _context.TournamentCourts
+                            .Where(c => c.EventId == eventId && c.IsActive)
+                            .OrderBy(c => c.SortOrder)
+                            .ToListAsync();
+                    }
                 }
                 divisionCourts[division.Id] = courts;
             }
