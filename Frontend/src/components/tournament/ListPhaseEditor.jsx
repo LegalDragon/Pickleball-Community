@@ -271,7 +271,7 @@ const ListPhaseEditor = ({ visualState, onChange }) => {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Seeding</label>
-                        <select value={phase.seedingStrategy || 'Sequential'}
+                        <select value={phase.seedingStrategy || 'Folded'}
                           onChange={e => updatePhase(idx, 'seedingStrategy', e.target.value)}
                           className="w-full px-2 py-1.5 border rounded text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
                           {SEEDING_STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}

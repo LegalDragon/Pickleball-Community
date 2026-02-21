@@ -1087,7 +1087,7 @@ const NodeConfigPanel = ({ phase, phaseIndex, onChange, onDelete }) => {
           <>
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Seeding</label>
-              <select value={phase.seedingStrategy || 'Sequential'} onChange={e => update('seedingStrategy', e.target.value)}
+              <select value={phase.seedingStrategy || 'Folded'} onChange={e => update('seedingStrategy', e.target.value)}
                 className="w-full px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-purple-500">
                 {SEEDING_STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
