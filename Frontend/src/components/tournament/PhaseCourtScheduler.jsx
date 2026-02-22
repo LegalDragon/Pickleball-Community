@@ -1093,22 +1093,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
               return [...scheduled, ...pending]
             }
             
-            // Calculate pixel offset from dayStart (round UP to nearest slot for cleaner alignment)
+            // Calculate pixel offset from dayStart (exact position, no rounding)
             const getTopOffset = (startTime) => {
               const minutes = (new Date(startTime).getTime() - dayStart.getTime()) / 60000
-              const roundedMinutes = Math.ceil(minutes / SLOT_SIZE) * SLOT_SIZE // Round UP
-              return (roundedMinutes / SLOT_SIZE) * PIXELS_PER_SLOT
+              return (minutes / SLOT_SIZE) * PIXELS_PER_SLOT
             }
             
-            // Calculate height from start/end times (round end DOWN for alignment)
+            // Calculate height from duration (exact, no rounding)
             const getDisplayHeight = (startTime, duration) => {
-              const startMinutes = (new Date(startTime).getTime() - dayStart.getTime()) / 60000
-              const endMinutes = startMinutes + duration
-              // Round start UP, end DOWN
-              const displayStart = Math.ceil(startMinutes / SLOT_SIZE) * SLOT_SIZE
-              const displayEnd = Math.floor(endMinutes / SLOT_SIZE) * SLOT_SIZE
-              const displayDuration = Math.max(displayEnd - displayStart, SLOT_SIZE) // Min 1 slot
-              return (displayDuration / SLOT_SIZE) * PIXELS_PER_SLOT
+              return (duration / SLOT_SIZE) * PIXELS_PER_SLOT
             }
             
             return (
