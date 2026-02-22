@@ -66,6 +66,9 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   // Quick Schedule Modal
   const [quickScheduleDivision, setQuickScheduleDivision] = useState(null) // { id, name, matchCount, phases }
   
+  // Selected Matches Schedule Modal
+  const [showSelectedMatchesModal, setShowSelectedMatchesModal] = useState(false)
+  
   // Edit Match Modal
   const [editingMatch, setEditingMatch] = useState(null) // match object to edit
   const [dayStart, setDayStart] = useState(() => {
@@ -1065,11 +1068,9 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
         {/* Quick schedule controls */}
         {selectedMatches.size > 0 && (
           <QuickScheduleBar
-            courts={allCourts}
             selectedCount={selectedMatches.size}
             totalDuration={totalDuration}
-            dayStart={dayStart}
-            onSchedule={autoScheduleSelected}
+            onOpenModal={() => setShowSelectedMatchesModal(true)}
           />
         )}
 
@@ -1302,6 +1303,21 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           }}
         />
       )}
+
+      {/* Selected Matches Schedule Modal */}
+      {showSelectedMatchesModal && (
+        <SelectedMatchesScheduleModal
+          selectedMatches={selectedMatches}
+          matches={matches}
+          courts={allCourts}
+          dayStart={dayStart}
+          onClose={() => setShowSelectedMatchesModal(false)}
+          onSchedule={(courtIds, startTime) => {
+            autoScheduleSelected(courtIds, startTime)
+            setShowSelectedMatchesModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1419,13 +1435,50 @@ function EditMatchModal({ match, courts, dayStart, currentAssignment, onClose, o
 }
 
 // ═════════════════════════════════════════════════════
-// Quick Schedule Bar
+// Quick Schedule Bar - Opens modal for selected matches
 // ═════════════════════════════════════════════════════
-function QuickScheduleBar({ courts, selectedCount, totalDuration, dayStart, onSchedule }) {
-  const [selectedCourts, setSelectedCourts] = useState(new Set())
+function QuickScheduleBar({ selectedCount, totalDuration, onOpenModal }) {
+  return (
+    <div className="px-4 py-3 border-b bg-orange-50 flex items-center gap-4 flex-wrap">
+      <div className="text-sm font-medium text-orange-800">
+        Schedule {selectedCount} matches ({Math.floor(totalDuration / 60)}h {totalDuration % 60}m)
+      </div>
+      
+      <button
+        onClick={onOpenModal}
+        className="px-4 py-1.5 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-lg flex items-center gap-1"
+      >
+        <Zap className="w-4 h-4" />
+        Auto-Schedule
+      </button>
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════
+// Selected Matches Schedule Modal
+// ═════════════════════════════════════════════════════
+function SelectedMatchesScheduleModal({ selectedMatches, matches, courts, dayStart, onClose, onSchedule }) {
+  const [selectedCourts, setSelectedCourts] = useState(new Set(courts.slice(0, 6).map(c => c.id)))
   const [startTime, setStartTime] = useState(
     `${String(dayStart.getHours()).padStart(2, '0')}:${String(dayStart.getMinutes()).padStart(2, '0')}`
   )
+  const [scheduling, setScheduling] = useState(false)
+
+  const matchList = matches.filter(m => selectedMatches.has(m.id))
+  const totalDuration = matchList.reduce((sum, m) => sum + m.duration, 0)
+  
+  // Calculate estimated end time
+  const estimatedEnd = useMemo(() => {
+    if (selectedCourts.size === 0 || matchList.length === 0) return null
+    const [h, m] = startTime.split(':').map(Number)
+    const start = new Date(dayStart)
+    start.setHours(h, m, 0, 0)
+    const slotsPerCourt = Math.ceil(matchList.length / selectedCourts.size)
+    const avgDuration = totalDuration / matchList.length
+    const minutes = slotsPerCourt * avgDuration
+    return addMinutes(start, minutes)
+  }, [selectedCourts, startTime, matchList, totalDuration, dayStart])
 
   const toggleCourt = (courtId) => {
     setSelectedCourts(prev => {
@@ -1436,59 +1489,135 @@ function QuickScheduleBar({ courts, selectedCount, totalDuration, dayStart, onSc
     })
   }
 
+  const selectAllCourts = () => setSelectedCourts(new Set(courts.map(c => c.id)))
+  const clearCourts = () => setSelectedCourts(new Set())
+
   const handleSchedule = () => {
-    const [h, m] = startTime.split(':').map(Number)
-    const time = new Date(dayStart)
-    time.setHours(h, m, 0, 0)
-    onSchedule(Array.from(selectedCourts), time)
+    if (selectedCourts.size === 0) return
+    setScheduling(true)
+    try {
+      const [h, m] = startTime.split(':').map(Number)
+      const start = new Date(dayStart)
+      start.setHours(h, m, 0, 0)
+      onSchedule(Array.from(selectedCourts), start)
+      onClose()
+    } finally {
+      setScheduling(false)
+    }
   }
 
   return (
-    <div className="px-4 py-3 border-b bg-orange-50 flex items-center gap-4 flex-wrap">
-      <div className="text-sm font-medium text-orange-800">
-        Schedule {selectedCount} matches ({Math.floor(totalDuration / 60)}h {totalDuration % 60}m)
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-600">on courts:</span>
-        <div className="flex flex-wrap gap-1">
-          {courts.slice(0, 10).map(court => (
-            <button
-              key={court.id}
-              onClick={() => toggleCourt(court.id)}
-              className={`px-2 py-1 text-xs rounded ${
-                selectedCourts.has(court.id)
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-white border text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {court.courtLabel}
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-orange-500 to-amber-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                Schedule Selected Matches
+              </h2>
+              <p className="text-orange-100 text-sm">{matchList.length} matches selected</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg text-white">
+              <X className="w-5 h-5" />
             </button>
-          ))}
-          {courts.length > 10 && (
-            <span className="text-xs text-gray-500">+{courts.length - 10} more</span>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-5">
+          {/* Match stats */}
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex-1">
+              <div className="text-2xl font-bold text-gray-900">{matchList.length}</div>
+              <div className="text-xs text-gray-500">matches to schedule</div>
+            </div>
+            <div className="flex-1">
+              <div className="text-2xl font-bold text-gray-900">{Math.floor(totalDuration / 60)}h {totalDuration % 60}m</div>
+              <div className="text-xs text-gray-500">total duration</div>
+            </div>
+          </div>
+
+          {/* Courts selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Courts to use</label>
+              <div className="text-xs space-x-2">
+                <button onClick={selectAllCourts} className="text-orange-600 hover:underline">All</button>
+                <button onClick={clearCourts} className="text-gray-500 hover:underline">None</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {courts.map(court => (
+                <button
+                  key={court.id}
+                  onClick={() => toggleCourt(court.id)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition ${
+                    selectedCourts.has(court.id)
+                      ? 'bg-orange-500 text-white border-orange-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                  }`}
+                >
+                  {court.courtLabel}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Time settings */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1">Start Time</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+
+          {/* Preview */}
+          {selectedCourts.size > 0 && matchList.length > 0 && (
+            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">Schedule Preview</span>
+              </div>
+              <p>
+                {matchList.length} matches on {selectedCourts.size} courts
+                {estimatedEnd && (
+                  <> → ends ~<strong>{formatTime(estimatedEnd)}</strong></>
+                )}
+              </p>
+            </div>
           )}
         </div>
-      </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-600">starting at:</span>
-        <input
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="px-2 py-1 border rounded text-sm"
-        />
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSchedule}
+            disabled={selectedCourts.size === 0 || scheduling}
+            className="px-6 py-2 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+          >
+            {scheduling ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4" />
+            )}
+            Schedule {matchList.length} Matches
+          </button>
+        </div>
       </div>
-
-      <button
-        onClick={handleSchedule}
-        disabled={selectedCourts.size === 0}
-        className="px-4 py-1.5 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-lg flex items-center gap-1 disabled:opacity-50"
-      >
-        <Zap className="w-4 h-4" />
-        Auto-Schedule
-      </button>
     </div>
   )
 }
