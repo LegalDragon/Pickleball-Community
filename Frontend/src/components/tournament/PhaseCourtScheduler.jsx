@@ -20,8 +20,8 @@ const COLORS = [
 ]
 
 // Time slot size in minutes
-const SLOT_SIZE = 15
-const PIXELS_PER_SLOT = 20 // Reduced from 30 for narrower blocks (~20 min matches)
+const SLOT_SIZE = 5 // 5-minute granularity for better alignment
+const PIXELS_PER_SLOT = 8 // Smaller slots = smaller pixels per slot
 const DEFAULT_GAME_DURATION = 15 // minutes per game
 
 function formatTime(date) {
@@ -1093,15 +1093,22 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
               return [...scheduled, ...pending]
             }
             
-            // Calculate pixel offset from dayStart
+            // Calculate pixel offset from dayStart (round UP to nearest slot for cleaner alignment)
             const getTopOffset = (startTime) => {
               const minutes = (new Date(startTime).getTime() - dayStart.getTime()) / 60000
-              return (minutes / SLOT_SIZE) * PIXELS_PER_SLOT
+              const roundedMinutes = Math.ceil(minutes / SLOT_SIZE) * SLOT_SIZE // Round UP
+              return (roundedMinutes / SLOT_SIZE) * PIXELS_PER_SLOT
             }
             
-            // Calculate height from duration
-            const getHeight = (duration) => {
-              return (duration / SLOT_SIZE) * PIXELS_PER_SLOT
+            // Calculate height from start/end times (round end DOWN for alignment)
+            const getDisplayHeight = (startTime, duration) => {
+              const startMinutes = (new Date(startTime).getTime() - dayStart.getTime()) / 60000
+              const endMinutes = startMinutes + duration
+              // Round start UP, end DOWN
+              const displayStart = Math.ceil(startMinutes / SLOT_SIZE) * SLOT_SIZE
+              const displayEnd = Math.floor(endMinutes / SLOT_SIZE) * SLOT_SIZE
+              const displayDuration = Math.max(displayEnd - displayStart, SLOT_SIZE) // Min 1 slot
+              return (displayDuration / SLOT_SIZE) * PIXELS_PER_SLOT
             }
             
             return (
@@ -1113,17 +1120,21 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                   </div>
                   <div className="relative" style={{ height: totalHeight }}>
                     {timeSlots.map((slot, i) => {
-                      const isHour = slot.getMinutes() === 0
+                      const minutes = slot.getMinutes()
+                      const isHour = minutes === 0
+                      const isQuarter = minutes % 15 === 0 // Show label every 15 min
                       const top = i * PIXELS_PER_SLOT
                       return (
                         <div
                           key={i}
-                          className={`absolute left-0 right-0 px-2 flex items-center text-[11px] border-t ${
-                            isHour ? 'font-medium text-gray-700 border-gray-300' : 'text-gray-300 border-gray-100'
+                          className={`absolute left-0 right-0 px-1 flex items-center text-[10px] border-t ${
+                            isHour ? 'font-medium text-gray-700 border-gray-400' : 
+                            isQuarter ? 'text-gray-500 border-gray-200' : 
+                            'text-transparent border-gray-100'
                           }`}
                           style={{ top, height: PIXELS_PER_SLOT }}
                         >
-                          {isHour ? formatTime(slot) : ''}
+                          {isQuarter ? formatTime(slot) : ''}
                         </div>
                       )
                     })}
@@ -1175,12 +1186,16 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                       >
                         {/* Grid lines */}
                         {timeSlots.map((slot, i) => {
-                          const isHour = slot.getMinutes() === 0
+                          const minutes = slot.getMinutes()
+                          const isHour = minutes === 0
+                          const isQuarter = minutes % 15 === 0
                           return (
                             <div
                               key={i}
                               className={`absolute left-0 right-0 border-t ${
-                                isHour ? 'border-gray-300' : 'border-gray-100'
+                                isHour ? 'border-gray-400' : 
+                                isQuarter ? 'border-gray-200' : 
+                                'border-gray-100/50'
                               } hover:bg-blue-50/30`}
                               style={{ top: i * PIXELS_PER_SLOT, height: PIXELS_PER_SLOT }}
                             />
@@ -1191,7 +1206,7 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                         {courtMatches.map(match => {
                           const color = divColors[match.divisionId] || COLORS[0]
                           const top = getTopOffset(match.startTime)
-                          const height = Math.max(getHeight(match.duration), 24) // Min height for visibility
+                          const height = Math.max(getDisplayHeight(match.startTime, match.duration), 20) // Min height for visibility
                           
                           return (
                             <div
@@ -1207,8 +1222,8 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                               <span className={`font-semibold ${color.text}`}>
                                 #{match.divisionSequence || '?'}
                               </span>
-                              {height > 30 && (
-                                <span className={`text-[9px] ${color.text} opacity-70 truncate max-w-full px-1`}>
+                              {height > 24 && (
+                                <span className={`text-[8px] ${color.text} opacity-70 truncate max-w-full px-0.5`}>
                                   {match.duration}m
                                 </span>
                               )}
