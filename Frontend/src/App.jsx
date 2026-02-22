@@ -64,6 +64,7 @@ import ActiveEventNotices from './components/ActiveEventNotices'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import AuthCallback from './pages/AuthCallback'
+import ChatBot from './components/ChatBot'
 import InstaGameList from './pages/InstaGame/InstaGameList'
 import InstaGameCreate from './pages/InstaGame/InstaGameCreate'
 import InstaGameMain from './pages/InstaGame/InstaGameMain'
@@ -78,6 +79,7 @@ function App() {
   return (
     <>
       <ActiveEventNotices />
+      <ChatBot />
       <Routes>
       {/* Public Routes */}
       <Route path="/" element={<Home />} />

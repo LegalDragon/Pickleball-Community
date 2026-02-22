@@ -1,0 +1,90 @@
+name: Update Config
+
+on:
+  workflow_dispatch:
+    inputs:
+      key:
+        description: 'Config key (e.g., OpenAI:ApiKey)'
+        required: true
+        type: string
+      value:
+        description: 'Config value'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+
+jobs:
+  update:
+    name: Update Config (${{ inputs.environment }})
+    runs-on: [self-hosted, windows, iis]
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Set paths
+        shell: powershell
+        run: |
+          $env_name = "${{ inputs.environment }}"
+          if ($env_name -eq "production") {
+            echo "CONFIG_PATH=F:\New_WWW\Pickleball\Community\api\appsettings.json" >> $env:GITHUB_ENV
+          } else {
+            echo "CONFIG_PATH=F:\New_WWW\Pickleball_Community_STG\API\appsettings.json" >> $env:GITHUB_ENV
+          }
+
+      - name: Update config value
+        shell: powershell
+        run: |
+          $configPath = "${{ env.CONFIG_PATH }}"
+          $key = "${{ inputs.key }}"
+          $value = "${{ inputs.value }}"
+          
+          Write-Host "[CONFIG] Updating $key in $configPath"
+          
+          if (-not (Test-Path $configPath)) {
+            throw "Config file not found: $configPath"
+          }
+          
+          # Read existing config
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          
+          # Navigate to nested key (supports : separator)
+          $parts = $key -split ':'
+          $current = $config
+          for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+            $part = $parts[$i]
+            if (-not $current.PSObject.Properties[$part]) {
+              $current | Add-Member -NotePropertyName $part -NotePropertyValue ([PSCustomObject]@{})
+            }
+            $current = $current.$part
+          }
+          
+          # Set the value
+          $lastKey = $parts[-1]
+          if ($current.PSObject.Properties[$lastKey]) {
+            $current.$lastKey = $value
+          } else {
+            $current | Add-Member -NotePropertyName $lastKey -NotePropertyValue $value
+          }
+          
+          # Write back
+          $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+          
+          Write-Host "[CONFIG] Successfully updated $key"
+
+      - name: Restart app pool
+        shell: powershell
+        run: |
+          $env_name = "${{ inputs.environment }}"
+          if ($env_name -eq "production") {
+            $pool = "_pb.community"
+          } else {
+            $pool = "Pickleball_Community_STG"
+          }
+          
+          Write-Host "[IIS] Recycling app pool: $pool"
+          & "$env:SystemRoot\System32\inetsrv\appcmd.exe" recycle apppool /apppool.name:"$pool"
+          Write-Host "[IIS] App pool recycled"
