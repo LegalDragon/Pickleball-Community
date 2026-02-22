@@ -105,7 +105,7 @@ Write-Host "[DEPLOY] Frontend deployed" -ForegroundColor Green
 
 # -- Deploy backend --
 Write-Host "`n[DEPLOY] Copying backend..." -ForegroundColor Yellow
-$preserveBackend = @("appsettings.Production.json", "appsettings.production.json", "appsettings.Staging.json", "web.config", "uploads", "wwwroot", "logs")
+$preserveBackend = @("appsettings.json", "appsettings.Production.json", "appsettings.production.json", "appsettings.Staging.json", "web.config", "uploads", "wwwroot", "logs")
 Get-ChildItem $BackendPath -Exclude $preserveBackend | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "$BackendArtifact\*" -Destination $BackendPath -Recurse -Force
 Write-Host "[DEPLOY] Backend deployed" -ForegroundColor Green
