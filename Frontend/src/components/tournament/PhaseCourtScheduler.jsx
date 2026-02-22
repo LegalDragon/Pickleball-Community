@@ -1128,27 +1128,17 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                       return aStart >= cellTime && aStart < cellTime + SLOT_SIZE * 60000
                     })
                     
-                    // Check if a match spans this slot (started earlier, still running)
-                    const spanningMatch = !startingMatch && !pendingMatch && scheduledMatches.find(m => {
-                      if (m.courtId !== court.id) return false
-                      const mStart = new Date(m.startTime).getTime()
-                      const mEnd = mStart + m.duration * 60000
-                      return mStart < cellTime && mEnd > cellTime
-                    })
-                    
                     if (startingMatch) {
                       const color = divColors[startingMatch.divisionId] || COLORS[0]
-                      const heightSlots = Math.ceil(startingMatch.duration / SLOT_SIZE)
                       
                       return (
                         <div 
                           key={court.id} 
-                          className="flex-shrink-0 border-r relative"
+                          className="flex-shrink-0 border-r relative overflow-hidden"
                           style={{ width: 70, height: PIXELS_PER_SLOT }}
                         >
                           <div
-                            className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} ${color.border} border flex flex-col items-center justify-center text-xs cursor-move overflow-hidden z-10 group`}
-                            style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
+                            className={`absolute inset-0.5 rounded ${color.bg} ${color.border} border flex items-center justify-center text-xs cursor-move group`}
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('matchId', startingMatch.id.toString())}
                             title={`${startingMatch.divisionName}\n${startingMatch.phaseName || ''}\n#${startingMatch.divisionSequence}: ${startingMatch.unit1Name || 'TBD'} vs ${startingMatch.unit2Name || 'TBD'}\nBo${startingMatch.totalGames} (${startingMatch.duration}min)`}
@@ -1176,17 +1166,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                       const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
                       if (match) {
                         const color = divColors[match.divisionId] || COLORS[0]
-                        const heightSlots = Math.ceil(match.duration / SLOT_SIZE)
                         
                         return (
                           <div 
                             key={court.id} 
-                            className="flex-shrink-0 border-r relative"
+                            className="flex-shrink-0 border-r relative overflow-hidden"
                             style={{ width: 70, height: PIXELS_PER_SLOT }}
                           >
                             <div
-                              className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex flex-col items-center justify-center text-xs cursor-move overflow-hidden z-10 opacity-80 group`}
-                              style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
+                              className={`absolute inset-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center text-xs cursor-move opacity-80 group`}
                               draggable
                               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
                               title={`PENDING\n${match.divisionName}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}`}
@@ -1210,12 +1198,12 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                       }
                     }
                     
-                    // Empty cell or spanned cell
+                    // Empty cell
                     return (
                       <div 
                         key={court.id} 
-                        className={`flex-shrink-0 border-r ${spanningMatch ? '' : 'hover:bg-gray-50'}`}
-                        style={{ width: 70 }}
+                        className="flex-shrink-0 border-r hover:bg-gray-50"
+                        style={{ width: 70, height: PIXELS_PER_SLOT }}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => {
                           e.preventDefault()
