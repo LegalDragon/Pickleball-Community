@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Clock, Loader2, ChevronDown, ChevronRight, Check, X,
   GripVertical, MapPin, Calendar, AlertTriangle, Zap,
-  Play, Square, Users, Filter, RotateCcw, Hash, Layers, Eye, EyeOff
+  Play, Square, Users, Filter, RotateCcw, Hash, Layers, Eye, EyeOff, Pencil
 } from 'lucide-react'
 import { tournamentApi } from '../../services/api'
 import { useToast } from '../../contexts/ToastContext'
@@ -65,6 +65,9 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
   
   // Quick Schedule Modal
   const [quickScheduleDivision, setQuickScheduleDivision] = useState(null) // { id, name, matchCount, phases }
+  
+  // Edit Match Modal
+  const [editingMatch, setEditingMatch] = useState(null) // match object to edit
   const [dayStart, setDayStart] = useState(() => {
     const d = new Date(data?.eventStartDate || new Date())
     d.setHours(8, 0, 0, 0)
@@ -778,17 +781,20 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                               {phaseMatches.map(match => {
                                 const isScheduled = match.courtId || assignments[match.id]?.courtId
                                 return (
-                                  <label
+                                  <div
                                     key={match.id}
-                                    className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-xs ${
+                                    className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-xs ${
                                       isScheduled ? 'bg-green-50' : ''
                                     }`}
                                   >
+                                    <span className="text-gray-500 font-medium w-6 text-right">
+                                      #{match.divisionSequence || match.encounterNumber || '?'}
+                                    </span>
                                     <input
                                       type="checkbox"
                                       checked={selectedMatches.has(match.id)}
                                       onChange={() => toggleMatch(match.id)}
-                                      className="rounded border-gray-300"
+                                      className="rounded border-gray-300 cursor-pointer"
                                     />
                                     <span className="flex-1 truncate">
                                       {match.unit1Name || 'TBD'} vs {match.unit2Name || 'TBD'}
@@ -801,7 +807,17 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                                         {match.courtLabel || assignments[match.id]?.courtId}
                                       </span>
                                     )}
-                                  </label>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setEditingMatch(match)
+                                      }}
+                                      className="p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
+                                      title="Edit match time/court"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                  </div>
                                 )
                               })}
                             </div>
@@ -1128,10 +1144,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                         <div 
                           key={court.id} 
                           className="flex-shrink-0 border-r relative"
-                          style={{ width: 70 }}
+                          style={{ width: 70, height: PIXELS_PER_SLOT }}
                         >
                           <div
-                            className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} ${color.border} border flex items-center justify-center text-xs cursor-move overflow-hidden z-10`}
+                            className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} ${color.border} border flex flex-col items-center justify-center text-xs cursor-move overflow-hidden z-10 group`}
                             style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
                             draggable
                             onDragStart={(e) => e.dataTransfer.setData('matchId', startingMatch.id.toString())}
@@ -1140,6 +1156,16 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                             <span className={`font-semibold ${color.text}`}>
                               #{startingMatch.divisionSequence || '?'}
                             </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingMatch(startingMatch)
+                              }}
+                              className="absolute top-0.5 right-0.5 p-0.5 text-gray-400 hover:text-purple-600 hover:bg-white/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Edit"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
                           </div>
                         </div>
                       )
@@ -1156,10 +1182,10 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                           <div 
                             key={court.id} 
                             className="flex-shrink-0 border-r relative"
-                            style={{ width: 70 }}
+                            style={{ width: 70, height: PIXELS_PER_SLOT }}
                           >
                             <div
-                              className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center text-xs cursor-move overflow-hidden z-10 opacity-80`}
+                              className={`absolute inset-x-0.5 top-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex flex-col items-center justify-center text-xs cursor-move overflow-hidden z-10 opacity-80 group`}
                               style={{ height: heightSlots * PIXELS_PER_SLOT - 4 }}
                               draggable
                               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
@@ -1168,6 +1194,16 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                               <span className={`font-semibold ${color.text}`}>
                                 #{match.divisionSequence || '?'}
                               </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingMatch(match)
+                                }}
+                                className="absolute top-0.5 right-0.5 p-0.5 text-gray-400 hover:text-purple-600 hover:bg-white/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Edit"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
                             </div>
                           </div>
                         )
@@ -1246,6 +1282,141 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           }}
         />
       )}
+
+      {/* Edit Match Modal */}
+      {editingMatch && (
+        <EditMatchModal
+          match={editingMatch}
+          courts={allCourts}
+          dayStart={dayStart}
+          currentAssignment={assignments[editingMatch.id]}
+          onClose={() => setEditingMatch(null)}
+          onSave={(courtId, startTime) => {
+            const endTime = addMinutes(new Date(startTime), editingMatch.duration)
+            setAssignments(prev => ({
+              ...prev,
+              [editingMatch.id]: {
+                courtId,
+                startTime: startTime.toISOString(),
+                endTime: endTime.toISOString()
+              }
+            }))
+            setEditingMatch(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════
+// Edit Match Modal
+// ═════════════════════════════════════════════════════
+function EditMatchModal({ match, courts, dayStart, currentAssignment, onClose, onSave }) {
+  const existingCourt = currentAssignment?.courtId || match.courtId
+  const existingTime = currentAssignment?.startTime || match.scheduledStartTime
+  
+  const [selectedCourt, setSelectedCourt] = useState(existingCourt || '')
+  const [startTime, setStartTime] = useState(() => {
+    if (existingTime) {
+      const d = new Date(existingTime)
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    }
+    return `${String(dayStart.getHours()).padStart(2, '0')}:${String(dayStart.getMinutes()).padStart(2, '0')}`
+  })
+
+  const handleSave = () => {
+    if (!selectedCourt) return
+    const [h, m] = startTime.split(':').map(Number)
+    const time = new Date(dayStart)
+    time.setHours(h, m, 0, 0)
+    onSave(parseInt(selectedCourt), time)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-purple-600 to-indigo-600">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Pencil className="w-5 h-5" />
+                Edit Match
+              </h2>
+              <p className="text-purple-200 text-sm">#{match.divisionSequence || match.encounterNumber}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-4">
+          {/* Match info */}
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-900">
+              {match.unit1Name || 'TBD'} vs {match.unit2Name || 'TBD'}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {match.divisionName} • {match.phaseName || 'No Phase'} • Bo{match.totalGames}
+            </div>
+          </div>
+
+          {/* Court selection */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-2">Court</label>
+            <select
+              value={selectedCourt}
+              onChange={(e) => setSelectedCourt(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="">Select court...</option>
+              {courts.map(court => (
+                <option key={court.id} value={court.id}>{court.courtLabel}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Time selection */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-2">Start Time</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+
+          {/* Duration info */}
+          <div className="text-xs text-gray-500">
+            Duration: {match.duration} minutes
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!selectedCourt}
+            className="px-6 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg flex items-center gap-2 disabled:opacity-50"
+          >
+            <Check className="w-4 h-4" />
+            Apply
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
