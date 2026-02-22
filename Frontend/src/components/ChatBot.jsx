@@ -8,7 +8,7 @@ const ChatBot = () => {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hi! I'm Ace, your pickleball assistant! 🏓 I can help you with:\n\n• Using Pickleball Community features\n• Pickleball rules and scoring\n• Tips and strategies\n• Collecting your feedback\n\nHow can I help you today?"
+      content: "Hi! I'm Synthia, your pickleball assistant! 🏓 I can help you with:\n\n• Using Pickleball Community features\n• Pickleball rules and scoring\n• Tips and strategies\n• Collecting your feedback\n\nHow can I help you today?"
     }
   ])
   const [input, setInput] = useState('')
@@ -138,7 +138,7 @@ const ChatBot = () => {
             <div className="flex items-center gap-2">
               <span className="text-xl">🏓</span>
               <div>
-                <h3 className="font-semibold text-sm">Ace - Pickleball Assistant</h3>
+                <h3 className="font-semibold text-sm">Synthia - Pickleball Assistant</h3>
                 {!isMinimized && (
                   <p className="text-xs text-emerald-100">Ask me anything about pickleball!</p>
                 )}
