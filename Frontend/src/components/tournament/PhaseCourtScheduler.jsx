@@ -1073,115 +1073,145 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
           />
         )}
 
-        {/* Timeline grid - Transposed: Time rows × Court columns */}
+        {/* Timeline grid - Column-based: each court is a column with matches positioned absolutely */}
         <div className="flex-1 overflow-auto" ref={timelineRef}>
-          <div className="min-w-max">
-            {/* Court header (columns) */}
-            <div className="sticky top-0 z-10 flex bg-gray-100 border-b">
-              <div className="w-16 flex-shrink-0 px-2 py-2 font-medium text-xs text-gray-500 border-r">
-                Time
-              </div>
-              {allCourts.map(court => (
-                <div
-                  key={court.id}
-                  className="flex-shrink-0 px-1 py-2 font-medium text-xs text-gray-700 border-r text-center"
-                  style={{ width: 70 }}
-                >
-                  {court.courtLabel}
-                </div>
-              ))}
-            </div>
-
-            {/* Time rows */}
-            {timeSlots.map((slot, slotIndex) => {
-              const isHour = slot.getMinutes() === 0
-              return (
-                <div 
-                  key={slotIndex} 
-                  className={`flex ${isHour ? 'border-t border-gray-300' : 'border-t border-gray-100'}`}
-                  style={{ height: PIXELS_PER_SLOT }}
-                >
-                  {/* Time label */}
-                  <div 
-                    className={`w-16 flex-shrink-0 px-2 flex items-center text-[11px] border-r ${
-                      isHour ? 'font-medium text-gray-700 bg-gray-50' : 'text-gray-300'
-                    }`}
-                  >
-                    {isHour ? formatTime(slot) : ''}
+          {(() => {
+            const totalMinutes = (dayEnd.getTime() - dayStart.getTime()) / 60000
+            const totalHeight = (totalMinutes / SLOT_SIZE) * PIXELS_PER_SLOT
+            const COURT_WIDTH = 80
+            
+            // Get matches for each court (scheduled + pending)
+            const getCourtMatches = (courtId) => {
+              const scheduled = scheduledMatches.filter(m => m.courtId === courtId)
+              const pending = Object.entries(assignments)
+                .filter(([_, a]) => a.courtId === courtId)
+                .map(([id, a]) => {
+                  const match = matches.find(m => m.id === id || m.id === parseInt(id))
+                  return match ? { ...match, startTime: a.startTime, isPending: true } : null
+                })
+                .filter(Boolean)
+              return [...scheduled, ...pending]
+            }
+            
+            // Calculate pixel offset from dayStart
+            const getTopOffset = (startTime) => {
+              const minutes = (new Date(startTime).getTime() - dayStart.getTime()) / 60000
+              return (minutes / SLOT_SIZE) * PIXELS_PER_SLOT
+            }
+            
+            // Calculate height from duration
+            const getHeight = (duration) => {
+              return (duration / SLOT_SIZE) * PIXELS_PER_SLOT
+            }
+            
+            return (
+              <div className="flex min-w-max">
+                {/* Time labels column */}
+                <div className="w-16 flex-shrink-0 border-r bg-gray-50 sticky left-0 z-20">
+                  <div className="h-8 border-b bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-500">
+                    Time
                   </div>
-                  
-                  {/* Court columns */}
-                  {allCourts.map(court => {
-                    const cellTime = slot.getTime()
-                    
-                    // Find match starting in this slot for this court
-                    const startingMatch = scheduledMatches.find(m => {
-                      if (m.courtId !== court.id) return false
-                      const mStart = new Date(m.startTime).getTime()
-                      return mStart >= cellTime && mStart < cellTime + SLOT_SIZE * 60000
-                    })
-                    
-                    // Find pending match starting in this slot
-                    const pendingMatch = !startingMatch && Object.entries(assignments).find(([id, a]) => {
-                      if (a.courtId !== court.id) return false
-                      const aStart = new Date(a.startTime).getTime()
-                      return aStart >= cellTime && aStart < cellTime + SLOT_SIZE * 60000
-                    })
-                    
-                    if (startingMatch) {
-                      const color = divColors[startingMatch.divisionId] || COLORS[0]
-                      
+                  <div className="relative" style={{ height: totalHeight }}>
+                    {timeSlots.map((slot, i) => {
+                      const isHour = slot.getMinutes() === 0
+                      const top = i * PIXELS_PER_SLOT
                       return (
-                        <div 
-                          key={court.id} 
-                          className="flex-shrink-0 border-r relative overflow-hidden"
-                          style={{ width: 70, height: PIXELS_PER_SLOT }}
+                        <div
+                          key={i}
+                          className={`absolute left-0 right-0 px-2 flex items-center text-[11px] border-t ${
+                            isHour ? 'font-medium text-gray-700 border-gray-300' : 'text-gray-300 border-gray-100'
+                          }`}
+                          style={{ top, height: PIXELS_PER_SLOT }}
                         >
-                          <div
-                            className={`absolute inset-0.5 rounded ${color.bg} ${color.border} border flex items-center justify-center text-xs cursor-move group`}
-                            draggable
-                            onDragStart={(e) => e.dataTransfer.setData('matchId', startingMatch.id.toString())}
-                            title={`${startingMatch.divisionName}\n${startingMatch.phaseName || ''}\n#${startingMatch.divisionSequence}: ${startingMatch.unit1Name || 'TBD'} vs ${startingMatch.unit2Name || 'TBD'}\nBo${startingMatch.totalGames} (${startingMatch.duration}min)`}
-                          >
-                            <span className={`font-semibold ${color.text}`}>
-                              #{startingMatch.divisionSequence || '?'}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEditingMatch(startingMatch)
-                              }}
-                              className="absolute top-0.5 right-0.5 p-0.5 text-gray-400 hover:text-purple-600 hover:bg-white/50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Edit"
-                            >
-                              <Pencil className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
+                          {isHour ? formatTime(slot) : ''}
                         </div>
                       )
-                    }
-                    
-                    if (pendingMatch) {
-                      const [matchId, assignment] = pendingMatch
-                      const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
-                      if (match) {
-                        const color = divColors[match.divisionId] || COLORS[0]
-                        
-                        return (
-                          <div 
-                            key={court.id} 
-                            className="flex-shrink-0 border-r relative overflow-hidden"
-                            style={{ width: 70, height: PIXELS_PER_SLOT }}
-                          >
+                    })}
+                  </div>
+                </div>
+                
+                {/* Court columns */}
+                {allCourts.map(court => {
+                  const courtMatches = getCourtMatches(court.id)
+                  
+                  return (
+                    <div key={court.id} className="flex-shrink-0 border-r" style={{ width: COURT_WIDTH }}>
+                      {/* Court header */}
+                      <div className="h-8 border-b bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-700 sticky top-0 z-10">
+                        {court.courtLabel}
+                      </div>
+                      
+                      {/* Court timeline */}
+                      <div 
+                        className="relative"
+                        style={{ height: totalHeight }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const matchId = e.dataTransfer.getData('matchId')
+                          if (!matchId) return
+                          
+                          // Calculate drop time from Y position
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          const y = e.clientY - rect.top
+                          const slotIndex = Math.floor(y / PIXELS_PER_SLOT)
+                          const dropTime = addMinutes(dayStart, slotIndex * SLOT_SIZE)
+                          
+                          const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
+                          if (match && !wouldViolateStagger(match, court.id, dropTime.getTime(), assignments)) {
+                            const endTime = addMinutes(dropTime, match.duration)
+                            setAssignments(prev => ({
+                              ...prev,
+                              [matchId]: {
+                                courtId: court.id,
+                                startTime: dropTime.toISOString(),
+                                endTime: endTime.toISOString()
+                              }
+                            }))
+                          } else if (match) {
+                            toast.warn('Would cause back-to-back conflict for a team')
+                          }
+                        }}
+                      >
+                        {/* Grid lines */}
+                        {timeSlots.map((slot, i) => {
+                          const isHour = slot.getMinutes() === 0
+                          return (
                             <div
-                              className={`absolute inset-0.5 rounded ${color.bg} border-2 border-dashed ${color.border} flex items-center justify-center text-xs cursor-move opacity-80 group`}
+                              key={i}
+                              className={`absolute left-0 right-0 border-t ${
+                                isHour ? 'border-gray-300' : 'border-gray-100'
+                              } hover:bg-blue-50/30`}
+                              style={{ top: i * PIXELS_PER_SLOT, height: PIXELS_PER_SLOT }}
+                            />
+                          )
+                        })}
+                        
+                        {/* Match cards */}
+                        {courtMatches.map(match => {
+                          const color = divColors[match.divisionId] || COLORS[0]
+                          const top = getTopOffset(match.startTime)
+                          const height = Math.max(getHeight(match.duration), 24) // Min height for visibility
+                          
+                          return (
+                            <div
+                              key={`${match.id}-${match.isPending ? 'pending' : 'scheduled'}`}
+                              className={`absolute left-1 right-1 rounded ${color.bg} ${color.border} ${
+                                match.isPending ? 'border-2 border-dashed opacity-80' : 'border'
+                              } flex flex-col items-center justify-center text-xs cursor-move group overflow-hidden`}
+                              style={{ top: top + 1, height: height - 2 }}
                               draggable
                               onDragStart={(e) => e.dataTransfer.setData('matchId', match.id.toString())}
-                              title={`PENDING\n${match.divisionName}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}`}
+                              title={`${match.isPending ? 'PENDING\n' : ''}${match.divisionName}\n${match.phaseName || ''}\n#${match.divisionSequence}: ${match.unit1Name || 'TBD'} vs ${match.unit2Name || 'TBD'}\n${formatTime(match.startTime)} (${match.duration}min)`}
                             >
                               <span className={`font-semibold ${color.text}`}>
                                 #{match.divisionSequence || '?'}
                               </span>
+                              {height > 30 && (
+                                <span className={`text-[9px] ${color.text} opacity-70 truncate max-w-full px-1`}>
+                                  {match.duration}m
+                                </span>
+                              )}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -1193,44 +1223,15 @@ export default function PhaseCourtScheduler({ eventId, data, onUpdate }) {
                                 <Pencil className="w-2.5 h-2.5" />
                               </button>
                             </div>
-                          </div>
-                        )
-                      }
-                    }
-                    
-                    // Empty cell
-                    return (
-                      <div 
-                        key={court.id} 
-                        className="flex-shrink-0 border-r hover:bg-gray-50"
-                        style={{ width: 70, height: PIXELS_PER_SLOT }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          const matchId = e.dataTransfer.getData('matchId')
-                          if (!matchId) return
-                          const match = matches.find(m => m.id === matchId || m.id === parseInt(matchId))
-                          if (match && !wouldViolateStagger(match, court.id, slot.getTime(), assignments)) {
-                            const endTime = addMinutes(slot, match.duration)
-                            setAssignments(prev => ({
-                              ...prev,
-                              [matchId]: { 
-                                courtId: court.id, 
-                                startTime: slot.toISOString(),
-                                endTime: endTime.toISOString()
-                              }
-                            }))
-                          } else if (match) {
-                            toast.warn('Would cause back-to-back conflict for a team')
-                          }
-                        }}
-                      />
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
       </div>
 
