@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, Loader2, Minimize2, Maximize2 } from 'lucide-react'
 import api from '../services/api'
+import Logo from '../assets/Logo.png'
 
 const ChatBot = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -15,6 +16,7 @@ const ChatBot = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const messagesEndRef = useRef(null)
+  const messagesContainerRef = useRef(null)
   const inputRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -28,6 +30,27 @@ const ChatBot = () => {
       setUnreadCount(0)
     }
   }, [messages, isOpen, isMinimized])
+
+  // Prevent body scroll when chat is open on mobile
+  useEffect(() => {
+    const handleTouchMove = (e) => {
+      if (isOpen && !isMinimized && messagesContainerRef.current) {
+        const container = messagesContainerRef.current
+        if (container.contains(e.target)) {
+          // Allow scrolling within chat container
+          return
+        }
+      }
+    }
+
+    if (isOpen && !isMinimized) {
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    }
+
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove)
+    }
+  }, [isOpen, isMinimized])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -128,15 +151,15 @@ const ChatBot = () => {
       {/* Chat Window */}
       {isOpen && (
         <div 
-          className={`fixed bottom-24 right-6 z-50 bg-white rounded-xl shadow-2xl overflow-hidden transition-all duration-300 ${
+          className={`fixed bottom-24 right-6 z-50 bg-white rounded-xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
             isMinimized ? 'w-80 h-14' : 'w-96 h-[500px] max-h-[70vh]'
           }`}
           style={{ maxWidth: 'calc(100vw - 48px)' }}
         >
           {/* Header */}
-          <div className="bg-emerald-600 text-white px-4 py-3 flex items-center justify-between">
+          <div className="bg-emerald-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🏓</span>
+              <img src={Logo} alt="Logo" className="w-8 h-8 rounded-full bg-white p-0.5" />
               <div>
                 <h3 className="font-semibold text-sm">Synthia - Pickleball Assistant</h3>
                 {!isMinimized && (
@@ -160,7 +183,11 @@ const ChatBot = () => {
           {!isMinimized && (
             <>
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 h-[calc(100%-140px)]">
+              <div 
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto p-4 space-y-4 overscroll-contain touch-pan-y"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
                 {messages.map((msg, idx) => (
                   <div
                     key={idx}
@@ -189,7 +216,7 @@ const ChatBot = () => {
 
               {/* Suggestions (show when no user messages yet) */}
               {messages.length === 1 && !isLoading && (
-                <div className="px-4 pb-2">
+                <div className="px-4 pb-2 flex-shrink-0">
                   <p className="text-xs text-gray-500 mb-2">Try asking:</p>
                   <div className="flex flex-wrap gap-1">
                     {suggestedQuestions.map((q, idx) => (
@@ -206,7 +233,7 @@ const ChatBot = () => {
               )}
 
               {/* Input */}
-              <form onSubmit={handleSubmit} className="p-3 border-t bg-gray-50">
+              <form onSubmit={handleSubmit} className="p-3 border-t bg-gray-50 flex-shrink-0">
                 <div className="flex gap-2">
                   <input
                     ref={inputRef}
